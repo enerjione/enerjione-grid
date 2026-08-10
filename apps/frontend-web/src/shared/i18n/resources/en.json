@@ -820,7 +820,8 @@
       "notification_whatsapp_web_test_ok": "WhatsApp Web test successful: {{recipient}}",
       "notification_whatsapp_web_test_failed": "WhatsApp Web test failed: {{error}}",
       "notification_whatsapp_web_logout": "WhatsApp Web session closed",
-      "topology_imported": "Topology imported: {{regions}} regions, {{lines}} lines, {{poles}} poles"
+      "topology_imported": "Topology imported: {{regions}} regions, {{lines}} lines, {{poles}} poles",
+      "fault_cause_set": "Fault cause recorded: fault {{fault_id}} → {{cause}}"
     },
     "category": {
       "auth": "Login & session",
@@ -1022,12 +1023,26 @@
       "commentPlaceholder": "Write a field observation / action note…",
       "addCommentBtn": "Add Comment",
       "loadingComments": "Loading comments…",
-      "close": "Close"
+      "close": "Close",
+      "causeTitle": "Fault Cause",
+      "causeHint": "Needed for analysis. Pick the cause found in the field; leave empty if unknown.",
+      "causeNotSet": "— Not selected —",
+      "causeSuggested": "Suggested from device data: {{cause}}",
+      "causeUseSuggestion": "Use suggestion",
+      "causeDetailPlaceholder": "Detail (e.g. cracked pin insulator on pole 3)",
+      "saveCause": "Save Cause"
     },
     "phase": {
       "master": "Master",
       "sat01": "Satellite 01",
       "sat02": "Satellite 02"
+    },
+    "causeGroup": {
+      "external": "External",
+      "equipment": "Equipment",
+      "weather": "Weather",
+      "operational": "Operational",
+      "unknown": "Unknown"
     }
   },
   "network": {
@@ -3785,7 +3800,8 @@
     "poleDeleteFail": "Failed to delete pole.",
     "changesSaved": "Changes saved.",
     "draftReverted": "Draft changes reverted.",
-    "deviceAddFailed": "Could not add device."
+    "deviceAddFailed": "Could not add device.",
+    "faultCauseSaved": "Fault cause saved."
   },
   "tabs": {
     "close": "Close tab",

@@ -8,7 +8,15 @@ import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
 
 import type { GridSnapshot } from "../../shared/api";
 import { formatDistanceM, formatDistanceRange } from "../../shared/lineDistance";
-import type { AlarmEvent, DeviceRow, FaultComment, FaultEvent, UserRead } from "../../shared/types";
+import type {
+  AlarmEvent,
+  DeviceRow,
+  FaultCause,
+  FaultCauseCatalog,
+  FaultComment,
+  FaultEvent,
+  UserRead
+} from "../../shared/types";
 import { useModalDialog } from "../../shared/useModalDialog";
 
 type Props = {
@@ -25,6 +33,15 @@ type Props = {
   onAssign: (faultId: number, username: string | null) => Promise<void>;
   onUpdateStatus: (faultId: number, status: string) => Promise<void>;
   onUpdateNote: (faultId: number, note: string | null) => Promise<void>;
+  /** Ariza sebebi (katalogdan). Analiz katmaninin ogrenecegi TEK insan
+      etiketi — durum degisiminden BAGIMSIZ girilebilir. */
+  onUpdateCause: (
+    faultId: number,
+    payload: { cause_code: string | null; cause_detail?: string | null }
+  ) => Promise<void>;
+  /** Sebep katalogu — UST bilesende BIR KEZ cekilir. Modal her acildiginda
+      yeniden cekmek, degismeyen bir listeyi tekrar tekrar istemek olurdu. */
+  causeCatalog: FaultCauseCatalog | null;
   onLoadComments: (faultId: number) => Promise<FaultComment[]>;
   onAddComment: (faultId: number, body: string) => Promise<void>;
 };
@@ -94,6 +111,8 @@ export function FaultDetailModal({
   onAssign,
   onUpdateStatus,
   onUpdateNote,
+  onUpdateCause,
+  causeCatalog,
   onLoadComments,
   onAddComment
 }: Props) {
@@ -102,6 +121,8 @@ export function FaultDetailModal({
   const [comments, setComments] = useState<FaultComment[]>([]);
   const [commentDraft, setCommentDraft] = useState("");
   const [noteDraft, setNoteDraft] = useState(fault.note ?? "");
+  const [causeDraft, setCauseDraft] = useState(fault.cause_code ?? "");
+  const [causeDetailDraft, setCauseDetailDraft] = useState(fault.cause_detail ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   // Canlı süre sayacı için "now" state'i her saniye güncellenir.
@@ -435,6 +456,49 @@ export function FaultDetailModal({
     setError("");
     try {
       await onUpdateNote(fault.id, noteDraft.trim() || null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.errorOccurred"));
+    } finally {
+      setSaving(false);
+    }
+  };
+  /** Katalog etiketi — arayuz dilini izler. */
+  const causeLabel = (c: FaultCause) => (i18n.language?.startsWith("tr") ? c.label_tr : c.label_en);
+
+  /** Aileye gore gruplanmis secim listesi. Duz bir 19'luk liste taranmasi zor;
+      "dis etken / ekipman / hava / isletme" ayrimi secimi hizlandirir. */
+  const causeGroups = useMemo<[string, FaultCause[]][]>(() => {
+    if (!causeCatalog) return [];
+    const harita = new Map<string, FaultCause[]>();
+    for (const grup of causeCatalog.groups) harita.set(grup, []);
+    for (const c of causeCatalog.causes) {
+      const liste = harita.get(c.group);
+      if (liste) liste.push(c);
+      else harita.set(c.group, [c]);
+    }
+    return [...harita.entries()].filter(([, liste]) => liste.length > 0);
+  }, [causeCatalog]);
+
+  /** Kuralin onerdigi sebep. SECILI GELMEZ — operator onaylamadan bir etiket
+      "girilmis" sayilirsa istatistik, kimsenin bakmadigi bir tahminle dolar.
+      Zaten girilmis bir sebep varsa oneri de gosterilmez (is bitmis). */
+  const suggestedCause = useMemo(() => {
+    if (!causeCatalog || fault.cause_code) return null;
+    const kod = fault.auto_cause_code;
+    if (!kod) return null;
+    const c = causeCatalog.causes.find((x) => x.code === kod);
+    return c ? { code: c.code, label: causeLabel(c) } : null;
+  }, [causeCatalog, fault.auto_cause_code, fault.cause_code, i18n.language]);
+
+  const handleSaveCause = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      await onUpdateCause(fault.id, {
+        // Bos secim = sebebi GERI AL (yanlis secildiyse duzeltilebilmeli).
+        cause_code: causeDraft || null,
+        cause_detail: causeDetailDraft.trim() || null
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.errorOccurred"));
     } finally {
@@ -840,6 +904,81 @@ export function FaultDetailModal({
                   })}
                 </div>
               </div>
+            </div>
+
+            {/* Arıza sebebi — analiz katmanının öğreneceği TEK insan etiketi.
+                Kural önerisi (auto_cause_code) varsa gösterilir ama SEÇİLİ
+                GELMEZ: operatör onaylamadan bir etiket "girilmiş" sayılırsa
+                istatistik, kimsenin bakmadığı bir tahminle dolar. */}
+            <div className="fault-modal-card fault-cause-card">
+              <div className="fault-modal-card-head">
+                <span
+                  className="fault-modal-card-icon"
+                  style={{ background: "rgba(139,92,246,0.12)", color: "#7c3aed" }}
+                >
+                  <span className="material-symbols-outlined">troubleshoot</span>
+                </span>
+                <div>
+                  <h4>{t("faults.detail.causeTitle")}</h4>
+                  <p>{t("faults.detail.causeHint")}</p>
+                </div>
+              </div>
+
+              {suggestedCause ? (
+                <div className="fault-cause-suggestion">
+                  <span className="material-symbols-outlined">lightbulb</span>
+                  <span>
+                    {t("faults.detail.causeSuggested", { cause: suggestedCause.label })}
+                  </span>
+                  {canEdit && causeDraft !== suggestedCause.code ? (
+                    <button
+                      type="button"
+                      className="fault-cause-apply"
+                      onClick={() => setCauseDraft(suggestedCause.code)}
+                    >
+                      {t("faults.detail.causeUseSuggestion")}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <select
+                className="fault-cause-select"
+                value={causeDraft}
+                disabled={saving || !canEdit || causeCatalog === null}
+                onChange={(e) => setCauseDraft(e.target.value)}
+              >
+                <option value="">{t("faults.detail.causeNotSet")}</option>
+                {causeGroups.map(([grup, liste]) => (
+                  <optgroup key={grup} label={t(`faults.causeGroup.${grup}`, { defaultValue: grup })}>
+                    {liste.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {causeLabel(c)}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+
+              <textarea
+                className="fault-cause-detail"
+                value={causeDetailDraft}
+                onChange={(e) => setCauseDetailDraft(e.target.value)}
+                disabled={saving || !canEdit}
+                placeholder={t("faults.detail.causeDetailPlaceholder")}
+              />
+
+              {canEdit ? (
+                <button
+                  type="button"
+                  className="fault-modal-save-btn"
+                  onClick={() => void handleSaveCause()}
+                  disabled={saving}
+                >
+                  <span className="material-symbols-outlined">save</span>
+                  {t("faults.detail.saveCause")}
+                </button>
+              ) : null}
             </div>
 
             {/* Kısa Not kart — modal'ın en altına kadar uzanır (flex-grow) */}

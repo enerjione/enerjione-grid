@@ -36,6 +36,7 @@ from app.schemas.fault import (
     FaultEventAssignUpdate,
     FaultEventNoteUpdate,
     FaultEventRead,
+    FaultCauseUpdate,
     FaultEventStatusUpdate,
     FaultTriggerAlarm,
 )
@@ -201,6 +202,20 @@ def _serialize_fault(db: Session, f: FaultEvent, refs: _FaultRefs | None = None)
         assigned_to_full_name=assigned_user.full_name if assigned_user else None,
         comment_count=int(comment_count),
         trigger_alarms=triggers,
+        # ---- Analiz alanlari ----
+        cause_code=f.cause_code,
+        cause_detail=f.cause_detail,
+        auto_cause_code=f.auto_cause_code,
+        fault_kind=f.fault_kind,
+        phase=f.phase,
+        fault_direction=f.fault_direction,
+        trigger_signals=f.trigger_signals,
+        fault_current_a=f.fault_current_a,
+        load_current_before_a=f.load_current_before_a,
+        conductor_temp_c=f.conductor_temp_c,
+        momentary_fault_count=f.momentary_fault_count,
+        permanent_fault_count=f.permanent_fault_count,
+        measured_at=f.measured_at,
     )
 
 
@@ -465,6 +480,107 @@ def assign_fault(
         except Exception:  # noqa: BLE001
             import logging as _logging
             _logging.getLogger(__name__).exception("fault_assignment_email_failed")
+    db.commit()
+    db.refresh(f)
+    return _serialize_fault(db, f)
+
+
+@router.get("/causes")
+def list_fault_causes():
+    """Ariza sebep katalogu — arayuzdeki secim listesi.
+
+    KATALOG TEK KAYNAKTAN gelir (`app/data/fault_causes.py`). Frontend'e
+    ayri bir liste gomulseydi ikisi zamanla ayrisir ve arayuzde secilen bir
+    kod backend'de taninmaz olurdu.
+
+    Yetki: giris yapmis herkes. Operator de sebep girecegi icin listeyi
+    gorebilmeli.
+    """
+    from app.data.fault_causes import CAUSE_GROUPS, FAULT_CAUSES, FAULT_KINDS, PHASES
+
+    return {
+        "causes": [dict(c) for c in FAULT_CAUSES],
+        "groups": list(CAUSE_GROUPS),
+        "kinds": [
+            {"code": k, "label_tr": tr, "label_en": en} for k, tr, en in FAULT_KINDS
+        ],
+        "phases": sorted(PHASES),
+    }
+
+
+@router.patch("/{fault_id}/cause", response_model=FaultEventRead)
+def update_fault_cause(
+    fault_id: int,
+    payload: FaultCauseUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Saha ekibinin girdigi ariza sebebi.
+
+    DURUMDAN BAGIMSIZ: ekip arizayi kapatirken sebebi bilmeyebilir (kablo
+    altyapisi sonradan kazilir) ya da kapattiktan sonra ogrenebilir. Sebebi
+    `status` ucuna baglamak yapay kisit dogururdu.
+
+    INSAN ETIKETI KAZANIR: kural onerisi (`auto_cause_code`) ayri kolonda
+    durur ve BURADAN EZILMEZ. Ikisini ayri tutmak, kurallarin isabetini
+    olcmeyi mumkun kilan tek sey.
+    """
+    from app.data.fault_causes import CAUSE_CODES, FAULT_KIND_CODES, PHASES
+
+    f = db.get(FaultEvent, fault_id)
+    if f is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ariza bulunamadi.")
+    if current_user.role == UserRole.OPERATOR and f.assigned_to_username != current_user.username:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bu arizaya yetkiniz yok.")
+
+    # Katalogda olmayan kodu REDDET: sessizce kabul etmek, analiz
+    # sorgularinda hicbir gruba dusmeyen olu etiketler biriktirirdi.
+    kod = (payload.cause_code or "").strip() or None
+    if kod is not None and kod not in CAUSE_CODES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Bilinmeyen ariza sebebi: {kod}",
+        )
+    tur = (payload.fault_kind or "").strip() or None
+    if tur is not None and tur not in FAULT_KIND_CODES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Gecersiz ariza turu: {tur}"
+        )
+    faz = (payload.phase or "").strip().lower() or None
+    if faz is not None and faz not in PHASES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Gecersiz faz: {faz}"
+        )
+
+    onceki = f.cause_code
+    f.cause_code = kod
+    f.cause_detail = (payload.cause_detail or "").strip() or None
+    # Tur/faz yalnizca GONDERILDIYSE degisir: bunlar cihazdan turetiliyor ve
+    # bos gonderimi "sil" saymak, elle duzeltmeyen bir kaydin cihaz verisini
+    # silmesine yol acardi.
+    if tur is not None:
+        f.fault_kind = tur
+    if faz is not None:
+        f.phase = faz
+
+    record_event(
+        db,
+        category="fault",
+        event_type="fault_cause_set",
+        severity="info",
+        actor_username=current_user.username,
+        message=f"Ariza sebebi: fault {fault_id} -> {kod or '(temizlendi)'}",
+        metadata={
+            "fault_id": fault_id,
+            "cause_code": kod,
+            "previous": onceki,
+            # Kuralin ne onerdigi de kaydedilir: isabet olcumu gecmise
+            # donuk yapilabilsin.
+            "auto_cause_code": f.auto_cause_code,
+        },
+        i18n_key="fault_cause_set",
+        i18n_params={"fault_id": fault_id, "cause": kod or "—"},
+    )
     db.commit()
     db.refresh(f)
     return _serialize_fault(db, f)

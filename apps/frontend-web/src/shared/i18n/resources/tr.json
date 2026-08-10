@@ -817,7 +817,8 @@
       "notification_whatsapp_web_test_ok": "WhatsApp Web test başarılı: {{recipient}}",
       "notification_whatsapp_web_test_failed": "WhatsApp Web test başarısız: {{error}}",
       "notification_whatsapp_web_logout": "WhatsApp Web oturumu kapatıldı",
-      "topology_imported": "Topoloji içe aktarıldı: {{regions}} bölge, {{lines}} hat, {{poles}} direk"
+      "topology_imported": "Topoloji içe aktarıldı: {{regions}} bölge, {{lines}} hat, {{poles}} direk",
+      "fault_cause_set": "Arıza sebebi girildi: arıza {{fault_id}} → {{cause}}"
     },
     "category": {
       "auth": "Giriş ve oturum",
@@ -1019,12 +1020,26 @@
       "commentPlaceholder": "Sahada gözlem / işlem notu yaz…",
       "addCommentBtn": "Yorum Ekle",
       "loadingComments": "Yorumlar yükleniyor…",
-      "close": "Kapat"
+      "close": "Kapat",
+      "causeTitle": "Arıza Sebebi",
+      "causeHint": "Analiz için gerekli. Sahada tespit edilen sebebi seçin; bilinmiyorsa boş bırakın.",
+      "causeNotSet": "— Seçilmedi —",
+      "causeSuggested": "Cihaz verisine göre öneri: {{cause}}",
+      "causeUseSuggestion": "Öneriyi kullan",
+      "causeDetailPlaceholder": "Ayrıntı (örn. 3. direkteki mesnet izolatörü çatlak)",
+      "saveCause": "Sebebi Kaydet"
     },
     "phase": {
       "master": "Master",
       "sat01": "Satellite 01",
       "sat02": "Satellite 02"
+    },
+    "causeGroup": {
+      "external": "Dış etken",
+      "equipment": "Ekipman",
+      "weather": "Hava koşulu",
+      "operational": "İşletme",
+      "unknown": "Bilinmiyor"
     }
   },
   "network": {
@@ -3782,7 +3797,8 @@
     "poleDeleteFail": "Direk silinemedi.",
     "changesSaved": "Değişiklikler kaydedildi.",
     "draftReverted": "Taslak değişiklikler geri alındı.",
-    "deviceAddFailed": "Cihaz eklenemedi."
+    "deviceAddFailed": "Cihaz eklenemedi.",
+    "faultCauseSaved": "Arıza sebebi kaydedildi."
   },
   "tabs": {
     "close": "Sekmeyi kapat",

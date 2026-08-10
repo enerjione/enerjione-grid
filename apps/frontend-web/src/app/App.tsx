@@ -56,6 +56,7 @@ import {
   fetchFaultStats,
   assignFault,
   updateFaultStatus,
+  updateFaultCause,
   updateFaultNote,
   fetchFaultComments,
   addFaultComment,
@@ -1426,6 +1427,15 @@ export function App() {
     const updated = await updateFaultNote(session.accessToken, faultId, note);
     setFaults((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
     toast.success(t("toasts.noteSaved"));
+  };
+  const handleUpdateFaultCause = async (
+    faultId: number,
+    payload: { cause_code: string | null; cause_detail?: string | null }
+  ) => {
+    if (!session) return;
+    const updated = await updateFaultCause(session.accessToken, faultId, payload);
+    setFaults((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+    toast.success(t("toasts.faultCauseSaved"));
   };
   const handleLoadFaultComments = async (faultId: number): Promise<FaultComment[]> => {
     if (!session) return [];
@@ -2966,6 +2976,8 @@ export function App() {
                 onAssign={handleAssignFault}
                 onUpdateStatus={handleUpdateFaultStatus}
                 onUpdateNote={handleUpdateFaultNote}
+                onUpdateCause={handleUpdateFaultCause}
+                accessToken={session.accessToken}
                 onLoadComments={handleLoadFaultComments}
                 onAddComment={handleAddFaultComment}
               />

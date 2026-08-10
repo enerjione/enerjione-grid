@@ -959,6 +959,41 @@ export async function updateFaultNote(
   return (await response.json()) as import("./types").FaultEvent;
 }
 
+/** Arıza sebep kataloğu. Tek kaynak backend'dedir (`app/data/fault_causes.py`). */
+export async function fetchFaultCauses(
+  token: string
+): Promise<import("./types").FaultCauseCatalog> {
+  const response = await apiFetch(`${API_BASE_URL}/faults/causes`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Arıza sebep listesi alınamadı.");
+  return (await response.json()) as import("./types").FaultCauseCatalog;
+}
+
+/** Sahanın girdiği arıza sebebi.
+ *
+ *  DURUMDAN BAĞIMSIZ uç: ekip arızayı kapatırken sebebi bilmeyebilir ya da
+ *  kapattıktan sonra öğrenebilir. `fault_kind`/`phase` GÖNDERİLMEZSE cihazdan
+ *  türetilen değer korunur (boş = "dokunma", "sil" değil). */
+export async function updateFaultCause(
+  token: string,
+  faultId: number,
+  payload: {
+    cause_code: string | null;
+    cause_detail?: string | null;
+    fault_kind?: string | null;
+    phase?: string | null;
+  }
+): Promise<import("./types").FaultEvent> {
+  const response = await apiFetch(`${API_BASE_URL}/faults/${faultId}/cause`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw await buildApiError(response, "Arıza sebebi kaydedilemedi.");
+  return (await response.json()) as import("./types").FaultEvent;
+}
+
 export async function fetchFaultComments(
   token: string,
   faultId: number

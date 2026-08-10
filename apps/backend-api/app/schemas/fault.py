@@ -73,6 +73,26 @@ class FaultEventRead(BaseModel):
     #: once. Bos liste: alarm bu arada normale dondu ya da kayit eski.
     trigger_alarms: list[FaultTriggerAlarm] = []
 
+    # ---- ANALIZ ALANLARI ----
+    #: Insanin girdigi sebep (katalogdan). NULL = henuz doldurulmadi.
+    cause_code: str | None = None
+    cause_detail: str | None = None
+    #: Kuralin CIHAZ VERISINDEN turettigi oneri. Insan etiketinden AYRI
+    #: durur; arayuz bunu "onerilen" olarak gosterir, kilitlemez.
+    auto_cause_code: str | None = None
+    fault_kind: str | None = None
+    phase: str | None = None
+    fault_direction: str | None = None
+    #: Ariza aninda aktif olan sinyaller (kaynak oneki dahil) — "cihaz ne
+    #: gordu" sorusunun ham cevabi.
+    trigger_signals: list[str] | None = None
+    fault_current_a: float | None = None
+    load_current_before_a: float | None = None
+    conductor_temp_c: float | None = None
+    momentary_fault_count: int | None = None
+    permanent_fault_count: int | None = None
+    measured_at: datetime | None = None
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -86,6 +106,28 @@ class FaultEventAssignUpdate(BaseModel):
 
 class FaultEventStatusUpdate(BaseModel):
     status: str  # "in_progress" | "closed" | (manuel olarak)
+
+
+class FaultCauseUpdate(BaseModel):
+    """Saha ekibinin girdigi ariza sebebi.
+
+    AYRI BIR UC: sebep, durum degisiminden BAGIMSIZ girilebilmeli. Ekip
+    arizayi kapatirken sebebi bilmeyebilir (kablo altyapisi sonradan
+    kazilir) ya da kapattiktan sonra ogrenebilir. Sebebi `status` ucuna
+    baglamak, "kapatildi ama sebep girilemedi" ya da tersi "sebep girmek
+    icin durumu degistir" gibi yapay kisitlar dogururdu.
+
+    `cause_code` NULL gonderilebilir — girilmis bir sebebi GERI ALMAK
+    (yanlis secildiyse) mumkun olmali.
+    """
+
+    cause_code: str | None = None
+    cause_detail: str | None = None
+    #: Elle duzeltme: cihaz verisinden turetilen tur/faz yanlissa insan
+    #: ezebilmeli. Gonderilmezse mevcut deger KORUNUR (None "sil" demek
+    #: degil, "dokunma" demek) — bu yuzden ayri bir bayrakla ayrisir.
+    fault_kind: str | None = None
+    phase: str | None = None
 
 
 class FaultCommentCreate(BaseModel):

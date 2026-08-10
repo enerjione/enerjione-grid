@@ -239,6 +239,45 @@ export type FaultEvent = {
   comment_count: number;
   /** Arızayı açan alarmlar (son "gördüm" diyen cihazdan), en yeni önce. */
   trigger_alarms?: FaultTriggerAlarm[];
+
+  // ---- Analiz alanları ----
+  /** Sahanın girdiği sebep (katalogdan). NULL = henüz doldurulmadı. */
+  cause_code?: string | null;
+  cause_detail?: string | null;
+  /** Kuralın CİHAZ VERİSİNDEN türettiği öneri. İnsan etiketinden AYRI durur;
+      arayüz bunu "önerilen" olarak gösterir, kilitlemez. */
+  auto_cause_code?: string | null;
+  /** "transient" | "permanent" | "unknown" — cihazdan okunur. */
+  fault_kind?: string | null;
+  /** Etkilenen faz: "a" | "b" | "ab" | "abc" ... Hangi ünitelerin arızayı
+      gördüğünden türetilir (master/sat01/sat02 ayrı fazlara takılır). */
+  phase?: string | null;
+  fault_direction?: string | null;
+  /** Arıza anında aktif olan sinyaller (kaynak öneki dahil). */
+  trigger_signals?: string[] | null;
+  fault_current_a?: number | null;
+  load_current_before_a?: number | null;
+  conductor_temp_c?: number | null;
+  momentary_fault_count?: number | null;
+  permanent_fault_count?: number | null;
+  measured_at?: string | null;
+};
+
+/** Arıza sebep kataloğu — backend `/faults/causes` ucundan gelir.
+    Frontend'e gömülmez: iki liste zamanla ayrışır ve arayüzde seçilen bir kod
+    backend'de tanınmaz olurdu. */
+export type FaultCause = {
+  code: string;
+  label_tr: string;
+  label_en: string;
+  group: string;
+};
+
+export type FaultCauseCatalog = {
+  causes: FaultCause[];
+  groups: string[];
+  kinds: { code: string; label_tr: string; label_en: string }[];
+  phases: string[];
 };
 
 /** Arızayı doğuran alarm — "bu arıza NEDEN açıldı" sorusunun cevabı.

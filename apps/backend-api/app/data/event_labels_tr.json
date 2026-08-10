@@ -162,7 +162,8 @@
     "notification_whatsapp_web_test_ok": "WhatsApp Web test başarılı: {{recipient}}",
     "notification_whatsapp_web_test_failed": "WhatsApp Web test başarısız: {{error}}",
     "notification_whatsapp_web_logout": "WhatsApp Web oturumu kapatıldı",
-    "topology_imported": "Topoloji içe aktarıldı: {{regions}} bölge, {{lines}} hat, {{poles}} direk"
+    "topology_imported": "Topoloji içe aktarıldı: {{regions}} bölge, {{lines}} hat, {{poles}} direk",
+    "fault_cause_set": "Arıza sebebi girildi: arıza {{fault_id}} → {{cause}}"
   },
   "severity": {
     "info": "Bilgi",

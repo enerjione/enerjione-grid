@@ -24,9 +24,11 @@ import { useTranslation } from "react-i18next";
 import { CheckCircle2, Clock, FileText, RefreshCw, TriangleAlert } from "lucide-react";
 
 import type { GridSnapshot } from "../../shared/api";
+import { fetchFaultCauses } from "../../shared/api";
 import type {
   AlarmEvent,
   DeviceRow,
+  FaultCauseCatalog,
   FaultComment,
   FaultEvent,
   FaultStats,
@@ -63,6 +65,13 @@ type Props = {
   onAssign: (faultId: number, username: string | null) => Promise<void>;
   onUpdateStatus: (faultId: number, status: string) => Promise<void>;
   onUpdateNote: (faultId: number, note: string | null) => Promise<void>;
+  /** Ariza sebebi — analiz katmaninin ogrenecegi tek insan etiketi. */
+  onUpdateCause: (
+    faultId: number,
+    payload: { cause_code: string | null; cause_detail?: string | null }
+  ) => Promise<void>;
+  /** Oturum token'i — sebep katalogunu BIR KEZ cekmek icin. */
+  accessToken: string;
   onLoadComments: (faultId: number) => Promise<FaultComment[]>;
   onAddComment: (faultId: number, body: string) => Promise<void>;
 };
@@ -97,6 +106,8 @@ export function FaultListPage({
   onAssign,
   onUpdateStatus,
   onUpdateNote,
+  onUpdateCause,
+  accessToken,
   onLoadComments,
   onAddComment
 }: Props) {
@@ -125,6 +136,26 @@ export function FaultListPage({
     () => faults.filter((f) => f.status === "resolved" || f.status === "closed"),
     [faults]
   );
+
+  /** Sebep katalogu — sayfa basina BIR KEZ. Backend tek kaynak
+   *  (`app/data/fault_causes.py`); frontend'e gomulseydi ikisi ayrisir ve
+   *  arayuzde secilen kod backend'de taninmaz olurdu. */
+  const [causeCatalog, setCauseCatalog] = useState<FaultCauseCatalog | null>(null);
+  useEffect(() => {
+    let iptal = false;
+    fetchFaultCauses(accessToken)
+      .then((k) => {
+        if (!iptal) setCauseCatalog(k);
+      })
+      .catch(() => {
+        // Katalog alinamazsa sebep secimi devre disi kalir; sayfanin geri
+        // kalani (ariza listesi) etkilenmez.
+        if (!iptal) setCauseCatalog(null);
+      });
+    return () => {
+      iptal = true;
+    };
+  }, [accessToken]);
 
   /** line_id -> hattin tum direk sira numaralari (sematik serit icin). */
   const poleSeqsByLine = useMemo(() => {
@@ -311,6 +342,8 @@ export function FaultListPage({
           onAssign={onAssign}
           onUpdateStatus={onUpdateStatus}
           onUpdateNote={onUpdateNote}
+          onUpdateCause={onUpdateCause}
+          causeCatalog={causeCatalog}
           onLoadComments={onLoadComments}
           onAddComment={onAddComment}
         />

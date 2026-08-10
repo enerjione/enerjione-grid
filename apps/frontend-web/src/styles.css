@@ -24779,6 +24779,75 @@ th.event-col-category {
    Orta kolon flex-column oldugundan flex:1 ile geri kalan alani kaplar;
    icindeki textarea da flex:1 olarak butun ic alani doldurur — kullanici
    yorumu yazarken alan en alta kadar uzanir. */
+/* ---- Ariza sebebi karti ----
+   Analiz katmaninin ogrenecegi TEK insan etiketi buradan giriliyor. */
+.fault-cause-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Kural onerisi. Bilerek SOLGUN ve ayri: bir oneridir, girilmis bir deger
+   degil. Operator "Oneriyi kullan"a basmadan istatistige girmez. */
+.fault-cause-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  color: #5b21b6;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.fault-cause-suggestion > .material-symbols-outlined {
+  font-size: 17px;
+  flex-shrink: 0;
+}
+.fault-cause-apply {
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid #c4b5fd;
+  background: #fff;
+  color: #6d28d9;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.fault-cause-apply:hover {
+  background: #ede9fe;
+}
+
+.fault-cause-select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  font-size: 13px;
+  background: #fff;
+  color: #0f172a;
+}
+.fault-cause-select:disabled {
+  background: #f8fafc;
+  color: #94a3b8;
+}
+
+.fault-cause-detail {
+  width: 100%;
+  min-height: 58px;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .fault-modal-card--note {
   flex: 1 1 auto;
   display: flex;
