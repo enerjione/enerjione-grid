@@ -14,6 +14,53 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.58.0] — 2026-08-10
+
+Arıza analiz katmanı. v2.56/2.57'de veri birikmeye başlamıştı; bu sürüm onu
+**okunabilir** yapıyor.
+
+### Eklendi
+
+- **Arıza Analizi sayfası** (Mühendislik → İzleme). En çok arıza çıkaran
+  hatlar ve bölgeler, ortalama çözüm süresi, tekrarlayan açıklıklar, sebep
+  dağılımı, faz dağılımı ve aylık eğilim. Dönem seçilebilir (30 gün – 3 yıl).
+- **Tekrarlayan açıklıklar** — aynı iki direk arasında birden fazla arıza.
+  Bakım önceliklendirmesinin en doğrudan girdisi: bir açıklık yılda beş kez
+  arıza yapıyorsa oradaki sorun kalıcıdır, tek tek müdahale yerine o
+  açıklığı elden geçirmek gerekir.
+- **Kural isabeti.** Cihaz verisinden türetilen sebep önerisi, sahanın
+  girdiği etiketle ne kadar örtüşüyor — ve en sık hangi çiftte yanılıyor.
+  Bir öğrenme katmanı eklemeden önce bilinmesi gereken sayı budur: düşükse
+  önce kuralları düzeltmek gerekir, model eklemek isabetsizliği gizlemekten
+  başka bir şey yapmaz.
+- **Arıza bildirimi WhatsApp'a harita görseliyle düşüyor.** Metin tek başına
+  "nerede" sorusunu tam cevaplamıyordu; koordinat linkini tıklayıp uygulama
+  değiştirmek gerekiyordu. Ekip artık sohbetten çıkmadan konumu görüyor.
+- **Arıza bölgesindeki branşman kolları gösteriliyor.** Hat tek bir zincir
+  değil: dallanma direğine bağlı kollar ayrı birer hattır. Ana hattaki arıza
+  aralığı bir dallanma direğini kapsıyorsa o kol da enerjisiz kalır — ama
+  arızada hiçbir yerde görünmüyordu, yani o koldaki aboneler "etkilenmemiş"
+  sanılıyordu.
+- Arıza detayındaki harita seçilen odağa göre çerçeveleniyor.
+
+### Not — sayıların dürüstlüğü
+
+Bu ekran bakım bütçesini yönlendireceği için iki yerde bilinçli davranıldı:
+
+- **Ortalama çözüm süresi yalnızca kapanmış arızalardan** hesaplanıyor.
+  Devam eden bir arızayı "0 sürdü" saymak ortalamayı sistematik olarak aşağı
+  çeker ve tabloyu olduğundan iyi gösterirdi.
+- **Sebebi girilmiş arıza oranı gizlenmiyor.** Oran düşükse ekran uyarı
+  basıyor: kayıtların yalnızca %5'i etiketliyken sebep dağılımına bakıp
+  "en sık sebep ağaç teması" demek uydurma bir bulgudur. Etiketsiz kayıtlar
+  ayrıca "bilinmiyor" dilimi yapılmıyor — veri eksikliğini bir bulgu gibi
+  göstermek olurdu.
+
+Analiz operatör için sorumluluk alanıyla sınırlıdır; görmediği hatların
+arızaları toplam sayılara da girmez.
+
+---
+
 ## [2.57.0] — 2026-08-10
 
 v2.56.0 arıza analizinin veri temelini kurmuştu ama girilecek bir yer yoktu.
