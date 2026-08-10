@@ -14,14 +14,19 @@
  * dilim islemine indirgenir.
  */
 
-/** Ana hattan ayrilan bransman kolu — cizimde dal olarak gosterilir. */
+/** Ana hattan ayrilan bransman kolu — cizimde ALT KAT olarak gosterilir. */
 export type StripBranch = {
   lineId: number;
   name: string;
   /** Kolun ayrildigi ANA HAT diregi (sequence_no). */
   atSeq: number;
-  /** Koldaki direk sayisi — dalin uzunlugunu olcekler. */
+  /** Koldaki direk sayisi. */
   poleCount: number;
+  /** Kolun direkleri (sirali). Cizimde alt katta gercek direk olarak
+   *  gosterilir — kol tek bir cizgi ucu degil, kendi hattidir. */
+  poles?: StripPole[];
+  /** Kolda O AN acik bir ariza var mi — varsa kol kirmizi cizilir. */
+  hasFault?: boolean;
 };
 
 /** Cizimdeki bir direk. `seq` zorunlu; ad/rol varsa etiket ve ipucu zenginlesir. */
@@ -80,7 +85,7 @@ export type StripGeometry = {
 // ust uste biniyordu. Artik span 116 — hat "uzun" okunuyor ve cihaz/faz
 // isaretleri birbirine degmiyor. Yukseklik artisi ise ALTTAKI OLCU SERIDI
 // icin: mesafe artik metin kutusunda degil, cizimin uzerinde.
-export const STRIP_H = 176;
+export const STRIP_H = 248;
 export const PAD_X = 38;
 export const SPAN_W = 116;
 export const GROUND_Y = 96;
@@ -88,10 +93,29 @@ export const CROSSARM_Y = 20;
 export const WIRE_Y = 36;
 export const SAG = 11;
 export const LABEL_Y = 114;
+
+// --- BRANSMAN KATI ---------------------------------------------------------
+// Kol ana hattin ALTINDA kendi kati olarak cizilir. Onceki surumde dal yalnizca
+// kisa bir kesikli cizgi + nokta + etiketti; iki kol yan yana gelince
+// etiketleri ust uste biniyor ("BR-2 BR-3") ve kolun KENDI direkleri hic
+// gorunmuyordu. Kol ayri bir hattir — oyle de cizilmeli.
+/** Dal traversinin y'si (kolun direk basliklari). */
+export const BRANCH_CROSSARM_Y = 150;
+/** Dal iletkeninin y'si. */
+export const BRANCH_WIRE_Y = 160;
+/** Dal zemini. */
+export const BRANCH_GROUND_Y = 190;
+/** Dal direk etiketleri. */
+export const BRANCH_LABEL_Y = 202;
+/** Kolun kendi adi (dal katinin solunda). */
+export const BRANCH_NAME_Y = 143;
+/** Dal katinda bir direk araligi — ana hattan dar, kol ikincil bilgi. */
+export const BRANCH_SPAN_W = 74;
+
 /** Olcu (dimension) cizgisinin y'si — teknik resimdeki kot cizgisi gibi. */
-export const DIM_Y = 140;
+export const DIM_Y = 222;
 /** Olcu etiketinin taban cizgisi. */
-export const DIM_LABEL_Y = 162;
+export const DIM_LABEL_Y = 242;
 const SAMPLES = 16;
 
 /**

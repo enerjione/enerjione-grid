@@ -207,23 +207,40 @@ export function FaultListPage({
    *  hattaki dallanma diregine baglanir. */
   const branchesByLine = useMemo(() => {
     const m = new Map<number, StripBranch[]>();
+    // Kolda kendi ariza kaydi varsa cizimde kirmizi gorunmeli: ana hattaki
+    // ariza araligina girmese de kol arizali olabilir.
+    const aktifArizaliHatlar = new Set(
+      faults.filter((f) => ACTIVE_STATUSES.has(f.status)).map((f) => f.line_id)
+    );
     const poleById = new Map((gridSnapshot?.poles ?? []).map((p) => [p.id, p]));
     for (const ln of gridSnapshot?.lines ?? []) {
       if (!ln.branched_from_pole_id) continue;
       const anchor = poleById.get(ln.branched_from_pole_id);
       if (!anchor) continue;
+      const kolDirekleri = (gridSnapshot?.poles ?? [])
+        .filter((p) => p.line_id === ln.id)
+        .sort((a, b) => a.sequence_no - b.sequence_no);
       const kol: StripBranch = {
         lineId: ln.id,
         name: ln.name,
         atSeq: anchor.sequence_no,
-        poleCount: (gridSnapshot?.poles ?? []).filter((p) => p.line_id === ln.id).length
+        poleCount: kolDirekleri.length,
+        // Kolun KENDI direkleri — dal kati bunlari cizer, kol tek bir
+        // cizgi ucu degil kendi hattidir.
+        poles: kolDirekleri.map((p) => ({
+          seq: p.sequence_no,
+          name: p.name ?? null,
+          role: p.topology_role ?? null
+        })),
+        // Kolda O AN acik bir ariza var mi — varsa dal kirmizi cizilir.
+        hasFault: aktifArizaliHatlar.has(ln.id)
       };
       const arr = m.get(anchor.line_id);
       if (arr) arr.push(kol);
       else m.set(anchor.line_id, [kol]);
     }
     return m;
-  }, [gridSnapshot]);
+  }, [gridSnapshot, faults]);
 
   /** Sekmelerde secili aktif ariza. Kayit listeden dusunce (cozuldu) ilk
    *  siradakine duser — bos ekran gostermek yerine. */

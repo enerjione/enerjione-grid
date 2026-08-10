@@ -27,6 +27,11 @@ import "./lineFocus.test";
 // cihazin arasinda. Yanlis konum sahada yanlis direge gitmek demek.
 import "./faultStrip.test";
 
+// Ariza Analizi grafiklerinin renk sozlesmesi: palet sirasi CVD (renk
+// korlugu) dogrulamasindan gecen dizilim olmali. Sira degisirse ekran renk
+// koru bir operator icin sessizce okunamaz hale gelir.
+import "./faultChartTheme.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   DEFAULT_STALE_AFTER_MS,

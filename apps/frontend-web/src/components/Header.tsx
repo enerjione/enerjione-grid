@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Home, Bell, TriangleAlert, FileText, Settings, LockOpen, type LucideIcon } from "lucide-react";
+import {
+  Home,
+  Bell,
+  TriangleAlert,
+  FileText,
+  ChartLine,
+  Settings,
+  LockOpen,
+  type LucideIcon
+} from "lucide-react";
 
 import { NotificationBell } from "./NotificationBell";
 import { HeaderSearch } from "./HeaderSearch";
@@ -29,6 +38,11 @@ type Props = {
   onOpenRemoteAccess?: () => void;
   activePage: NavPage;
   onChangePage: (page: NavPage) => void;
+  /** "Ariza Analizi" sayfasini acar. Sayfa muhendislik agacinda yasiyor ama
+   *  gunluk kullanilan bir ekran; ust menude olmasi isteniyor. */
+  onOpenFaultAnalytics?: () => void;
+  /** Analiz sekmesi su an acik mi (ust menude vurgulanir). */
+  faultAnalyticsActive?: boolean;
   // Global arama (cihaz + hat + bolge).
   devices: DeviceRow[];
   regions: Region[];
@@ -60,6 +74,8 @@ export function Header({
   remoteAccessLabel,
   onOpenRemoteAccess,
   activePage,
+  onOpenFaultAnalytics,
+  faultAnalyticsActive,
   onChangePage,
   devices,
   regions,
@@ -143,6 +159,18 @@ export function Header({
               <span>{t(key)}</span>
             </button>
           ))}
+          {/* Ariza Analizi muhendislik agacinda yasiyor ama gunluk bakilan
+              bir ekran; menu icinde aramak yerine ust seride alindi.
+              Yetkisi olmayan (operator) rolde geri cagri gecilmez. */}
+          {onOpenFaultAnalytics ? (
+            <button
+              className={`header-nav-btn${faultAnalyticsActive ? " active" : ""}`}
+              onClick={onOpenFaultAnalytics}
+            >
+              <ChartLine size={17} strokeWidth={2} />
+              <span>{t("engineering.nav.faultAnalytics")}</span>
+            </button>
+          ) : null}
         </nav>
       </div>
 

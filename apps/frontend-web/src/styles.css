@@ -23804,6 +23804,9 @@ th.event-col-category {
 .fx-strip-stage {
   position: relative;
   width: 100%;
+  /* Kalan yuksekligi kaplar: cizimin altinda bos beyaz serit kalmasin. */
+  flex: 1 1 auto;
+  min-height: 220px;
   border-radius: 10px;
   overflow: hidden;
   background:
@@ -23813,8 +23816,13 @@ th.event-col-category {
 .fx-strip {
   display: block;
   width: 100%;
+  height: 100%;
   touch-action: none;
   cursor: grab;
+  /* Surukleyerek gezerken direk adlari ve olcu yazilari SECILMESIN —
+     imlec metnin uzerinden gecince mavi secim lekesi olusuyordu. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 .fx-strip.is-zoomed { cursor: grab; }
 .fx-strip:active { cursor: grabbing; }
@@ -39470,6 +39478,36 @@ th.event-col-category {
 .fa-card--wide {
   grid-column: 1 / -1;
 }
+
+/* Grafikli kartlar esit yukseklikte olsun: yan yana iki siralama kartinin
+   biri kisa digeri uzun oldugunda izgara "kirik" gorunuyordu. */
+.fa-card {
+  display: flex;
+  flex-direction: column;
+}
+.fa-card .rad-card-head h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Grafigin ustunde duran veri-kalitesi uyarisi. Banner degil satir ici:
+   uyari kartin DISINDA dursaydi kart tek basina kopyalanip yanlis
+   okunabilirdi. */
+.fa-inline-warn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  padding: 6px 9px;
+  border-radius: 7px;
+  border-left: 3px solid #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.fa-inline-warn svg { flex-shrink: 0; }
 
 /* ---- Siralamali listeler ---- */
 .fa-list {

@@ -366,9 +366,14 @@ export function DeviceManagementPanel({
   const [description, setDescription] = useState("");
   const [model, setModel] = useState("horstmann_sn_2_0");
   // Unite -> faz eslemesi. Bos = "Proje Ayarlari'ndaki konvansiyonu kullan".
-  const [phaseMaster, setPhaseMaster] = useState<"" | PhaseCode>("");
-  const [phaseSat01, setPhaseSat01] = useState<"" | PhaseCode>("");
-  const [phaseSat02, setPhaseSat02] = useState<"" | PhaseCode>("");
+  // VARSAYILAN L1/L2/L3: master ilk faza, uydular sirayla digerlerine
+  // kelepcelenir — sahadaki standart kurulum sirasi budur. Eskiden ucu de
+  // bos ("proje ayarini kullan") basliyordu; pratikte kimse doldurmuyor ve
+  // arizanin hangi fazda oldugu bilinmiyordu. Farkli kurulan cihazlarda
+  // deger elle degistirilebilir.
+  const [phaseMaster, setPhaseMaster] = useState<"" | PhaseCode>("a");
+  const [phaseSat01, setPhaseSat01] = useState<"" | PhaseCode>("b");
+  const [phaseSat02, setPhaseSat02] = useState<"" | PhaseCode>("c");
   const [installationDate, setInstallationDate] = useState("");
   const [ipAddress, setIpAddress] = useState("");
   const [dnp3OutstationPort, setDnp3OutstationPort] = useState("20001");
@@ -493,9 +498,9 @@ export function DeviceManagementPanel({
     setSerial(device.serialNumber ?? "");
     setDescription(device.description ?? "");
     setModel(device.model ?? "horstmann_sn_2_0");
-    setPhaseMaster(device.phaseMaster ?? "");
-    setPhaseSat01(device.phaseSat01 ?? "");
-    setPhaseSat02(device.phaseSat02 ?? "");
+    setPhaseMaster(device.phaseMaster ?? "a");
+    setPhaseSat01(device.phaseSat01 ?? "b");
+    setPhaseSat02(device.phaseSat02 ?? "c");
     setInstallationDate(device.installationDate ?? "");
     setIpAddress(device.ipAddress ?? "");
     setDnp3OutstationPort(String(device.dnp3OutstationPort ?? 20001));
@@ -1304,9 +1309,6 @@ export function DeviceManagementPanel({
                       <span className="device-phase-title">
                         {t("engineering.devicesPanel.form.phaseTitle")}
                       </span>
-                      <small className="device-phase-hint">
-                        {t("engineering.devicesPanel.form.phaseHint")}
-                      </small>
                       <div className="device-phase-grid">
                         {(
                           [
@@ -1339,7 +1341,7 @@ export function DeviceManagementPanel({
                       <textarea
                         value={description}
                         onChange={(event) => setDescription(event.target.value)}
-                        rows={6}
+                        rows={3}
                       />
                     </label>
                   </div>

@@ -24,19 +24,23 @@
  * ezdigi icin pin her render'da (0,0)'a — cizimin sol ust kosesine —
  * sicriyordu. Arizanin yeri kirmizi tel ve olcu seridiyle isaretli.
  */
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Maximize2, Minus, Plus } from "lucide-react";
 
 import {
+  BRANCH_CROSSARM_Y,
+  BRANCH_GROUND_Y,
+  BRANCH_LABEL_Y,
+  BRANCH_NAME_Y,
+  BRANCH_SPAN_W,
+  BRANCH_WIRE_Y,
   CROSSARM_Y,
   DIM_LABEL_Y,
   DIM_Y,
   GROUND_Y,
   LABEL_Y,
-  PX_PER_UNIT,
   STRIP_H,
-  STRIP_PX_H,
   WIRE_Y,
   buildStripGeometry,
   hotPathOf,
@@ -81,9 +85,6 @@ const BRANCH = "#7c3aed";
 
 /** Faz sirasi — bir SN2 govdesindeki uc sensor, hattin uc fazi. */
 const PHASES = ["master", "sat01", "sat02"] as const;
-
-/** Dalin ana hattin altina indigi derinlik (viewBox birimi). */
-const BRANCH_DROP = 46;
 
 type Pt = { x: number; y: number };
 type Hover =
@@ -268,10 +269,38 @@ export function FaultPoleStrip({
   const { seqs, poles: poleList, width, wire, devices, span, xOf, pointAt } = geo;
 
   // ---- Gorunum penceresi (zoom + pan) ----------------------------------
-  const base: View = useMemo(
-    () => ({ x: 0, y: 0, w: width, h: STRIP_H }),
-    [width]
-  );
+  //
+  // SVG'ye sabit bir yukseklik verildiginde kapsayicinin geri kalani BOS
+  // kaliyordu: kart uzadikca cizimin altinda genis beyaz bir serit olusuyor,
+  // sahne "sayfaya oturmamis" gorunuyordu. Cozum viewBox'in EN-BOY ORANINI
+  // kapsayicidan almak — cizim tum alani doldurur ve icerik bozulmaz.
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const [oran, setOran] = useState<number>(STRIP_H / 900);
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) setOran(r.height / r.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const base: View = useMemo(() => {
+    // Cizimin tamami HER ZAMAN sigsin: gereken yukseklik kapsayicidan
+    // fazlaysa genisligi degil YUKSEKLIGI buyutmek cizimi kucultmek olurdu,
+    // o yuzden genisligi oranla telafi ediyoruz.
+    const gerekenH = width * oran;
+    if (gerekenH >= STRIP_H) {
+      // Kapsayici yeterince yuksek: cizim dikeyde ortalanir.
+      return { x: 0, y: (STRIP_H - gerekenH) / 2, w: width, h: gerekenH };
+    }
+    // Kapsayici basik: cizimin tamamini gostermek icin daha genis bir
+    // pencere ac (yanlarda bosluk kalir, icerik kirpilmaz).
+    const w = STRIP_H / oran;
+    return { x: (width - w) / 2, y: 0, w, h: STRIP_H };
+  }, [width, oran]);
   const [view, setView] = useState<View | null>(null);
   const v = view ?? base;
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -364,27 +393,54 @@ export function FaultPoleStrip({
   // Kol ana hattin ALTINA iner: ana hat yatay ekseni korur, dal asagi dogru
   // ayrilir. Boylece "hangi direkten ne cikiyor" tek bakista okunur.
   const branchDraw = useMemo(() => {
+    // Kol ana hattin ALTINDA kendi kati olarak cizilir. Onceki surumde dal
+    // kisa bir kesikli cizgi + nokta + etiketti; iki kol yan yana gelince
+    // etiketler ust uste biniyor ("BR-2 BR-3"), kolun KENDI direkleri hic
+    // gorunmuyordu. Kol ayri bir hattir — oyle de cizilmeli.
     const out: {
       key: string;
       name: string;
-      x: number;
-      inZone: boolean;
+      /** Ana hattaki dallanma diregi. */
+      anchorX: number;
+      /** Dal katindaki direkler (en fazla GOSTER kadar). */
+      poles: { x: number; label: string }[];
+      /** Gosterilemeyen direk sayisi ("+N"). */
+      fazla: number;
+      hot: boolean;
       poleCount: number;
-      tipX: number;
-      tipY: number;
+      endX: number;
     }[] = [];
+    const GOSTER = 4;
     for (const b of branches ?? []) {
       const idx = seqs.indexOf(b.atSeq);
       if (idx === -1) continue;
-      const x = xOf(idx);
+      const anchorX = xOf(idx);
+      const kolDirekleri = (b.poles ?? []).slice(0, GOSTER);
+      // Kol direk kaydi gelmediyse en azindan sayidan yer tutucu uret:
+      // dalin uzunlugu gorunsun.
+      const adet = kolDirekleri.length || Math.min(GOSTER, Math.max(1, b.poleCount));
+      const cizilecek = kolDirekleri.length
+        ? kolDirekleri.map((p, i) => ({
+            x: anchorX + 26 + i * BRANCH_SPAN_W,
+            label: poleLabel(p)
+          }))
+        : Array.from({ length: adet }, (_, i) => ({
+            x: anchorX + 26 + i * BRANCH_SPAN_W,
+            label: `#${i + 1}`
+          }));
       out.push({
         key: `${b.lineId}`,
         name: b.name,
-        x,
-        inZone: active && idx >= hotFrom && idx <= hotTo,
+        anchorX,
+        poles: cizilecek,
+        fazla: Math.max(0, b.poleCount - cizilecek.length),
+        // Kol KENDI arizasini tasiyorsa ya da ariza araligi bu dallanma
+        // diregini kapsiyorsa kirmizi.
+        hot: Boolean(b.hasFault) || (active && idx >= hotFrom && idx <= hotTo),
         poleCount: b.poleCount,
-        tipX: x + 34,
-        tipY: GROUND_Y - 6 + BRANCH_DROP
+        endX: cizilecek.length
+          ? cizilecek[cizilecek.length - 1].x
+          : anchorX + 26
       });
     }
     return out;
@@ -404,7 +460,7 @@ export function FaultPoleStrip({
     : hoveredPole
       ? { x: xOf(seqs.indexOf(hoveredPole.seq)), y: CROSSARM_Y + 26 }
       : hoveredBranch
-        ? { x: hoveredBranch.x, y: GROUND_Y + 10 }
+        ? { x: hoveredBranch.anchorX, y: BRANCH_NAME_Y + 4 }
         : null;
   // Ipucu HTML katmaninda; viewBox birimini kapsayicinin yuzdesine cevir.
   const tipStyle = tipUnit
@@ -416,13 +472,13 @@ export function FaultPoleStrip({
 
   return (
     <div className="fx-strip-wrap">
-      <div className="fx-strip-stage">
+      <div className="fx-strip-stage" ref={stageRef}>
         <svg
           ref={svgRef}
           className={`fx-strip${yakinlasti ? " is-zoomed" : ""}`}
           viewBox={`${v.x} ${v.y} ${v.w} ${v.h}`}
           width="100%"
-          height={STRIP_PX_H}
+          height="100%"
           preserveAspectRatio="xMidYMid meet"
           role="img"
           aria-label={
@@ -520,50 +576,109 @@ export function FaultPoleStrip({
             strokeLinecap="round"
           />
 
-          {/* ---- BRANSMAN KOLLARI ---- */}
-          {branchDraw.map((b) => (
-            <g
-              key={b.key}
-              className="fx-strip-branch"
-              onMouseEnter={() => setHover({ kind: "branch", key: b.key })}
-              onMouseLeave={() => setHover(null)}
-            >
-              <rect
-                x={b.x - 6}
-                y={GROUND_Y - 4}
-                width={b.tipX - b.x + 14}
-                height={BRANCH_DROP + 10}
-                fill="transparent"
-              />
-              {/* Dal ana hattin altina iner; kesikli cizgi "ayri hat" der. */}
-              <path
-                d={`M${b.x} ${WIRE_Y + 2} C ${b.x} ${GROUND_Y}, ${b.x + 14} ${b.tipY - 12}, ${b.tipX} ${b.tipY}`}
-                fill="none"
-                stroke={b.inZone ? RED : BRANCH}
-                strokeWidth={b.inZone ? 2.6 : 2}
-                strokeLinecap="round"
-                strokeDasharray="7 4"
-                opacity={0.9}
-              />
-              <circle
-                cx={b.tipX}
-                cy={b.tipY}
-                r={3.4}
-                fill="#fff"
-                stroke={b.inZone ? RED : BRANCH}
-                strokeWidth={2}
-              />
-              <text
-                x={b.tipX + 7}
-                y={b.tipY + 3.4}
-                fontSize={9.5}
-                fontWeight={700}
-                fill={b.inZone ? "#b91c1c" : "#6d28d9"}
+          {/* ---- BRANSMAN KOLLARI (ALT KAT) ---- */}
+          {branchDraw.map((b) => {
+            const renk = b.hot ? RED : BRANCH;
+            return (
+              <g
+                key={b.key}
+                className="fx-strip-branch"
+                onMouseEnter={() => setHover({ kind: "branch", key: b.key })}
+                onMouseLeave={() => setHover(null)}
               >
-                {b.name}
-              </text>
-            </g>
-          ))}
+                <rect
+                  x={b.anchorX - 10}
+                  y={BRANCH_NAME_Y - 12}
+                  width={b.endX - b.anchorX + 70}
+                  height={BRANCH_LABEL_Y - BRANCH_NAME_Y + 20}
+                  fill="transparent"
+                />
+                {/* Ana hattan dal katina INIS — kesikli: ayri bir hat. */}
+                <path
+                  d={`M${b.anchorX} ${GROUND_Y - 2} L${b.anchorX} ${BRANCH_CROSSARM_Y - 6} Q ${b.anchorX} ${BRANCH_WIRE_Y}, ${b.anchorX + 22} ${BRANCH_WIRE_Y}`}
+                  fill="none"
+                  stroke={renk}
+                  strokeWidth={1.8}
+                  strokeDasharray="6 4"
+                  strokeLinecap="round"
+                  opacity={0.85}
+                />
+                {/* Kol adi — dal katinin solunda, kendi satirinda. Iki kol
+                    yan yana gelse bile etiketler artik carpismiyor. */}
+                <text
+                  x={b.anchorX + 2}
+                  y={BRANCH_NAME_Y}
+                  fontSize={9.5}
+                  fontWeight={800}
+                  fill={b.hot ? "#b91c1c" : "#6d28d9"}
+                >
+                  {b.name}
+                </text>
+                {/* Dal zemini */}
+                <line
+                  x1={b.anchorX + 18}
+                  y1={BRANCH_GROUND_Y}
+                  x2={b.endX + 18}
+                  y2={BRANCH_GROUND_Y}
+                  stroke="#e2e8f0"
+                  strokeWidth={1}
+                  strokeDasharray="3 4"
+                />
+                {/* Dal iletkeni — mini katener */}
+                <path
+                  d={b.poles
+                    .map((p, i) =>
+                      i === 0
+                        ? `M${b.anchorX + 22} ${BRANCH_WIRE_Y} L${p.x} ${BRANCH_WIRE_Y}`
+                        : `L${p.x} ${BRANCH_WIRE_Y}`
+                    )
+                    .join(" ")}
+                  fill="none"
+                  stroke={b.hot ? renk : WIRE_GREY}
+                  strokeWidth={b.hot ? 2.4 : 1.8}
+                  strokeLinecap="round"
+                />
+                {/* Kolun direkleri — ana hattakinin kucugu */}
+                {b.poles.map((p) => (
+                  <g key={p.x} stroke={renk} strokeWidth={1.4} strokeLinecap="round" fill="none">
+                    <line x1={p.x} y1={BRANCH_CROSSARM_Y} x2={p.x} y2={BRANCH_GROUND_Y} />
+                    <line
+                      x1={p.x - 7}
+                      y1={BRANCH_CROSSARM_Y}
+                      x2={p.x + 7}
+                      y2={BRANCH_CROSSARM_Y}
+                    />
+                    <line x1={p.x} y1={BRANCH_GROUND_Y - 11} x2={p.x - 5} y2={BRANCH_GROUND_Y} />
+                    <line x1={p.x} y1={BRANCH_GROUND_Y - 11} x2={p.x + 5} y2={BRANCH_GROUND_Y} />
+                  </g>
+                ))}
+                {b.poles.map((p) => (
+                  <text
+                    key={`bl-${p.x}`}
+                    x={p.x}
+                    y={BRANCH_LABEL_Y}
+                    textAnchor="middle"
+                    fontSize={8.5}
+                    fontWeight={b.hot ? 700 : 500}
+                    fill={b.hot ? "#b91c1c" : GREY}
+                  >
+                    {p.label}
+                  </text>
+                ))}
+                {b.fazla > 0 ? (
+                  <text
+                    x={b.endX + 16}
+                    y={BRANCH_WIRE_Y + 3}
+                    fontSize={8.5}
+                    fontWeight={700}
+                    fill={GREY}
+                  >
+                    +{b.fazla}
+                  </text>
+                ) : null}
+              </g>
+            );
+          })}
 
           {/* ARIZALI PARCA */}
           {hotPath ? (
@@ -773,7 +888,7 @@ export function FaultPoleStrip({
                 <div className="fx-strip-tip-row">
                   {t("faults.poleStrip.branchPoles", { count: hoveredBranch.poleCount })}
                 </div>
-                {hoveredBranch.inZone ? (
+                {hoveredBranch.hot ? (
                   <div className="fx-strip-tip-row fx-strip-tip-row--warn">
                     {t("faults.poleStrip.inZone")}
                   </div>

@@ -11,13 +11,20 @@
  * 2. BOS DURUM DURUSTCE SOYLENIR. Veri yokken bos grafik cizmek "ariza yok"
  *    gibi okunur; oysa dogru mesaj "henuz veri birikmedi"dir.
  *
- * Cizim harici kutuphane KULLANMAZ: mevcut bagimliliklarla (CSS + inline SVG)
- * yapiliyor. Bir grafik kutuphanesi eklemek paket boyutunu ve saha cihazinda
- * yuklenme suresini bu ekranin degerinden fazla buyuturdu.
+ * CIZIM: echarts. Onceden inline SVG ile ciziliyordu ve gerekcesi "kutuphane
+ * eklemek paket boyutunu buyutur"du. O gerekce artik gecerli degil — echarts
+ * ZATEN bagimlilik (cihaz detay grafikleri kullaniyor) ve bu sayfa lazy
+ * yukleniyor. Kazanc gorsel degil islevsel: her seride ipucu/hover
+ * kendiliginden gelir, elde cizilen SVG'de bunlar yoktu.
+ *
+ * 3. BOLGE DAGILIMI EKLENDI. Backend `top_regions` uretiyordu ama ekran onu
+ *    HIC gostermiyordu; hesaplanip atilan bir veriydi.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, Gauge, MapPin, Repeat, TrendingUp } from "lucide-react";
+import { AlertTriangle, Gauge, Map as MapIcon, MapPin, Repeat, TrendingUp } from "lucide-react";
+
+import { EgilimGrafigi, FazGrafigi, SiralamaGrafigi } from "./FaultCharts";
 
 import { fetchFaultAnalytics, fetchFaultCauses } from "../../shared/api";
 import type { FaultAnalytics, FaultCauseCatalog } from "../../shared/types";
@@ -37,19 +44,6 @@ const LOW_LABEL_RATIO = 0.4;
 
 function yuzde(x: number): string {
   return `${Math.round(x * 100)}%`;
-}
-
-/** Yatay cubuk — en buyuk degere gore olceklenir. */
-function Bar({ value, max, tone }: { value: number; max: number; tone?: string }) {
-  const pct = max > 0 ? Math.max(2, (value / max) * 100) : 0;
-  return (
-    <span className="fa-bar">
-      <span
-        className={`fa-bar-fill${tone ? ` fa-bar-fill--${tone}` : ""}`}
-        style={{ width: `${pct}%` }}
-      />
-    </span>
-  );
 }
 
 export function FaultAnalyticsPage({ accessToken }: Props) {
@@ -111,17 +105,12 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
   const dusukEtiket =
     ozet !== undefined && ozet.total > 0 && ozet.labeled_ratio < LOW_LABEL_RATIO;
 
-  const maxCause = useMemo(
-    () => Math.max(1, ...(data?.cause_distribution ?? []).map((c) => c.count)),
-    [data]
-  );
-  const maxLine = useMemo(
-    () => Math.max(1, ...(data?.top_lines ?? []).map((c) => c.count)),
-    [data]
-  );
-  const maxMonth = useMemo(
-    () => Math.max(1, ...(data?.monthly_trend ?? []).map((c) => c.count)),
-    [data]
+  /** Faz kodu -> okunabilir etiket ("a" -> "L1"). */
+  const fazLabel = useCallback(
+    (kod: string) =>
+      ({ a: "L1", b: "L2", c: "L3", abc: t("faultAnalytics.allPhases") })[kod] ??
+      kod.toUpperCase(),
+    [t]
   );
 
   return (
@@ -224,30 +213,121 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
       ) : null}
 
       <div className="fa-grid">
+        {/* ---- Aylik egilim — EN USTTE ve tam genislikte.
+             Once zaman baglami: "artiyor mu, azaliyor mu, mevsimsel mi".
+             Alttaki siralama kartlari o baglamin icinde okunur. ---- */}
+        <section className="rad-card fa-card fa-card--wide">
+          <header className="rad-card-head">
+            <h3>
+              <TrendingUp size={16} />
+              {t("faultAnalytics.monthlyTrend")}
+            </h3>
+            <small>{t("faultAnalytics.monthlyHint")}</small>
+          </header>
+          {data?.monthly_trend.length ? (
+            <EgilimGrafigi
+              points={data.monthly_trend}
+              labelToplam={t("faultAnalytics.faultUnit")}
+            />
+          ) : (
+            <p className="net-empty">{t("faultAnalytics.noData")}</p>
+          )}
+        </section>
+
         {/* ---- En cok ariza cikaran hatlar ---- */}
         <section className="rad-card fa-card">
           <header className="rad-card-head">
             <h3>{t("faultAnalytics.topLines")}</h3>
+            <small>{t("faultAnalytics.topLinesHint")}</small>
           </header>
           {data?.top_lines.length ? (
-            <ul className="fa-list">
-              {data.top_lines.map((l) => (
-                <li key={l.line_id}>
-                  <span className="fa-list-label" title={l.code}>
-                    {l.name}
-                  </span>
-                  <Bar value={l.count} max={maxLine} />
-                  <strong className="fa-list-count">{l.count}</strong>
-                </li>
-              ))}
-            </ul>
+            <SiralamaGrafigi
+              items={data.top_lines.map((l) => ({ label: l.name, value: l.count }))}
+              birim={t("faultAnalytics.faultUnit")}
+            />
+          ) : (
+            <p className="net-empty">{t("faultAnalytics.noData")}</p>
+          )}
+        </section>
+
+        {/* ---- Bolge dagilimi.
+             Backend bunu zaten uretiyordu ama ekran GOSTERMIYORDU. Hat
+             siralamasi "hangi hat" der; bolge siralamasi "hangi ekibin
+             sahasi" der — bakim planlamasinda ikisi ayri sorudur. ---- */}
+        <section className="rad-card fa-card">
+          <header className="rad-card-head">
+            <h3>
+              <MapIcon size={16} />
+              {t("faultAnalytics.topRegions")}
+            </h3>
+            <small>{t("faultAnalytics.topRegionsHint")}</small>
+          </header>
+          {data?.top_regions.length ? (
+            <SiralamaGrafigi
+              items={data.top_regions.map((r) => ({ label: r.name, value: r.count }))}
+              birim={t("faultAnalytics.faultUnit")}
+            />
+          ) : (
+            <p className="net-empty">{t("faultAnalytics.noData")}</p>
+          )}
+        </section>
+
+        {/* ---- Sebep dagilimi ---- */}
+        <section className="rad-card fa-card">
+          <header className="rad-card-head">
+            <h3>{t("faultAnalytics.causeDistribution")}</h3>
+            {ozet ? (
+              <small>{t("faultAnalytics.ofLabeled", { count: ozet.labeled })}</small>
+            ) : null}
+          </header>
+          {data?.cause_distribution.length ? (
+            <>
+              {/* Etiketlenme dusukse grafigin YANINDA soylenir; kart tek
+                  basina kopyalanip "en sik sebep bu" diye okunmasin. */}
+              {dusukEtiket ? (
+                <p className="fa-inline-warn">
+                  <AlertTriangle size={13} />
+                  {t("faultAnalytics.lowLabelInline", {
+                    percent: yuzde(ozet!.labeled_ratio)
+                  })}
+                </p>
+              ) : null}
+              <SiralamaGrafigi
+                items={data.cause_distribution.map((c) => ({
+                  label: causeLabel(c.cause_code),
+                  value: c.count
+                }))}
+                birim={t("faultAnalytics.faultUnit")}
+              />
+            </>
+          ) : (
+            <p className="net-empty">{t("faultAnalytics.noCauses")}</p>
+          )}
+        </section>
+
+        {/* ---- Faz dagilimi ---- */}
+        <section className="rad-card fa-card">
+          <header className="rad-card-head">
+            <h3>{t("faultAnalytics.phaseDistribution")}</h3>
+            <small>{t("faultAnalytics.phaseHint")}</small>
+          </header>
+          {data?.phase_distribution.length ? (
+            <FazGrafigi
+              items={data.phase_distribution.map((p) => ({
+                phase: p.phase,
+                count: p.count,
+                label: fazLabel(p.phase)
+              }))}
+              birim={t("faultAnalytics.faultUnit")}
+            />
           ) : (
             <p className="net-empty">{t("faultAnalytics.noData")}</p>
           )}
         </section>
 
         {/* ---- Tekrarlayan aciklikar — bakim onceliklendirmesinin
-             en dogrudan girdisi ---- */}
+             en dogrudan girdisi. Grafik DEGIL liste: burada aranan sey
+             "hangi aciklik" ve "kac kez", ikisi de metin. ---- */}
         <section className="rad-card fa-card">
           <header className="rad-card-head">
             <h3>
@@ -269,7 +349,7 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
                       })}
                     </em>
                   </span>
-                  <strong className="fa-list-count fa-list-count--hot">{s.count}×</strong>
+                  <strong className="fa-list-count fa-list-count--hot">{s.count}x</strong>
                 </li>
               ))}
             </ul>
@@ -278,31 +358,14 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
           )}
         </section>
 
-        {/* ---- Sebep dagilimi ---- */}
+        {/* ---- Kural isabeti — cikarim katmanina guvenmeden ONCE
+             bakilmasi gereken sayi ---- */}
         <section className="rad-card fa-card">
           <header className="rad-card-head">
-            <h3>{t("faultAnalytics.causeDistribution")}</h3>
-            {ozet ? <small>{t("faultAnalytics.ofLabeled", { count: ozet.labeled })}</small> : null}
-          </header>
-          {data?.cause_distribution.length ? (
-            <ul className="fa-list">
-              {data.cause_distribution.map((c) => (
-                <li key={c.cause_code}>
-                  <span className="fa-list-label">{causeLabel(c.cause_code)}</span>
-                  <Bar value={c.count} max={maxCause} tone="cause" />
-                  <strong className="fa-list-count">{c.count}</strong>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="net-empty">{t("faultAnalytics.noCauses")}</p>
-          )}
-        </section>
-
-        {/* ---- Kural isabeti — LLM eklemeden ONCE bakilmasi gereken sayi ---- */}
-        <section className="rad-card fa-card">
-          <header className="rad-card-head">
-            <h3>{t("faultAnalytics.ruleAccuracy")}</h3>
+            <h3>
+              <Gauge size={16} />
+              {t("faultAnalytics.ruleAccuracy")}
+            </h3>
             <small>{t("faultAnalytics.ruleAccuracyHint")}</small>
           </header>
           {data && data.rule_accuracy.accuracy !== null ? (
@@ -321,7 +384,7 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
                   {data.rule_accuracy.top_mismatches.map((m) => (
                     <li key={`${m.suggested}->${m.actual}`}>
                       <span className="fa-mismatch-from">{causeLabel(m.suggested)}</span>
-                      <span aria-hidden="true">→</span>
+                      <span aria-hidden="true">-&gt;</span>
                       <span className="fa-mismatch-to">{causeLabel(m.actual)}</span>
                       <strong>{m.count}</strong>
                     </li>
@@ -331,49 +394,6 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
             </>
           ) : (
             <p className="net-empty">{t("faultAnalytics.noComparable")}</p>
-          )}
-        </section>
-
-        {/* ---- Faz dagilimi ---- */}
-        <section className="rad-card fa-card">
-          <header className="rad-card-head">
-            <h3>{t("faultAnalytics.phaseDistribution")}</h3>
-            <small>{t("faultAnalytics.phaseHint")}</small>
-          </header>
-          {data?.phase_distribution.length ? (
-            <ul className="fa-chips">
-              {data.phase_distribution.map((p) => (
-                <li key={p.phase}>
-                  <span className="fa-chip-phase">{p.phase.toUpperCase()}</span>
-                  <strong>{p.count}</strong>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="net-empty">{t("faultAnalytics.noData")}</p>
-          )}
-        </section>
-
-        {/* ---- Aylik egilim ---- */}
-        <section className="rad-card fa-card fa-card--wide">
-          <header className="rad-card-head">
-            <h3>{t("faultAnalytics.monthlyTrend")}</h3>
-            <small>{t("faultAnalytics.monthlyHint")}</small>
-          </header>
-          {data?.monthly_trend.length ? (
-            <div className="fa-trend">
-              {data.monthly_trend.map((m) => (
-                <div className="fa-trend-col" key={m.month} title={`${m.month}: ${m.count}`}>
-                  <span
-                    className="fa-trend-fill"
-                    style={{ height: `${Math.max(4, (m.count / maxMonth) * 100)}%` }}
-                  />
-                  <small>{m.month.slice(5)}</small>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="net-empty">{t("faultAnalytics.noData")}</p>
           )}
         </section>
       </div>

@@ -14,6 +14,47 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.60.0] — 2026-08-10
+
+Arıza Analizi ekranı çalışır hale geldi ve grafiklerle yeniden yazıldı.
+
+### Düzeltildi
+
+- **Arıza Analizi sayfası tamamen boş açılıyordu** ve üstte "Doğrulama hatası
+  (fault_id)" yazıyordu. Sebep bir yol çakışmasıydı: `/faults/analytics` ucu
+  `/faults/{fault_id}` deseninden **sonra** tanımlıydı. FastAPI yolları sırayla
+  eşleştirdiği için istek parametreli uca düşüyor, `"analytics"` tam sayıya
+  çevrilmeye çalışılıyordu. Uç hiçbir zaman çalışmamıştı.
+- **`/faults/causes` ucu kimlik doğrulaması istemiyordu** — halka açıktı.
+  Fark edilmemesinin sebebi yukarıdaki hataydı: istek hiç oraya ulaşmıyor,
+  parametreli ucun yetki kontrolüne takılıyordu. Bir hata diğerini
+  maskeliyordu. Yol sırası düzeltilince ortaya çıktı ve kapatıldı.
+
+### Eklendi
+
+- **Bölge dağılımı** kartı. Backend bu veriyi zaten üretiyordu ama ekran
+  göstermiyordu — hesaplanıp atılıyordu. Hat sıralaması "hangi hat" der,
+  bölge sıralaması "hangi ekibin sahası"; bakım planlamasında ayrı sorular.
+- **Arıza Analizi üst menüde.** Mühendislik ağacında aramak yerine Anasayfa /
+  Alarmlar / Hat Arızaları / Olaylar yanında. Operatör rolünde görünmez.
+- **Branşman kolları şematik çizimde alt kat olarak.** Önceden kısa bir
+  kesikli çizgi ve nokta idi; iki kol yan yana gelince etiketleri üst üste
+  biniyor, kolun kendi direkleri hiç görünmüyordu. Artık kol kendi direkleri,
+  teli ve adıyla çiziliyor; kolda arıza varsa kırmızı.
+
+### Değişti
+
+- **Grafikler echarts ile.** Sayfa elle çizilmiş SVG kullanıyordu; hover ve
+  ipucu yoktu. Palet renk körlüğü (CVD) ayrım kontrolünden geçirildi —
+  ilk denenen sırada turuncu ile yeşil komşu düşüp deuteranopia'da ayırt
+  edilemiyordu (ΔE 7.3). Sıra testle kilitlendi.
+- **Aylık eğilim en üstte, tam genişlikte** — önce zaman bağlamı, sıralamalar
+  onun içinde okunuyor.
+- **Cihaz ayarlarında faz eşleştirmesi L1/L2/L3 varsayılanıyla geliyor.**
+  Üç alan da boş ("proje ayarını kullan") başlıyordu; pratikte doldurulmadığı
+  için arızanın hangi fazda olduğu bilinmiyordu.
+- Şematik çizim kapsayıcının tümünü dolduruyor; sürüklerken metin seçilmiyor.
+
 ## [2.59.0] — 2026-08-10
 
 Hat Arızaları ekranının şematik görünümü. Arıza artık metinle anlatılmıyor,

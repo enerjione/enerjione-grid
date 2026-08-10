@@ -2606,6 +2606,14 @@ export function App() {
         isEngineeringView={pageMode === "engineering"}
         onToggleEngineering={() => handleChangePage("engineering")}
         onOpenSystemStatus={() => openEng("system-status")}
+        // Analiz sayfasi muhendislik yetkisi ister; operator rolunde geri
+        // cagri hic gecilmez, dugme de gorunmez.
+        onOpenFaultAnalytics={
+          session.role === "operator" ? undefined : () => openEng("fault-analytics")
+        }
+        faultAnalyticsActive={
+          pageMode === "engineering" && engineeringPage === "fault-analytics"
+        }
         remoteAccessActive={remoteAccessBadge.active}
         remoteAccessLabel={
           remoteAccessBadge.remainingSeconds === null

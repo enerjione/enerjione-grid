@@ -4401,6 +4401,12 @@
     "noRepeats": "Tekrarlayan açıklık yok",
     "noComparable": "Karşılaştırılabilir kayıt yok — hem kural önerisi hem saha etiketi taşıyan arıza birikmesi gerekiyor.",
     "emptyWindow": "Bu dönemde arıza kaydı yok. Analiz, arızalar biriktikçe anlam kazanır.",
-    "lowLabelWarning": "Arızaların yalnızca {{percent}}'i için sebep girilmiş. Aşağıdaki sebep dağılımı bu küçük altkümeyi yansıtır — genel bir sonuç çıkarmadan önce saha ekibinin sebep girmesini bekleyin."
+    "lowLabelWarning": "Arızaların yalnızca {{percent}}'i için sebep girilmiş. Aşağıdaki sebep dağılımı bu küçük altkümeyi yansıtır — genel bir sonuç çıkarmadan önce saha ekibinin sebep girmesini bekleyin.",
+    "faultUnit": "arıza",
+    "topLinesHint": "Bakım önceliği en yüksek hatlar",
+    "topRegions": "Bölgelere Göre Dağılım",
+    "topRegionsHint": "Hangi ekibin sahası daha çok yük taşıyor",
+    "allPhases": "Üç faz",
+    "lowLabelInline": "Kayıtların yalnızca %{{percent}}'i etiketli — bu dağılım tek başına sonuç sayılmamalı"
   }
 }
