@@ -134,9 +134,17 @@ def _system_settings(db: Session) -> NotificationSettings | None:
 
 
 def _build_alarm_email(
-    db: Session, alarm: AlarmEvent, project_title: str | None
+    db: Session,
+    alarm: AlarmEvent,
+    project_title: str | None,
+    map_cid: str | None = None,
 ) -> tuple[str, str, str]:
-    """Alarm icin (subject, plain_text, html_body) uretir."""
+    """Alarm icin (subject, plain_text, html_body) uretir.
+
+    `map_cid` verilirse harita gorseli sablonun KENDI konum blogunda
+    render edilir (bkz. `render_alarm_email`); eskiden govde `</body>`
+    etiketi string ile degistirilerek eklendigi icin harita kartin ve
+    altbilginin altinda, cerceve disinda kaliyordu."""
     # Bagli notification kaydindan zenginlestirilmis metadata'yi cek
     # (device_name, signal_source, line_name, region_name, value, threshold)
     from app.models.notification import Notification
@@ -173,6 +181,7 @@ def _build_alarm_email(
         threshold=meta.get("threshold"),
         operator=meta.get("operator"),
         occurred_at=alarm.created_at,
+        map_cid=map_cid,
     )
     plain_text = (
         f"Alarm: {alarm.title}\n"
@@ -218,49 +227,33 @@ def _send_email_for_user(
         return
     if not user.email:
         return
-    subject, plain_text, html_body = _build_alarm_email(db, alarm, project_title)
-
-    # Mail govdesine harita gorseli ekle. Fault aktifse PNG render edip
-    # inline (cid) ek olarak ekleriz; HTML body de <img src="cid:fault-map">
-    # referansiyla gosterir. Render hatasi mail'i bozmasin — ek atla.
+    # Harita ekini SABLONDAN ONCE hazirla: `cid` sablona parametre olarak
+    # gidiyor, boylece gorsel kartin "Konum" blogunda cerceve icinde
+    # render edilir. Render hatasi mail'i bozmasin — ek atlanir, mail
+    # haritasiz gider.
     attachments: list[dict] = []
+    map_cid: str | None = None
     try:
         fault = _resolve_active_fault(db, alarm)
         if fault is not None:
             from app.services.fault_map_render import render_fault_map_png
             png = render_fault_map_png(db, fault)
             if png:
-                cid = f"fault-map-{fault.id}"
+                map_cid = f"fault-map-{fault.id}"
                 attachments.append(
                     {
                         "filename": f"ariza-haritasi-{fault.id}.png",
                         "content": png,
                         "mime": "image/png",
-                        "cid": cid,
+                        "cid": map_cid,
                     }
                 )
-                # HTML body'ye haritayi ekle (inline goruntu)
-                # Sadece <body> sonuna append edelim ki mevcut sablon
-                # bozulmasin.
-                if html_body and "</body>" in html_body:
-                    inline_block = (
-                        f'<div style="margin:18px 0;text-align:center;">'
-                        f'<img src="cid:{cid}" alt="Arıza haritası" '
-                        f'style="max-width:100%;border-radius:10px;'
-                        f'box-shadow:0 2px 8px rgba(0,0,0,.1);" /></div>'
-                    )
-                    html_body = html_body.replace(
-                        "</body>", inline_block + "</body>"
-                    )
-                elif html_body:
-                    html_body = (
-                        html_body
-                        + f'<div style="margin:18px 0;text-align:center;">'
-                          f'<img src="cid:{cid}" alt="Arıza haritası" '
-                          f'style="max-width:100%;border-radius:10px;" /></div>'
-                    )
     except Exception:  # noqa: BLE001
         logger.exception("fault_map_render_outer_failed")
+
+    subject, plain_text, html_body = _build_alarm_email(
+        db, alarm, project_title, map_cid=map_cid
+    )
 
     try:
         send_smtp_test(
