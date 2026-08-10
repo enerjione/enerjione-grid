@@ -193,11 +193,19 @@ def test_apply_HATA_YUTAR_ariza_acilmaya_devam_eder(db, monkeypatch):
     assert f.trigger_signals is None
 
 
-# ---- Faz eslemesi Proje Ayarlari'ndan OKUNMALI -----------------------------
+# ---- Faz eslemesi ZINCIRI: cihaz -> proje -> kod varsayilani -------------
+#
+# Kelepceyi hangi faza takacagina sahadaki kisi karar verir ve bu CIHAZDAN
+# CIHAZA degisebilir. Ama 600 cihazlik kurulumda her cihaz icin uc alan
+# doldurma zorunlulugu pratikte "hicbiri doldurulmaz" demektir; o yuzden
+# proje katmani genel konvansiyonu, cihaz katmani ISTISNAYI tasir.
 #
 # Ayarin var olmasi yetmez: `apply_snapshot` onu okumazsa operator ayari
 # degistirir, ekranda gorur, ama faz etiketleri ESKI esleme ile birikmeye
 # devam eder. Bu sinif hata sessizdir ve veri biriktikten sonra geri alinamaz.
+
+from app.services.fault_snapshot import resolve_source_phase
+
 
 def _proje_ayari(db, **kw):
     from app.models.project_settings import ProjectSettings
@@ -206,33 +214,63 @@ def _proje_ayari(db, **kw):
     db.flush()
 
 
-def test_esleme_TANIMSIZSA_varsayilan(db):
-    from app.services.fault_snapshot import resolve_source_phase
-
-    assert resolve_source_phase(db) is None, "satir yokken varsayilan kullanilmali"
+def test_hicbir_katman_yoksa_KOD_varsayilani(db):
+    assert resolve_source_phase(db) is None
     _proje_ayari(db)
     assert resolve_source_phase(db) is None, "bos alanlar varsayilani bozmamali"
 
 
-def test_esleme_KISMI_olabilir(db):
+def test_PROJE_katmani_genel_konvansiyonu_verir(db):
+    _proje_ayari(db, phase_master="c", phase_sat01="a", phase_sat02="b")
+    assert resolve_source_phase(db) == {"master": "c", "sat01": "a", "sat02": "b"}
+
+
+def test_CIHAZ_katmani_projeyi_EZER(db):
+    """Ayni hatta bile kelepce farkli takilmis olabilir."""
+    d = _cihaz(db)
+    _proje_ayari(db, phase_master="a", phase_sat01="b", phase_sat02="c")
+    d.phase_master = "b"
+    d.phase_sat01 = "a"
+    db.flush()
+
+    esleme = resolve_source_phase(db, device_id=d.id)
+
+    assert esleme["master"] == "b", "cihaz ayari projeyi ezmedi"
+    assert esleme["sat01"] == "a"
+    assert esleme["sat02"] == "c", "cihazda bos olan alan projeden gelmeli"
+
+
+def test_KISMI_doldurma_desteklenir(db):
     """Tek kelepce degistiyse ucunu birden girmek zorunda kalinmamali."""
-    from app.services.fault_snapshot import resolve_source_phase
+    d = _cihaz(db)
+    d.phase_sat02 = "a"
+    db.flush()
 
+    esleme = resolve_source_phase(db, device_id=d.id)
+
+    assert esleme["sat02"] == "a"
+    assert esleme["master"] == "a" and esleme["sat01"] == "b", (
+        "dokunulmayan uniteler kod varsayilaninda kalmali"
+    )
+
+
+def test_cihaz_bossa_PROJE_gecerli(db):
+    d = _cihaz(db)
     _proje_ayari(db, phase_master="c")
-    esleme = resolve_source_phase(db)
-    assert esleme == {"master": "c", "sat01": "b", "sat02": "c"} or esleme["master"] == "c"
-    assert esleme["sat01"] == "b", "dokunulmayan unite varsayilanda kalmali"
+    db.flush()
+    assert resolve_source_phase(db, device_id=d.id)["master"] == "c"
 
 
-def test_apply_ESLEMEYI_ayardan_okur(db):
+def test_apply_ESLEMEYI_ZINCIRDEN_cozer(db):
     """Cagiranin hatirlamasini beklemek, ayarin etkisiz kalmasi demekti."""
     d = _cihaz(db)
     _olcum(db, d.id, "master.overcurrent_tripped", value=1)
-    _proje_ayari(db, phase_master="c")
+    _proje_ayari(db, phase_master="b")
+    d.phase_master = "c"  # cihaz istisnasi projeyi ezmeli
     db.flush()
 
     f = _SahteFault(d.id)
     f.phase = None
     apply_snapshot(db, f)
 
-    assert f.phase == "c", "Proje Ayarlari'ndaki esleme uygulanmadi"
+    assert f.phase == "c", "cihaz bazli faz eslemesi uygulanmadi"

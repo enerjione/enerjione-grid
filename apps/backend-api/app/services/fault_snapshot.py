@@ -54,31 +54,57 @@ _ANALOG_KEYS = frozenset(
 _COUNTER_KEYS = frozenset({C_MOMENTARY, C_PERMANENT})
 
 
-def resolve_source_phase(db: Session) -> dict[str, str] | None:
-    """Proje Ayarlari'ndaki unite -> faz eslemesi. Tanimsizsa None (varsayilan).
+#: (unite, kolon adi) — uc katmanda da ayni alan adlari kullanilir.
+_PHASE_FIELDS = (
+    ("master", "phase_master"),
+    ("sat01", "phase_sat01"),
+    ("sat02", "phase_sat02"),
+)
 
-    KISMI ESLEME DESTEKLENIR: operator yalnizca bir uniteyi degistirmis
-    olabilir; dolduran alanlar varsayilanin uzerine biner. Tumunu zorunlu
-    kilmak, tek bir kelepce degisikligi icin ucunu birden girmeyi
-    gerektirirdi.
+
+def _katmani_uygula(esleme: dict[str, str], row) -> bool:  # noqa: ANN001
+    """Bir kaynagin (proje ya da cihaz) doldurdugu alanlari eslemeye isler.
+
+    Donus: bu katman bir sey degistirdi mi. KISMI doldurma desteklenir —
+    yalnizca `sat01` farkliysa yalnizca o yazilir, digerleri alttaki
+    katmandan gelmeye devam eder. Tumunu zorunlu kilmak, tek bir kelepce
+    degisikligi icin ucunu birden girmeyi gerektirirdi.
     """
-    from app.models.project_settings import ProjectSettings
-    from app.services.fault_inference import DEFAULT_SOURCE_PHASE
-
-    row = db.get(ProjectSettings, 1)
     if row is None:
-        return None
-    esleme = dict(DEFAULT_SOURCE_PHASE)
+        return False
     degisti = False
-    for unite, alan in (
-        ("master", "phase_master"),
-        ("sat01", "phase_sat01"),
-        ("sat02", "phase_sat02"),
-    ):
+    for unite, alan in _PHASE_FIELDS:
         deger = (getattr(row, alan, None) or "").strip().lower()
         if deger:
             esleme[unite] = deger
             degisti = True
+    return degisti
+
+
+def resolve_source_phase(
+    db: Session, *, device_id: int | None = None
+) -> dict[str, str] | None:
+    """Unite -> faz eslemesini COZ: cihaz -> proje -> kod varsayilani.
+
+    Kelepceyi hangi faza takacagina sahadaki kisi karar verir ve bu
+    CIHAZDAN CIHAZA degisebilir. Ama 600 cihazlik bir kurulumda her cihaz
+    icin uc alan doldurma zorunlulugu pratikte "hicbiri doldurulmaz"
+    demektir; bu yuzden kurulumun genel konvansiyonu Proje Ayarlari'nda
+    bir kez girilir, cihaz alani yalnizca ISTISNALAR icindir.
+
+    Hicbir katman bir sey soylemediyse None doner ve cagiran taraf kod
+    varsayilanini (`DEFAULT_SOURCE_PHASE`) kullanir.
+    """
+    from app.models.device import Device
+    from app.models.project_settings import ProjectSettings
+    from app.services.fault_inference import DEFAULT_SOURCE_PHASE
+
+    esleme = dict(DEFAULT_SOURCE_PHASE)
+    # Sira onemli: once proje (genel konvansiyon), sonra cihaz (istisna)
+    # — cihaz katmani projeyi EZER.
+    degisti = _katmani_uygula(esleme, db.get(ProjectSettings, 1))
+    if device_id is not None:
+        degisti = _katmani_uygula(esleme, db.get(Device, device_id)) or degisti
     return esleme if degisti else None
 
 
@@ -205,10 +231,14 @@ def apply_snapshot(
     daha agir bir hata olurdu.
     """
     try:
-        # Esleme verilmediyse Proje Ayarlari'ndan okunur. Cagiranin bunu
-        # hatirlamasini beklemek, ayarin sessizce etkisiz kalmasi demekti.
+        # Esleme verilmediyse ZINCIRDEN cozulur (cihaz -> proje -> kod).
+        # Cagiranin bunu hatirlamasini beklemek, ayarin sessizce etkisiz
+        # kalmasi demekti. Cihaz kimligi ariza kaydindan gelir: faz, arizayi
+        # TESPIT EDEN cihazin kelepce duzenine gore yorumlanmali.
         if source_phase is None:
-            source_phase = resolve_source_phase(db)
+            source_phase = resolve_source_phase(
+                db, device_id=fault.last_red_device_id
+            )
         alanlar = build_snapshot(
             db, device_id=fault.last_red_device_id, source_phase=source_phase
         )

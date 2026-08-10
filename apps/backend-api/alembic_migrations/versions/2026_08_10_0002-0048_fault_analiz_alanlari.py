@@ -77,12 +77,18 @@ _INDEXES = (
 )
 
 
-#: Unite -> faz eslemesi (kurulum karari; bkz. ProjectSettings).
-_PROJECT_COLUMNS = (
+#: Unite -> faz eslemesi. IKI KATMAN:
+#:   `project_settings` = kurulumun genel konvansiyonu (bir kez girilir)
+#:   `devices`          = ISTISNA cihazlar (kelepce farkli takilmissa)
+#: Cozum zinciri: cihaz -> proje -> kod varsayilani (a/b/c).
+#: Yalnizca cihaz katmani olsaydi 600 cihazlik kurulumda hicbiri
+#: doldurulmaz ve veri varsayilana guvenmekten daha kotu olurdu.
+_PHASE_COLUMNS = (
     ("phase_master", sa.String(length=4)),
     ("phase_sat01", sa.String(length=4)),
     ("phase_sat02", sa.String(length=4)),
 )
+_PHASE_TABLES = ("project_settings", "devices")
 
 
 def _mevcut_kolonlar(bind, tablo: str = "fault_events") -> set[str]:  # noqa: ANN001
@@ -112,10 +118,11 @@ def upgrade() -> None:
     # Unite -> faz eslemesi. NULL birakilir: varsayilan
     # (master=a, sat01=b, sat02=c) kodda tanimli. Buraya deger YAZMAK,
     # kurulumcunun onaylamadigi bir esmelemeyi "secilmis" gostermek olurdu.
-    proje_var = _mevcut_kolonlar(bind, "project_settings")
-    for ad, tip in _PROJECT_COLUMNS:
-        if ad not in proje_var:
-            op.add_column("project_settings", sa.Column(ad, tip, nullable=True))
+    for tablo in _PHASE_TABLES:
+        mevcut = _mevcut_kolonlar(bind, tablo)
+        for ad, tip in _PHASE_COLUMNS:
+            if ad not in mevcut:
+                op.add_column(tablo, sa.Column(ad, tip, nullable=True))
 
 
 def downgrade() -> None:
@@ -125,10 +132,11 @@ def downgrade() -> None:
         if ad in var_idx:
             op.drop_index(ad, table_name="fault_events")
 
-    proje_var = _mevcut_kolonlar(bind, "project_settings")
-    for ad, _tip in _PROJECT_COLUMNS:
-        if ad in proje_var:
-            op.drop_column("project_settings", ad)
+    for tablo in _PHASE_TABLES:
+        mevcut = _mevcut_kolonlar(bind, tablo)
+        for ad, _tip in _PHASE_COLUMNS:
+            if ad in mevcut:
+                op.drop_column(tablo, ad)
 
     var = _mevcut_kolonlar(bind)
     for ad, _tip in _COLUMNS:

@@ -51,3 +51,26 @@ class Device(Base):
     # paketleyecegini buradan ogrenir. NULL ise outbound target'in
     # `iec104_common_address` (default) degeri kullanilir.
     iec104_common_address: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # --- UNITE -> FAZ ESLEMESI (bu cihaza OZEL) --------------------------
+    #
+    # Horstmann SN2 tek cihazdir ama uc unitesi (master / sat01 / sat02)
+    # hatta UC AYRI FAZA kelepcelenir. Hangi unitenin hangi fazda oldugu
+    # sahada kelepceyi takan kisinin kararidir ve CIHAZDAN CIHAZA
+    # DEGISEBILIR — ayni hatta bile.
+    #
+    # COZUM ZINCIRI (fault_snapshot.resolve_source_phase):
+    #     cihaz  ->  proje varsayilani  ->  kod varsayilani (a/b/c)
+    #
+    # NEDEN ZINCIR, NEDEN SADECE CIHAZ DEGIL: 600 cihazlik bir kurulumda
+    # her cihaz icin uc alan doldurmak zorunlulugu pratikte "hicbiri
+    # doldurulmaz" demektir ve veri, varsayilana guvenmekten DAHA KOTU
+    # olur. Kurulumun genel konvansiyonu Proje Ayarlari'nda bir kez
+    # girilir; burasi yalnizca ISTISNA cihazlar icindir.
+    #
+    # NULL = "bu cihaz icin ozel bir sey yok, ustteki katmani kullan".
+    # Kismi doldurma desteklenir: yalnizca sat01 farkliysa yalnizca o
+    # yazilir, digerleri ust katmandan gelir.
+    phase_master: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    phase_sat01: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    phase_sat02: Mapped[str | None] = mapped_column(String(4), nullable=True)
