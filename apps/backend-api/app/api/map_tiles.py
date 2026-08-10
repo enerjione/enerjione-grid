@@ -46,7 +46,9 @@ def _http_error(exc: map_tile_service.MapTileError) -> HTTPException:
     code = status.HTTP_400_BAD_REQUEST
     if exc.code == "MAP_DOWNLOAD_BUSY":
         code = status.HTTP_409_CONFLICT
-    elif exc.code == "MAP_TILE_OFFLINE":
+    elif exc.code in ("MAP_TILE_OFFLINE", "MAP_ZOOM_UNSUPPORTED"):
+        # Ikisi de "bu karo YOK" demek, "istek hatali" degil. Leaflet 404'te
+        # sessizce bos birakir; 4xx/5xx konsolu hata mesajiyla doldurur.
         code = status.HTTP_404_NOT_FOUND
     return HTTPException(status_code=code, detail={"code": exc.code, "message": exc.message})
 

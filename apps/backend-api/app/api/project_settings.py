@@ -22,12 +22,16 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_role
+from app.api.deps import get_current_user, require_role
 from app.db.session import get_db
 from app.models.enums import UserRole
 from app.models.project_settings import ProjectSettings
 from app.models.user import User
-from app.schemas.project_settings import ProjectSettingsRead, ProjectSettingsUpdate
+from app.schemas.project_settings import (
+    PhaseMapRead,
+    ProjectSettingsRead,
+    ProjectSettingsUpdate,
+)
 from app.services.event_service import record_event
 
 router = APIRouter(prefix="/project-settings", tags=["project-settings"])
@@ -134,6 +138,24 @@ def get_project_settings(db: Session = Depends(get_db)):
     row = db.get(ProjectSettings, 1)
     if row is None:
         return ProjectSettingsRead()
+    return row
+
+
+@router.get("/phase-map", response_model=PhaseMapRead)
+def get_phase_map(
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Unite -> faz eslemesi (kurulumun genel konvansiyonu).
+
+    KIMLIK DOGRULAMALI ve `GET /project-settings`ten AYRI: o uc bilincli
+    olarak halka acik (login ekrani logoyu oturum yokken ceker) ve oraya
+    eklenen her alan anonim cagirana acilir. Faz eslemesi marka degil
+    sebeke yapilandirmasidir; login ekraninin ona ihtiyaci yok.
+    """
+    row = db.get(ProjectSettings, 1)
+    if row is None:
+        return PhaseMapRead()
     return row
 
 

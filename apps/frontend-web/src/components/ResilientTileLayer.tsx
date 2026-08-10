@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { TileLayer } from "react-leaflet";
 
-import { directTileUrl, tileSubdomains, tileUrl, type MapLayerKey } from "../shared/mapTiles";
+import {
+  directTileUrl,
+  layerDef,
+  tileSubdomains,
+  tileUrl,
+  type MapLayerKey
+} from "../shared/mapTiles";
 
 /**
  * Karo katmani — backend proxy'si calismazsa DOGRUDAN internete duser.
@@ -49,12 +55,14 @@ export function resetTileFallback(): void {
 type Props = {
   layer: MapLayerKey;
   attribution?: string;
+  /** Ust sinir override'i; verilmezse katman tanimindaki deger kullanilir. */
   maxZoom?: number;
 };
 
 export function ResilientTileLayer({ layer, attribution, maxZoom }: Props) {
   const [direct, setDirect] = useState(proxyBroken);
   const errorCount = useRef(0);
+  const def = layerDef(layer);
 
   useEffect(() => {
     const onChange = () => setDirect(proxyBroken);
@@ -74,7 +82,13 @@ export function ResilientTileLayer({ layer, attribution, maxZoom }: Props) {
       url={direct ? directTileUrl(layer) : tileUrl(layer)}
       subdomains={direct ? (tileSubdomains(layer) ?? "abc") : "abc"}
       attribution={attribution}
-      maxZoom={maxZoom}
+      maxZoom={maxZoom ?? def.maxZoom}
+      // KRITIK: bu olmadan Leaflet, saglayicida OLMAYAN zoom seviyeleri icin
+      // de karo ister. Esri o istege hata degil, uzerinde "Map data not yet
+      // available" yazan gecerli bir PNG dondurur — yani sorun sessizce
+      // GORUNTUYE karisir, hicbir hata yolu tetiklenmez. `maxNativeZoom` ile
+      // o sinirin ustunde karo istenmez; Leaflet son gercek karoyu buyutur.
+      maxNativeZoom={def.maxNativeZoom}
       eventHandlers={{
         tileerror: () => {
           if (direct) return; // zaten son caredeyiz; tekrar gecis yok

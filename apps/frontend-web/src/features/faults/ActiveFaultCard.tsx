@@ -41,12 +41,14 @@ import {
 import type { FaultEvent, FaultTriggerAlarm } from "../../shared/types";
 import { formatDistanceM } from "../../shared/lineDistance";
 import { FaultPoleStrip } from "./FaultPoleStrip";
-import type { StripDeviceAlarms, StripSegment } from "./FaultPoleStrip";
+import type { StripDeviceAlarms, StripPole, StripSegment } from "./FaultPoleStrip";
 
 type Props = {
   fault: FaultEvent;
   /** Hattin tum direk sira numaralari (sematik serit icin). */
   poleSeqs: number[];
+  /** Direk ad/rol bilgisi — etiketlerde sira numarasi yerine AD gosterilir. */
+  poles?: StripPole[];
   /** Hattin segmentleri — cihazlari TELIN UZERINDE cizmek icin. */
   segments: StripSegment[];
   localeTag: string;
@@ -93,6 +95,7 @@ function fmtElapsed(fromIso: string, endMs: number): string {
 export function ActiveFaultCard({
   fault: f,
   poleSeqs,
+  poles,
   segments,
   localeTag,
   now,
@@ -108,6 +111,25 @@ export function ActiveFaultCard({
 
   // Cihaz koduna gore alarm ozeti — cizimdeki faz noktalari ve tooltip
   // bunu okur. Ayni cihazda birden fazla faz alarmi olabilir.
+  /** Direk araligi basligi: direklerin ADI varsa onu kullan, yoksa "#3 — #4".
+   *  Saha ekibi direkleri sira numarasiyla degil adiyla taniyor. */
+  const rangeText = useMemo(() => {
+    const adOf = (seq: number | null | undefined): string | null => {
+      if (seq == null) return null;
+      const ad = (poles?.find((p) => p.seq === seq)?.name ?? "").trim();
+      return ad || null;
+    };
+    const fromAd = adOf(f.from_pole_seq);
+    const toAd = adOf(f.to_pole_seq);
+    if (fromAd && toAd) {
+      return t("faults.card.rangeTextNamed", { from: fromAd, to: toAd });
+    }
+    return t("faults.card.rangeText", {
+      from: f.from_pole_seq ?? "?",
+      to: f.to_pole_seq ?? "?"
+    });
+  }, [poles, f.from_pole_seq, f.to_pole_seq, t]);
+
   const alarmsByDevice = useMemo(() => {
     const map: Record<string, StripDeviceAlarms> = {};
     for (const a of alarms) {
@@ -135,10 +157,7 @@ export function ActiveFaultCard({
             {f.line_name}
             <span className="fx-head-range">
               <ChevronRight size={16} strokeWidth={2.6} />
-              {t("faults.card.rangeText", {
-                from: f.from_pole_seq ?? "?",
-                to: f.to_pole_seq ?? "?"
-              })}
+              {rangeText}
             </span>
           </h3>
         </div>
@@ -214,6 +233,7 @@ export function ActiveFaultCard({
           </div>
           <FaultPoleStrip
             poleSeqs={poleSeqs}
+            poles={poles}
             segments={segments}
             fromSeq={f.from_pole_seq}
             toSeq={f.to_pole_seq}

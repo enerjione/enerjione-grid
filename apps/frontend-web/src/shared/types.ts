@@ -94,6 +94,14 @@ export type DeviceRow = {
   // IEC 60870-5-104 ASDU Common Address. NULL ise outbound target'in default
   // CA'si kullanilir.
   iec104CommonAddress?: number | null;
+
+  /** Ünite → faz eşlemesi (bu cihaza ÖZEL). SN2'nin üç ünitesi hattın üç ayrı
+   *  fazına kelepçelenir; hangisinin hangi fazda olduğu sahada kelepçeyi takan
+   *  kişinin kararıdır. Boş = "Proje Ayarları'ndaki kurulum konvansiyonunu
+   *  kullan". Kısmi doldurma serbest. */
+  phaseMaster?: PhaseCode | null;
+  phaseSat01?: PhaseCode | null;
+  phaseSat02?: PhaseCode | null;
 };
 
 export type UserRole = "operator" | "engineer" | "installer" | "ops_manager";
@@ -166,7 +174,35 @@ export type ApiDevice = {
   alarm_active: boolean;
   last_update_at?: string | null;
   iec104_common_address?: number | null;
+
+  /** Ünite → faz eşlemesi (bu cihaza ÖZEL). SN2'nin üç ünitesi hattın üç
+   *  ayrı fazına kelepçelenir; hangisinin hangi fazda olduğu sahada kelepçeyi
+   *  takan kişinin kararıdır. NULL = "özel bir şey yok, Proje Ayarları'ndaki
+   *  kurulum konvansiyonunu kullan". Kısmi doldurma serbest. */
+  phase_master?: PhaseCode | null;
+  phase_sat01?: PhaseCode | null;
+  phase_sat02?: PhaseCode | null;
 };
+
+/** Geçerli faz kodu. Serbest metin DEĞİL: "A" / "L1" / "faz-a" gibi birbirinden
+ *  habersiz yazımlar faz gruplamasını bölerdi. */
+export type PhaseCode = "a" | "b" | "c";
+
+/** Ünite → faz eşlemesi: kurulumun GENEL konvansiyonu.
+ *
+ *  `ProjectSettings` İÇİNDE DEĞİL: `GET /project-settings` bilinçli olarak
+ *  halka açık (login ekranı logoyu oturum yokken çeker) ve oraya eklenen her
+ *  alan anonim çağırana açılır. Faz eşlemesi marka değil şebeke
+ *  yapılandırmasıdır; ayrı ve kimlik doğrulamalı bir uçtan gelir. */
+export type PhaseMap = {
+  phase_master?: PhaseCode | null;
+  phase_sat01?: PhaseCode | null;
+  phase_sat02?: PhaseCode | null;
+};
+
+/** PUT /project-settings gövdesi. Okuma şekli (public) ile yazma şekli
+ *  bilerek AYRI: PUT faz eşlemesini de alır, public GET almaz. */
+export type ProjectSettingsSave = ProjectSettings & PhaseMap;
 
 export type UserRead = {
   id: number;

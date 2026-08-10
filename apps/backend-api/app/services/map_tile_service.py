@@ -57,6 +57,14 @@ class TileLayerDef:
     key: str
     label: str
     url_template: str
+    #: Saglayicinin GERCEKTEN karo urettigi en yuksek zoom.
+    #:
+    #: Bunun ustunde karo istemek bos donmuyor — Esri ornegin uzerinde
+    #: "Map data not yet available" yazan GECERLI bir PNG'yi HTTP 200 ile
+    #: dondurur. Yani sinir asildiginda hata yolu tetiklenmez, sorun dogrudan
+    #: goruntuye karisir ve o karo cevrimdisi onbellege de yazilir.
+    #: Istemci tarafinda karsiligi Leaflet `maxNativeZoom`'udur; ustundeki
+    #: seviyeler son gercek karo buyutulerek gosterilir.
     max_zoom: int
     subdomains: tuple[str, ...] = ()
     attribution: str = ""
@@ -76,7 +84,10 @@ LAYERS: dict[str, TileLayerDef] = {
         label="Uydu (Esri)",
         # DIKKAT: Esri {z}/{y}/{x} sirasi kullanir, digerleri {z}/{x}/{y}.
         url_template="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        max_zoom=19,
+        # 19 DEGIL 18: Esri World Imagery Turkiye kirsalinda 18'de biter ve
+        # 19 istendiginde "Map data not yet available" karosu doner (bkz.
+        # max_zoom aciklamasi). Frontend `maxNativeZoom` ile ayni sinirda.
+        max_zoom=18,
         attribution="Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics",
     ),
     "topo": TileLayerDef(
@@ -91,7 +102,7 @@ LAYERS: dict[str, TileLayerDef] = {
         key="dark",
         label="Karanlik (CARTO)",
         url_template="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-        max_zoom=19,
+        max_zoom=20,
         subdomains=("a", "b", "c", "d"),
         attribution='&copy; OpenStreetMap &copy; CARTO',
     ),
@@ -105,6 +116,25 @@ class MapTileError(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+def _ensure_zoom_supported(layer: TileLayerDef, z: int) -> None:
+    """Katmanin veri sagladigi zoom araligi disinda ISTEK YAPILMAZ.
+
+    Sinirin ustunde saglayici hata dondurmez; Esri ornegin uzerinde
+    "Map data not yet available" yazan gecerli bir PNG'yi HTTP 200 ile
+    verir. Kontrol edilmezse o goruntu hem kullaniciya cizilir hem de
+    cevrimdisi onbellege KALICI olarak yazilir — sonra internet olsa bile
+    o karede gri "veri yok" gorulur.
+
+    Guncel istemci `maxNativeZoom` sayesinde bu isteklere zaten cikmaz;
+    burasi eski sekmeler ve dogrudan API cagrilari icin ikinci savunma.
+    """
+    if z < 0 or z > layer.max_zoom:
+        raise MapTileError(
+            "MAP_ZOOM_UNSUPPORTED",
+            f"{layer.label} katmani en fazla zoom {layer.max_zoom} destekler (istenen: {z})",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -286,6 +316,7 @@ def fetch_tile(layer_key: str, z: int, x: int, y: int) -> bytes:
     layer = LAYERS.get(layer_key)
     if layer is None:
         raise MapTileError("MAP_LAYER_UNKNOWN", f"Bilinmeyen katman: {layer_key}")
+    _ensure_zoom_supported(layer, z)
     resp = _http().get(_upstream_url(layer, z, x, y), timeout=settings.map_tile_timeout_sec)
     resp.raise_for_status()
     return resp.content
@@ -318,6 +349,7 @@ def get_tile(layer_key: str, z: int, x: int, y: int) -> tuple[bytes, str]:
     """
     if layer_key not in LAYERS:
         raise MapTileError("MAP_LAYER_UNKNOWN", f"Bilinmeyen katman: {layer_key}")
+    _ensure_zoom_supported(LAYERS[layer_key], z)
 
     def _store(data: bytes) -> None:
         # Gezinme sirasinda biriken onbellek sinirsiz buyumesin.

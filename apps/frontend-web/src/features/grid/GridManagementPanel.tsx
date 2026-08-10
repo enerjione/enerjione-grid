@@ -406,6 +406,32 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
 
   const segmentSlots = useMemo<SegmentSlot[]>(() => {
     const slots: SegmentSlot[] = [];
+
+    // BRANSMAN BAGLANTI SLOTU
+    // -----------------------
+    // Bir bransman kolu ayri bir hattir; kolun ILK baglantisi ana hattaki
+    // dallanma diregi -> kolun ilk diregidir. Bu cift ardisik degil (hatta
+    // ayni hatta bile degil), o yuzden asagidaki dongude hic uretilmiyordu:
+    // dallanma noktasina CIHAZ BAGLANAMIYORDU. Oysa dala giden akimi goren
+    // cihaz, arizanin ana hatta mi kolda mi oldugunu ayirt eden olcumdur.
+    const selLine = lines.find((l) => l.id === selectedLineId);
+    const branchParent =
+      selLine?.branched_from_pole_id && gridSnapshot
+        ? gridSnapshot.poles.find((p) => p.id === selLine.branched_from_pole_id) ?? null
+        : null;
+    if (branchParent && livePoles.length > 0) {
+      const ilk = livePoles[0];
+      const segs = (detail?.segments ?? []).filter(
+        (s) => s.from_pole_id === branchParent.id && s.to_pole_id === ilk.id
+      );
+      slots.push({
+        fromPole: branchParent,
+        toPole: ilk,
+        segment: segs[0] ?? null,
+        segments: segs
+      });
+    }
+
     for (let i = 0; i < livePoles.length - 1; i += 1) {
       const fromPole = livePoles[i];
       const toPole = livePoles[i + 1];
@@ -437,7 +463,7 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
       });
     }
     return slots;
-  }, [detail, livePoles, draftDevicePositions]);
+  }, [detail, livePoles, draftDevicePositions, lines, selectedLineId, gridSnapshot]);
 
   // Cihazlarin hangileri TUM SISTEMDE zaten bir segmente bagli.
   // DB seviyesinde LineSegment.device_id UNIQUE — bir cihaz sadece bir

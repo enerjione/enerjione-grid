@@ -1,9 +1,15 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import CommunicationStatus
 from app.schemas.dnp3_extended import Dnp3ExtendedSettings, merge_dnp3_extended
+
+#: Gecerli faz kodlari. Serbest metin kabul etmek, "A" / "L1" / "faz-a" gibi
+#: birbirinden habersiz yazimlarin birikmesi ve faz gruplamasinin bolunmesi
+#: demekti. Kucuk harf zorunlu degil — dogrulama oncesi normalize edilir.
+PhaseCode = Literal["a", "b", "c"]
 
 
 class DeviceScalarBase(BaseModel):
@@ -29,6 +35,14 @@ class DeviceScalarBase(BaseModel):
     # default CA'si kullanilir. 0..65534 araliginda; 65535 broadcast icin
     # rezerve edildiginden cihaza atanmamasi tavsiye edilir.
     iec104_common_address: int | None = Field(default=None, ge=0, le=65534)
+    # --- UNITE -> FAZ ESLEMESI (bu cihaza OZEL) ---
+    # SN2'nin uc unitesi (master/sat01/sat02) hatta uc ayri faza kelepcelenir
+    # ve hangisinin hangi fazda oldugu sahada kelepceyi takan kisinin
+    # kararidir. NULL = "bu cihaz icin ozel bir sey yok, Proje Ayarlari'ndaki
+    # kurulum konvansiyonunu kullan". Kismi doldurma serbest.
+    phase_master: PhaseCode | None = None
+    phase_sat01: PhaseCode | None = None
+    phase_sat02: PhaseCode | None = None
 
 
 class DeviceCreate(DeviceScalarBase):
@@ -52,6 +66,14 @@ class DeviceUpdate(BaseModel):
     longitude: float | None = None
     dnp3_extended: Dnp3ExtendedSettings | None = None
     iec104_common_address: int | None = Field(default=None, ge=0, le=65534)
+    # --- UNITE -> FAZ ESLEMESI (bu cihaza OZEL) ---
+    # SN2'nin uc unitesi (master/sat01/sat02) hatta uc ayri faza kelepcelenir
+    # ve hangisinin hangi fazda oldugu sahada kelepceyi takan kisinin
+    # kararidir. NULL = "bu cihaz icin ozel bir sey yok, Proje Ayarlari'ndaki
+    # kurulum konvansiyonunu kullan". Kismi doldurma serbest.
+    phase_master: PhaseCode | None = None
+    phase_sat01: PhaseCode | None = None
+    phase_sat02: PhaseCode | None = None
 
 
 class DeviceRead(DeviceScalarBase):

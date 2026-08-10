@@ -603,6 +603,21 @@ class Settings(BaseSettings):
     # backend inline dispatch SADECE dev/test icin. Operator backend'i
     # standalone (worker'siz) calistirsin istiyorsa env: True override.
     notification_inline_dispatch_enabled: bool = False
+
+    # --- Bildirim metinlerindeki SAAT DILIMI -------------------------------
+    # Sistemin her yerinde zaman UTC-aware saklanir (bkz. CLAUDE.md) — bu
+    # dogru ve degismemeli. Ancak DISARI CIKAN metinler (WhatsApp, Telegram,
+    # SMS, e-posta) sahadaki insana gider ve o kisi duvar saatine bakar:
+    # 11:00'de olan bir alarm mesajda 08:00 yaziyordu.
+    #
+    # Arayuz bu donusumu tarayicinin saat diliminde kendisi yapiyor; sunucudan
+    # cikan metinlerde ise yapacak kimse yoktu.
+    display_timezone: str = "Europe/Istanbul"
+    # IANA veritabani bulunamazsa (tzdata kurulu olmayan minimal imaj,
+    # Windows) kullanilacak sabit fark. Turkiye 2016'dan beri kalici UTC+3,
+    # yaz saati uygulamiyor — bu yedek dogru sonuc verir.
+    display_utc_offset_minutes: int = 180
+
     smtp_enabled: bool = False
     smtp_host: str = "localhost"
     smtp_port: int = 25

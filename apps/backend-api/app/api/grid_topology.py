@@ -774,10 +774,30 @@ def _validate_segment_endpoints(db: Session, line_id: int, from_id: int, to_id: 
     to_pole = db.get(Pole, to_id)
     if from_pole is None or to_pole is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Direk bulunamadı.")
-    if from_pole.line_id != line_id or to_pole.line_id != line_id:
+
+    # BRANSMAN BAGLANTISI ISTISNASI
+    # -----------------------------
+    # Bir bransman kolu AYRI bir hattir (`Line.branched_from_pole_id` ana
+    # hattaki dallanma diregini gosterir). Kolun ILK segmenti dogasi geregi
+    # iki FARKLI hattin direklerini birlestirir: ana hattaki dallanma diregi
+    # -> kolun ilk diregi.
+    #
+    # "Ikisi de ayni hatta olmali" kurali bu segmenti reddediyordu; sonuc
+    # olarak dallanma noktasindaki direge CIHAZ BAGLANAMIYORDU. Oysa saha
+    # acisindan en kritik olcum noktalarindan biri tam orasi: dala giden
+    # akimi goren cihaz, arizanin ana hatta mi kolda mi oldugunu ayirt eder.
+    #
+    # Istisna DAR: yalnizca `from_pole`, bu hattin bagli oldugu dallanma
+    # diregi ise gecerli. Keyfi iki hat birbirine baglanamaz.
+    line = db.get(Line, line_id)
+    branch_parent_id = line.branched_from_pole_id if line is not None else None
+    from_ok = from_pole.line_id == line_id or (
+        branch_parent_id is not None and from_pole.id == branch_parent_id
+    )
+    if not from_ok or to_pole.line_id != line_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Segment direkleri aynı hatta olmalı.",
+            detail="Segment direkleri aynı hatta olmalı (branşman kolunun ilk segmenti hariç).",
         )
 
 

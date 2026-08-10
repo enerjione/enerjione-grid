@@ -25,8 +25,19 @@ export type MapLayerDef = {
   /** LayersControl'de gorunen ad — i18n anahtari. */
   labelKey: string;
   attribution: string;
+  /** Kullanicinin yaklasabilecegi EN YUKSEK zoom. */
   maxZoom: number;
+  /** Saglayicidan GERCEKTEN karo istenecek en yuksek zoom. */
+  maxNativeZoom: number;
 };
+
+/**
+ * Kullanicinin yaklasabilecegi ust sinir. `maxNativeZoom` ustunde Leaflet yeni
+ * karo ISTEMEZ, son gercek karoyu buyuterek gosterir: goruntu yumusar ama
+ * direk/cihaz isaretleri ayrisir. Saha ekibi iki direk arasini ayirt etmek
+ * icin bu yakinliga ihtiyac duyuyor.
+ */
+const MAX_ZOOM = 22;
 
 /** Backend'deki LAYERS kaydiyla ayni anahtarlar (map_tile_service.py). */
 export const MAP_LAYERS: MapLayerDef[] = [
@@ -35,29 +46,45 @@ export const MAP_LAYERS: MapLayerDef[] = [
     labelKey: "map.layers.street",
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    maxZoom: 19
+    maxZoom: MAX_ZOOM,
+    maxNativeZoom: 19
   },
   {
     key: "satellite",
     labelKey: "map.layers.satellite",
     attribution: "Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics",
-    maxZoom: 19
+    maxZoom: MAX_ZOOM,
+    // 18 — Esri World Imagery'nin TURKIYE KIRSALINDA guvenle veri verdigi son
+    // seviye. Ustunde Esri hata DONDURMEZ: uzerinde "Map data not yet
+    // available" yazan gecerli bir PNG (HTTP 200) doner. Bu yuzden `tileerror`
+    // hic tetiklenmez, yedek yola gecis calismaz ve karo onbellege bile
+    // yazilirdi — kullanicinin sikayet ettigi gri "veri yok" karolari buydu.
+    // Cozum sinirdan gecmemek: 18 ustu istenmiyor, goruntu buyutulerek
+    // gosteriliyor.
+    maxNativeZoom: 18
   },
   {
     key: "topo",
     labelKey: "map.layers.topo",
     attribution:
       'Map data: &copy; OpenStreetMap, SRTM | Style: <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
-    maxZoom: 17
+    maxZoom: MAX_ZOOM,
+    maxNativeZoom: 17
   },
   {
     key: "dark",
     labelKey: "map.layers.dark",
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    maxZoom: 19
+    maxZoom: MAX_ZOOM,
+    maxNativeZoom: 20
   }
 ];
+
+/** Katman tanimi — bulunamazsa OSM'ye duser (cagiran yerlerde null kontrolu yok). */
+export function layerDef(key: MapLayerKey): MapLayerDef {
+  return MAP_LAYERS.find((l) => l.key === key) ?? MAP_LAYERS[0];
+}
 
 /**
  * Leaflet TileLayer icin url sablonu. {z}/{x}/{y} yer tutuculari Leaflet

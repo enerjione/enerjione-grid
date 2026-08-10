@@ -30,6 +30,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from app.services import local_time
+
 # Seviye -> (Turkce ad, emoji). Alarm-service ve kurallar bu dort seviyeyi
 # uretir; bilinmeyen bir deger gelirse ham hali buyuk harfle gosterilir.
 _LEVELS: dict[str, tuple[str, str]] = {
@@ -87,9 +89,12 @@ def format_distance(meters: float | None) -> str | None:
 
 
 def _fmt_time(dt: datetime | None) -> str:
-    if dt is None:
-        return "-"
-    return dt.strftime("%d.%m.%Y %H:%M")
+    """Mesajdaki saat YEREL saattir.
+
+    Ham UTC basiliyordu: 11:00'de olusan alarm mesajda 08:00 gorunuyordu.
+    Sistem UTC saklamaya devam eder; donusum yalnizca burada.
+    """
+    return local_time.fmt_local(dt)
 
 
 def maps_link(latitude: float | None, longitude: float | None) -> str | None:
@@ -138,45 +143,53 @@ def alarm_lines(
     region_name: str | None,
     occurred_at: datetime | None,
 ) -> list[tuple[str, str]]:
-    """Alarm govdesi — (emoji, metin) satirlari. Bicimden BAGIMSIZ."""
+    """Alarm govdesi — (ETIKET, DEGER) satirlari. Bicimden BAGIMSIZ.
+
+    Satir basina emoji KOYULMAZ. Emoji yalnizca basliktadir (aciliyet
+    seviyesi); govdede her satira emoji koymak mesaji suslu ve amator
+    gosteriyordu. Vurgu bicimden gelir: etiket kalin, deger ince.
+    """
     rows: list[tuple[str, str]] = []
 
     cihaz = device_name or device_code or None
     if cihaz:
-        etiket = f"{cihaz} ({device_code})" if device_code and device_name else cihaz
+        deger = f"{cihaz} ({device_code})" if device_code and device_name else cihaz
         faz = source_label(signal_key)
         if faz:
-            etiket = f"{etiket} - {faz}"
-        rows.append(("\U0001F4DF", f"Cihaz: {etiket}"))  # cagri cihazi
+            deger = f"{deger} — {faz}"
+        rows.append(("Cihaz", deger))
 
     yer = " / ".join(x for x in (region_name, line_name) if x)
     if yer:
-        rows.append(("\U0001F4CD", f"Konum: {yer}"))  # yer isareti
+        rows.append(("Konum", yer))
 
     if description:
-        rows.append(("\U0001F4DD", description.strip()))  # not
+        rows.append(("Açıklama", description.strip()))
 
-    rows.append(("\U0001F553", _fmt_time(occurred_at)))  # saat
+    rows.append(("Saat", _fmt_time(occurred_at)))
     return rows
 
 
 def alarm_whatsapp(**kw) -> str:
-    baslik = kw["title"]
+    """WhatsApp: `*kalin*` yalnizca baslik ve ETIKETLERDE."""
     lvl = kw.get("level")
-    parts = [f"{level_emoji(lvl)} *{level_label(lvl)} ALARM*", "", f"*{baslik}*"]
-    parts += [f"{emoji} {metin}" for emoji, metin in alarm_lines(**kw)]
+    parts = [f"{level_emoji(lvl)} *{level_label(lvl)} ALARM*", "", f"*{kw['title']}*", ""]
+    parts += [f"*{etiket}:* {deger}" for etiket, deger in alarm_lines(**kw)]
     return "\n".join(parts)
 
 
 def alarm_telegram_html(**kw) -> str:
-    baslik = _esc_html(kw["title"])
     lvl = kw.get("level")
     parts = [
         f"{level_emoji(lvl)} <b>{level_label(lvl)} ALARM</b>",
         "",
-        f"<b>{baslik}</b>",
+        f"<b>{_esc_html(kw['title'])}</b>",
+        "",
     ]
-    parts += [f"{emoji} {_esc_html(metin)}" for emoji, metin in alarm_lines(**kw)]
+    parts += [
+        f"<b>{_esc_html(etiket)}:</b> {_esc_html(deger)}"
+        for etiket, deger in alarm_lines(**kw)
+    ]
     return "\n".join(parts)
 
 
@@ -222,54 +235,60 @@ def fault_lines(
     longitude: float | None,
     opened_at: datetime | None,
 ) -> list[tuple[str, str]]:
-    """Hat arizasi govdesi — (emoji, metin) satirlari."""
+    """Hat arizasi govdesi — (ETIKET, DEGER) satirlari (emoji yok)."""
     rows: list[tuple[str, str]] = []
 
     yer = " / ".join(x for x in (region_name, line_name) if x)
     if yer:
-        rows.append(("\U0001F4CD", f"Bölge / Hat: {yer}"))
+        rows.append(("Bölge / Hat", yer))
 
     if from_pole_seq is not None and to_pole_seq is not None:
-        rows.append(("⚡", f"Arıza aralığı: Direk #{from_pole_seq} – Direk #{to_pole_seq}"))
+        rows.append((
+            "Arıza aralığı",
+            f"Direk #{from_pole_seq} – Direk #{to_pole_seq}",
+        ))
 
     # Arizanin hangi iki cihaz arasinda oldugunu ACIKCA yaz: ekip sahada
     # direk numarasindan cok cihaz adiyla yon buluyor.
     if last_red_name:
         arasi = first_green_name or "hat ucu"
-        rows.append(("\U0001F50C", f"{last_red_name} ile {arasi} arasında"))
+        rows.append(("Cihazlar arası", f"{last_red_name} – {arasi}"))
 
     baslangic = format_distance(zone_start_m)
     bitis = format_distance(zone_end_m)
     if baslangic and bitis:
-        satir = f"Tahmini arıza mesafesi: {baslangic} – {bitis} (hat başından)"
+        deger = f"{baslangic} – {bitis} (hat başından)"
         belirsizlik = format_distance(zone_length_m)
         if belirsizlik:
-            satir += f" — {belirsizlik} belirsizlik aralığı"
-        rows.append(("\U0001F4CF", satir))  # cetvel
+            deger += f", {belirsizlik}'lik kesim"
+        rows.append(("Tahmini mesafe", deger))
 
     if trigger_titles:
         gorunen = ", ".join(trigger_titles[:3])
         if len(trigger_titles) > 3:
             gorunen += f" (+{len(trigger_titles) - 3})"
-        rows.append(("\U0001F6A8", f"Tetikleyen alarm: {gorunen}"))
+        rows.append(("Tetikleyen alarm", gorunen))
 
     link = maps_link(latitude, longitude)
     if link:
-        rows.append(("\U0001F5FA", link))  # harita
+        rows.append(("Konum", link))
 
-    rows.append(("\U0001F553", _fmt_time(opened_at)))
+    rows.append(("Saat", _fmt_time(opened_at)))
     return rows
 
 
 def fault_whatsapp(**kw) -> str:
-    parts = ["\U0001F534 *HAT ARIZASI*", ""]
-    parts += [f"{emoji} {metin}" for emoji, metin in fault_lines(**kw)]
+    parts = ["🔴 *HAT ARIZASI*", ""]
+    parts += [f"*{etiket}:* {deger}" for etiket, deger in fault_lines(**kw)]
     return "\n".join(parts)
 
 
 def fault_telegram_html(**kw) -> str:
-    parts = ["\U0001F534 <b>HAT ARIZASI</b>", ""]
-    parts += [f"{emoji} {_esc_html(metin)}" for emoji, metin in fault_lines(**kw)]
+    parts = ["🔴 <b>HAT ARIZASI</b>", ""]
+    parts += [
+        f"<b>{_esc_html(etiket)}:</b> {_esc_html(deger)}"
+        for etiket, deger in fault_lines(**kw)
+    ]
     return "\n".join(parts)
 
 

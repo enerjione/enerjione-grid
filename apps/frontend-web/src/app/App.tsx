@@ -2043,7 +2043,9 @@ export function App() {
     }
   };
 
-  const handleSaveProjectSettings = async (payload: import("../shared/types").ProjectSettings) => {
+  const handleSaveProjectSettings = async (
+    payload: import("../shared/types").ProjectSettingsSave
+  ) => {
     if (!session) return;
     await updateProjectSettings(session.accessToken, payload);
     // Provider'i yenile — Login + Header logosu hemen guncellensin diye.
@@ -2858,7 +2860,10 @@ export function App() {
               />
             ) : null}
             {engineeringPage === "project-settings" && session.role === "installer" ? (
-              <ProjectSettingsPanel onSave={handleSaveProjectSettings} />
+              <ProjectSettingsPanel
+                onSave={handleSaveProjectSettings}
+                accessToken={session.accessToken}
+              />
             ) : null}
             {engineeringPage === "grid" &&
             (session.role === "engineer" || session.role === "installer") ? (

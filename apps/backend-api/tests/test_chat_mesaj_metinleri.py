@@ -174,3 +174,54 @@ def test_mesafe_yoksa_satir_HIC_cikmaz():
     metin = ct.fault_whatsapp(**{**ARIZA, "zone_start_m": None, "zone_end_m": None})
     assert "None" not in metin
     assert "Tahmini mesafe" not in metin
+
+
+# ------------------------------------------------------------------ bicim
+
+
+def test_emoji_SADECE_baslikta():
+    """Her satira emoji koymak mesaji suslu ve amator gosteriyordu.
+    Aciliyet basliktaki tek emojiyle verilir; govde sade kalir."""
+    metin = ct.alarm_whatsapp(**ALARM)
+    satirlar = [s for s in metin.split("\n") if s.strip()]
+    assert satirlar[0].startswith(ct.level_emoji("critical"))
+    for satir in satirlar[1:]:
+        assert all(ord(ch) < 0x2600 for ch in satir), f"govde satirinda emoji var: {satir!r}"
+
+
+def test_govde_ETIKET_kalin_DEGER_ince():
+    """WhatsApp'ta `*...*` kalin. Etiket vurgulu, deger duz olmali."""
+    metin = ct.alarm_whatsapp(**ALARM)
+    assert "*Cihaz:* Direk-12" in metin, metin
+    assert "*Konum:* Batman / HAT-1" in metin
+    # Deger kalin OLMAMALI: "*Cihaz:* *Direk-12*" gibi bir sey cikmasin.
+    assert "*Cihaz:* *" not in metin
+
+
+def test_ariza_mesajinda_da_ayni_bicim():
+    metin = ct.fault_whatsapp(**ARIZA)
+    satirlar = [s for s in metin.split("\n") if s.strip()]
+    assert satirlar[0].startswith("\U0001F534")
+    for satir in satirlar[1:]:
+        assert satir.startswith("*") and ":*" in satir, f"etiket bicimi bozuk: {satir!r}"
+        assert all(ord(ch) < 0x2600 for ch in satir), f"govde satirinda emoji var: {satir!r}"
+
+
+# ------------------------------------------------------------------- saat
+
+
+def test_saat_YEREL_saat_dilimindedir():
+    """UTC 08:00'de olusan alarm mesajda 11:00 gorunmeli (TR = UTC+3).
+    Ham UTC basiliyordu; saha ekibi duvar saatine bakiyor."""
+    utc = datetime(2026, 8, 10, 8, 0, tzinfo=timezone.utc)
+    metin = ct.alarm_whatsapp(**{**ALARM, "occurred_at": utc})
+    assert "11:00" in metin, metin
+    assert "08:00" not in metin
+
+
+def test_naive_zaman_UTC_kabul_edilir():
+    """DB'den tz bilgisi dusmus olabilir; yerel varsaymak degeri 3 saat kaydirirdi."""
+    from app.services.local_time import to_local
+
+    naive = datetime(2026, 8, 10, 8, 0)
+    assert to_local(naive).hour == 11

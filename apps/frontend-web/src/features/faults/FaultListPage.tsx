@@ -35,6 +35,7 @@ import type {
   UserRead
 } from "../../shared/types";
 import { ActiveFaultCard } from "./ActiveFaultCard";
+import type { StripPole } from "./FaultPoleStrip";
 import { FaultDetailModal } from "./FaultDetailModal";
 import { FaultHistoryTable } from "./FaultHistoryTable";
 
@@ -166,6 +167,25 @@ export function FaultListPage({
       else m.set(p.line_id, [p.sequence_no]);
     }
     for (const arr of m.values()) arr.sort((a, b) => a - b);
+    return m;
+  }, [gridSnapshot]);
+
+  /** line_id -> direk AD ve ROL bilgisi. Cizimde sira numarasi yerine ad
+   *  gosterilir (saha ekibi direkleri adiyla taniyor) ve bransman direkleri
+   *  ayri bir sembolle isaretlenir. */
+  const polesByLine = useMemo(() => {
+    const m = new Map<number, StripPole[]>();
+    for (const p of gridSnapshot?.poles ?? []) {
+      const item: StripPole = {
+        seq: p.sequence_no,
+        name: p.name ?? null,
+        role: p.topology_role ?? null
+      };
+      const arr = m.get(p.line_id);
+      if (arr) arr.push(item);
+      else m.set(p.line_id, [item]);
+    }
+    for (const arr of m.values()) arr.sort((a, b) => a.seq - b.seq);
     return m;
   }, [gridSnapshot]);
 
@@ -302,21 +322,37 @@ export function FaultListPage({
             <p>{t("faults.empty.systemClean")}</p>
           </div>
         ) : (
-          <div className="fx-active-list">
-            {activeFaults.map((f) => (
-              <ActiveFaultCard
-                key={f.id}
-                fault={f}
-                poleSeqs={poleSeqsByLine.get(f.line_id) ?? []}
-                segments={segmentsByLine.get(f.line_id) ?? []}
-                localeTag={localeTag}
-                now={now}
-                canAssign={canAssign}
-                onOpenDetail={() => setOpenFaultId(f.id)}
-                onAssignClick={() => setOpenFaultId(f.id)}
-                onShowOnMap={() => setOpenFaultId(f.id)}
-              />
-            ))}
+          /* KAYDIRMALI KART DESTESI
+             Arizalar alt alta diziliyordu; iki ariza varken sayfa uzuyor,
+             ikincisini gormek icin kaydirmak gerekiyordu. Ariza karti
+             sematik cizimiyle birlikte TEK BASINA bir ekran dolusu bilgi —
+             ayni anda birden fazlasini yarim gostermek okumayi bozuyor.
+             Simdi her kart ekrani doldurur, sonrakine YATAY kaydirarak
+             gecilir (scroll-snap; klavye ve dokunmatik dogal calisir). */
+          <div className="fx-deck-wrap">
+            <div className="fx-deck">
+              {activeFaults.map((f) => (
+                <div className="fx-deck-item" key={f.id}>
+                  <ActiveFaultCard
+                    fault={f}
+                    poleSeqs={poleSeqsByLine.get(f.line_id) ?? []}
+                    poles={polesByLine.get(f.line_id) ?? []}
+                    segments={segmentsByLine.get(f.line_id) ?? []}
+                    localeTag={localeTag}
+                    now={now}
+                    canAssign={canAssign}
+                    onOpenDetail={() => setOpenFaultId(f.id)}
+                    onAssignClick={() => setOpenFaultId(f.id)}
+                    onShowOnMap={() => setOpenFaultId(f.id)}
+                  />
+                </div>
+              ))}
+            </div>
+            {activeFaults.length > 1 ? (
+              <div className="fx-deck-hint">
+                {t("faults.card.deckHint", { count: activeFaults.length })}
+              </div>
+            ) : null}
           </div>
         )
       ) : (

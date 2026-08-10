@@ -856,13 +856,22 @@
     "poleStrip": {
       "range": "Fault section: between poles {{from}} and {{to}}",
       "unknown": "Fault section could not be determined",
-      "spanLabel": "↔ {{span}} uncertainty range",
-      "between": "Between poles {{from}} – {{to}}",
+      "spanLabel": "↔ Search section: {{span}}",
+      "between": "Between {{from}} – {{to}}",
       "atDistance": "{{d}} from line start",
       "role": {
-        "red": "DETECTED fault current",
-        "green": "did NOT detect fault current",
+        "red": "Fault DETECTED",
+        "green": "No fault detected",
         "idle": "Outside the fault zone"
+      },
+      "poleSeq": "Pole {{seq}} on the line",
+      "inZone": "Inside the fault zone",
+      "poleRole": {
+        "line_start": "Line start",
+        "transit": "Transit pole",
+        "branch": "Branch point",
+        "line_end": "Line end",
+        "cable_transition": "Cable transition"
       }
     },
     "title": "Line Faults",
@@ -951,12 +960,14 @@
       "durationLive": "Fault still active — live duration",
       "durationFinal": "Total fault duration",
       "openTooltip": "Open detail — {{at}}",
-      "uncertainty": "{{span}} uncertainty",
+      "uncertainty": "{{span}} section",
       "causeTitle": "Triggering Alarm",
       "causeEmpty": "The triggering alarm has cleared.",
       "alarmAcked": "acknowledged",
       "alarmMore": "+{{count}} more alarms",
-      "boundsTitle": "Fault Zone Bounds"
+      "boundsTitle": "Fault Zone Bounds",
+      "rangeTextNamed": "{{from}} — {{to}}",
+      "deckHint": "{{count}} faults — swipe to browse"
     },
     "empty": {
       "errorTitle": "Could not load faults",
@@ -2088,7 +2099,15 @@
       "toastMuteHint": "New info/warning alarms no longer pop up on screen. Critical alarms are always shown.",
       "toastScopeNote": "Muting only covers unprompted info/warning notifications. CRITICAL alarms, along with \"Saved\", \"could not save\", permission and validation warnings, are ALWAYS shown. Muted alarms remain visible in the notification bell, on the Alarms page and in email/SMS/Telegram notifications; while muting is on the bell icon appears crossed out.",
       "saving": "Saving...",
-      "save": "Save"
+      "save": "Save",
+      "phaseTitle": "Unit → Phase Mapping (Site Default)",
+      "phaseHint": "The three units of a Horstmann SN2 clamp onto three separate phases. This distinction is a decisive input for fault cause inference: single phase-to-ground usually indicates an external cause (tree, animal), three-phase usually equipment or overload. Individual devices clamped differently can be overridden in Device Management.",
+      "phaseDefault": "Default ({{phase}})",
+      "phaseUnit": {
+        "master": "Master",
+        "sat01": "Satellite 01",
+        "sat02": "Satellite 02"
+      }
     },
     "responsibilityAreas": {
       "title": "Teams",
@@ -2327,7 +2346,15 @@
         "createMinimalHint": "Other communication settings are configured after device creation from Device Properties > Comms.",
         "cancel": "Cancel",
         "create": "Create",
-        "save": "Save"
+        "save": "Save",
+        "phaseTitle": "Unit → Phase Mapping",
+        "phaseHint": "The device's three units clamp onto three separate phases. A unit left empty follows the site convention from Project Settings — this is only for exception devices.",
+        "phaseInherit": "Use project setting",
+        "phaseUnit": {
+          "master": "Master",
+          "sat01": "Satellite 01",
+          "sat02": "Satellite 02"
+        }
       },
       "footer": {
         "ok": "OK",

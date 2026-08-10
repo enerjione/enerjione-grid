@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field
 # sinifi birebir ayni metni kullanir.
 ToastPosition = Literal["bottom-right", "bottom-left", "top-right", "top-left"]
 
+#: Faz kodu — cihaz semasiyla AYNI kume (tek tanim, ayrisma olmasin).
+from app.schemas.device import PhaseCode  # noqa: E402
+
 
 class ProjectSettingsRead(BaseModel):
     """Login ekrani + header tarafindan auth-siz okunabilir; private alan yok.
@@ -33,7 +36,6 @@ class ProjectSettingsRead(BaseModel):
     toast_position: ToastPosition | None = None
     # NULL/False = bildirimler gorunur (mevcut davranis).
     toast_muted: bool | None = None
-
     class Config:
         from_attributes = True
 
@@ -57,3 +59,27 @@ class ProjectSettingsUpdate(BaseModel):
     # Yalnizca KENDILIGINDEN gelen bildirimleri susturur; kullanici eyleminin
     # sonucu olan toast'lar her zaman gosterilir (bkz. model yorumu).
     toast_muted: bool | None = Field(default=None)
+    # Kurulumun genel faz konvansiyonu. Serbest metin DEGIL: "A" / "L1" /
+    # "faz-a" gibi birbirinden habersiz yazimlar faz gruplamasini bolerdi.
+    phase_master: PhaseCode | None = Field(default=None)
+    phase_sat01: PhaseCode | None = Field(default=None)
+    phase_sat02: PhaseCode | None = Field(default=None)
+
+
+class PhaseMapRead(BaseModel):
+    """Unite -> faz eslemesi (kurulumun genel konvansiyonu).
+
+    NEDEN `ProjectSettingsRead` ICINDE DEGIL: `GET /project-settings`
+    bilincli olarak HALKA ACIK — login ekrani ve header oturum yokken
+    logoyu ceker. Oraya eklenen her alan anonim bir cagirana acilir
+    (bkz. tests/test_toast_bildirim_ayarlari.PUBLIC_ALANLAR).
+
+    Faz eslemesi marka degil SEBEKE YAPILANDIRMASIDIR ve login ekraninin
+    ona ihtiyaci yok; bu yuzden ayri ve KIMLIK DOGRULAMALI bir uctan
+    servis edilir. Kucuk bir bilgi olmasi, gereksiz yere acmayi hakli
+    kilmaz.
+    """
+
+    phase_master: PhaseCode | None = None
+    phase_sat01: PhaseCode | None = None
+    phase_sat02: PhaseCode | None = None

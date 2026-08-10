@@ -853,13 +853,22 @@
     "poleStrip": {
       "range": "Arıza aralığı: direk {{from}} ile {{to}} arası",
       "unknown": "Arıza aralığı belirlenemedi",
-      "spanLabel": "↔ {{span}} belirsizlik aralığı",
-      "between": "Direk {{from}} – {{to}} arasında",
+      "spanLabel": "↔ Aranacak hat kesimi: {{span}}",
+      "between": "{{from}} – {{to}} arasında",
       "atDistance": "Hat başından {{d}}",
       "role": {
-        "red": "Arıza akımını GÖRDÜ",
-        "green": "Arıza akımını GÖRMEDİ",
+        "red": "Arıza GÖRÜLDÜ",
+        "green": "Arıza GÖRÜLMEDİ",
         "idle": "Arıza bölgesi dışında"
+      },
+      "poleSeq": "Hat üzerinde {{seq}}. direk",
+      "inZone": "Arıza bölgesinin içinde",
+      "poleRole": {
+        "line_start": "Hat başlangıcı",
+        "transit": "Geçiş direği",
+        "branch": "Branşman noktası",
+        "line_end": "Hat sonu",
+        "cable_transition": "Kablo geçişi"
       }
     },
     "title": "Hat Arızaları",
@@ -948,12 +957,14 @@
       "durationLive": "Arıza halen aktif — canlı süre",
       "durationFinal": "Toplam arıza süresi",
       "openTooltip": "Detay görüntüle — {{at}}",
-      "uncertainty": "{{span}} belirsizlik",
+      "uncertainty": "{{span}}'lik kesim",
       "causeTitle": "Arızayı Açan Alarm",
       "causeEmpty": "Arızayı açan alarm normale dönmüş.",
       "alarmAcked": "onaylandı",
       "alarmMore": "+{{count}} alarm daha",
-      "boundsTitle": "Arıza Bölgesi Sınırları"
+      "boundsTitle": "Arıza Bölgesi Sınırları",
+      "rangeTextNamed": "{{from}} — {{to}}",
+      "deckHint": "{{count}} arıza — yana kaydırarak geçin"
     },
     "empty": {
       "errorTitle": "Arıza listesi alınamadı",
@@ -2085,7 +2096,15 @@
       "toastMuteHint": "Yeni bilgi/uyarı alarmları ekranda baloncuk olarak belirmez. Kritik alarmlar her zaman gösterilir.",
       "toastScopeNote": "Susturma yalnızca kendiliğinden gelen bilgi/uyarı bildirimlerini kapsar. KRİTİK alarmlar ile \"Kaydedildi\", \"kaydedilemedi\", yetki ve doğrulama uyarıları HER ZAMAN gösterilir. Susturulan alarmlar bildirim çanında, Alarmlar sayfasında ve e-posta/SMS/Telegram bildirimlerinde görünmeye devam eder; susturma açıkken çan ikonu üstü çizili görünür.",
       "saving": "Kaydediliyor...",
-      "save": "Kaydet"
+      "save": "Kaydet",
+      "phaseTitle": "Ünite → Faz Eşlemesi (Kurulum Geneli)",
+      "phaseHint": "Horstmann SN2'nin üç ünitesi hattın üç ayrı fazına kelepçelenir. Bu ayrım arıza sebebi çıkarımının belirleyici girdisidir: tek faz-toprak çoğunlukla dış etken (ağaç, hayvan), üç faz çoğunlukla ekipman ya da aşırı yük işaretidir. Tek tek cihazlar farklı kurulduysa Cihaz Yönetimi'nden ayrıca değiştirilebilir.",
+      "phaseDefault": "Varsayılan ({{phase}})",
+      "phaseUnit": {
+        "master": "Master",
+        "sat01": "Satellite 01",
+        "sat02": "Satellite 02"
+      }
     },
     "responsibilityAreas": {
       "title": "Ekipler",
@@ -2324,7 +2343,15 @@
         "createMinimalHint": "Diğer haberleşme ayarları cihaz kaydından sonra Cihaz Özellikleri > Haberleşme sekmesinden yapılır.",
         "cancel": "İptal",
         "create": "Oluştur",
-        "save": "Kaydet"
+        "save": "Kaydet",
+        "phaseTitle": "Ünite → Faz Eşlemesi",
+        "phaseHint": "Cihazın üç ünitesi hattın üç ayrı fazına kelepçelenir. Boş bırakılan ünite Proje Ayarları'ndaki kurulum konvansiyonunu kullanır — burası yalnızca istisna cihazlar içindir.",
+        "phaseInherit": "Proje ayarını kullan",
+        "phaseUnit": {
+          "master": "Master",
+          "sat01": "Satellite 01",
+          "sat02": "Satellite 02"
+        }
       },
       "footer": {
         "ok": "OK",

@@ -109,14 +109,21 @@ def _operator_symbol(op: str | None) -> str:
 
 
 def _format_timestamp(ts: datetime | str | None) -> str:
+    """E-postadaki saat YEREL saattir (bkz. services/local_time.py).
+
+    Ham UTC basiliyordu: 11:00'de olusan alarm postada 08:00 gorunuyordu.
+    """
+    from app.services.local_time import fmt_local
+
     if ts is None:
         return ""
     if isinstance(ts, datetime):
-        return ts.strftime("%d.%m.%Y %H:%M:%S")
+        return fmt_local(ts, "%d.%m.%Y %H:%M:%S")
     try:
-        return datetime.fromisoformat(str(ts).replace("Z", "+00:00")).strftime("%d.%m.%Y %H:%M:%S")
+        parsed = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
     except Exception:  # noqa: BLE001
         return _esc(ts)
+    return fmt_local(parsed, "%d.%m.%Y %H:%M:%S")
 
 
 # --------- Alarm email -------------------------------------------------

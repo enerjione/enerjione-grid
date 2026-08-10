@@ -405,7 +405,11 @@ export async function fetchDevices(token: string, gatewayCode?: string): Promise
     lastUpdateAt: item.last_update_at ?? undefined,
     latitude: item.latitude,
     longitude: item.longitude,
-    iec104CommonAddress: item.iec104_common_address ?? null
+    iec104CommonAddress: item.iec104_common_address ?? null,
+    // Unite -> faz eslemesi (bu cihaza OZEL). null = proje konvansiyonu.
+    phaseMaster: item.phase_master ?? null,
+    phaseSat01: item.phase_sat01 ?? null,
+    phaseSat02: item.phase_sat02 ?? null
   }));
 }
 
@@ -960,6 +964,15 @@ export async function updateFaultNote(
 }
 
 /** Arıza sebep kataloğu. Tek kaynak backend'dedir (`app/data/fault_causes.py`). */
+/** Ünite → faz eşlemesi (kimlik doğrulamalı; public ayarlardan AYRI). */
+export async function fetchPhaseMap(token: string): Promise<import("./types").PhaseMap> {
+  const response = await apiFetch(`${API_BASE_URL}/project-settings/phase-map`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Faz eşlemesi alınamadı.");
+  return (await response.json()) as import("./types").PhaseMap;
+}
+
 export async function fetchFaultCauses(
   token: string
 ): Promise<import("./types").FaultCauseCatalog> {
@@ -2435,7 +2448,7 @@ export async function fetchProjectSettings(): Promise<import("./types").ProjectS
 
 export async function updateProjectSettings(
   token: string,
-  payload: import("./types").ProjectSettings
+  payload: import("./types").ProjectSettingsSave
 ): Promise<import("./types").ProjectSettings> {
   const response = await apiFetch(`${API_BASE_URL}/project-settings`, {
     method: "PUT",

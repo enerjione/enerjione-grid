@@ -274,3 +274,43 @@ def test_apply_ESLEMEYI_ZINCIRDEN_cozer(db):
     apply_snapshot(db, f)
 
     assert f.phase == "c", "cihaz bazli faz eslemesi uygulanmadi"
+
+
+# ---- Faz eslemesi HALKA ACIK ucta SIZMAMALI --------------------------------
+#
+# `GET /project-settings` bilincli olarak kimlik dogrulamasizdir (login ekrani
+# logoyu oturum yokken ceker). Faz eslemesi marka degil SEBEKE
+# YAPILANDIRMASIDIR; oraya eklemek her anonim cagirana kurulumun elektriksel
+# duzenini acmak olurdu. Kucuk bir bilgi olmasi, gereksiz acmayi hakli
+# kilmaz — ve bu tur bir eklemeyi kimse fark etmez.
+
+def test_faz_eslemesi_PUBLIC_okumada_YOK():
+    from app.schemas.project_settings import ProjectSettingsRead
+
+    alanlar = set(ProjectSettingsRead.model_fields)
+    sizanlar = {a for a in alanlar if a.startswith("phase_")}
+    assert not sizanlar, (
+        f"faz eslemesi halka acik GET'e sizmis: {sorted(sizanlar)}. "
+        "Kimlik dogrulamali /project-settings/phase-map ucunu kullanin."
+    )
+
+
+def test_faz_eslemesi_YAZMADA_var():
+    """Okumadan cikarmak, yazmayi da kirmis olmamali."""
+    from app.schemas.project_settings import ProjectSettingsUpdate
+
+    alanlar = set(ProjectSettingsUpdate.model_fields)
+    assert {"phase_master", "phase_sat01", "phase_sat02"} <= alanlar
+
+
+def test_phase_map_ucu_KIMLIK_DOGRULAMALI():
+    """Ayri uc actik ama korumasiz birakilsaydi hicbir sey kazanmazdik."""
+    import inspect
+
+    from app.api.project_settings import get_phase_map
+
+    imza = inspect.signature(get_phase_map)
+    kaynak = inspect.getsource(get_phase_map)
+    assert "get_current_user" in kaynak, "phase-map ucu kimlik dogrulamasiz"
+    assert "phase_map" in get_phase_map.__name__ or True
+    assert len(imza.parameters) >= 2

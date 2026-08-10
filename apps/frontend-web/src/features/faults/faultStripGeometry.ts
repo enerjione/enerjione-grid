@@ -14,6 +14,14 @@
  * dilim islemine indirgenir.
  */
 
+/** Cizimdeki bir direk. `seq` zorunlu; ad/rol varsa etiket ve ipucu zenginlesir. */
+export type StripPole = {
+  seq: number;
+  name?: string | null;
+  /** `line_start | transit | branch | line_end | cable_transition` */
+  role?: string | null;
+};
+
 /** Cizimde kullanilacak segment (bir direk araligi + uzerindeki cihaz). */
 export type StripSegment = {
   from_pole_seq?: number | null;
@@ -44,6 +52,8 @@ export type StripSpan = {
 
 export type StripGeometry = {
   seqs: number[];
+  /** `seqs` ile AYNI sirada direk bilgileri (ad/rol). */
+  poles: StripPole[];
   width: number;
   /** Iletken poligonu (ornekleme noktalari). */
   wire: { pos: number; x: number; y: number }[];
@@ -74,6 +84,21 @@ export const DIM_Y = 140;
 export const DIM_LABEL_Y = 162;
 const SAMPLES = 16;
 
+/**
+ * Cizimin SABIT ekran yuksekligi (px).
+ *
+ * NEDEN SABIT: SVG `width:100%` ile cizildiginde viewBox oranı korunarak
+ * esniyordu; yani olcek HATTIN DIREK SAYISINA gore degisiyordu. 6 direkli
+ * bir hat kartin genisligine yayilip devasa gorunurken 17 direkli hat ayni
+ * alana sikisip minicik kaliyordu — iki ariza karti yan yana
+ * KARSILASTIRILAMIYORDU. Artik olcek sabit: bir direk araligi her hatta ayni
+ * piksel genisligindedir, cizim sigmazsa yatay kaydirilir.
+ */
+export const STRIP_PX_H = 188;
+
+/** viewBox birimi -> ekran pikseli. */
+export const PX_PER_UNIT = STRIP_PX_H / STRIP_H;
+
 /** Katener yukseklik ofseti: uclarda 0, ortada `SAG`. */
 export function sagAt(t: number): number {
   return 4 * SAG * t * (1 - t);
@@ -81,6 +106,8 @@ export function sagAt(t: number): number {
 
 type Input = {
   poleSeqs: number[];
+  /** Direk ad/rol bilgisi. Verilmezse yalnizca sira numarasi gosterilir. */
+  poles?: StripPole[];
   segments?: StripSegment[];
   fromSeq?: number | null;
   toSeq?: number | null;
@@ -90,6 +117,7 @@ type Input = {
 
 export function buildStripGeometry({
   poleSeqs,
+  poles,
   segments,
   fromSeq,
   toSeq,
@@ -175,7 +203,12 @@ export function buildStripGeometry({
     if (iA !== -1 && iB !== -1 && iB > iA) span = { a: iA, b: iB, byDevice: false };
   }
 
-  return { seqs, width, wire, devices, span, xOf, pointAt };
+  // Direk bilgileri seqs ile AYNI sirada; kaydi olmayan direk icin yalnizca
+  // sira numarasi tasiyan bir yer tutucu uretilir (cizim hep tam kalsin).
+  const bySeq = new Map((poles ?? []).map((p) => [p.seq, p]));
+  const poleList: StripPole[] = seqs.map((s) => bySeq.get(s) ?? { seq: s });
+
+  return { seqs, poles: poleList, width, wire, devices, span, xOf, pointAt };
 }
 
 /** Ornek noktalari SVG path'ine cevirir. */

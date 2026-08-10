@@ -9,7 +9,8 @@ import type {
   Gateway,
   GatewayAgentStatus,
   LicenseStatus,
-  LocalGateway
+  LocalGateway,
+  PhaseCode
 } from "../../shared/types";
 import { DEFAULT_DNP3_EXTENDED, mergeDnp3Extended } from "../../shared/types";
 import {
@@ -178,6 +179,9 @@ type Props = {
       latitude?: number;
       longitude?: number;
       iec104_common_address?: number | null;
+      phase_master?: PhaseCode | null;
+      phase_sat01?: PhaseCode | null;
+      phase_sat02?: PhaseCode | null;
     }
   ) => Promise<void>;
   onDelete: (deviceCode: string) => Promise<void>;
@@ -361,6 +365,10 @@ export function DeviceManagementPanel({
   const [serial, setSerial] = useState("");
   const [description, setDescription] = useState("");
   const [model, setModel] = useState("horstmann_sn_2_0");
+  // Unite -> faz eslemesi. Bos = "Proje Ayarlari'ndaki konvansiyonu kullan".
+  const [phaseMaster, setPhaseMaster] = useState<"" | PhaseCode>("");
+  const [phaseSat01, setPhaseSat01] = useState<"" | PhaseCode>("");
+  const [phaseSat02, setPhaseSat02] = useState<"" | PhaseCode>("");
   const [installationDate, setInstallationDate] = useState("");
   const [ipAddress, setIpAddress] = useState("");
   const [dnp3OutstationPort, setDnp3OutstationPort] = useState("20001");
@@ -485,6 +493,9 @@ export function DeviceManagementPanel({
     setSerial(device.serialNumber ?? "");
     setDescription(device.description ?? "");
     setModel(device.model ?? "horstmann_sn_2_0");
+    setPhaseMaster(device.phaseMaster ?? "");
+    setPhaseSat01(device.phaseSat01 ?? "");
+    setPhaseSat02(device.phaseSat02 ?? "");
     setInstallationDate(device.installationDate ?? "");
     setIpAddress(device.ipAddress ?? "");
     setDnp3OutstationPort(String(device.dnp3OutstationPort ?? 20001));
@@ -552,6 +563,11 @@ export function DeviceManagementPanel({
         timeout_ms: Number(timeoutMs),
         retry_count: Number(retryCount),
         iec104_common_address: caValue,
+        // Bos secim = "bu cihaz icin ozel bir sey yok" -> Proje Ayarlari'ndaki
+        // kurulum konvansiyonu gecerli olur.
+        phase_master: phaseMaster || null,
+        phase_sat01: phaseSat01 || null,
+        phase_sat02: phaseSat02 || null,
         latitude: Number(latitude),
         longitude: Number(longitude)
       });
@@ -1273,6 +1289,49 @@ export function DeviceManagementPanel({
                       </div>
                       <div className="device-visual-card">
                         <img src={deviceImageSrc(model)} alt={t("engineering.devicesPanel.deviceImageAlt")} />
+                      </div>
+                    </div>
+                    {/* Unite -> faz eslemesi. SN2'nin uc unitesi hattin uc
+                        ayri fazina kelepcelenir; hangisinin hangi fazda
+                        oldugu sahada kelepceyi takan kisinin kararidir ve
+                        cihazdan cihaza degisebilir.
+
+                        BOS = "Proje Ayarlari'ndaki kurulum konvansiyonunu
+                        kullan". Burasi yalnizca ISTISNA cihazlar icin —
+                        600 cihazin hepsinde uc alan doldurma zorunlulugu
+                        pratikte "hicbiri doldurulmaz" demek olurdu. */}
+                    <div className="device-phase-field">
+                      <span className="device-phase-title">
+                        {t("engineering.devicesPanel.form.phaseTitle")}
+                      </span>
+                      <small className="device-phase-hint">
+                        {t("engineering.devicesPanel.form.phaseHint")}
+                      </small>
+                      <div className="device-phase-grid">
+                        {(
+                          [
+                            ["master", phaseMaster, setPhaseMaster],
+                            ["sat01", phaseSat01, setPhaseSat01],
+                            ["sat02", phaseSat02, setPhaseSat02]
+                          ] as const
+                        ).map(([unite, deger, setter]) => (
+                          <label key={unite}>
+                            {t(`engineering.devicesPanel.form.phaseUnit.${unite}`)}
+                            <select
+                              value={deger}
+                              onChange={(event) =>
+                                setter((event.target.value || "") as "" | PhaseCode)
+                              }
+                            >
+                              <option value="">
+                                {t("engineering.devicesPanel.form.phaseInherit")}
+                              </option>
+                              <option value="a">A (L1)</option>
+                              <option value="b">B (L2)</option>
+                              <option value="c">C (L3)</option>
+                            </select>
+                          </label>
+                        ))}
                       </div>
                     </div>
                     <label className="device-description-field">

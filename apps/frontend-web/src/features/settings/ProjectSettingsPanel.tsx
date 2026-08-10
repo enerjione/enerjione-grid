@@ -9,7 +9,13 @@ import { useTranslation } from "react-i18next";
 
 import { useProjectSettings } from "../../components/ProjectSettingsProvider";
 import { DEFAULT_TOAST_POSITION, toastPosition, useToast } from "../../components/ToastProvider";
-import type { ProjectSettings, ToastPosition } from "../../shared/types";
+import type {
+  PhaseCode,
+  ProjectSettings,
+  ProjectSettingsSave,
+  ToastPosition
+} from "../../shared/types";
+import { fetchPhaseMap } from "../../shared/api";
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB (logo, favicon)
 const MAX_LOGIN_IMAGE_SIZE = 2_500_000; // 2.5 MB (login dekoratif gorsel daha buyuk olabilir)
@@ -17,7 +23,10 @@ const ACCEPT = "image/png,image/jpeg,image/svg+xml,image/webp";
 const ACCEPT_FAVICON = "image/x-icon,image/png,image/svg+xml,image/vnd.microsoft.icon";
 
 type Props = {
-  onSave: (payload: ProjectSettings) => Promise<void>;
+  onSave: (payload: ProjectSettingsSave) => Promise<void>;
+  /** Faz eslemesi HALKA ACIK ayarlardan ayri, kimlik dogrulamali bir uctan
+   *  gelir — bu yuzden panelin token'a ihtiyaci var. */
+  accessToken: string;
 };
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -29,7 +38,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-export function ProjectSettingsPanel({ onSave }: Props) {
+export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
   const { t } = useTranslation();
   const { settings, refresh } = useProjectSettings();
   // Hata/basari mesajlari sayfanin altinda satir olarak degil toast ile
@@ -49,6 +58,29 @@ export function ProjectSettingsPanel({ onSave }: Props) {
   // degistirilen deger herkes icin gecerlidir.
   const [toastPos, setToastPos] = useState<ToastPosition>(DEFAULT_TOAST_POSITION);
   const [toastMuted, setToastMuted] = useState(false);
+  // Unite -> faz eslemesi: kurulumun GENEL konvansiyonu. Bos = kod
+  // varsayilani. Istisna cihazlar Cihaz Yonetimi'nden ayrica ezilir.
+  const [phaseMaster, setPhaseMaster] = useState<"" | PhaseCode>("");
+  const [phaseSat01, setPhaseSat01] = useState<"" | PhaseCode>("");
+  const [phaseSat02, setPhaseSat02] = useState<"" | PhaseCode>("");
+  // Faz eslemesi public ayarlarda DEGIL (bkz. PhaseMap tipi); ayri cekilir.
+  useEffect(() => {
+    let iptal = false;
+    fetchPhaseMap(accessToken)
+      .then((m) => {
+        if (iptal) return;
+        setPhaseMaster(m.phase_master ?? "");
+        setPhaseSat01(m.phase_sat01 ?? "");
+        setPhaseSat02(m.phase_sat02 ?? "");
+      })
+      .catch(() => {
+        // Alinamazsa alanlar bos kalir = "varsayilani kullan"; formun geri
+        // kalani etkilenmez.
+      });
+    return () => {
+      iptal = true;
+    };
+  }, [accessToken]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -73,6 +105,7 @@ export function ProjectSettingsPanel({ onSave }: Props) {
     // ile gercek davranis ayrisamaz (null/bozuk deger -> sag-alt).
     setToastPos(toastPosition(settings.toast_position));
     setToastMuted(settings.toast_muted === true);
+
   }, [settings]);
 
   const handlePickLogo = async (
@@ -124,7 +157,12 @@ export function ProjectSettingsPanel({ onSave }: Props) {
         favicon: favicon,
         login_image: loginImage,
         toast_position: toastPos,
-        toast_muted: toastMuted
+        toast_muted: toastMuted,
+        // Bos = "varsayilani kullan"; deger yazmak kurulumcunun onaylamadigi
+        // bir eslemeyi "secilmis" gostermek olurdu.
+        phase_master: phaseMaster || null,
+        phase_sat01: phaseSat01 || null,
+        phase_sat02: phaseSat02 || null
       });
       await refresh();
       toast.success(t("engineering.projectSettings.saveSuccess"));
@@ -218,6 +256,50 @@ export function ProjectSettingsPanel({ onSave }: Props) {
             emptyLabel={t("engineering.projectSettings.emptyImage")}
             removeLabel={t("engineering.projectSettings.remove")}
           />
+        </div>
+
+        {/* Unite -> faz eslemesi: kurulumun GENEL konvansiyonu.
+            SN2'nin uc unitesi hattin uc ayri fazina kelepcelenir ve bu
+            ayrim ariza sebebi cikariminin belirleyici girdisi (tek
+            faz-toprak cogunlukla dis etken, uc faz ekipman/asiri yuk).
+            Istisna cihazlar Cihaz Yonetimi'nden ayrica ezilir. */}
+        <div className="project-settings-battery-box">
+          <div className="project-settings-battery-head">
+            <span
+              className="project-settings-battery-icon material-symbols-outlined"
+              aria-hidden="true"
+            >
+              electric_meter
+            </span>
+            <h4>{t("engineering.projectSettings.phaseTitle")}</h4>
+          </div>
+          <p className="helper-text">{t("engineering.projectSettings.phaseHint")}</p>
+          <div className="project-settings-battery-grid">
+            {(
+              [
+                ["master", phaseMaster, setPhaseMaster],
+                ["sat01", phaseSat01, setPhaseSat01],
+                ["sat02", phaseSat02, setPhaseSat02]
+              ] as const
+            ).map(([unite, deger, setter]) => (
+              <label className="project-settings-battery-field" key={unite}>
+                {t(`engineering.projectSettings.phaseUnit.${unite}`)}
+                <select
+                  value={deger}
+                  onChange={(event) => setter((event.target.value || "") as "" | PhaseCode)}
+                >
+                  <option value="">
+                    {t("engineering.projectSettings.phaseDefault", {
+                      phase: unite === "master" ? "A" : unite === "sat01" ? "B" : "C"
+                    })}
+                  </option>
+                  <option value="a">A (L1)</option>
+                  <option value="b">B (L2)</option>
+                  <option value="c">C (L3)</option>
+                </select>
+              </label>
+            ))}
+          </div>
         </div>
 
         <div className="project-settings-battery-box">

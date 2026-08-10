@@ -159,3 +159,42 @@ test("tek direkli/bos hatta cokme yok", () => {
   assert.ok(geo.wire.length > 0, "tel bos kalmamali");
   assert.equal(geo.span, null);
 });
+
+// --------------------------------------------------------------- OLCEK
+
+test("olcek DIREK SAYISINDAN bagimsiz: bir aralik her hatta ayni genislikte", () => {
+  // Cizim eskiden `width:100%` ile esniyordu; 6 direkli hat kartin
+  // genisligine yayilip devasa, 17 direkli hat ayni alana sikisip minicik
+  // goruniyordu. Iki ariza karti yan yana KARSILASTIRILAMIYORDU.
+  const kisa = buildStripGeometry({ poleSeqs: [1, 2, 3, 4, 5, 6], fromSeq: 2, toSeq: 3 });
+  const uzun = buildStripGeometry({
+    poleSeqs: Array.from({ length: 17 }, (_, i) => i + 1),
+    fromSeq: 2,
+    toSeq: 3
+  });
+  const aralik = (g: ReturnType<typeof buildStripGeometry>) => g.xOf(1) - g.xOf(0);
+  assert.ok(
+    Math.abs(aralik(kisa) - aralik(uzun)) < 1e-9,
+    `direk araligi hatta gore degisiyor: ${aralik(kisa)} vs ${aralik(uzun)}`
+  );
+  // Uzun hat DAHA GENIS bir cizim uretmeli (kaydirilarak gosterilir).
+  assert.ok(uzun.width > kisa.width);
+});
+
+test("direk ad ve rolu cizime tasinir", () => {
+  const geo = buildStripGeometry({
+    poleSeqs: [1, 2, 3],
+    poles: [
+      { seq: 1, name: "ANA-1", role: "line_start" },
+      { seq: 2, name: "ANA-2", role: "branch" }
+    ],
+    fromSeq: 1,
+    toSeq: 2
+  });
+  assert.equal(geo.poles.length, 3, "her direk icin bir kayit olmali");
+  assert.equal(geo.poles[1].name, "ANA-2");
+  assert.equal(geo.poles[1].role, "branch");
+  // Kaydi olmayan direk yer tutucuyla gelir — cizim eksik kalmamali.
+  assert.equal(geo.poles[2].seq, 3);
+  assert.equal(geo.poles[2].name, undefined);
+});
