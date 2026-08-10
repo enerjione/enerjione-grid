@@ -29,23 +29,27 @@ import { useTranslation } from "react-i18next";
 import { Maximize2, Minus, Plus } from "lucide-react";
 
 import {
-  BRANCH_CROSSARM_Y,
+  ARM_HALF,
   BRANCH_GROUND_Y,
   BRANCH_LABEL_Y,
+  BRANCH_MAIN_ARM_Y,
   BRANCH_NAME_Y,
   BRANCH_SPAN_W,
   BRANCH_WIRE_Y,
-  CROSSARM_Y,
   DIM_LABEL_Y,
   DIM_Y,
   GROUND_Y,
   LABEL_Y,
+  MAIN_ARM_Y,
+  PEAK_Y,
   STRIP_H,
+  STRIP_PX_H,
   WIRE_Y,
   buildStripGeometry,
   hotPathOf,
   toPath
 } from "./faultStripGeometry";
+import { StripTower } from "./StripTower";
 import type { StripBranch, StripPole, StripSegment } from "./faultStripGeometry";
 import { formatDistanceM } from "../../shared/lineDistance";
 
@@ -86,6 +90,23 @@ const BRANCH = "#7c3aed";
 /** Faz sirasi — bir SN2 govdesindeki uc sensor, hattin uc fazi. */
 const PHASES = ["master", "sat01", "sat02"] as const;
 
+/**
+ * UC ILETKEN — her faz kendi renginde ve kendi yuksekliginde.
+ *
+ * Tek gri tel "hat" demiyordu; uc renkli iletken hem gercek bir havai hatta
+ * benziyor hem de arizanin HANGI FAZDA oldugunu telin kendisinde
+ * gosterebiliyor. Renkler cihaz ekranindaki kaynak renkleriyle ayni:
+ * operator ayni kodu bir kez ogreniyor.
+ *
+ * `dx`: ana traversteki izolator noktasinin merkeze gore ofseti.
+ * `kaynak`: alarm faz eslemesi (master/sat01/sat02).
+ */
+const ILETKENLER = [
+  { faz: "L1", kaynak: "master", dx: -ARM_HALF, renk: "#2563eb" },
+  { faz: "L2", kaynak: "sat01", dx: 0, renk: "#16a34a" },
+  { faz: "L3", kaynak: "sat02", dx: ARM_HALF, renk: "#c2410c" }
+] as const;
+
 type Pt = { x: number; y: number };
 type Hover =
   | { kind: "device" | "pole" | "branch"; key: string }
@@ -95,86 +116,6 @@ type View = { x: number; y: number; w: number; h: number };
 function poleLabel(p: StripPole): string {
   const ad = (p.name ?? "").trim();
   return ad || `#${p.seq}`;
-}
-
-/** Bir direk — travers, izolatorler, kafes ayaklar + 2.5D yan yuz ve golge. */
-function Tower({
-  x,
-  hot,
-  role,
-  onEnter,
-  onLeave
-}: {
-  x: number;
-  hot: boolean;
-  role?: string | null;
-  onEnter: () => void;
-  onLeave: () => void;
-}) {
-  const stroke = hot ? RED : GREY;
-  const arm = 13;
-  const spread = 9;
-  return (
-    <g
-      className="fx-strip-pole"
-      onMouseEnter={onEnter}
-      onMouseLeave={onLeave}
-      onFocus={onEnter}
-      onBlur={onLeave}
-      tabIndex={0}
-    >
-      <rect
-        x={x - 15}
-        y={CROSSARM_Y - 8}
-        width={30}
-        height={GROUND_Y - CROSSARM_Y + 24}
-        fill="transparent"
-      />
-      {/* Zemin golgesi — cismi zemine oturtur, derinlik hissinin temeli. */}
-      <ellipse
-        cx={x}
-        cy={GROUND_Y + 1.5}
-        rx={spread + 3}
-        ry={2.6}
-        fill="#0f172a"
-        opacity={0.1}
-      />
-      {/* Govdenin YAN YUZU: govde cizgisinin hemen sagina soluk bir serit.
-          Tek cizgilik direge kalinlik kazandirir (2.5D). */}
-      <path
-        d={`M${x} ${CROSSARM_Y} L${x + 2.4} ${CROSSARM_Y + 2} L${x + 2.4} ${GROUND_Y} L${x} ${GROUND_Y} Z`}
-        fill={stroke}
-        opacity={0.16}
-      />
-      <g stroke={stroke} strokeWidth={hot ? 2 : 1.7} strokeLinecap="round" fill="none">
-        <line x1={x} y1={CROSSARM_Y} x2={x} y2={GROUND_Y} />
-        <line x1={x - arm} y1={CROSSARM_Y} x2={x + arm} y2={CROSSARM_Y} />
-        <line x1={x - arm} y1={CROSSARM_Y} x2={x - arm} y2={WIRE_Y - 5} />
-        <line x1={x + arm} y1={CROSSARM_Y} x2={x + arm} y2={WIRE_Y - 5} />
-        <line x1={x} y1={CROSSARM_Y} x2={x} y2={WIRE_Y - 5} />
-        <line x1={x} y1={GROUND_Y - 24} x2={x - spread} y2={GROUND_Y} />
-        <line x1={x} y1={GROUND_Y - 24} x2={x + spread} y2={GROUND_Y} />
-        <line
-          x1={x - spread * 0.55}
-          y1={GROUND_Y - 12}
-          x2={x + spread * 0.55}
-          y2={GROUND_Y - 12}
-        />
-      </g>
-      {/* Bransman direginin traversinde ek kol — dal buradan cikar. */}
-      {role === "branch" ? (
-        <line
-          x1={x}
-          y1={CROSSARM_Y}
-          x2={x}
-          y2={CROSSARM_Y - 7}
-          stroke={BRANCH}
-          strokeWidth={2.2}
-          strokeLinecap="round"
-        />
-      ) : null}
-    </g>
-  );
 }
 
 /** Iletken uzerindeki ariza gecis gostergesi + uc faz noktasi. */
@@ -270,37 +211,18 @@ export function FaultPoleStrip({
 
   // ---- Gorunum penceresi (zoom + pan) ----------------------------------
   //
-  // SVG'ye sabit bir yukseklik verildiginde kapsayicinin geri kalani BOS
-  // kaliyordu: kart uzadikca cizimin altinda genis beyaz bir serit olusuyor,
-  // sahne "sayfaya oturmamis" gorunuyordu. Cozum viewBox'in EN-BOY ORANINI
-  // kapsayicidan almak — cizim tum alani doldurur ve icerik bozulmaz.
-  const stageRef = useRef<HTMLDivElement | null>(null);
-  const [oran, setOran] = useState<number>(STRIP_H / 900);
-  useEffect(() => {
-    const el = stageRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => {
-      const r = el.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) setOran(r.height / r.width);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const base: View = useMemo(() => {
-    // Cizimin tamami HER ZAMAN sigsin: gereken yukseklik kapsayicidan
-    // fazlaysa genisligi degil YUKSEKLIGI buyutmek cizimi kucultmek olurdu,
-    // o yuzden genisligi oranla telafi ediyoruz.
-    const gerekenH = width * oran;
-    if (gerekenH >= STRIP_H) {
-      // Kapsayici yeterince yuksek: cizim dikeyde ortalanir.
-      return { x: 0, y: (STRIP_H - gerekenH) / 2, w: width, h: gerekenH };
-    }
-    // Kapsayici basik: cizimin tamamini gostermek icin daha genis bir
-    // pencere ac (yanlarda bosluk kalir, icerik kirpilmaz).
-    const w = STRIP_H / oran;
-    return { x: (width - w) / 2, y: 0, w, h: STRIP_H };
-  }, [width, oran]);
+  // TABAN GORUNUM = CIZIMIN TAMAMI. Onceki surumde viewBox yuksekligi
+  // kapsayicinin en-boy oranindan turetiliyordu; kapsayici uzadikca pencere
+  // de uzuyor, icerik yukarida kucucuk kaliyor ve altinda ucu bucagi
+  // gorunmeyen bos bir alan aciliyordu — "canvas sonsuza dek asagi kayiyor"
+  // sikayeti tam olarak buydu. Artik pencere icerige bagli, kapsayiciya
+  // degil: SVG sabit yukseklikte cizilir ve `preserveAspectRatio` ile
+  // ortalanir. Kaydirma sinirlari da bu tabana gore kapatildi (asagida),
+  // yani cizim disina asla cikilamaz.
+  const base: View = useMemo(
+    () => ({ x: 0, y: 0, w: width, h: STRIP_H }),
+    [width]
+  );
   const [view, setView] = useState<View | null>(null);
   const v = view ?? base;
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -330,8 +252,9 @@ export function FaultPoleStrip({
         let x = odakX - yeniW * oranX;
         let y = odakY - yeniH * oranY;
         // Cizim disina tasma: kenarlarda bosluga bakmak kafa karistirir.
-        x = Math.max(-4, Math.min(base.w - yeniW + 4, x));
-        y = Math.max(-4, Math.min(base.h - yeniH + 4, y));
+        // Tam sinir: pencere cizimin DISINA cikamaz.
+        x = Math.max(0, Math.min(Math.max(0, base.w - yeniW), x));
+        y = Math.max(0, Math.min(Math.max(0, base.h - yeniH), y));
         return { x, y, w: yeniW, h: yeniH };
       });
     },
@@ -362,8 +285,8 @@ export function FaultPoleStrip({
     const x = d.vx - (e.clientX - d.x) * sx;
     const y = d.vy - (e.clientY - d.y) * sy;
     setView({
-      x: Math.max(-4, Math.min(base.w - v.w + 4, x)),
-      y: Math.max(-4, Math.min(base.h - v.h + 4, y)),
+      x: Math.max(0, Math.min(Math.max(0, base.w - v.w), x)),
+      y: Math.max(0, Math.min(Math.max(0, base.h - v.h), y)),
       w: v.w,
       h: v.h
     });
@@ -384,6 +307,14 @@ export function FaultPoleStrip({
   const hotFrom = span ? Math.floor(span.a) : -1;
   const hotTo = span ? Math.ceil(span.b) : -1;
   const hotPath = hotPathOf(geo);
+
+  /** Arizali FAZLAR — "gordum" diyen cihazin acik alarmlarindan.
+   *  Bos ise faz bilinmiyor (eski kayit) ve uc iletken de vurgulanir. */
+  const arizaliFazlar = useMemo(() => {
+    const k = (lastRedDeviceCode ?? "").trim();
+    const kaynaklar = k ? alarmsByDevice?.[k]?.sources ?? [] : [];
+    return new Set(kaynaklar);
+  }, [alarmsByDevice, lastRedDeviceCode]);
   const dimA = span ? pointAt(span.a).x : null;
   const dimB = span ? pointAt(span.b).x : null;
   const spanM =
@@ -458,7 +389,7 @@ export function FaultPoleStrip({
   const tipUnit = hoveredDevice
     ? pointAt(hoveredDevice.pos)
     : hoveredPole
-      ? { x: xOf(seqs.indexOf(hoveredPole.seq)), y: CROSSARM_Y + 26 }
+      ? { x: xOf(seqs.indexOf(hoveredPole.seq)), y: MAIN_ARM_Y + 26 }
       : hoveredBranch
         ? { x: hoveredBranch.anchorX, y: BRANCH_NAME_Y + 4 }
         : null;
@@ -472,13 +403,13 @@ export function FaultPoleStrip({
 
   return (
     <div className="fx-strip-wrap">
-      <div className="fx-strip-stage" ref={stageRef}>
+      <div className="fx-strip-stage">
         <svg
           ref={svgRef}
           className={`fx-strip${yakinlasti ? " is-zoomed" : ""}`}
           viewBox={`${v.x} ${v.y} ${v.w} ${v.h}`}
           width="100%"
-          height="100%"
+          height={STRIP_PX_H}
           preserveAspectRatio="xMidYMid meet"
           role="img"
           aria-label={
@@ -513,100 +444,135 @@ export function FaultPoleStrip({
             </linearGradient>
           </defs>
 
-          {/* Zemin duzlemi — direklerin uzerinde durdugu yuzey. */}
+          {/* Zemin duzlemi — direklerin ustunde durdugu yuzey. */}
           <rect
-            x={-4}
+            x={-8}
             y={GROUND_Y}
-            width={width + 8}
+            width={width + 16}
             height={STRIP_H - GROUND_Y}
             fill="url(#fx-ground)"
           />
-          {/* Derinlik izgarasi: asagi indikce SIKLASIR (ufuk etkisi). */}
-          {[6, 14, 24, 36, 50].map((dy, i) => (
-            <line
-              key={dy}
-              x1={-4}
-              y1={GROUND_Y + dy}
-              x2={width + 4}
-              y2={GROUND_Y + dy}
-              stroke="#94a3b8"
-              strokeWidth={0.6}
-              opacity={0.1 + i * 0.03}
-            />
-          ))}
+          <line
+            x1={-8}
+            y1={GROUND_Y}
+            x2={width + 8}
+            y2={GROUND_Y}
+            stroke="#cbd5e1"
+            strokeWidth={1.1}
+          />
 
-          {/* Arizali bolge sutunu */}
+          {/* Arizali bolge sutunu — direkler ve teller bunun uzerine biner. */}
           {dimA != null && dimB != null && active ? (
             <rect
               x={dimA}
-              y={CROSSARM_Y - 10}
+              y={MAIN_ARM_Y - 26}
               width={Math.max(0, dimB - dimA)}
-              height={GROUND_Y - CROSSARM_Y + 10}
+              height={GROUND_Y - MAIN_ARM_Y + 26}
               fill="url(#fx-hatch)"
             />
           ) : null}
 
-          <line
-            x1={4}
-            y1={GROUND_Y}
-            x2={width - 4}
-            y2={GROUND_Y}
-            stroke="#cbd5e1"
-            strokeWidth={1.2}
-          />
-
-          {/* Arka iletkenler — daha soluk ve ince: derinlik. */}
-          {[-8, -4].map((dy, i) => (
-            <path
-              key={dy}
-              d={toPath(wire.map((p) => ({ x: p.x, y: p.y + dy })))}
-              fill="none"
-              stroke={WIRE_GREY}
-              strokeWidth={1 + i * 0.15}
-              strokeLinecap="round"
-              opacity={0.4 + i * 0.12}
-            />
-          ))}
-
+          {/* Toprak teli — tepe noktalari arasinda, ince gri. */}
           <path
-            d={toPath(wire)}
+            d={toPath(
+              wire.map((pt) => ({ x: pt.x, y: pt.y - (WIRE_Y - PEAK_Y) + 2 }))
+            )}
             fill="none"
-            stroke={WIRE_GREY}
-            strokeWidth={2.4}
+            stroke="#cbd5e1"
+            strokeWidth={0.9}
             strokeLinecap="round"
+            opacity={0.75}
           />
 
-          {/* ---- BRANSMAN KOLLARI (ALT KAT) ---- */}
+          {/* UC FAZ ILETKENI — her biri kendi renginde ve kendi
+              izolator noktasindan geciyor. Tek gri tel "hat" demiyordu;
+              uc renkli iletken hem gercek bir havai hatta benziyor hem de
+              arizanin HANGI FAZDA oldugunu telin kendisinde gosteriyor. */}
+          {ILETKENLER.map((ilt) => {
+            const yol = toPath(wire.map((pt) => ({ x: pt.x + ilt.dx, y: pt.y })));
+            const arizali = active && arizaliFazlar.has(ilt.kaynak);
+            return (
+              <g key={ilt.faz}>
+                <path
+                  d={yol}
+                  fill="none"
+                  stroke={ilt.renk}
+                  strokeWidth={1.7}
+                  strokeLinecap="round"
+                  opacity={active && arizaliFazlar.size > 0 && !arizali ? 0.35 : 0.9}
+                />
+              </g>
+            );
+          })}
+
+          {/* ARIZALI PARCA — arizali fazin telinde. Faz bilinmiyorsa
+              (eski kayit) uc iletken de vurgulanir. */}
+          {hotPath
+            ? ILETKENLER.filter(
+                (ilt) => arizaliFazlar.size === 0 || arizaliFazlar.has(ilt.kaynak)
+              ).map((ilt) => {
+                const yol = hotPathOf(geo, ilt.dx);
+                if (!yol) return null;
+                return (
+                  <g key={`hot-${ilt.faz}`}>
+                    <path
+                      d={yol}
+                      fill="none"
+                      stroke={faultColor}
+                      strokeWidth={6.5}
+                      strokeLinecap="round"
+                      filter="url(#fx-wire-glow)"
+                      opacity={active ? 0.4 : 0.16}
+                    />
+                    <path
+                      d={yol}
+                      fill="none"
+                      stroke={faultColor}
+                      strokeWidth={2.8}
+                      strokeLinecap="round"
+                    />
+                  </g>
+                );
+              })
+            : null}
+
+          {/* ---- BRANSMAN KOLLARI ----
+               Kol ana direkten CAPRAZ iner ve kendi direklerine baglanir.
+               Ariza ile ilgili kollar (bolge icinde ya da kendi arizasi olan)
+               TAM cizilir; digerleri soluk kalir ki kalabalik etmesin. */}
           {branchDraw.map((b) => {
             const renk = b.hot ? RED : BRANCH;
+            const solukluk = b.hot ? 1 : 0.42;
             return (
               <g
                 key={b.key}
                 className="fx-strip-branch"
+                opacity={solukluk}
                 onMouseEnter={() => setHover({ kind: "branch", key: b.key })}
                 onMouseLeave={() => setHover(null)}
               >
                 <rect
-                  x={b.anchorX - 10}
-                  y={BRANCH_NAME_Y - 12}
-                  width={b.endX - b.anchorX + 70}
-                  height={BRANCH_LABEL_Y - BRANCH_NAME_Y + 20}
+                  x={b.anchorX - 12}
+                  y={MAIN_ARM_Y}
+                  width={b.endX - b.anchorX + 74}
+                  height={BRANCH_LABEL_Y - MAIN_ARM_Y + 12}
                   fill="transparent"
                 />
-                {/* Ana hattan dal katina INIS — kesikli: ayri bir hat. */}
-                <path
-                  d={`M${b.anchorX} ${GROUND_Y - 2} L${b.anchorX} ${BRANCH_CROSSARM_Y - 6} Q ${b.anchorX} ${BRANCH_WIRE_Y}, ${b.anchorX + 22} ${BRANCH_WIRE_Y}`}
-                  fill="none"
+                {/* CAPRAZ INIS: ana direkte traversten ayrilir, dal katina
+                    egik bir dogru ile iner. Kesikli degil DUZ cizgi —
+                    iletken gercekten oradan gecer. */}
+                <line
+                  x1={b.anchorX}
+                  y1={MAIN_ARM_Y + 2}
+                  x2={b.poles[0]?.x ?? b.anchorX + 40}
+                  y2={BRANCH_MAIN_ARM_Y}
                   stroke={renk}
-                  strokeWidth={1.8}
-                  strokeDasharray="6 4"
+                  strokeWidth={1.6}
                   strokeLinecap="round"
-                  opacity={0.85}
                 />
-                {/* Kol adi — dal katinin solunda, kendi satirinda. Iki kol
-                    yan yana gelse bile etiketler artik carpismiyor. */}
+                {/* Kol adi — capraz inisin yaninda, kendi satirinda. */}
                 <text
-                  x={b.anchorX + 2}
+                  x={b.anchorX + 6}
                   y={BRANCH_NAME_Y}
                   fontSize={9.5}
                   fontWeight={800}
@@ -614,60 +580,58 @@ export function FaultPoleStrip({
                 >
                   {b.name}
                 </text>
+
                 {/* Dal zemini */}
                 <line
-                  x1={b.anchorX + 18}
+                  x1={(b.poles[0]?.x ?? b.anchorX) - 16}
                   y1={BRANCH_GROUND_Y}
-                  x2={b.endX + 18}
+                  x2={b.endX + 16}
                   y2={BRANCH_GROUND_Y}
                   stroke="#e2e8f0"
                   strokeWidth={1}
                   strokeDasharray="3 4"
                 />
-                {/* Dal iletkeni — mini katener */}
+                {/* Dal iletkeni — uc faz yerine tek hat: kol ikincil bilgi,
+                    uc renkli tel burada gurultu olurdu. */}
                 <path
                   d={b.poles
-                    .map((p, i) =>
-                      i === 0
-                        ? `M${b.anchorX + 22} ${BRANCH_WIRE_Y} L${p.x} ${BRANCH_WIRE_Y}`
-                        : `L${p.x} ${BRANCH_WIRE_Y}`
-                    )
+                    .map((pt, i) => `${i === 0 ? "M" : "L"}${pt.x} ${BRANCH_WIRE_Y}`)
                     .join(" ")}
                   fill="none"
-                  stroke={b.hot ? renk : WIRE_GREY}
-                  strokeWidth={b.hot ? 2.4 : 1.8}
+                  stroke={b.hot ? renk : "#cbd5e1"}
+                  strokeWidth={b.hot ? 2.2 : 1.6}
                   strokeLinecap="round"
                 />
-                {/* Kolun direkleri — ana hattakinin kucugu */}
-                {b.poles.map((p) => (
-                  <g key={p.x} stroke={renk} strokeWidth={1.4} strokeLinecap="round" fill="none">
-                    <line x1={p.x} y1={BRANCH_CROSSARM_Y} x2={p.x} y2={BRANCH_GROUND_Y} />
+                {/* Kolun direkleri — ana hattakinin sadelestirilmis hali. */}
+                {b.poles.map((pt) => (
+                  <g key={pt.x} stroke={renk} strokeWidth={1.3} strokeLinecap="round" fill="none">
+                    <line x1={pt.x} y1={BRANCH_MAIN_ARM_Y} x2={pt.x} y2={BRANCH_GROUND_Y} />
                     <line
-                      x1={p.x - 7}
-                      y1={BRANCH_CROSSARM_Y}
-                      x2={p.x + 7}
-                      y2={BRANCH_CROSSARM_Y}
+                      x1={pt.x - 8}
+                      y1={BRANCH_MAIN_ARM_Y}
+                      x2={pt.x + 8}
+                      y2={BRANCH_MAIN_ARM_Y}
                     />
-                    <line x1={p.x} y1={BRANCH_GROUND_Y - 11} x2={p.x - 5} y2={BRANCH_GROUND_Y} />
-                    <line x1={p.x} y1={BRANCH_GROUND_Y - 11} x2={p.x + 5} y2={BRANCH_GROUND_Y} />
+                    <line x1={pt.x} y1={BRANCH_GROUND_Y - 10} x2={pt.x - 5} y2={BRANCH_GROUND_Y} />
+                    <line x1={pt.x} y1={BRANCH_GROUND_Y - 10} x2={pt.x + 5} y2={BRANCH_GROUND_Y} />
                   </g>
                 ))}
-                {b.poles.map((p) => (
+                {b.poles.map((pt) => (
                   <text
-                    key={`bl-${p.x}`}
-                    x={p.x}
+                    key={`bl-${pt.x}`}
+                    x={pt.x}
                     y={BRANCH_LABEL_Y}
                     textAnchor="middle"
                     fontSize={8.5}
                     fontWeight={b.hot ? 700 : 500}
                     fill={b.hot ? "#b91c1c" : GREY}
                   >
-                    {p.label}
+                    {pt.label}
                   </text>
                 ))}
                 {b.fazla > 0 ? (
                   <text
-                    x={b.endX + 16}
+                    x={b.endX + 14}
                     y={BRANCH_WIRE_Y + 3}
                     fontSize={8.5}
                     fontWeight={700}
@@ -703,7 +667,7 @@ export function FaultPoleStrip({
           ) : null}
 
           {poleList.map((p, idx) => (
-            <Tower
+            <StripTower
               key={p.seq}
               x={xOf(idx)}
               hot={active && idx >= hotFrom && idx <= hotTo}
@@ -745,15 +709,17 @@ export function FaultPoleStrip({
           {/* ---- OLCU SERIDI ---- */}
           {dimA != null && dimB != null && zoneStartM != null && zoneEndM != null ? (
             <g className="fx-strip-dim" stroke={DIM_INK} fill={DIM_INK}>
-              <line x1={dimA} y1={LABEL_Y + 6} x2={dimA} y2={DIM_Y + 6} strokeWidth={1} opacity={0.5} />
-              <line x1={dimB} y1={LABEL_Y + 6} x2={dimB} y2={DIM_Y + 6} strokeWidth={1} opacity={0.5} />
+              {/* Uzanti cizgileri direge kadar iner: olcunun NEREYI
+                  olctugu belirsiz kalmasin. */}
+              <line x1={dimA} y1={DIM_Y} x2={dimA} y2={MAIN_ARM_Y - 6} strokeWidth={0.9} opacity={0.35} />
+              <line x1={dimB} y1={DIM_Y} x2={dimB} y2={MAIN_ARM_Y - 6} strokeWidth={0.9} opacity={0.35} />
               <line x1={dimA} y1={DIM_Y} x2={dimB} y2={DIM_Y} strokeWidth={1.3} />
               <path d={`M${dimA} ${DIM_Y} l6 -3 v6 z`} stroke="none" />
               <path d={`M${dimB} ${DIM_Y} l-6 -3 v6 z`} stroke="none" />
-              <text x={dimA} y={DIM_Y - 7} textAnchor="middle" fontSize={9.5} fontWeight={600} stroke="none" opacity={0.85}>
+              <text x={dimA} y={DIM_Y + 12} textAnchor="middle" fontSize={9.5} fontWeight={600} stroke="none" opacity={0.85}>
                 {formatDistanceM(zoneStartM)}
               </text>
-              <text x={dimB} y={DIM_Y - 7} textAnchor="middle" fontSize={9.5} fontWeight={600} stroke="none" opacity={0.85}>
+              <text x={dimB} y={DIM_Y + 12} textAnchor="middle" fontSize={9.5} fontWeight={600} stroke="none" opacity={0.85}>
                 {formatDistanceM(zoneEndM)}
               </text>
               {spanM != null ? (

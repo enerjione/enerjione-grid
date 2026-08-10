@@ -198,3 +198,44 @@ test("direk ad ve rolu cizime tasinir", () => {
   assert.equal(geo.poles[2].seq, 3);
   assert.equal(geo.poles[2].name, undefined);
 });
+
+// ------------------------------------------------------- UC FAZ ILETKENI
+
+test("arizali parca FAZ OFSETINE gore kayar", () => {
+  // Uc iletken ayri izolator noktalarindan gecer. Arizali parca tek bir orta
+  // cizgide gosterilseydi "hangi faz" bilgisi gorselden silinirdi.
+  const geo = buildStripGeometry({
+    poleSeqs: POLES,
+    segments: segments(),
+    fromSeq: 3,
+    toSeq: 4,
+    lastRedDeviceCode: "SN2-RED",
+    firstGreenDeviceCode: "SN2-GREEN"
+  });
+  const orta = hotPathOf(geo);
+  const sol = hotPathOf(geo, -22);
+  const sag = hotPathOf(geo, 22);
+
+  assert.ok(orta && sol && sag, "uc faz icin de path uretilmeli");
+  assert.notEqual(sol, orta, "sol faz ofseti uygulanmamis");
+  assert.notEqual(sag, orta, "sag faz ofseti uygulanmamis");
+
+  // Ofset YALNIZCA x'i kaydirmali: tel yuksekligi (sarkma) korunur.
+  const xler = (d: string) =>
+    d.split(/[ML]/).filter(Boolean).map((par) => Number(par.trim().split(" ")[0]));
+  const yler = (d: string) =>
+    d.split(/[ML]/).filter(Boolean).map((par) => Number(par.trim().split(" ")[1]));
+
+  const xOrta = xler(orta);
+  const xSol = xler(sol);
+  assert.equal(xOrta.length, xSol.length);
+  for (let i = 0; i < xOrta.length; i += 1) {
+    assert.ok(Math.abs(xSol[i] - (xOrta[i] - 22)) < 0.11, `nokta ${i} ofseti yanlis`);
+  }
+  assert.deepEqual(yler(sol), yler(orta), "faz ofseti tel yuksekligini degistirmemeli");
+});
+
+test("ofset verilmezse davranis DEGISMEZ (geriye uyum)", () => {
+  const geo = buildStripGeometry({ poleSeqs: POLES, fromSeq: 3, toSeq: 4 });
+  assert.equal(hotPathOf(geo), hotPathOf(geo, 0));
+});

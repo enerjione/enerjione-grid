@@ -85,37 +85,61 @@ export type StripGeometry = {
 // ust uste biniyordu. Artik span 116 — hat "uzun" okunuyor ve cihaz/faz
 // isaretleri birbirine degmiyor. Yukseklik artisi ise ALTTAKI OLCU SERIDI
 // icin: mesafe artik metin kutusunda degil, cizimin uzerinde.
-export const STRIP_H = 248;
-export const PAD_X = 38;
-export const SPAN_W = 116;
-export const GROUND_Y = 96;
-export const CROSSARM_Y = 20;
-export const WIRE_Y = 36;
-export const SAG = 11;
-export const LABEL_Y = 114;
+// ---------------------------------------------------------------------------
+// SAHNE OLCULERI (viewBox birimi)
+// ---------------------------------------------------------------------------
+// Dizilim YUKARIDAN ASAGIYA:
+//   olcu seridi -> direk (tepe/travers/kafes govde) -> zemin -> direk adlari
+//   -> bransman dali (capraz inis + kendi direkleri)
+//
+// OLCU SERIDI EN USTTE: aranacak hat kesimi operatorun ILK okudugu sayi.
+// Altta dururken direk adlariyla bransman etiketleri arasinda kayboluyordu.
+export const STRIP_H = 300;
+export const PAD_X = 52;
+export const SPAN_W = 132;
 
-// --- BRANSMAN KATI ---------------------------------------------------------
-// Kol ana hattin ALTINDA kendi kati olarak cizilir. Onceki surumde dal yalnizca
-// kisa bir kesikli cizgi + nokta + etiketti; iki kol yan yana gelince
-// etiketleri ust uste biniyor ("BR-2 BR-3") ve kolun KENDI direkleri hic
-// gorunmuyordu. Kol ayri bir hattir — oyle de cizilmeli.
-/** Dal traversinin y'si (kolun direk basliklari). */
-export const BRANCH_CROSSARM_Y = 150;
-/** Dal iletkeninin y'si. */
-export const BRANCH_WIRE_Y = 160;
-/** Dal zemini. */
-export const BRANCH_GROUND_Y = 190;
-/** Dal direk etiketleri. */
-export const BRANCH_LABEL_Y = 202;
-/** Kolun kendi adi (dal katinin solunda). */
-export const BRANCH_NAME_Y = 143;
-/** Dal katinda bir direk araligi — ana hattan dar, kol ikincil bilgi. */
-export const BRANCH_SPAN_W = 74;
+/** Olcu (dimension) cizgisi ve etiketi — direklerin USTUNDE. */
+export const DIM_Y = 30;
+export const DIM_LABEL_Y = 18;
 
-/** Olcu (dimension) cizgisinin y'si — teknik resimdeki kot cizgisi gibi. */
-export const DIM_Y = 222;
-/** Olcu etiketinin taban cizgisi. */
-export const DIM_LABEL_Y = 242;
+/** Direk tepesi (toprak teli tasiyicisi). */
+export const PEAK_Y = 52;
+/** Ust travers — toprak teli. */
+export const TOP_ARM_Y = 64;
+/** ANA travers — uc faz izolatoru buraya oturur. */
+export const MAIN_ARM_Y = 88;
+/** Iletkenlerin izolator altindaki asilma yuksekligi. */
+export const WIRE_Y = 100;
+/** Kafes govdenin zemine bastigi yer. */
+export const GROUND_Y = 190;
+/** Direk adlari. */
+export const LABEL_Y = 206;
+
+/** Iletken sarkmasi (katener derinligi). */
+export const SAG = 13;
+
+/** Travers yari genisligi — faz izolatorleri buna gore dizilir. */
+export const ARM_HALF = 22;
+/** Ust (toprak) travers yari genisligi. */
+export const TOP_ARM_HALF = 11;
+
+// --- BRANSMAN DALI ---------------------------------------------------------
+// Dal ana direkten CAPRAZ asagi iner ve kendi direklerine baglanir. Onceki
+// surumde yalnizca kesikli bir cizgi + noktaydi; kolun kendi direkleri
+// gorunmuyor, iki kol yan yana gelince etiketleri ust uste biniyordu.
+/** Dalin ana traversten ayrildigi nokta ile dal katı arasindaki capraz inis. */
+export const BRANCH_MAIN_ARM_Y = 240;
+export const BRANCH_WIRE_Y = 248;
+export const BRANCH_GROUND_Y = 276;
+export const BRANCH_LABEL_Y = 288;
+/** Kolun kendi adi — capraz inisin yaninda. */
+export const BRANCH_NAME_Y = 228;
+/** Dal katinda bir direk araligi — ana hattan dar; kol ikincil bilgidir. */
+export const BRANCH_SPAN_W = 86;
+
+/** Geriye uyum: eski ad `CROSSARM_Y` ana travers demekti. */
+export const CROSSARM_Y = MAIN_ARM_Y;
+
 const SAMPLES = 16;
 
 /**
@@ -250,9 +274,19 @@ export function toPath(pts: { x: number; y: number }[]): string {
   return pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
 }
 
-/** Arizali parcanin path'i — uclar TAM cihaz konumunda baslar/biter. */
-export function hotPathOf(geo: StripGeometry): string {
+/** Arizali parcanin path'i — uclar TAM cihaz konumunda baslar/biter.
+ *
+ * `dx`: faz ofseti. Uc iletken ayri izolator noktalarindan gectigi icin
+ * arizali parca da hangi FAZIN telinde ise oraya cizilir; tek bir orta
+ * cizgide gostermek "hangi faz" bilgisini gorselden siler.
+ */
+export function hotPathOf(geo: StripGeometry, dx = 0): string {
   if (!geo.span) return "";
   const inner = geo.wire.filter((p) => p.pos > geo.span!.a && p.pos < geo.span!.b);
-  return toPath([geo.pointAt(geo.span.a), ...inner, geo.pointAt(geo.span.b)]);
+  const kaydir = (pt: { x: number; y: number }) => ({ x: pt.x + dx, y: pt.y });
+  return toPath([
+    kaydir(geo.pointAt(geo.span.a)),
+    ...inner.map(kaydir),
+    kaydir(geo.pointAt(geo.span.b))
+  ]);
 }

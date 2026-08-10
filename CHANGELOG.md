@@ -14,6 +14,43 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.61.0] — 2026-08-10
+
+Hat arızası şematik çizimi baştan tasarlandı.
+
+### Değişti
+
+- **Kafes direk silueti.** Önceki çizim tek dikey çizgi ve düz bir traversti;
+  şema değil taslak gibi duruyordu. Artık aşağı açılan iki ana ayak, X çapraz
+  kafes dolgular, yatay kuşaklar, iki seviyeli travers ve travers uçlarında
+  takviye çaprazları var. İzolatörler boncuklu zincir olarak çiziliyor.
+- **Üç renkli iletken.** Her faz kendi izolatör noktasından geçiyor:
+  L1 mavi, L2 yeşil, L3 turuncu — cihaz ekranındaki kaynak renkleriyle aynı.
+  Üstte ince gri toprak teli.
+  Kazanç görsel değil işlevsel: **arızalı parça artık hangi fazın telindeyse
+  orada çiziliyor.** Alarmın faz bilgisi varsa yalnızca o iletken kırmızı
+  yanıyor, diğerleri soluyor; faz bilinmiyorsa üçü birden vurgulanıyor. Tek
+  gri çizgide bu bilgi görselden siliniyordu.
+- **Branşman kolu çapraz iniyor.** Ana direğin traversinden ayrılıp dal
+  katına eğik bir doğruyla iniyor — kesikli değil düz, çünkü iletken
+  gerçekten oradan geçiyor. Arızayla ilgili kollar tam çiziliyor, ilgisizler
+  soluk kalıyor.
+- **Ölçü şeridi üste taşındı.** Aranacak hat kesimi operatörün ilk okuduğu
+  sayı; altta dururken direk adlarıyla branşman etiketleri arasında
+  kayboluyordu. Uzantı çizgileri traverse kadar iniyor.
+- Şematik yüksekliği 248 → 300 birime, direk aralığı 116 → 132'ye çıktı.
+
+### Düzeltildi
+
+- **Çizim alanı sonsuza doğru aşağı kayıyordu.** viewBox yüksekliği
+  kapsayıcının en-boy oranından türetiliyordu; kart uzadıkça görünüm
+  penceresi de uzuyor, çizim yukarıda küçük kalıyor ve altında ucu bucağı
+  görünmeyen boş bir alan açılıyordu. Pencere artık içeriğe bağlı,
+  kapsayıcıya değil; kaydırma sınırları da tam kapatıldı — çizim dışına
+  çıkılamıyor.
+- **Cihaz seçilince harita uzaklaşıyordu**; hat ekrana sığacak şekilde
+  çerçeveleniyor.
+
 ## [2.60.0] — 2026-08-10
 
 Arıza Analizi ekranı çalışır hale geldi ve grafiklerle yeniden yazıldı.

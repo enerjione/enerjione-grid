@@ -23804,9 +23804,11 @@ th.event-col-category {
 .fx-strip-stage {
   position: relative;
   width: 100%;
-  /* Kalan yuksekligi kaplar: cizimin altinda bos beyaz serit kalmasin. */
-  flex: 1 1 auto;
-  min-height: 220px;
+  /* Yukseklik ICERIGE bagli (SVG sabit yukseklikte cizilir), kapsayiciya
+     degil. Kapsayiciya baglandiginda kart uzadikca gorunum penceresi de
+     uzuyor, cizim yukarida kucucuk kaliyor ve altinda ucu bucagi
+     gorunmeyen bos bir alan aciliyordu. */
+  flex: 0 0 auto;
   border-radius: 10px;
   overflow: hidden;
   background:
