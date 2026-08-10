@@ -66,6 +66,22 @@ export type DeviceModelOption = {
 
 export const DEFAULT_DEVICE_MODEL = "horstmann_sn_2_0";
 
+/** Horstmann Pole Master Kit — FİZİKSEL kayıt (tek DNP3 outstation, 9 uydu).
+ *  Kullanıcı listelerinde gösterilmez; setlerini taşır. */
+export const POLE_MASTER_KIT_MODEL = "horstmann_pole_master_kit";
+
+/** Kitin SANAL seti — kullanıcının gördüğü, hatta yerleştirdiği kayıt. */
+export const PMK_SET_MODEL = "horstmann_pmk_set";
+
+/** Bu model sanal alt cihaz üretir mi? Cihaz formunda "bağlı set sayısı"
+ *  alanı yalnızca bunlarda sorulur. */
+export function isKitModel(model: string | null | undefined): boolean {
+  return model === POLE_MASTER_KIT_MODEL;
+}
+
+/** Kitin desteklediği en fazla set sayısı (9 uydu / set başına 3). */
+export const MAX_SATELLITE_SETS = 3;
+
 export type DeviceRow = {
   id: number;
   code: string;
@@ -102,6 +118,23 @@ export type DeviceRow = {
   phaseMaster?: PhaseCode | null;
   phaseSat01?: PhaseCode | null;
   phaseSat02?: PhaseCode | null;
+  /** Pole Master Kit setinde ölçüm yapan ÜÇÜNCÜ ünite. SN2'de karşılığı yok. */
+  phaseSat03?: PhaseCode | null;
+
+  /** --- KİT / SANAL SET BAĞI (salt okunur) ---
+   *
+   *  Bir Horstmann Pole Master Kit tek DNP3 outstation'dır ama 9 uydusu üçerli
+   *  setler halinde sahada bağımsız noktalara kelepçelenir. Her set AYRI bir
+   *  cihaz kaydıdır: hatta ayrı yerleşir, arızası kendine düşer, kendi detay
+   *  sayfası olur. Fiziksel kayıt kullanıcı listelerinde GÖSTERİLMEZ; kit
+   *  seviyesindeki değerler (modem, GPS, solar/AC besleme, komutlar) her
+   *  setin "Pole Master" sekmesinde gösterilir. */
+  parentDeviceId?: number | null;
+  parentDeviceCode?: string | null;
+  /** Setin kit üzerindeki sırası (1..3). Fiziksel kayıtlarda boş. */
+  subunitIndex?: number | null;
+  /** Kite bağlı set sayısı (yalnızca fiziksel kit kaydında dolu). */
+  satelliteSetCount?: number | null;
 };
 
 export type UserRole = "operator" | "engineer" | "installer" | "ops_manager";
@@ -182,6 +215,13 @@ export type ApiDevice = {
   phase_master?: PhaseCode | null;
   phase_sat01?: PhaseCode | null;
   phase_sat02?: PhaseCode | null;
+  phase_sat03?: PhaseCode | null;
+
+  /** Kit / sanal set bağı — bkz. DeviceRow. */
+  parent_device_id?: number | null;
+  parent_device_code?: string | null;
+  subunit_index?: number | null;
+  satellite_set_count?: number | null;
 };
 
 /** Geçerli faz kodu. Serbest metin DEĞİL: "A" / "L1" / "faz-a" gibi birbirinden
@@ -198,6 +238,8 @@ export type PhaseMap = {
   phase_master?: PhaseCode | null;
   phase_sat01?: PhaseCode | null;
   phase_sat02?: PhaseCode | null;
+  /** Pole Master Kit setinin üçüncü ünitesi. SN2 kurulumlarında boş kalır. */
+  phase_sat03?: PhaseCode | null;
 };
 
 /** PUT /project-settings gövdesi. Okuma şekli (public) ile yazma şekli
@@ -962,7 +1004,25 @@ export type DeviceCommandRow = {
   completed_at?: string | null;
 };
 
-export type SignalSource = "master" | "sat01" | "sat02";
+/** Sinyal anahtarının kaynak öneki (`sat01.fault_current` → `sat01`).
+ *
+ *  Horstmann SN 2.0'da üç ünite vardır (master + iki uydu). Pole Master Kit'in
+ *  bir SETİNDE ise ölçüm yapan üç ünitenin üçü de uydudur — kitin master'ı
+ *  ortak RTU'dur, bir faza kelepçelenmez. Bu yüzden `sat03` var.
+ *
+ *  Fiziksel kit kaydı dokuz uyduyu birden taşır (`sat01`..`sat09`); o kayıt
+ *  kullanıcı listelerinde görünmez ama sinyal katalogu ekranında görünür. */
+export type SignalSource =
+  | "master"
+  | "sat01"
+  | "sat02"
+  | "sat03"
+  | "sat04"
+  | "sat05"
+  | "sat06"
+  | "sat07"
+  | "sat08"
+  | "sat09";
 
 export type SignalCatalogRow = {
   id: number;
@@ -1182,6 +1242,14 @@ export type AlarmRuleRow = {
   hysteresis: number;
   debounce_sec: number;
   device_code_filter?: string | null;
+  /** Virgülle ayrılmış cihaz MODELİ kodları; boş = tüm modeller.
+   *
+   *  Sinyaller modeller arasında ortak değil (Pole Master Kit'te
+   *  `master.solar_power` var, SN 2.0'da yok; SN 2.0'da
+   *  `master.nominal_voltage` var, kitte yok) ve ortak adlarda eşikler modele
+   *  göre farklılaşabilir. Boş bırakılan kurallar eskisi gibi tüm cihazlarda
+   *  çalışır. */
+  device_model_filter?: string | null;
   is_active: boolean;
   /** Kural-bazli bildirim kanallari. Web bildirimi her zaman gider; bunlar
    *  sadece kuraldan acildiysa email/sms/telegram tetiklenir. Default false. */

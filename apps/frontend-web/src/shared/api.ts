@@ -41,6 +41,7 @@
   OutboundTarget,
   ResponsibilityAreaDetail,
   ResponsibilityAreaRow,
+  PhaseCode,
   SignalCatalogRow,
   SignalHistorianBulkPayload,
   SignalHistorianBulkResult,
@@ -409,7 +410,13 @@ export async function fetchDevices(token: string, gatewayCode?: string): Promise
     // Unite -> faz eslemesi (bu cihaza OZEL). null = proje konvansiyonu.
     phaseMaster: item.phase_master ?? null,
     phaseSat01: item.phase_sat01 ?? null,
-    phaseSat02: item.phase_sat02 ?? null
+    phaseSat02: item.phase_sat02 ?? null,
+    phaseSat03: item.phase_sat03 ?? null,
+    // Kit / sanal set bagi. Fiziksel kayitlarda parentDeviceId null'dir.
+    parentDeviceId: item.parent_device_id ?? null,
+    parentDeviceCode: item.parent_device_code ?? null,
+    subunitIndex: item.subunit_index ?? null,
+    satelliteSetCount: item.satellite_set_count ?? null
   }));
 }
 
@@ -589,6 +596,17 @@ export async function createDevice(
     latitude: number;
     longitude: number;
     iec104_common_address?: number | null;
+    // Unite -> faz eslemesi. Tip zincirinde EKSIKTI: panel bu alanlari
+    // gonderiyordu ama tip bilmiyordu; "tip var mi" diye bakan bir sonraki
+    // kisi yanlis sonuca varirdi.
+    phase_master?: PhaseCode | null;
+    phase_sat01?: PhaseCode | null;
+    phase_sat02?: PhaseCode | null;
+    phase_sat03?: PhaseCode | null;
+    /** Pole Master Kit'e bagli set sayisi (1..3). Yalnizca kit modelinde
+     *  anlamli ve ZORUNLU: kac set takildigi sahada belli olur. Her set icin
+     *  ayri bir cihaz kaydi acilir. */
+    satellite_set_count?: number | null;
   }
 ): Promise<void> {
   const response = await apiFetch(`${API_BASE_URL}/devices`, {
@@ -619,6 +637,13 @@ export async function updateDevice(
     latitude?: number;
     longitude?: number;
     iec104_common_address?: number | null;
+    phase_master?: PhaseCode | null;
+    phase_sat01?: PhaseCode | null;
+    phase_sat02?: PhaseCode | null;
+    phase_sat03?: PhaseCode | null;
+    /** Set sayisini DUSURMEK veri siler (setin telemetrisi, alarmlari, ariza
+     *  gecmisi ve hat yerlesimi). Arayuz once acik uyari gostermeli. */
+    satellite_set_count?: number | null;
   }
 ): Promise<void> {
   const response = await apiFetch(`${API_BASE_URL}/devices/${deviceCode}`, {

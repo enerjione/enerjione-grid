@@ -13,6 +13,7 @@ import type {
   AlarmLevel,
   AlarmRuleKind,
   AlarmRuleRow,
+  DeviceModelOption,
   DeviceRow,
   SignalCatalogRow,
   UserRole
@@ -26,6 +27,8 @@ type Props = {
    *  Bos gecilirse modal acilamaz, kapsam alani yine de manuel kod girmeye
    *  imkan verir (geri uyumluluk). */
   devices?: DeviceRow[];
+  /** Model kapsami secici icin cihaz modelleri (GET /device-models). */
+  deviceModels?: DeviceModelOption[];
   loading: boolean;
   error?: string;
   onCreate: (payload: Omit<AlarmRuleRow, "id">) => Promise<void>;
@@ -74,6 +77,7 @@ const EMPTY_FORM: Omit<AlarmRuleRow, "id"> = {
   hysteresis: 0,
   debounce_sec: 0,
   device_code_filter: "",
+  device_model_filter: "",
   is_active: true,
   notify_email: false,
   notify_sms: false,
@@ -129,6 +133,7 @@ export function AlarmRulesPage({
   rules,
   signals,
   devices,
+  deviceModels = [],
   loading,
   error,
   onCreate,
@@ -188,8 +193,17 @@ export function AlarmRulesPage({
 
   const filteredSignalsForPicker = useMemo(() => {
     const q = pickerSearch.trim().toLowerCase();
+    // MODEL KAPSAMI SECILIYSE SINYAL LISTESI DE DARALIR.
+    //
+    // Sinyaller modeller arasinda ORTAK DEGIL: Pole Master Kit'te
+    // `master.solar_power` var ama SN2'de yok; SN2'de `master.nominal_voltage`
+    // var ama kitte yok. Kapsami bir modele daraltmis kullaniciya o modelde
+    // OLMAYAN sinyalleri gostermek, hicbir zaman tetiklenmeyecek bir kural
+    // yazdirmak demektir — ve bu sessizce yasanir.
+    const secilenModel = form.device_model_filter?.toString().trim() || "";
     return signals.filter((sig) => {
       if (sig.source !== pickerSource) return false;
+      if (secilenModel && sig.model !== secilenModel) return false;
       if (!q) return true;
       return (
         sig.label.toLowerCase().includes(q) ||
@@ -197,7 +211,7 @@ export function AlarmRulesPage({
         (sig.description ?? "").toLowerCase().includes(q)
       );
     });
-  }, [signals, pickerSource, pickerSearch]);
+  }, [signals, pickerSource, pickerSearch, form.device_model_filter]);
 
   const selectedRule = useMemo(
     () => rules.find((r) => r.id === selectedRuleId) ?? null,
@@ -225,6 +239,7 @@ export function AlarmRulesPage({
         hysteresis: selectedRule.hysteresis,
         debounce_sec: selectedRule.debounce_sec,
         device_code_filter: selectedRule.device_code_filter ?? "",
+        device_model_filter: selectedRule.device_model_filter ?? "",
         is_active: selectedRule.is_active,
         notify_email: selectedRule.notify_email === true,
         notify_sms: selectedRule.notify_sms === true,
@@ -371,6 +386,8 @@ export function AlarmRulesPage({
       ...form,
       description: form.description?.toString().trim() || null,
       device_code_filter: form.device_code_filter?.toString().trim() || null,
+      // Bos = TUM modeller (mevcut kurallarin davranisi).
+      device_model_filter: form.device_model_filter?.toString().trim() || null,
       rule_kind: isComposite ? "composite" : "simple",
       expression,
       threshold: isBooleanComparator(form.comparator) ? 0 : Number(form.threshold),
@@ -847,6 +864,28 @@ export function AlarmRulesPage({
 
                     <fieldset className="rule-fieldset" disabled={!canEdit}>
                       <legend>{t("engineering.alarmRules.fieldsetScope")}</legend>
+                      <label className="rule-field">
+                        {t("engineering.alarmRules.deviceModelScope")}
+                        <select
+                          value={form.device_model_filter ?? ""}
+                          onChange={(event) =>
+                            setForm({ ...form, device_model_filter: event.target.value })
+                          }
+                          disabled={!canEdit}
+                        >
+                          <option value="">
+                            {t("engineering.alarmRules.deviceModelScopeAll")}
+                          </option>
+                          {deviceModels.map((opt) => (
+                            <option key={opt.code} value={opt.code}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                        <small className="rule-hint">
+                          {t("engineering.alarmRules.deviceModelScopeHint")}
+                        </small>
+                      </label>
                       <ScopeDevicePicker
                         deviceCodeFilter={form.device_code_filter ?? ""}
                         onChange={(next) =>

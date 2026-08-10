@@ -47,7 +47,7 @@ from uuid import uuid4
 
 import nats
 
-from . import katalog, watchdog
+from . import bolme, katalog, watchdog
 
 # Yapilandirilabilir logging — eski `print()` cagrilari structured log'a
 # tasindi. LOG_LEVEL env ile kontrol (INFO/WARNING/ERROR/DEBUG).
@@ -97,6 +97,11 @@ HEALTH_PORT = int(os.getenv("WORKER_HEALTH_PORT", "8011"))
 # katalog cekilemedigi surece) `sinif()` her sinyale ONCELIKLI der, yani
 # davranis BUGUNKUNE esit olur: tek hat, karisik trafik.
 KATALOG = katalog.onbellek_kur()
+
+# Kit cihazlarini sanal setlere bolme haritasi. Bos oldugu surece hicbir
+# mesaj yeniden yazilmaz — yani davranis coklu-set oncesiyle AYNI kalir
+# (bkz. bolme.py).
+BOLME = bolme.onbellek_kur()
 
 
 def _nats_tls_context():
@@ -271,6 +276,29 @@ async def _run() -> None:
                             processed["message_id"],
                             processed["device_code"],
                         )
+                    # KIT BOLMESI — cok uniteli cihazlarin (Horstmann Pole
+                    # Master Kit) olcumlerini ait olduklari SANAL SETE
+                    # yonlendir. YERINDE yeniden yazma: bir giren = bir cikan.
+                    #
+                    # Cogaltma yapilamaz — backend tuketicisi
+                    # `processed_messages` uzerinde (consumer, message_id)
+                    # tekil kisiti tutuyor; ikinci satir IntegrityError verir,
+                    # batch geri alinir ve mesaj sonsuza kadar yeniden teslim
+                    # edilir. Kit seviyesindeki (`master.*`) olcumler bu
+                    # yuzden fiziksel kayitta kalir; setler onlari okuma
+                    # tarafinda devralir.
+                    #
+                    # SIRA ONEMLI: siniflandirma yeniden yazilmis anahtarla
+                    # yapilmali, cunku katalogtaki sinif SANAL setin sinyal
+                    # anahtarina baglidir. Once siniflandirip sonra yeniden
+                    # yazsaydik, yeni anahtar katalogta bulunamayacagi icin
+                    # her olcum oncelikli hatta akardi (sahada bir kez
+                    # yasandi: 3M drenajin 1,58M'i oncelikli hatta yigildi).
+                    yeniden = BOLME.coz(
+                        processed.get("device_code"), processed.get("signal_key")
+                    )
+                    if yeniden is not None:
+                        processed["device_code"], processed["signal_key"] = yeniden
                     # HAT SECIMI — konudaki son token. Bilinmeyen her durumda
                     # oncelikli hat (bkz. katalog.KatalogOnbellegi.sinif).
                     sinif = KATALOG.sinif(processed.get("signal_key"))
@@ -433,6 +461,8 @@ async def _run() -> None:
                 KATALOG.yuklendi,
                 KATALOG.boyut,
             )
+            if BOLME.boyut:
+                logger.info("tag-engine-bolme esleme=%d", BOLME.boyut)
             backoff = 2  # connect basarili
             while not _stop_event.is_set():
                 await asyncio.sleep(1)
@@ -477,6 +507,10 @@ def main() -> None:
     # Katalog AYRI ipliktedir; olay dongusu backend'in yavasligina bagli
     # kalmaz. Ilk cekim bitene kadar her sinyal oncelikli hatta gider.
     KATALOG.baslat()
+    # Bolme haritasi da AYRI iplikte tazelenir. Harita gelene kadar kit
+    # olcumleri fiziksel kayda akar — veri kaybi degil, yalnizca sete
+    # ulasmama (bkz. bolme.py "HARITA YOKKEN NE OLUR").
+    BOLME.baslat()
     # ILK CEKIMI SINIRLI SURE BEKLE — NEDEN
     # -------------------------------------
     # Katalog yokken "bilinmeyen -> oncelikli" kurali dogru ama pahali:
@@ -499,6 +533,7 @@ def main() -> None:
     logger.info("tag-engine-starting")
     asyncio.run(_run())
     KATALOG.durdur()
+    BOLME.durdur()
     logger.info("tag-engine-stopped")
 
 

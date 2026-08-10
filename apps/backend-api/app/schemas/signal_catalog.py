@@ -104,6 +104,11 @@ class SignalCatalogUpdate(BaseModel):
 
 class SignalCatalogRead(SignalCatalogBase):
     id: int
+    # DIS SISTEME yayinlanabilir mi (bkz. SignalCatalog.outbound_eligible).
+    # Turetilmis alan: katalogta duran ama o cihaz kaydinda HIC saklanmayan
+    # noktalar (Pole Master Kit'in uydu satirlari) SCADA adres tablosuna
+    # girmemeli — girerlerse hicbir zaman veri gelmeyen adresler bildirilir.
+    outbound_eligible: bool = True
     # Operatorun elle degistirdigi alanlarin adlari. Arayuz bu alanlari
     # "fabrika degerinden farkli" olarak isaretleyebilir; ayrica acilistaki
     # seed'in neden o alanlari guncellemedigini aciklar.

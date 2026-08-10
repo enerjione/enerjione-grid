@@ -34,6 +34,7 @@ from app.models.device import Device
 from app.models.device_command import DeviceCommand
 from app.models.gateway import Gateway
 from app.models.signal_catalog import SignalCatalog
+from app.services import device_kit_service
 from app.services.event_service import record_event
 
 logger = logging.getLogger(__name__)
@@ -61,22 +62,40 @@ class QueuedCommand:
     device_code: str
 
 
-def resolve_command_index(db: Session, slug: str) -> tuple[int, str]:
+def resolve_command_index(db: Session, slug: str, *, model: str | None = None) -> tuple[int, str]:
     """Slug'i SignalCatalog uzerinden DNP3 index'ine cevirir.
 
     Ham index KABUL EDILMEZ: adres DB'den yonetilir, boylece cihaz profili
     degistiginde tek yerden guncellenir ve cagiran taraf yanlis bir index
     uyduramaz.
+
+    MODEL ZORUNLU GIBI DAVRAN: sinyal anahtari artik MODEL BAZINDA tekil
+    (bkz. SignalCatalog docstring). Ayni slug iki modelde de bulunabilir ve
+    DNP3 indeksleri FARKLI olabilir — olcum: `master.boost_mode` SN2'de 26,
+    Pole Master Kit'te 30. Modeli vermeden cozmek, komutu yanlis noktaya
+    gondermek demektir; cihaz hicbir hata dondurmez, sadece istenmeyen bir
+    sey yapar ya da hicbir sey yapmaz.
+
+    `model=None` yalnizca geriye uyum icin kabul edilir ve tek eslesme
+    varsa calisir; birden fazla model ayni slug'i tasiyorsa REDDEDER.
     """
-    signal = db.scalar(
-        select(SignalCatalog).where(
-            SignalCatalog.key == f"master.{slug}",
-            SignalCatalog.data_type == "binary_output",
-            SignalCatalog.is_active.is_(True),
-        )
+    stmt = select(SignalCatalog).where(
+        SignalCatalog.key == f"master.{slug}",
+        SignalCatalog.data_type == "binary_output",
+        SignalCatalog.is_active.is_(True),
     )
-    if signal is None:
+    if model:
+        stmt = stmt.where(SignalCatalog.model == model)
+    satirlar = list(db.scalars(stmt).all())
+    if not satirlar:
         raise CommandRejected("unknown_command", f"Gecersiz veya pasif komut: {slug}")
+    if len(satirlar) > 1:
+        raise CommandRejected(
+            "ambiguous_command",
+            f"'{slug}' komutu birden fazla cihaz modelinde tanimli; "
+            "hangi model icin cozulecegi belirtilmeli.",
+        )
+    signal = satirlar[0]
     return int(signal.dnp3_index), str(signal.label or slug)
 
 
@@ -97,20 +116,28 @@ def queue_command(
 
     `origin` audit'te komutun hangi kapidan geldigini gosterir ("ui",
     "iec104"); `actor` ise kullanici adi ya da protokol/peer bilgisi.
+
+    SANAL SET -> FIZIKSEL KIT: bir Pole Master Kit setinin kendi DNP3
+    oturumu yoktur. Komut kitin outstation'ina gider ve KIT GENELINDE
+    etkilidir ("Tum FCI'lari sifirla" dokuz uydunun hepsini sifirlar).
+    Yonlendirme yapilmasaydi komut, gateway'e hic verilmeyen bir cihaz
+    koduyla kuyruga girer ve sessizce hicbir yere ulasmazdi.
     """
-    if not device.gateway_code:
+    hedef = device_kit_service.command_target(db, device)
+
+    if not hedef.gateway_code:
         raise CommandRejected(
             "no_gateway", "Cihaz bir gateway'e bagli degil; komut gonderilemez."
         )
-    gateway = db.scalar(select(Gateway).where(Gateway.code == device.gateway_code))
+    gateway = db.scalar(select(Gateway).where(Gateway.code == hedef.gateway_code))
     if gateway is None:
-        raise CommandRejected("no_gateway", f"Gateway bulunamadi: {device.gateway_code}")
+        raise CommandRejected("no_gateway", f"Gateway bulunamadi: {hedef.gateway_code}")
 
-    index, label = resolve_command_index(db, slug)
+    index, label = resolve_command_index(db, slug, model=hedef.model)
 
     cmd = DeviceCommand(
         gateway_code=gateway.code,
-        device_code=device.code,
+        device_code=hedef.code,
         command=slug,
         dnp3_index=index,
         # Horstmann SN2 Device Profile PULSE DESTEKLEMEZ (yalniz LATCH_ON/OFF).
@@ -130,8 +157,11 @@ def queue_command(
         event_type="device_command_queued",
         severity="info",
         actor_username=actor,
-        device_code=device.code,
-        message=f"Komut kuyruga alindi: {label} ({device.code}) #{cmd.id}",
+        device_code=hedef.code,
+        message=(
+            f"Komut kuyruga alindi: {label} ({hedef.code}) #{cmd.id}"
+            + (f" — istek: {device.code}" if hedef.code != device.code else "")
+        ),
         metadata={
             "command": slug,
             "index": index,
@@ -140,16 +170,19 @@ def queue_command(
             # kim istedi" sorusunun cevabi UI kullanicisi ile SCADA master'i
             # arasinda ayrilabilmeli.
             "origin": origin,
+            # Sanal setten verilen komut fiziksel kite gider; "kim istedi"
+            # ile "nereye gitti" AYRI kayitlar olmali.
+            "requested_device_code": device.code,
         },
         i18n_key="device_command_queued",
-        i18n_params={"command": slug, "code": device.code},
+        i18n_params={"command": slug, "code": hedef.code},
     )
     return QueuedCommand(
         id=cmd.id,
         status=cmd.status,
         command=slug,
         dnp3_index=index,
-        device_code=device.code,
+        device_code=hedef.code,
     )
 
 

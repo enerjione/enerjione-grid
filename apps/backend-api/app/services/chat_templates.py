@@ -28,6 +28,7 @@ Bu modul metinleri tek yerde toplar. Kanal farklari yalnizca BICIMDE:
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from app.services import local_time
@@ -46,9 +47,13 @@ _LEVELS: dict[str, tuple[str, str]] = {
 # (`sat01.current_phase_a` -> `sat01`).
 _SOURCES: dict[str, str] = {
     "master": "Master",
-    "sat01": "Satellite 01",
-    "sat02": "Satellite 02",
 }
+
+#: `sat07` gibi uydu kaynaklari. SN2'de iki uydu var, Pole Master Kit'te
+#: dokuz; sabit sozluk yedisini ELEYIP mesajdan unite satirini tamamen
+#: dusururdu (asagida bilinmeyen prefix None doner ve sablon o satiri atlar)
+#: — sahadaki ekip "hangi faz" bilgisini goremezdi ve hicbir hata olusmazdi.
+_SAT_SOURCE_RE = re.compile(r"^sat(\d{1,2})$")
 
 
 def level_label(level: str | None) -> str:
@@ -71,7 +76,10 @@ def source_label(signal_key: str | None) -> str | None:
     if not signal_key or "." not in signal_key:
         return None
     prefix = signal_key.split(".", 1)[0].lower()
-    return _SOURCES.get(prefix)
+    if prefix in _SOURCES:
+        return _SOURCES[prefix]
+    eslesme = _SAT_SOURCE_RE.match(prefix)
+    return f"Satellite {int(eslesme.group(1)):02d}" if eslesme else None
 
 
 def format_distance(meters: float | None) -> str | None:

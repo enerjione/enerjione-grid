@@ -11,6 +11,7 @@
  * "guvenilmez veri" kararlari sayfaya aittir; grafik bos veriyle cagrilmaz.
  */
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import ReactECharts from "echarts-for-react/lib/core";
 import * as echarts from "echarts/core";
 import { BarChart, LineChart, SankeyChart } from "echarts/charts";
@@ -345,6 +346,9 @@ export function SaatProfiliGrafigi({
   utcOffsetHours,
   yukseklik = 220
 }: SaatProfiliProps) {
+  // Seri adlari ipucunda GORUNUR (trigger: "axis"), yani cevrilmek zorunda;
+  // sabit Turkce birakildiginda EN arayuzde karisik dil cikiyordu.
+  const { t } = useTranslation();
   const option = useMemo(() => {
     const yerel = points
       .map((p) => ({
@@ -368,7 +372,7 @@ export function SaatProfiliGrafigi({
       series: [
         {
           type: "line",
-          name: "Ortalama",
+          name: t("faultAnalytics.rssiAvg"),
           smooth: true,
           symbol: "none",
           data: yerel.map((p) => p.ort),
@@ -377,7 +381,7 @@ export function SaatProfiliGrafigi({
         },
         {
           type: "line",
-          name: "Dip",
+          name: t("faultAnalytics.rssiWorst"),
           smooth: true,
           symbol: "none",
           data: yerel.map((p) => p.dip),
@@ -385,7 +389,7 @@ export function SaatProfiliGrafigi({
         }
       ]
     };
-  }, [points, utcOffsetHours]);
+  }, [points, utcOffsetHours, t]);
 
   return (
     <ReactECharts

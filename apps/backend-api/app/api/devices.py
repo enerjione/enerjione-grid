@@ -27,7 +27,12 @@ from app.schemas.device import (
     DeviceUpdate,
 )
 from app.schemas.telemetry import TelemetryAggregatePoint, TelemetryHistoryPoint
-from app.services import device_command_service, device_config_service, license_service
+from app.services import (
+    device_command_service,
+    device_config_service,
+    device_kit_service,
+    license_service,
+)
 from app.services.event_service import record_event
 from app.services.scope_service import get_visible_device_ids
 
@@ -76,8 +81,20 @@ def list_devices(
     # Operator scope: sadece kendi sorumluluk alanlarindaki cihazlari gosterir.
     visible_ids = get_visible_device_ids(db, current_user)
     if visible_ids is not None:
-        rows = [d for d in rows if d.id in visible_ids]
-    return rows
+        # KIT ISTISNASI: fiziksel kit kaydi hicbir hat segmentine baglanmaz
+        # (hatta oturan setleridir), bu yuzden kapsam filtresinden HER ZAMAN
+        # duserdi. Duserse setlerin "Pole Master" sekmesi kit seviyesindeki
+        # degerleri (modem, GPS, besleme) ve komutlari cozemez.
+        # Kural: setlerinden en az biri gorunuyorsa kit de gorunur.
+        gorunur_parent_ids = {
+            d.parent_device_id
+            for d in rows
+            if d.parent_device_id and d.id in visible_ids
+        }
+        rows = [
+            d for d in rows if d.id in visible_ids or d.id in gorunur_parent_ids
+        ]
+    return device_kit_service.annotate(db, rows)
 
 
 @router.post("", response_model=DeviceRead, status_code=status.HTTP_201_CREATED)
@@ -91,6 +108,16 @@ def create_device(
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Device code already exists")
     try:
+        set_count = device_kit_service.normalize_set_count(
+            payload.model, payload.satellite_set_count
+        )
+        if set_count is not None:
+            device_kit_service.validate_kit_codes(payload.code, set_count)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    try:
         _require_gateway(db, payload.gateway_code)
         _require_unique_endpoint(
             db,
@@ -100,11 +127,22 @@ def create_device(
         )
         license_service.lock_and_assert_device_capacity(db)
         device = repository.create(payload)
+        # Sanal setler FIZIKSEL kaydin hemen ardindan, AYNI transaction'da
+        # uretilir. Ayri bir istege birakmak, yarim kalmis bir kit (setleri
+        # olmayan fiziksel kayit) birakma riski demekti: o kayit telemetriyi
+        # hicbir yere yazamaz ve arayuzde bos gorunur.
+        if set_count is not None:
+            device_kit_service.create_subunits(db, device, set_count)
     except license_service.LicenseCapacityError as exc:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"code": exc.code, "message": exc.message},
+        ) from exc
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
         ) from exc
     record_event(
         db,
@@ -135,7 +173,7 @@ def create_device(
 
     _bump_gateway_config_nonce(db, device.gateway_code)
     db.commit()
-    return device
+    return device_kit_service.annotate_one(db, device)
 
 
 def _require_unique_endpoint(
@@ -167,6 +205,13 @@ def _require_unique_endpoint(
     Kapsam GATEWAY BAZINDA: farkli gateway'ler farkli ag segmentlerinde
     olabilir ve ayni IP'yi mesru sekilde gorebilirler. Ayni gateway icinde
     ise ayni (IP, port) her zaman hatadir.
+
+    SANAL SETLER HARIC (`parent_device_id IS NOT NULL`): bir Pole Master
+    Kit'in setleri ayni outstation'i BILEREK paylasir ve gateway'e poll
+    hedefi olarak HIC verilmez (bkz. api/gateways.py) — yani yukaridaki
+    tahliye dongusunu uretemezler. Muafiyet yalnizca alt cihazlaradir;
+    kontrolun asil amaci (iki BAGIMSIZ cihazin ayni uc noktaya ayarlanmasi)
+    aynen korunur.
     """
     if not gateway_code or not ip_address or not port:
         return
@@ -174,6 +219,7 @@ def _require_unique_endpoint(
         Device.gateway_code == gateway_code,
         Device.ip_address == ip_address,
         Device.dnp3_outstation_port == port,
+        Device.parent_device_id.is_(None),
     )
     if exclude_device_id is not None:
         stmt = stmt.where(Device.id != exclude_device_id)
@@ -263,6 +309,37 @@ def update_device(
         exclude_device_id=device.id,
     )
     updated = repository.update(device, payload)
+
+    # --- SET SAYISI DEGISIKLIGI ---
+    #
+    # Modelin kendisi de bu istekte degisiyor olabilir (SN2 -> kit); karari
+    # GUNCELLENMIS model uzerinden veriyoruz.
+    # DEVRALINAN ALANLARI SETLERE YANSIT.
+    #
+    # Setler kitin gateway/IP/port bilgisini tasir. Kit baska bir gateway'e
+    # tasinip setler eski kodda kalirsa, ESKI gateway silindiginde setler
+    # silinir ve kit yetim kalir (silme hedefi yalnizca `gateway_code` ile
+    # secilir) — hat yerlesimi ve ariza gecmisi geri alinamaz sekilde gider.
+    if device_kit_service.is_kit(updated):
+        device_kit_service.propagate_to_subunits(db, updated)
+
+    set_degisimi: dict[str, list[str]] | None = None
+    if "satellite_set_count" in changes:
+        try:
+            set_count = device_kit_service.normalize_set_count(
+                updated.model, payload.satellite_set_count
+            )
+            if set_count is not None:
+                set_degisimi = device_kit_service.sync_subunits(db, updated, set_count)
+                # Yeni uretilen setler zaten guncel degerlerle olusur; bu
+                # cagri, sync sirasinda kalan eski setleri de hizalar.
+                device_kit_service.propagate_to_subunits(db, updated)
+        except ValueError as exc:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            ) from exc
+
     record_event(
         db,
         category="device",
@@ -275,13 +352,30 @@ def update_device(
         i18n_key="device_updated",
         i18n_params={"name": updated.name, "code": updated.code},
     )
+    if set_degisimi and (set_degisimi["created"] or set_degisimi["deleted"]):
+        # Set silmek VERI SILER (telemetri, alarm, ariza gecmisi, hat
+        # yerlesimi). Denetim kaydi olmadan bunun izi kalmazdi.
+        record_event(
+            db,
+            category="device",
+            event_type="device_subunits_synced",
+            severity="warning" if set_degisimi["deleted"] else "info",
+            actor_username=current_user.username,
+            device_code=updated.code,
+            message=(
+                f"{updated.code}: set sayisi guncellendi "
+                f"(eklenen={len(set_degisimi['created'])}, "
+                f"silinen={len(set_degisimi['deleted'])})"
+            ),
+            metadata={"device_id": updated.id, **set_degisimi},
+        )
     if updated.gateway_code == old_gateway_code:
         _bump_gateway_config_nonce(db, updated.gateway_code)
     else:
         _bump_gateway_config_nonce(db, old_gateway_code)
         _bump_gateway_config_nonce(db, updated.gateway_code)
     db.commit()
-    return updated
+    return device_kit_service.annotate_one(db, updated)
 
 
 @router.delete("/{device_code}", status_code=status.HTTP_204_NO_CONTENT)

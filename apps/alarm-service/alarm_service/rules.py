@@ -66,6 +66,11 @@ class AlarmRule:
     hysteresis: float
     debounce_sec: int
     device_code_filter: str | None
+    # Virgulle ayrili cihaz MODELI kodlari; bos = tum modeller.
+    # Sinyaller modeller arasinda ORTAK DEGIL (Pole Master Kit'te
+    # `master.solar_power` var, SN2'de yok; SN2'de `master.nominal_voltage`
+    # var, kitte yok) ve ortak adlarda esikler modele gore farklilasabilir.
+    device_model_filter: str | None
     is_active: bool
     # "Bu alarm gercek hat arizasi uretir mi?" Backend'e gonderilen payload'a
     # konur; backend produces_fault=False alarmlari haritada/fault'ta dikkate
@@ -84,6 +89,11 @@ class AlarmRule:
             return set()
         return {item.strip() for item in self.device_code_filter.split(",") if item.strip()}
 
+    def device_models(self) -> set[str]:
+        if not self.device_model_filter:
+            return set()
+        return {item.strip() for item in self.device_model_filter.split(",") if item.strip()}
+
 
 class AlarmRuleCache:
     """Backend'den alarm kurallarini periyodik ceken in-memory cache."""
@@ -100,6 +110,9 @@ class AlarmRuleCache:
         # ve kurallarin ihtiyac duydugu en uzun pencere. Bkz. needs_samples.
         self._agg_keys: set[str] = set()
         self._max_agg_window_sec: int = 0
+        # Cihaz kodu -> model. Kural kapsamini modele gore daraltmak icin.
+        # Bos kalirsa model filtreli kurallar hic uygulanmaz (bkz. rules_for).
+        self._device_models: dict[str, str] = {}
         self._ready = False
 
     def refresh(self) -> bool:
@@ -120,6 +133,27 @@ class AlarmRuleCache:
             return False
         rules_data: list[dict[str, Any]] = rules_resp.json()
         signals_data: list[dict[str, Any]] = signals_resp.json()
+        # Cihaz -> model haritasi BEST-EFFORT cekilir ve basarisizligi kural
+        # tazelemesini DUSURMEZ. Zorunlu olsaydi, bu ucu tanimayan eski bir
+        # backend surumune karsi alarm motoru tamamen susardi — yani kapsam
+        # iyilestirmesi, alarmlarin hic uretilmemesine yol acardi.
+        try:
+            dm_resp = requests.get(
+                f"{self.base_url}/internal/device-map",
+                headers=headers,
+                timeout=self.timeout_sec,
+            )
+            if dm_resp.status_code == 200:
+                govde = dm_resp.json()
+                self._device_models = {
+                    str(d["code"]): str(d.get("model") or "")
+                    for d in (govde.get("devices") or [])
+                    if isinstance(d, dict) and d.get("code")
+                }
+        except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+            # Onceki harita KORUNUR — bosaltmak, model filtreli tum kurallari
+            # sessizce devre disi birakmak olurdu.
+            print(f"device-map-fetch-error error={exc}")
         # Onceden `supports_alarm` bayragi kuralin degerlendirilmesini engelliyordu;
         # artik UI/backend tum sinyallere kural ekleyebildigi icin bu filtreyi
         # kaldirdik. Sinyal katalog'da var olmasi yeterli sayilir; yine de
@@ -182,6 +216,7 @@ class AlarmRuleCache:
                 hysteresis=float(item.get("hysteresis") or 0.0),
                 debounce_sec=int(item.get("debounce_sec") or 0),
                 device_code_filter=item.get("device_code_filter"),
+                device_model_filter=item.get("device_model_filter"),
                 is_active=True,
                 produces_fault=bool(item.get("produces_fault", True)),
                 rule_kind=rule_kind,
@@ -243,17 +278,48 @@ class AlarmRuleCache:
         with self._lock:
             return self._max_agg_window_sec
 
-    def rules_for(self, signal_key: str, device_code: str | None) -> list[AlarmRule]:
+    def rules_for(
+        self,
+        signal_key: str,
+        device_code: str | None,
+        device_model: str | None = None,
+    ) -> list[AlarmRule]:
+        """Bu (sinyal, cihaz) icin gecerli kurallar.
+
+        MODEL KAPSAMI: kuralda model filtresi varsa cihazin modeli o kumede
+        OLMAK ZORUNDA. Cihazin modeli BILINMIYORSA (harita henuz gelmedi ya
+        da cihaz kaydi yok) model filtreli kurallar UYGULANMAZ — "bilmiyorum"
+        durumunda daraltilmis bir kurali herkese uygulamak, operatorun
+        bilerek sinirladigi bir esigi tum filoya dayatmak olurdu.
+        Filtresiz kurallar eskisi gibi calismaya devam eder.
+        """
         with self._lock:
             rules = list(self._rules_by_signal.get(signal_key, ()))
+
+        def _model_uyar(rule: AlarmRule) -> bool:
+            models = rule.device_models()
+            if not models:
+                return True
+            return bool(device_model) and device_model in models
+
         if not device_code:
-            return [rule for rule in rules if not rule.device_code_filter]
+            return [
+                rule
+                for rule in rules
+                if not rule.device_code_filter and _model_uyar(rule)
+            ]
         matched: list[AlarmRule] = []
         for rule in rules:
             codes = rule.device_codes()
-            if not codes or device_code in codes:
+            if (not codes or device_code in codes) and _model_uyar(rule):
                 matched.append(rule)
         return matched
+
+    def device_model(self, device_code: str | None) -> str | None:
+        """Cihazin modeli; bilinmiyorsa None."""
+        if not device_code:
+            return None
+        return self._device_models.get(device_code) or None
 
     def is_alarmable(self, signal_key: str) -> bool:
         with self._lock:

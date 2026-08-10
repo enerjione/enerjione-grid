@@ -61,6 +61,7 @@ def _kural(rule_id: int, signal_key: str, terimler) -> AlarmRule:
         hysteresis=0.0,
         debounce_sec=0,
         device_code_filter=None,
+        device_model_filter=None,
         is_active=True,
         rule_kind="composite",
         expression=CompositeExpression(logic="AND", terms=tuple(terimler)),

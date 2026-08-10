@@ -39824,3 +39824,78 @@ th.event-col-category {
     rgba(190, 18, 60, 0.92) 100%
   );
 }
+
+/* ==========================================================================
+   POLE MASTER SEKMESI — Pole Master Kit'in KIT SEVIYESI verileri
+   ==========================================================================
+   Bir kitin uc seti kullaniciya ayri cihaz olarak gorunur ama modem/GPS/
+   besleme olcumleri ucunun ORTAK varligidir. Bu sekme onlari setin kendi
+   sinyallerinden AYIRARAK gosterir; ayni listede olsalardi hangi degerin
+   sete hangisinin kite ait oldugu karisirdi. */
+.pole-master-panel {
+  padding: 18px;
+  overflow-y: auto;
+}
+.pole-master-note {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-left: 3px solid #38bdf8;
+  border-radius: 0 8px 8px 0;
+  background: #f0f9ff;
+  color: #0c4a6e;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.pole-master-empty {
+  margin: 0;
+  padding: 24px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+}
+.pole-master-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.pole-master-card .device-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pole-master-card .device-card-title .material-symbols-outlined {
+  font-size: 18px;
+  color: #38bdf8;
+}
+.pole-master-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pole-master-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.pole-master-row:last-child { border-bottom: none; }
+.pole-master-row dt {
+  color: #64748b;
+  font-size: 12px;
+  /* Uzun sinyal adlari degeri ekrandan itmemeli. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pole-master-row dd {
+  margin: 0;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  overflow-wrap: anywhere;
+}

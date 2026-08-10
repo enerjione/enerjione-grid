@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import queue
+import re
 import ssl
 import threading
 import time
@@ -398,21 +399,32 @@ def _quality_is_bad(payload: dict) -> bool:
 
 _SOURCE_LABEL_TR = {
     "master": "Master",
-    "sat01": "Satellite 01",
-    "sat02": "Satellite 02",
 }
+
+#: `sat07` gibi uydu kaynaklarini yakalar.
+#:
+#: NEDEN SABIT SOZLUK DEGIL: Pole Master Kit 9 uydu tasiyor (sat01..sat09).
+#: Elle yazilan bir sozluk once sat01/sat02'de kalir, kalan yedi uydu
+#: "Sat07" gibi yari-cevrilmis bir etiketle gorunurdu — hata da vermezdi.
+_SAT_SOURCE_RE = re.compile(r"^sat(\d{1,2})$")
 
 
 def _signal_source_label(signal_key: str | None) -> str:
     """Sinyal anahtarinin prefix'inden kullanici dostu kaynak etiketi turet.
 
-    Ornek: "master.overcurrent_tripped" -> "Master".
-    Bilinmeyen prefix'ler icin prefix oldugu gibi (orn. "Sat03") doner;
-    prefix yoksa bos string."""
+    Ornek: "master.overcurrent_tripped" -> "Master",
+           "sat07.fault_current"        -> "Satellite 07".
+    Bilinmeyen prefix'ler icin prefix oldugu gibi doner; prefix yoksa bos
+    string."""
     if not signal_key:
         return ""
     prefix = signal_key.split(".", 1)[0].lower()
-    return _SOURCE_LABEL_TR.get(prefix, prefix.capitalize())
+    if prefix in _SOURCE_LABEL_TR:
+        return _SOURCE_LABEL_TR[prefix]
+    eslesme = _SAT_SOURCE_RE.match(prefix)
+    if eslesme:
+        return f"Satellite {int(eslesme.group(1)):02d}"
+    return prefix.capitalize()
 
 
 def _build_alarm_from_rule(
@@ -757,7 +769,8 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
     if _CACHE.needs_samples(str(signal_key)):
         _SAMPLES.put(str(signal_key), str(device_code or ""), value, now)
 
-    for rule in _CACHE.rules_for(str(signal_key), str(device_code) if device_code else None):
+    _kod = str(device_code) if device_code else None
+    for rule in _CACHE.rules_for(str(signal_key), _kod, _CACHE.device_model(_kod)):
         # Composite kural ise anchor cihazi tetikleyen telemetri'nin
         # device_code'u olur; tum terimler bu cihaz uzerinden ("*") veya
         # explicit cihaz koduyla cozulur.

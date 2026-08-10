@@ -49,6 +49,7 @@ def _row_to_read(row: AlarmRule) -> AlarmRuleRead:
             "hysteresis": row.hysteresis,
             "debounce_sec": row.debounce_sec,
             "device_code_filter": row.device_code_filter,
+            "device_model_filter": row.device_model_filter,
             "is_active": row.is_active,
             "notify_email": row.notify_email,
             "notify_sms": row.notify_sms,

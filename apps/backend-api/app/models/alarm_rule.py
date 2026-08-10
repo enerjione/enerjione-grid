@@ -69,6 +69,23 @@ class AlarmRule(Base):
     # cihaz kodlari ile sinirlanabilir (bos = hepsi)
     device_code_filter: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
+    # Kapsam #2: CIHAZ MODELI. Virgulle ayrili model kodlari; bos = tum
+    # modeller (mevcut kurallarin davranisi).
+    #
+    # NEDEN GEREKLI: sinyaller modeller arasinda ORTAK DEGIL.
+    #   * Pole Master Kit'te `master.solar_power`, `master.ac_power`,
+    #     `master.fast_curve_enabled` var — SN2'de yok.
+    #   * SN2'de `master.nominal_voltage`, `master.conductor_temperature_
+    #     alarm_threshold` ve GPS alanlari var — kitte yok.
+    #   * Kit setinde ucuncu bir olcum unitesi var (`sat03`) — SN2'de yok.
+    # Ortak ADI tasiyan sinyallerde ise esik modele gore farklilasabilir
+    # (ayni "asiri akim" farkli kelepce/olcek demek olabilir).
+    #
+    # Model kapsami olmasaydi tek bir esik butun filoya dayatilirdi ve
+    # "hangi cihazdan ne bilgisi geldi" karisirdi; kural yanlis modelde ya
+    # hic tetiklenmez (sinyal yok) ya da yanlis esikle tetiklenirdi.
+    device_model_filter: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Bildirim kanallari — kural bazli secim. Web bildirimi her zaman gider

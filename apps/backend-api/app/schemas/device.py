@@ -43,10 +43,23 @@ class DeviceScalarBase(BaseModel):
     phase_master: PhaseCode | None = None
     phase_sat01: PhaseCode | None = None
     phase_sat02: PhaseCode | None = None
+    # Pole Master Kit setinde olcum yapan UCUNCU unite. SN2'de karsiligi yok
+    # (orada ucuncu unite `master`'dir), bu yuzden yalnizca set kayitlarinda
+    # doldurulur.
+    phase_sat03: PhaseCode | None = None
 
 
 class DeviceCreate(DeviceScalarBase):
     dnp3_extended: Dnp3ExtendedSettings | None = None
+    # --- KIT: BAGLI SET SAYISI ---
+    #
+    # Yalnizca sanal set ureten modellerde (Horstmann Pole Master Kit)
+    # anlamlidir ve ZORUNLUDUR: kaci takildigi sahada belli olur, tahmin
+    # edilemez. Diger modellerde gonderilirse yok sayilir.
+    #
+    # Her set icin ayri bir `devices` satiri acilir; setler hatta ayri ayri
+    # yerlestirilir ve arizalar dogru sete duser.
+    satellite_set_count: int | None = Field(default=None, ge=1, le=3)
 
 
 class DeviceUpdate(BaseModel):
@@ -74,6 +87,11 @@ class DeviceUpdate(BaseModel):
     phase_master: PhaseCode | None = None
     phase_sat01: PhaseCode | None = None
     phase_sat02: PhaseCode | None = None
+    phase_sat03: PhaseCode | None = None
+    # Kite bagli set sayisi. Artirilirsa eksik setler uretilir, azaltilirsa
+    # fazla setler SILINIR (telemetrisi, alarmlari, arizalari ve hat
+    # yerlesimiyle birlikte) — bu yuzden arayuz once acik uyari gosterir.
+    satellite_set_count: int | None = Field(default=None, ge=1, le=3)
 
 
 class DeviceRead(DeviceScalarBase):
@@ -83,6 +101,15 @@ class DeviceRead(DeviceScalarBase):
     alarm_active: bool
     last_update_at: datetime | None
     dnp3_extended: Dnp3ExtendedSettings
+    # --- KIT / SET BAGI (salt okunur) ---
+    #: Sanal set kaydinin bagli oldugu fiziksel kit. NULL = fiziksel cihaz.
+    parent_device_id: int | None = None
+    #: Setin kit uzerindeki sirasi (1..3). Fiziksel kayitlarda NULL.
+    subunit_index: int | None = None
+    #: Fiziksel kitin kodu — arayuz "PMK-001 / Set 2" diyebilsin diye.
+    parent_device_code: str | None = None
+    #: Kite bagli set sayisi (yalnizca kit satirlarinda dolu).
+    satellite_set_count: int | None = None
 
     @field_validator("dnp3_extended", mode="before")
     @classmethod

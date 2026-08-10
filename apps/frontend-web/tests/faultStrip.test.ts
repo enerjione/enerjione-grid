@@ -239,3 +239,86 @@ test("ofset verilmezse davranis DEGISMEZ (geriye uyum)", () => {
   const geo = buildStripGeometry({ poleSeqs: POLES, fromSeq: 3, toSeq: 4 });
   assert.equal(hotPathOf(geo), hotPathOf(geo, 0));
 });
+
+/* ---------------------------------------------------------------------------
+ * BRANSMAN GIRISI — cihaz cizimden DUSMEMELI
+ *
+ * Kolun giris segmentinde bir ucu ana hattin diregi, digeri kolun ilk
+ * diregidir. Kolun diregi ana hattin direk listesinde OLMADIGI icin segment
+ * "komsu degil" sayilip tamamen eleniyordu.
+ *
+ * Sonuc sessizdi ve agirdi: bransman girisini izleyen cihaz cizimden dusuyor,
+ * "gordum" diyen cihaz bulunamiyor ve `span` null kaliyordu — AKTIF bir ariza
+ * karti tertemiz, arizasiz bir hat gosteriyordu.
+ * ------------------------------------------------------------------------- */
+
+/** Ana hattin 3 nolu diregine takili bir kolun giris segmenti. */
+function bransmanGirisi() {
+  return [
+    { from_pole_seq: 3, to_pole_seq: 41, device_code: "SN2-KOL", device_position_t: 0.5 }
+  ];
+}
+
+test("bransman girisindeki cihaz cizimde GORUNUR", () => {
+  const geo = buildStripGeometry({
+    poleSeqs: POLES,
+    segments: bransmanGirisi(),
+    fromSeq: 3,
+    toSeq: 4,
+    lastRedDeviceCode: "SN2-KOL"
+  });
+  const kol = geo.devices.find((d) => d.code === "SN2-KOL");
+  assert.ok(kol, "bransman girisindeki cihaz elenmis");
+  assert.equal(kol.onBranch, true, "cihaz bransman girisi olarak isaretlenmeli");
+  // Dallanma diregine cizilir: seq 3 -> indeks 2.
+  assert.equal(kol.pos, 2, "cihaz dallanma diregine oturmali");
+});
+
+test("bransman cihazi ANA HAT uzerinde arizali parca TANIMLAMAZ", () => {
+  // Gordugu ariza kolun asagisindadir; ana telde kirmizi bir parca cizmek
+  // ekibi yanlis acikliga gonderirdi.
+  const geo = buildStripGeometry({
+    poleSeqs: POLES,
+    segments: bransmanGirisi(),
+    fromSeq: null,
+    toSeq: null,
+    lastRedDeviceCode: "SN2-KOL"
+  });
+  assert.equal(geo.span, null, "kol cihazi ana hatta parca uretmemeli");
+  assert.equal(hotPathOf(geo), "", "ana hatta kirmizi tel cizilmemeli");
+});
+
+test("ana hattaki cihazlar bransmandan ETKILENMEZ", () => {
+  // Geriye uyum: kol segmenti listeye eklense de normal cihazlarin konumu ve
+  // ariza araligi aynen kalmali.
+  const yalniz = buildStripGeometry({
+    poleSeqs: POLES,
+    segments: segments(),
+    fromSeq: 3,
+    toSeq: 4,
+    lastRedDeviceCode: "SN2-RED",
+    firstGreenDeviceCode: "SN2-GREEN"
+  });
+  const kolIle = buildStripGeometry({
+    poleSeqs: POLES,
+    segments: [...segments(), ...bransmanGirisi()],
+    fromSeq: 3,
+    toSeq: 4,
+    lastRedDeviceCode: "SN2-RED",
+    firstGreenDeviceCode: "SN2-GREEN"
+  });
+  assert.deepEqual(kolIle.span, yalniz.span, "ariza araligi degismemeli");
+  assert.equal(hotPathOf(kolIle), hotPathOf(yalniz), "arizali parca degismemeli");
+  assert.equal(kolIle.devices.length, yalniz.devices.length + 1, "kol cihazi eklenmeli");
+});
+
+test("iki ucu da bu hatta olmayan segment CIZILMEZ", () => {
+  // Baska bir hattin kaydi yanlislikla gelirse cihaz uydurulmamali.
+  const geo = buildStripGeometry({
+    poleSeqs: POLES,
+    segments: [{ from_pole_seq: 90, to_pole_seq: 91, device_code: "YABANCI" }],
+    fromSeq: 3,
+    toSeq: 4
+  });
+  assert.equal(geo.devices.length, 0, "baska hattin cihazi cizime girmis");
+});

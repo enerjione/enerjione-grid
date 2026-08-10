@@ -13,6 +13,8 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { useTranslation } from "react-i18next";
 
 import { fetchAlarmEvents } from "../../shared/api";
+import { SOURCES } from "../signals/signalCatalogConstants";
+import { PoleMasterTab } from "./PoleMasterTab";
 import { signalLabel } from "../../shared/signalLabel";
 import { signalTrust } from "../../shared/signalQuality";
 import type { AlarmEvent } from "../../shared/types";
@@ -38,7 +40,7 @@ type TopologyInfo =
   | { regionName: string; lineName: string; latitude?: number; longitude?: number }
   | undefined;
 
-type TabKey = "overview" | "all" | "trends" | "events" | "commands" | "config";
+type TabKey = "overview" | "all" | "poleMaster" | "trends" | "events" | "commands" | "config";
 
 type Props = {
   deviceId: number;
@@ -180,6 +182,28 @@ export function DeviceDetailPage({
 
   const device = useMemo(() => devices.find((d) => d.id === deviceId), [devices, deviceId]);
 
+  // FIZIKSEL KIT KAYDI (varsa). Pole Master Kit'in kit seviyesindeki
+  // olcumleri — modem, GPS, sebeke, solar/AC besleme, cihaz sicakligi —
+  // burada durur ve "Pole Master" sekmesinde gosterilir. Telemetri
+  // COGALTILMAZ (bkz. PoleMasterTab docstring'i), okuma tarafinda devralinir.
+  const parentDevice = useMemo(
+    () =>
+      device?.parentDeviceId != null
+        ? devices.find((d) => d.id === device.parentDeviceId)
+        : undefined,
+    [devices, device]
+  );
+
+  // Bir Pole Master Kit setinde olcum yapan uc unitenin ucu de uydudur;
+  // kitin `master`i ortak RTU'dur. Bu yuzden set acildiginda varsayilan
+  // kanal `sat01` olmali — `master` secili kalsaydi kullanici bos bir
+  // kanal gorurdu (sette `master.*` telemetrisi YOK).
+  useEffect(() => {
+    if (device?.parentDeviceId != null) {
+      setActiveSource((prev) => (prev === "master" ? "sat01" : prev));
+    }
+  }, [device?.parentDeviceId]);
+
   // Bu cihazin alarmlari — hem sidebar durum karti hem Alarmlar karti kullanir
   // (tek fetch). Aktif alarm = reset EDILMEMIS (giderilmemis) alarm.
   const loadAlarms = useCallback(async () => {
@@ -309,11 +333,13 @@ export function DeviceDetailPage({
   }, [valueByKey, device]);
 
   const sourceCounts = useMemo<Record<SignalSource, number>>(() => {
-    const c: Record<SignalSource, number> = { master: 0, sat01: 0, sat02: 0 };
+    const c = Object.fromEntries(
+      SOURCES.map((s) => [s, 0])
+    ) as Record<SignalSource, number>;
     if (device) {
       for (const r of values) {
-        if (r.device_id === device.id && (r.source === "master" || r.source === "sat01" || r.source === "sat02")) {
-          c[r.source] += 1;
+        if (r.device_id === device.id && r.source in c) {
+          c[r.source as SignalSource] += 1;
         }
       }
     }
@@ -352,6 +378,11 @@ export function DeviceDetailPage({
   const tabs: { key: TabKey; icon: string; show: boolean }[] = [
     { key: "overview", icon: "dashboard", show: true },
     { key: "all", icon: "table_rows", show: true },
+    // KIT SEVIYESI: yalnizca bir Pole Master Kit setinde gorunur. Kitin
+    // modem/GPS/besleme olcumleri uc setin ORTAK varligidir; setin kendi
+    // sinyalleriyle ayni listede gostermek hangi degerin nereye ait
+    // oldugunu karistirirdi.
+    { key: "poleMaster", icon: "solar_power", show: parentDevice != null },
     { key: "trends", icon: "show_chart", show: true },
     { key: "events", icon: "history", show: true },
     { key: "commands", icon: "terminal", show: canCommand },
@@ -443,6 +474,10 @@ export function DeviceDetailPage({
 
         {activeTab === "all" ? (
           <DeviceAllSignalsTab device={device} values={values} gwOnline={gwOnline} sourceCounts={sourceCounts} />
+        ) : null}
+
+        {activeTab === "poleMaster" && parentDevice ? (
+          <PoleMasterTab parent={parentDevice} values={values} />
         ) : null}
 
         {activeTab === "trends" && token ? (

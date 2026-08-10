@@ -190,6 +190,7 @@ import type {
   LicenseStatus,
   NotificationSettings,
   OutboundTarget,
+  PhaseCode,
   ResponsibilityAreaRow,
   SignalCatalogRow,
   SignalHistorianBulkPayload,
@@ -198,6 +199,7 @@ import type {
   UserRead,
   UserRole
 } from "../shared/types";
+import { isKitModel } from "../shared/types";
 
 // PageMode / EngineeringPage tipleri tabModel'den geliyor (tek kaynak). Sekme
 // sistemi bunlari uretir; App aktif sekmeden turetir.
@@ -1824,6 +1826,16 @@ export function App() {
     latitude: number;
     longitude: number;
     iec104_common_address?: number | null;
+    // TIP ZINCIRI GERCEGI YANSITMALI: panel bu alanlari zaten gonderiyordu
+    // ama tip bilmiyordu (JSON.stringify sessizce geciriyordu). Yeni alan
+    // eklerken "tip var mi" diye bakan bir sonraki kisi yaniliyordu.
+    serial_number?: string | null;
+    phase_master?: PhaseCode | null;
+    phase_sat01?: PhaseCode | null;
+    phase_sat02?: PhaseCode | null;
+    phase_sat03?: PhaseCode | null;
+    /** Pole Master Kit'e bagli set sayisi (1..3). */
+    satellite_set_count?: number | null;
   }) => {
     if (!session) return;
     try {
@@ -1869,6 +1881,13 @@ export function App() {
       latitude?: number;
       longitude?: number;
       iec104_common_address?: number | null;
+      serial_number?: string | null;
+      phase_master?: PhaseCode | null;
+      phase_sat01?: PhaseCode | null;
+      phase_sat02?: PhaseCode | null;
+      phase_sat03?: PhaseCode | null;
+      /** Set sayisini DUSURMEK veri siler; panel once acik onay alir. */
+      satellite_set_count?: number | null;
     }
   ) => {
     if (!session) return;
@@ -2350,6 +2369,18 @@ export function App() {
   const filteredDashboardDevices = useMemo(() => {
     const q = dashboardSearch.trim().toLowerCase();
     return devices.filter((d) => {
+      // FIZIKSEL KIT KAYDI ANA SAYFADA GORUNMEZ.
+      //
+      // Horstmann Pole Master Kit tek DNP3 outstation'dir; sahada izlenen sey
+      // onun SETLERIDIR (her set kendi direk araliginda oturur, kendi
+      // arizasini uretir). Fiziksel kayit hicbir hat segmentine baglanmaz —
+      // listede "hatta atanmadi" rozetiyle, haritada ise kurulumda girilmis
+      // sabit koordinatta (yani YANLIS yerde) gorunurdu.
+      //
+      // Kit seviyesindeki olcumler kaybolmuyor: her setin "Pole Master"
+      // sekmesinde gosteriliyor. Kitin kendisi Muhendislik > Cihazlar
+      // ekraninda duruyor (baglanti ayarlari ve yapilandirma orada).
+      if (isKitModel(d.model)) return false;
       // ESKI: atanmamis cihazlari listeden tamamen gizliyorduk. YENI:
       // hepsi gozuksun ama DeviceSidebar atanmamislari 'Hatta atanmadi'
       // rozeti ile isaretler (deviceTopology null kontrolu). Boylece
@@ -2752,6 +2783,7 @@ export function App() {
                 rules={alarmRules}
                 signals={signalCatalog}
                 devices={devices}
+                deviceModels={deviceModels}
                 loading={alarmRulesLoading}
                 error={alarmRulesError}
                 onCreate={handleCreateAlarmRule}

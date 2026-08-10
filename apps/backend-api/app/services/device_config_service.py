@@ -372,7 +372,15 @@ def ensure_initial_version(
 
     Sablon yoksa `None` doner, PATLAMAZ: config sablonu tanimlanmamis olmasi
     cihaz eklemeyi engellememelidir. Eksiklik arayuzde gorunur.
+
+    SANAL SET KAYITLARINDA HIC CALISMAZ: yapilandirma dosyasi FIZIKSEL
+    cihaza aittir (`<seri>_Configuration.csv` ve seri numarasi kitindir).
+    Her sete ayri bir surum zinciri acmak, tek dosya icin uc bagimsiz "v5"
+    uretir; denetim kaydi hangi v5'in gercekten cihazda oldugunu
+    soyleyemez hale gelirdi. Setler Yapilandirma sekmesinde kite yonlenir.
     """
+    if device.parent_device_id is not None:
+        return None
     if current_version(db, device.id) is not None:
         return None
     sablon = default_template(db, device.model)

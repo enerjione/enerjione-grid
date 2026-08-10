@@ -226,8 +226,15 @@ def seed_default_signals(
     if not items:
         return {"inserted": 0, "updated": 0, "removed": 0, "total": 0, "skipped": True}
 
-    existing = {row.key: row for row in db.scalars(select(SignalCatalog)).all()}
-    default_keys = {item.get("key") for item in items if item.get("key")}
+    # ANAHTAR (model, key) — sinyal anahtari MODEL BAZINDA tekildir
+    # (bkz. SignalCatalog docstring). Yalnizca `key` ile anahtarlamak, ayni
+    # sinyal adini paylasan iki modelden birinin satirini digerinin uzerine
+    # yazardi: seed her aciliste iki modeli sirayla "duzeltip" DNP3 indeksini
+    # yalpalatir, hicbir hata uretmezdi.
+    existing = {(row.model, row.key): row for row in db.scalars(select(SignalCatalog)).all()}
+    default_keys = {
+        (item.get("model"), item.get("key")) for item in items if item.get("key")
+    }
     inserted = 0
     updated = 0
     removed = 0
@@ -237,7 +244,7 @@ def seed_default_signals(
         key = data.get("key")
         if not key:
             continue
-        current = existing.get(key)
+        current = existing.get((data.get("model"), key))
         if current is None:
             db.add(SignalCatalog(**_arsiv_varsayilani(data)))
             inserted += 1
@@ -263,8 +270,8 @@ def seed_default_signals(
             updated += 1
 
     if strict:
-        for key, row in existing.items():
-            if key in default_keys:
+        for model_key, row in existing.items():
+            if model_key in default_keys:
                 continue
             if row.model not in seeded_models:
                 # Bu modeli bu calistirmada seed etmiyoruz -> dokunma.

@@ -114,6 +114,77 @@ def list_devices_internal(
     return list(db.scalars(stmt).all())
 
 
+@router.get("/device-map")
+def device_map_internal(
+    db: Session = Depends(get_db),
+    x_service_token: str | None = Header(default=None),
+):
+    """Worker'lar icin YALIN cihaz haritasi: model + kit bolme kurallari.
+
+    IKI TUKETICISI VAR, IKISININ DE IHTIYACI FARKLI AMA KAYNAGI AYNI:
+
+    tag-engine  — Pole Master Kit tek DNP3 outstation'dir ama 9 uydusu ucerli
+        setler halinde AYRI cihazlara aittir. `subunits[].sources` haritasi
+        "fiziksel kaynak -> (sanal cihaz kodu, sanal kaynak adi)" der; worker
+        normalize akisa yayinlamadan hemen once `device_code` + `signal_key`
+        ciftini YERINDE yeniden yazar. Bolme burada yapilmazsa ariza motoru
+        korlesir: uc setin alarmi tek device_id'ye duser, hatta yalnizca TEK
+        nokta kirmizi olur ve ariza araligi hep fazla genis cikar.
+
+    alarm-service — kural kapsamini modele gore daraltmak icin `code -> model`
+        eslemesi. Sinyaller modeller arasinda ortak degil (kitte
+        `master.solar_power` var, SN2'de yok; SN2'de `master.nominal_voltage`
+        var, kitte yok) ve ortak adlarda esikler farklilasabilir.
+
+    NEDEN `/internal/devices` YETMIYOR: o uc tam `DeviceRead` doner (DNP3 ek
+    ayarlari, koordinat, batarya, IEC104 CA...). 60 saniyede bir, 1800 satir
+    icin bunu tasimak worker basina onemli bir yuk; ustelik bolme haritasini
+    her worker'in kendi basina turetmesi gerekirdi — set -> uydu kurali TEK
+    yerde durmali.
+    """
+    _require_service_token(x_service_token)
+    from app.data.device_models import subunit_source_map
+
+    rows = list(db.scalars(select(Device).order_by(Device.code.asc())).all())
+    kodlar = {d.id: d.code for d in rows}
+
+    cocuklar: dict[int, list[Device]] = {}
+    for d in rows:
+        if d.parent_device_id is not None:
+            cocuklar.setdefault(d.parent_device_id, []).append(d)
+
+    devices = []
+    for d in rows:
+        subunits = []
+        for c in sorted(cocuklar.get(d.id, []), key=lambda x: x.subunit_index or 0):
+            if not c.subunit_index:
+                # Sirasi olmayan bir alt cihaz hangi uydulari tasidigini
+                # SOYLEYEMEZ. Haritaya koymak, telemetriyi rastgele bir sete
+                # yazmak olurdu; disarida birakiliyor ve verisi fiziksel
+                # kayitta kaliyor (gorunur eksiklik, sessiz yanlislik degil).
+                _logging.getLogger(__name__).warning(
+                    "subunit_index bos, bolme haritasina alinmadi: %s", c.code
+                )
+                continue
+            subunits.append(
+                {
+                    "code": c.code,
+                    "set_index": c.subunit_index,
+                    "sources": subunit_source_map(c.subunit_index),
+                }
+            )
+        devices.append(
+            {
+                "code": d.code,
+                "model": d.model,
+                "parent_code": kodlar.get(d.parent_device_id) if d.parent_device_id else None,
+                "subunit_index": d.subunit_index,
+                "subunits": subunits,
+            }
+        )
+    return {"devices": devices}
+
+
 @router.get("/outbound-targets", response_model=list[OutboundTargetRead])
 def list_outbound_targets_internal(
     db: Session = Depends(get_db),

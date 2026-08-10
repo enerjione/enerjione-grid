@@ -1163,7 +1163,25 @@ def get_gateway_config(
     # Boylece "uzaktan durdurma" kontrol panelindeki enable/disable butonlariyla
     # calisir ve collector ayakta kalip bir sonraki enable komutunu bekler.
 
-    devices: list[Device] = DeviceRepository(db).list_devices_by_gateway(gateway_code)
+    # SANAL SETLER POLL HEDEFI DEGILDIR.
+    #
+    # Bir Horstmann Pole Master Kit'in uc seti AYNI fiziksel outstation'dir;
+    # gateway'e uc ayri cihaz olarak verilirse ayni uc noktaya UC TCP oturumu
+    # acilir. Horstmann `CloseExisting` modunda calisir — yeni baglanti
+    # mevcudu kapatir — ve sonuc karsilikli tahliye dongusudur (aynisi
+    # 2026-08-01'de iki cihaz ayni porta ayarlandiginda yasandi: gateway
+    # gunlugunde 2.172 `link_close`, telemetri kesintili, belirti "ag
+    # kararsiz" gorunuyor, kok neden gorunmuyor).
+    #
+    # Ustelik initiating modda her cihaza ayri host portu ayrilir (asagida);
+    # sanal setler sizarsa portlar bosa harcanir ve `max_devices` muhasebesi
+    # sasar. Kitin uzerindeki 9 uydunun TAMAMI zaten fiziksel kaydin sinyal
+    # profilinde okunur; bolme telemetri hattinda (tag-engine) yapilir.
+    devices: list[Device] = [
+        d
+        for d in DeviceRepository(db).list_devices_by_gateway(gateway_code)
+        if d.parent_device_id is None
+    ]
     signals_rows = list(
         db.scalars(
             select(SignalCatalog)

@@ -56,6 +56,13 @@ export type StripDevice = {
   /** Cihazin oturdugu direk araligi — tooltip "Direk 3 – 4 arasi" der. */
   fromSeq: number;
   toSeq: number;
+  /** Cihaz bir BRANSMAN GIRISINDE mi oturuyor?
+   *
+   *  true ise segmentin bir ucu ana hatta, digeri kolun ilk diregindedir.
+   *  Cihaz dallanma diregine cizilir ama ANA HAT uzerinde arizali parca
+   *  TANIMLAMAZ: gordugu ariza kolun asagisindadir, ana telde degil.
+   *  Kirmizi bir ana hat parcasi cizmek ekibi yanlis acikliga gonderirdi. */
+  onBranch?: boolean;
 };
 
 export type StripSpan = {
@@ -236,16 +243,44 @@ export function buildStripGeometry({
     if (a == null || b == null) continue;
     const iA = idxOf(Math.min(a, b));
     const iB = idxOf(Math.max(a, b));
-    // Yalnizca KOMSU direkler arasindaki segmentler cizilebilir; atlamali
-    // bir kayit (veri bozuklugu) sessizce yanlis yere cihaz koymasin.
-    if (iA === -1 || iB === -1 || iB !== iA + 1) continue;
+    const tone: StripDevice["tone"] =
+      code === lastRedDeviceCode ? "red" : code === firstGreenDeviceCode ? "green" : "idle";
+
+    // BRANSMAN GIRISI: bir uc ana hatta, digeri kolun ilk diregi (ana hattin
+    // direk listesinde YOK).
+    //
+    // Bu segmentler "komsu degil" diye tamamen ELENIYORDU. Sonuc sessiz ve
+    // agirdi: bransman girisini izleyen cihaz cizimden dusuyor, dolayisiyla
+    // "gordum" diyen cihaz bulunamiyor ve `span` null kaliyordu — AKTIF bir
+    // ariza karti TERTEMIZ, arizasiz bir hat gosteriyordu.
+    //
+    // Cihaz artik dallanma diregine cizilir. Ama ana hat uzerinde arizali
+    // parca TANIMLAMAZ (bkz. `onBranch`): gordugu ariza kolun asagisindadir.
+    const anaUc = iA !== -1 ? iA : iB;
+    const digerUc = iA !== -1 ? iB : iA;
+    if (anaUc === -1) continue;  // iki uc da bu hatta degil: kayit bu cizime ait degil
+    if (digerUc === -1) {
+      devices.push({
+        code,
+        label: seg.device_name || code,
+        pos: anaUc,
+        tone,
+        fromSeq: seqs[anaUc],
+        toSeq: seqs[anaUc],
+        onBranch: true
+      });
+      continue;
+    }
+
+    // Atlamali bir kayit (veri bozuklugu) sessizce yanlis yere cihaz koymasin.
+    if (iB !== iA + 1) continue;
     const tt =
       seg.device_position_t == null ? 0.5 : Math.max(0, Math.min(1, seg.device_position_t));
     devices.push({
       code,
       label: seg.device_name || code,
       pos: iA + tt,
-      tone: code === lastRedDeviceCode ? "red" : code === firstGreenDeviceCode ? "green" : "idle",
+      tone,
       fromSeq: seqs[iA],
       toSeq: seqs[iB]
     });
@@ -254,8 +289,9 @@ export function buildStripGeometry({
 
   // ARIZALI PARCA: son "gordum" cihazindan ilk "gormedim" cihazina kadar.
   let span: StripSpan | null = null;
-  const red = devices.find((d) => d.tone === "red");
-  const green = devices.find((d) => d.tone === "green");
+  // Bransman girisindeki cihazlar ana hat uzerinde parca TANIMLAMAZ.
+  const red = devices.find((d) => d.tone === "red" && !d.onBranch);
+  const green = devices.find((d) => d.tone === "green" && !d.onBranch);
   if (red) {
     // Yesil cihaz yoksa ariza hat ucuna kadar suruyor demektir.
     const end = green ? green.pos : count - 1;

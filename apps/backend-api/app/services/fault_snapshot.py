@@ -61,8 +61,26 @@ _PHASE_FIELDS = (
     ("sat02", "phase_sat02"),
 )
 
+#: MODELE OZEL unite -> kolon eslemesi.
+#:
+#: Pole Master Kit setinde olcum yapan uc unite de uydudur; `phase_master`
+#: orada bir sey ifade etmez ve OKUNMAMALIDIR. Okunsaydi, proje genelindeki
+#: "master = a fazi" varsayilani kitin ORTAK RTU'sunu bir faza kelepcelenmis
+#: gibi gosterir ve setin gercek uc fazini bozardi.
+_PHASE_FIELDS_BY_MODEL: dict[str, tuple[tuple[str, str], ...]] = {
+    "horstmann_pmk_set": (
+        ("sat01", "phase_sat01"),
+        ("sat02", "phase_sat02"),
+        ("sat03", "phase_sat03"),
+    ),
+}
 
-def _katmani_uygula(esleme: dict[str, str], row) -> bool:  # noqa: ANN001
+
+def _phase_fields(model: str | None) -> tuple[tuple[str, str], ...]:
+    return _PHASE_FIELDS_BY_MODEL.get(model or "", _PHASE_FIELDS)
+
+
+def _katmani_uygula(esleme: dict[str, str], row, alanlar=_PHASE_FIELDS) -> bool:  # noqa: ANN001
     """Bir kaynagin (proje ya da cihaz) doldurdugu alanlari eslemeye isler.
 
     Donus: bu katman bir sey degistirdi mi. KISMI doldurma desteklenir —
@@ -73,7 +91,7 @@ def _katmani_uygula(esleme: dict[str, str], row) -> bool:  # noqa: ANN001
     if row is None:
         return False
     degisti = False
-    for unite, alan in _PHASE_FIELDS:
+    for unite, alan in alanlar:
         deger = (getattr(row, alan, None) or "").strip().lower()
         if deger:
             esleme[unite] = deger
@@ -97,15 +115,30 @@ def resolve_source_phase(
     """
     from app.models.device import Device
     from app.models.project_settings import ProjectSettings
-    from app.services.fault_inference import DEFAULT_SOURCE_PHASE
+    from app.services.fault_inference import DEFAULT_SOURCE_PHASE, default_source_phase
 
-    esleme = dict(DEFAULT_SOURCE_PHASE)
+    # Cihazi ONCE cozuyoruz: hangi UNITELERIN faza kelepcelendigi modele
+    # baglidir ve bu, proje katmaninin hangi alanlarinin okunacagini da
+    # belirler (bkz. _PHASE_FIELDS_BY_MODEL).
+    device = db.get(Device, device_id) if device_id is not None else None
+    model = getattr(device, "model", None)
+    alanlar = _phase_fields(model)
+
+    esleme = default_source_phase(model)
     # Sira onemli: once proje (genel konvansiyon), sonra cihaz (istisna)
     # — cihaz katmani projeyi EZER.
-    degisti = _katmani_uygula(esleme, db.get(ProjectSettings, 1))
-    if device_id is not None:
-        degisti = _katmani_uygula(esleme, db.get(Device, device_id)) or degisti
-    return esleme if degisti else None
+    degisti = _katmani_uygula(esleme, db.get(ProjectSettings, 1), alanlar)
+    if device is not None:
+        degisti = _katmani_uygula(esleme, device, alanlar) or degisti
+    if degisti:
+        return esleme
+    # HICBIR KATMAN KONUSMADIYSA: modelin KENDI varsayilani koddaki genel
+    # varsayilandan farkliysa yine de donmek ZORUNDAYIZ. Aksi halde cagiran
+    # taraf `DEFAULT_SOURCE_PHASE`e (master/sat01/sat02) duser ve Pole Master
+    # Kit setinin ucuncu uydusu HICBIR faz uretmez — ariza kaydinin `phase`
+    # alani sessizce NULL kalir, tek-faz/uc-faz ayrimi ve faz dagilimi raporu
+    # bu arizalari hic gormez.
+    return esleme if esleme != DEFAULT_SOURCE_PHASE else None
 
 
 def _truthy(value: float | None, value_string: str | None) -> bool:

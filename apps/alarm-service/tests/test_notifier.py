@@ -77,7 +77,10 @@ def test_transition_clear_hala_gonderiliyor(monkeypatch):
 
     monkeypatch.setattr(m._CACHE, "is_alarmable", lambda sk: True)
     monkeypatch.setattr(m._CACHE, "needs_samples", lambda sk: False)
-    monkeypatch.setattr(m._CACHE, "rules_for", lambda sk, dc: [Kural()])
+    # `rules_for` artik uc parametreli: (signal_key, device_code, device_model).
+    # Model kapsami eklendi — sinyaller modeller arasinda ortak degil.
+    monkeypatch.setattr(m._CACHE, "rules_for", lambda sk, dc, dm=None: [Kural()])
+    monkeypatch.setattr(m._CACHE, "device_model", lambda dc: None)
     monkeypatch.setattr(m, "evaluate_rule", lambda rule, value, prev_active: value > 100.0)
 
     payload = {"signal_key": "sat01.x", "device_code": "DEV1", "value": 150.0, "quality": "good"}

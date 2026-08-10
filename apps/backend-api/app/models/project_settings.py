@@ -72,6 +72,13 @@ class ProjectSettings(Base):
     #
     # NULL = varsayilan (master=a, sat01=b, sat02=c). Bkz.
     # fault_inference.DEFAULT_SOURCE_PHASE.
+    #
+    # UNITE KUMESI MODELE GORE DEGISIR: Pole Master Kit'in bir setinde olcum
+    # yapan uc unitenin ucu de uydudur (sat01/sat02/sat03) — orada `master`
+    # bir faza kelepcelenmez, ortak RTU'dur. Bu yuzden `phase_sat03` var ve
+    # her model yalnizca KENDI unitelerinin alanlarini okur
+    # (bkz. fault_snapshot._phase_fields).
     phase_master: Mapped[str | None] = mapped_column(String(4), nullable=True)
     phase_sat01: Mapped[str | None] = mapped_column(String(4), nullable=True)
     phase_sat02: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    phase_sat03: Mapped[str | None] = mapped_column(String(4), nullable=True)

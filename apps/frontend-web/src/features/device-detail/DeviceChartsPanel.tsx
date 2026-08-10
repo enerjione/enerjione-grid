@@ -12,6 +12,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+
+import { SOURCES, sourceLabel } from "../signals/signalCatalogConstants";
 import ReactECharts from "echarts-for-react/lib/core";
 import * as echarts from "echarts/core";
 import { LineChart, BarChart, HeatmapChart } from "echarts/charts";
@@ -65,12 +67,10 @@ const PALETTE = [
   "#38bdf8", "#f59e0b", "#34d399", "#f87171", "#a78bfa",
   "#f472b6", "#2dd4bf", "#fb923c", "#60a5fa", "#a3e635",
 ];
-const SOURCE_META: Record<SignalSource, { label: string }> = {
-  master: { label: "Master" },
-  sat01: { label: "Satellite 01" },
-  sat02: { label: "Satellite 02" },
-};
-const ALL_SOURCES: SignalSource[] = ["master", "sat01", "sat02"];
+const SOURCE_META: Record<SignalSource, { label: string }> = Object.fromEntries(
+  SOURCES.map((s) => [s, { label: sourceLabel(s) }])
+) as Record<SignalSource, { label: string }>;
+const ALL_SOURCES: SignalSource[] = SOURCES;
 
 // Grafige uygun OLMAYAN sinyaller (sabit/konum/kimlik) — listede gizli.
 const NON_TREND_RE =

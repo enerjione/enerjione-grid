@@ -22,6 +22,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.data.device_models import (
     BUILTIN_MODELS,
+    NON_SELECTABLE_MODELS,
     is_valid_model,
     list_models,
     model_label,
@@ -113,7 +114,10 @@ def test_veritabani_okunamazsa_liste_BOS_DONMEZ() -> None:
             raise RuntimeError("baglanti yok")
 
     kodlar = [m["code"] for m in list_models(_PatlayanDB())]
-    assert kodlar == list(BUILTIN_MODELS)
+    # Sanal set modeli (Pole Master Kit seti) dropdown'da YER ALMAZ: elle
+    # olusturulmaz, fiziksel kit eklenirken set sayisi kadar uretilir.
+    assert kodlar == [k for k in BUILTIN_MODELS if k not in NON_SELECTABLE_MODELS]
+    assert kodlar, "liste bos donmemeli"
 
 
 def test_bos_ve_None_model_degerleri_listeye_girmez(db_session) -> None:

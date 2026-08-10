@@ -316,11 +316,27 @@ def is_api_locked() -> bool:
     return state in ENFORCED_STATES
 
 
+def count_licensed_devices(db: Session) -> int:
+    """Lisans kotasindan DUSEN cihaz sayisi.
+
+    Yalnizca FIZIKSEL kayitlar sayilir (`parent_device_id IS NULL`). Bir
+    Horstmann Pole Master Kit tek bir donanimdir; kullanicinin gordugu uc
+    "set" o donanimin ic bolumlemesidir ve ayri satir tutulmalarinin nedeni
+    lisanslama degil, topolojidir (`line_segments.device_id` tekildir).
+
+    Sayilsalardi, tek kit alan musteri kotasindan UC slot yer ve "cihaz
+    ekle" butonu sessizce kilitlenirdi — satin aldigi seyle iliskisi olmayan
+    bir sinir.
+    """
+    return int(
+        db.scalar(select(func.count(Device.id)).where(Device.parent_device_id.is_(None)))
+        or 0
+    )
+
+
 def get_license_status(db: Session, *, device_count: int | None = None) -> LicenseStatus:
     count = (
-        int(device_count)
-        if device_count is not None
-        else int(db.scalar(select(func.count(Device.id))) or 0)
+        int(device_count) if device_count is not None else count_licensed_devices(db)
     )
     # Kurulum kimligi/lisans dizini okunamazsa (permission/bozuk dosya) 500
     # yerine fail-closed kontrollu status don: izleme acik kalir, cihaz ekleme
@@ -400,7 +416,7 @@ def lock_and_assert_device_capacity(db: Session) -> LicenseStatus:
     dialect = db.get_bind().dialect.name
     if dialect == "postgresql":
         db.execute(text("SELECT pg_advisory_xact_lock(:lock_id)"), {"lock_id": _ADVISORY_LOCK_ID})
-    count = int(db.scalar(select(func.count(Device.id))) or 0)
+    count = count_licensed_devices(db)
     status = get_license_status(db, device_count=count)
     if status.can_add_device:
         return status

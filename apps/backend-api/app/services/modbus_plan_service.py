@@ -181,6 +181,11 @@ class SignalSlot:
     # Arayuz bunu isaretler: SCADA'da eski katsayiyla kurulmus bir esleme
     # varsa guncellenmesi gerektigini operator gormeli.
     rescaled: bool = False
+    # Bu sinyal hangi CIHAZ MODELINE ait. Yerlesim model bazinda uretilir ve
+    # nokta tablosu yalnizca cihazin KENDI modelinin slotlarindan kurulur;
+    # aksi halde her cihaza her modelin sinyali yapisir (bkz.
+    # build_signal_layout).
+    model: str = ""
 
 
 @dataclass
@@ -226,18 +231,38 @@ def build_signal_layout(
     """
     fmt = value_format if value_format in VALUE_FORMATS else "int16"
     rows = [_as_signal_dict(s) for s in signals]
-    rows = [r for r in rows if r["is_active"]]
-    rows.sort(key=lambda r: (r["source"] or "", r["display_order"], r["key"]))
+    rows = [r for r in rows if r["is_active"] and r["outbound_eligible"]]
+    rows.sort(key=lambda r: (r["model"] or "", r["source"] or "", r["display_order"], r["key"]))
 
     layout = SignalLayout(value_format=fmt)
     analog_words = _analog_word_count(fmt)
 
+    # IMLECLER MODEL BAZINDA SIFIRLANIR — NEDEN
+    # -----------------------------------------
+    # Yerlesim eskiden TUM katalog uzerinde tek bir imlecle uretiliyordu.
+    # Katalog tek modelli oldugu surece bu tesadufen dogruydu. Ikinci bir
+    # model eklendiginde iki ayri hasar birden olusurdu:
+    #   1. Her cihaza HER modelin sinyali yapisirdi (nokta tablosu cihaz x
+    #      TUM sinyaller kartezyeni) — SCADA'ya hicbir zaman veri gelmeyecek
+    #      yuzlerce adres bildirilir.
+    #   2. Yeni modelin sinyalleri siralamaya karisip MEVCUT modelin
+    #      offset'lerini KAYDIRIRDI. SCADA'daki tum tag'ler sessizce yanlis
+    #      noktayi gosterir; hicbir hata olusmaz.
+    # Her model kendi 0'indan basladigi icin mevcut modelin offset'leri
+    # DEGISMEZ. Bloklarin cakismamasi icin gereken tek sey, cihaz basina
+    # ayrilan blogun EN BUYUK modele gore boyutlanmasidir (bkz. summary).
     reg_cursor = 0
     di_cursor = 0
     coil_cursor = 0
+    aktif_model: str | None = None
 
     for row in rows:
         data_type = (row["data_type"] or "").lower()
+        if row["model"] != aktif_model:
+            aktif_model = row["model"]
+            reg_cursor = 0
+            di_cursor = 0
+            coil_cursor = 0
 
         if data_type in _REGISTER_TYPES:
             # Counter'lar 32-bit sayaclardir; int16 formatinda bile 2 word alir
@@ -265,7 +290,7 @@ def build_signal_layout(
             layout.slots.append(
                 SignalSlot(
                     key=row["key"], label=row["label"], source=row["source"],
-                    data_type=data_type, unit=row["unit"],
+                    data_type=data_type, unit=row["unit"], model=row["model"],
                     function=function, offset=offset, word_count=words,
                     scale=reg_scale, offset_value=row["offset"], manual=manual,
                     rescaled=rescaled,
@@ -301,7 +326,7 @@ def build_signal_layout(
             layout.slots.append(
                 SignalSlot(
                     key=row["key"], label=row["label"], source=row["source"],
-                    data_type=data_type, unit=row["unit"],
+                    data_type=data_type, unit=row["unit"], model=row["model"],
                     function=function, offset=offset, word_count=0,
                     scale=row["scale"], offset_value=row["offset"], manual=manual,
                 )
@@ -316,15 +341,20 @@ def build_signal_layout(
 
     # Ozet: manuel override'lar imlecin otesine tasabilir; gercek ihtiyac
     # yerlesen en yuksek offset'e gore hesaplanir.
+    #
+    # Offset'ler model bazinda 0'dan basladigi icin bu degerler dogal olarak
+    # EN BUYUK modelin ihtiyacini verir — cihaz blogu da ona gore boyutlanmali
+    # (tum cihazlar ayni stride'i paylasir, aksi halde block_start hesabi
+    # slot_index ile dogrusal olamazdi).
     layout.summary.register_words = max(
-        [reg_cursor]
+        [0]
         + [s.offset + s.word_count for s in layout.slots if s.function in (FC_HOLDING_REGISTER, FC_INPUT_REGISTER)]
     )
     layout.summary.discrete_bits = max(
-        [di_cursor] + [s.offset + 1 for s in layout.slots if s.function == FC_DISCRETE_INPUT]
+        [0] + [s.offset + 1 for s in layout.slots if s.function == FC_DISCRETE_INPUT]
     )
     layout.summary.coil_bits = max(
-        [coil_cursor] + [s.offset + 1 for s in layout.slots if s.function == FC_COIL]
+        [0] + [s.offset + 1 for s in layout.slots if s.function == FC_COIL]
     )
     return layout
 
@@ -345,6 +375,11 @@ def _as_signal_dict(s) -> dict:
         "scale": float(get("scale") if get("scale") is not None else 1.0),
         "offset": float(get("offset") if get("offset") is not None else 0.0),
         "is_active": bool(get("is_active", True)),
+        # Katalogta duran ama bu cihaz kaydinda HIC saklanmayan nokta
+        # (Pole Master Kit'in uydu satirlari) adres uzayindan cikarilir;
+        # aksi halde blok gereksiz buyur ve MEVCUT cihazlarin adresleri kayar.
+        "outbound_eligible": bool(get("outbound_eligible", True)),
+        "model": str(get("model") or ""),
         "modbus_function": get("modbus_function"),
         "modbus_address": get("modbus_address"),
     }
@@ -376,6 +411,9 @@ class DeviceSlotPlan:
     slot_index: int
     unit_id: int
     block_start: int
+    # Cihazin modeli — nokta tablosu yalnizca bu modelin yerlesiminden
+    # kurulur (bkz. build_plan_points).
+    device_model: str = ""
 
 
 @dataclass
@@ -512,6 +550,7 @@ def ensure_slots(
                 slot_index=slot.slot_index,
                 unit_id=slot.unit_id,
                 block_start=slot.block_start,
+                device_model=str(getattr(device, "model", "") or ""),
             )
         )
 
@@ -578,10 +617,26 @@ def build_plan_points(
     duzenini kullanir (0'dan baslar)" derken register'lar 0'dan, bitler
     kaymis adresten yayinlaniyordu — SCADA'da bit eslemesi tutmuyordu.
     """
-    bit_stride = BIT_STRIDE if mode != "unit" else 0
+    # BIT BLOGU DINAMIK — NEDEN
+    # -------------------------
+    # `BIT_STRIDE` sabit 100'du. Pole Master Kit'in fiziksel kaydinda 209
+    # binary giris var; sabit blokla cihaz N'in bitleri cihaz N+1'in blogunun
+    # UZERINE yazardi ve kapasite kontrolu (yalnizca cihaz SAYISINA bakiyor)
+    # bunu hic gormezdi. Gercek ihtiyac ozetten turetilir; sabit yalnizca
+    # ALT SINIRDIR (mevcut kurulumlarin adresleri kucuk kataloglarda aynen
+    # kalsin diye).
+    bit_ihtiyac = max(layout.summary.discrete_bits, layout.summary.coil_bits)
+    bit_stride = 0 if mode == "unit" else max(BIT_STRIDE, bit_ihtiyac)
     points: list[PlanPoint] = []
+    # Cihaz modeli -> o modelin slotlari. Bir cihaza BASKA bir modelin
+    # sinyalini yazmak, SCADA'ya hicbir zaman veri gelmeyecek adresler
+    # bildirmek demektir.
+    slots_by_model: dict[str, list[SignalSlot]] = {}
+    for sig in layout.slots:
+        slots_by_model.setdefault(sig.model, []).append(sig)
+
     for slot in slots:
-        for sig in layout.slots:
+        for sig in slots_by_model.get(slot.device_model, ()):
             if sig.function in (FC_HOLDING_REGISTER, FC_INPUT_REGISTER):
                 address = slot.block_start + sig.offset
             else:

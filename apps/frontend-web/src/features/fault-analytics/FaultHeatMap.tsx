@@ -211,10 +211,14 @@ export function FaultHeatMap({ points }: Props) {
         })}
       </MapContainer>
 
-      {/* Lejant olmadan renk bir sey ifade etmez: "kirmizi cok mu, biraz mi?" */}
-      <div className="fa-heat-legend" aria-hidden="true">
+      {/* Lejant olmadan renk bir sey ifade etmez: "kirmizi cok mu, biraz mi?"
+          ARIA: kapsayiciya `aria-hidden` konulunca iki metin de erisilebilirlik
+          agacindan dusuyordu ve canvas lekesinin TEK metin karsiligi kayboluyordu
+          (canvas'in kendisi zaten okunamaz). Yalnizca DEKORATIF renk rampasi
+          gizlenir; olcegin uclarini anlatan metinler okunur kalir. */}
+      <div className="fa-heat-legend">
         <span>{t("faultAnalytics.heatLow")}</span>
-        <i className="fa-heat-ramp" />
+        <i className="fa-heat-ramp" aria-hidden="true" />
         <span>{t("faultAnalytics.heatHigh", { count: enCok })}</span>
       </div>
     </div>

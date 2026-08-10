@@ -12,7 +12,14 @@ import type {
   LocalGateway,
   PhaseCode
 } from "../../shared/types";
-import { DEFAULT_DNP3_EXTENDED, mergeDnp3Extended } from "../../shared/types";
+import {
+  DEFAULT_DNP3_EXTENDED,
+  MAX_SATELLITE_SETS,
+  PMK_SET_MODEL,
+  POLE_MASTER_KIT_MODEL,
+  isKitModel,
+  mergeDnp3Extended
+} from "../../shared/types";
 import {
   deviceStatusUnderGateway,
   gatewayLiveness,
@@ -74,12 +81,28 @@ function deviceCommDotClass(
 }
 
 const DEVICE_MODEL_IMAGES: Record<string, string> = {
-  horstmann_sn_2_0: "/sn20.png"
+  horstmann_sn_2_0: "/sn20.png",
+  // Fiziksel kit: gunes paneli + RTU govdesi. Sanal SET kaydi da AYNI
+  // gorseli kullanir — set fiziksel olarak kitin bir parcasidir ve ayri bir
+  // urun fotografi yoktur.
+  [POLE_MASTER_KIT_MODEL]: "/pole_master_kit.png",
+  [PMK_SET_MODEL]: "/pole_master_kit.png"
 };
 const INITIATING_PORT_BASE_DEFAULT = 20100;
 
 function deviceImageSrc(modelCode: string): string {
   return DEVICE_MODEL_IMAGES[modelCode] ?? "/sn20.png";
+}
+
+/** Cihaz gorselinin alternatif metni — MODELE gore.
+ *
+ * Sabit "Smart Navigator 2.0" metni, Pole Master Kit secildiginde ekran
+ * okuyucuya YANLIS cihazi soyluyordu; gorsel degisiyor ama metin degismiyordu.
+ */
+function deviceImageAltKey(modelCode: string): string {
+  return modelCode === POLE_MASTER_KIT_MODEL || modelCode === PMK_SET_MODEL
+    ? "engineering.devicesPanel.deviceImageAltPmk"
+    : "engineering.devicesPanel.deviceImageAlt";
 }
 
 /** Gateway calismiyorken cihaz sinyali fiziksel olarak gelse bile platform
@@ -159,6 +182,9 @@ type Props = {
     signal_profile: string;
     latitude: number;
     longitude: number;
+    /** Pole Master Kit'e bagli set sayisi (1..3). Her set icin ayri bir cihaz
+     *  kaydi acilir; yalnizca kit modelinde gonderilir. */
+    satellite_set_count?: number | null;
   }) => Promise<void>;
   onUpdate: (
     deviceCode: string,
@@ -182,6 +208,11 @@ type Props = {
       phase_master?: PhaseCode | null;
       phase_sat01?: PhaseCode | null;
       phase_sat02?: PhaseCode | null;
+      /** Kit setinin ucuncu unitesi. SN2'de karsiligi yok. */
+      phase_sat03?: PhaseCode | null;
+      /** Set sayisini DUSURMEK veri siler (telemetri, alarm, ariza gecmisi,
+       *  hat yerlesimi). Arayuz once acik onay alir. */
+      satellite_set_count?: number | null;
     }
   ) => Promise<void>;
   onDelete: (deviceCode: string) => Promise<void>;
@@ -365,6 +396,10 @@ export function DeviceManagementPanel({
   const [serial, setSerial] = useState("");
   const [description, setDescription] = useState("");
   const [model, setModel] = useState("horstmann_sn_2_0");
+  // Duzenleme formunda kite bagli set sayisi. Artirmak eksik setleri uretir;
+  // AZALTMAK setin telemetrisini, alarmlarini, ariza gecmisini ve hat
+  // yerlesimini SILER — kaydetmeden once acik onay alinir.
+  const [setCount, setSetCount] = useState("1");
   // Unite -> faz eslemesi. Bos = "Proje Ayarlari'ndaki konvansiyonu kullan".
   // VARSAYILAN L1/L2/L3: master ilk faza, uydular sirayla digerlerine
   // kelepcelenir — sahadaki standart kurulum sirasi budur. Eskiden ucu de
@@ -374,6 +409,9 @@ export function DeviceManagementPanel({
   const [phaseMaster, setPhaseMaster] = useState<"" | PhaseCode>("a");
   const [phaseSat01, setPhaseSat01] = useState<"" | PhaseCode>("b");
   const [phaseSat02, setPhaseSat02] = useState<"" | PhaseCode>("c");
+  // Pole Master Kit setinde olcum yapan UCUNCU unite. Set kayitlarinda
+  // sat01/sat02/sat03 = a/b/c; SN2'de bu alan kullanilmaz.
+  const [phaseSat03, setPhaseSat03] = useState<"" | PhaseCode>("c");
   const [installationDate, setInstallationDate] = useState("");
   const [ipAddress, setIpAddress] = useState("");
   const [dnp3OutstationPort, setDnp3OutstationPort] = useState("20001");
@@ -396,6 +434,11 @@ export function DeviceManagementPanel({
   const [createName, setCreateName] = useState("");
   const [createSerial, setCreateSerial] = useState("");
   const [createModel, setCreateModel] = useState("horstmann_sn_2_0");
+  // Kite BAGLI SET SAYISI. Yalnizca sanal set ureten modellerde (Pole Master
+  // Kit) sorulur ve zorunludur: kac set takildigi sahada belli olur, tahmin
+  // edilemez. Varsayilan 3 degil 1 — uydurma bir varsayilan, kullanilmayan
+  // iki set kaydi acar ve o setler hatta "veri gelmiyor" diye gorunurdu.
+  const [createSetCount, setCreateSetCount] = useState("1");
   const [createInstallationDate, setCreateInstallationDate] = useState("");
   const [createIpAddress, setCreateIpAddress] = useState("");
   const [createDnp3OutstationPort, setCreateDnp3OutstationPort] = useState("20001");
@@ -498,9 +541,13 @@ export function DeviceManagementPanel({
     setSerial(device.serialNumber ?? "");
     setDescription(device.description ?? "");
     setModel(device.model ?? "horstmann_sn_2_0");
+    setSetCount(String(device.satelliteSetCount ?? 1));
+    // Faz eslemesi MODELE gore: SN2'de olcum yapan ucuncu unite `master`,
+    // Pole Master Kit setinde ise ucu de uydudur (sat01/02/03).
     setPhaseMaster(device.phaseMaster ?? "a");
     setPhaseSat01(device.phaseSat01 ?? "b");
     setPhaseSat02(device.phaseSat02 ?? "c");
+    setPhaseSat03(device.phaseSat03 ?? "c");
     setInstallationDate(device.installationDate ?? "");
     setIpAddress(device.ipAddress ?? "");
     setDnp3OutstationPort(String(device.dnp3OutstationPort ?? 20001));
@@ -534,9 +581,34 @@ export function DeviceManagementPanel({
     applySelectedDeviceToForm(device);
   };
 
+  // Secili cihaz bir KIT mi (sanal set ureten fiziksel kayit) yoksa bir SET
+  // kaydi mi? Form alanlari buna gore degisir: kitte "bagli set sayisi" ve
+  // baglanti ayarlari, sette faz eslemesi ve hat yerlesimi anlamlidir.
+  const isKit = isKitModel(selectedDevice?.model);
+  const isPmkSet = (selectedDevice?.parentDeviceId ?? null) !== null;
+
   const handleSaveDevice = async () => {
     if (!selectedDevice) return;
     setError("");
+    // SET AZALTMA VERI SILER — sessizce yapilamaz.
+    //
+    // Kaldirilan setin telemetrisi, alarmlari, ariza gecmisi ve hat
+    // yerlesimi de gider (FK'lar CASCADE). Geri alinamaz; kullanici hangi
+    // setlerin gidecegini ADIYLA gormeli.
+    if (isKit) {
+      const mevcut = selectedDevice.satelliteSetCount ?? 0;
+      const yeni = Number(setCount);
+      if (yeni < mevcut) {
+        const gidecek = Array.from({ length: mevcut - yeni }, (_, i) => `${selectedDevice.code}-S${yeni + i + 1}`);
+        const onay = await asyncConfirm(
+          t("engineering.devicesPanel.form.setCountReduceConfirm", {
+            codes: gidecek.join(", "),
+            count: gidecek.length
+          })
+        );
+        if (!onay) return;
+      }
+    }
     const targetGateway = deviceGatewayCode || null;
     const movedToAnotherGateway =
       targetGateway !== null && targetGateway !== (selectedDevice.gatewayCode ?? null);
@@ -573,6 +645,10 @@ export function DeviceManagementPanel({
         phase_master: phaseMaster || null,
         phase_sat01: phaseSat01 || null,
         phase_sat02: phaseSat02 || null,
+        // Yalnizca set kayitlarinda anlamli; SN2'de gonderilse de backend
+        // yok sayar (o modelin unite listesinde `sat03` yok).
+        phase_sat03: isPmkSet ? phaseSat03 || null : null,
+        ...(isKit ? { satellite_set_count: Number(setCount) } : {}),
         latitude: Number(latitude),
         longitude: Number(longitude)
       });
@@ -627,13 +703,16 @@ export function DeviceManagementPanel({
         retry_count: Number(createRetryCount),
         signal_profile: "horstmann_sn2_fixed",
         latitude: Number(createLatitude),
-        longitude: Number(createLongitude)
+        longitude: Number(createLongitude),
+        // Kit modelinde ZORUNLU: her set icin ayri bir cihaz kaydi acilir.
+        ...(isKitModel(createModel) ? { satellite_set_count: Number(createSetCount) } : {})
       });
       setShowCreateModal(false);
       setCreateCode("");
       setCreateName("");
       setCreateSerial("");
       setCreateModel("horstmann_sn_2_0");
+      setCreateSetCount("1");
       setCreateInstallationDate("");
       setCreateIpAddress("");
       setCreateDnp3OutstationPort("20001");
@@ -1293,7 +1372,7 @@ export function DeviceManagementPanel({
                         </label>
                       </div>
                       <div className="device-visual-card">
-                        <img src={deviceImageSrc(model)} alt={t("engineering.devicesPanel.deviceImageAlt")} />
+                        <img src={deviceImageSrc(model)} alt={t(deviceImageAltKey(model))} />
                       </div>
                     </div>
                     {/* Unite -> faz eslemesi. SN2'nin uc unitesi hattin uc
@@ -1305,17 +1384,58 @@ export function DeviceManagementPanel({
                         kullan". Burasi yalnizca ISTISNA cihazlar icin —
                         600 cihazin hepsinde uc alan doldurma zorunlulugu
                         pratikte "hicbiri doldurulmaz" demek olurdu. */}
-                    <div className="device-phase-field">
+                    {isKit ? (
+                      /* KIT: fiziksel kayit hicbir faza kelepcelenmez —
+                         olcumu setleri yapar. Burada sorulan tek sey kac set
+                         takildigidir. AZALTMA VERI SILER, bu yuzden acik
+                         uyari var. */
+                      <label className="device-phase-field">
+                        <span className="device-phase-title">
+                          {t("engineering.devicesPanel.form.setCount")}
+                        </span>
+                        <select
+                          value={setCount}
+                          onChange={(event) => setSetCount(event.target.value)}
+                        >
+                          {Array.from({ length: MAX_SATELLITE_SETS }, (_, i) => i + 1).map(
+                            (n) => (
+                              <option key={n} value={String(n)}>
+                                {t("engineering.devicesPanel.form.setCountOption", {
+                                  count: n,
+                                  from: (n - 1) * 3 + 1,
+                                  to: n * 3
+                                })}
+                              </option>
+                            )
+                          )}
+                        </select>
+                        <small className="device-phase-hint">
+                          {t("engineering.devicesPanel.form.setCountHint")}
+                        </small>
+                      </label>
+                    ) : null}
+                    <div
+                      className="device-phase-field"
+                      hidden={isKit}
+                    >
                       <span className="device-phase-title">
                         {t("engineering.devicesPanel.form.phaseTitle")}
                       </span>
                       <div className="device-phase-grid">
-                        {(
-                          [
-                            ["master", phaseMaster, setPhaseMaster],
-                            ["sat01", phaseSat01, setPhaseSat01],
-                            ["sat02", phaseSat02, setPhaseSat02]
-                          ] as const
+                        {(isPmkSet
+                          ? ([
+                              // Pole Master Kit SETINDE olcum yapan uc unite
+                              // de uydudur; kitin `master`i ortak RTU'dur ve
+                              // bir faza kelepcelenmez.
+                              ["sat01", phaseSat01, setPhaseSat01],
+                              ["sat02", phaseSat02, setPhaseSat02],
+                              ["sat03", phaseSat03, setPhaseSat03]
+                            ] as const)
+                          : ([
+                              ["master", phaseMaster, setPhaseMaster],
+                              ["sat01", phaseSat01, setPhaseSat01],
+                              ["sat02", phaseSat02, setPhaseSat02]
+                            ] as const)
                         ).map(([unite, deger, setter]) => (
                           <label key={unite}>
                             {t(`engineering.devicesPanel.form.phaseUnit.${unite}`)}
@@ -1672,6 +1792,37 @@ export function DeviceManagementPanel({
                       )}
                     </select>
                   </label>
+                  {isKitModel(createModel) ? (
+                    /* BAGLI SET SAYISI — yalnizca sanal set ureten
+                       modellerde. Horstmann Pole Master Kit tek DNP3
+                       outstation'dir ama 9 uydusu ucerli setler halinde
+                       sahada BAGIMSIZ noktalara kelepcelenir; her set ayri
+                       bir cihaz olarak eklenir, hatta ayri yerlestirilir ve
+                       arizasi kendine duser. Kac set takildigi ancak sahada
+                       bilinir — varsayilan uydurmak, veri gelmeyen bos set
+                       kayitlari acmak olurdu. */
+                    <label>
+                      {t("engineering.devicesPanel.form.setCount")}
+                      <select
+                        value={createSetCount}
+                        onChange={(event) => setCreateSetCount(event.target.value)}
+                        required
+                      >
+                        {Array.from({ length: MAX_SATELLITE_SETS }, (_, i) => i + 1).map((n) => (
+                          <option key={n} value={String(n)}>
+                            {t("engineering.devicesPanel.form.setCountOption", {
+                              count: n,
+                              from: (n - 1) * 3 + 1,
+                              to: n * 3
+                            })}
+                          </option>
+                        ))}
+                      </select>
+                      <small className="device-phase-hint">
+                        {t("engineering.devicesPanel.form.setCountCreateHint")}
+                      </small>
+                    </label>
+                  ) : null}
                   <label>
                     {t("engineering.devicesPanel.form.installationDate")}
                     <input
@@ -1682,7 +1833,7 @@ export function DeviceManagementPanel({
                   </label>
                 </div>
                 <div className="device-visual-card">
-                  <img src={deviceImageSrc(createModel)} alt={t("engineering.devicesPanel.deviceImageAlt")} />
+                  <img src={deviceImageSrc(createModel)} alt={t(deviceImageAltKey(createModel))} />
                 </div>
               </div>
             </div>

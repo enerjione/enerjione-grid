@@ -13,6 +13,7 @@ import { MAP_LAYERS } from "../../shared/mapTiles";
 import L from "leaflet";
 
 import { formatRelative } from "../../shared/format";
+import { sourceLabel, sourceTone } from "../signals/signalCatalogConstants";
 import type { DeviceRow, SignalSource } from "../../shared/types";
 
 // Cihaz pin ikonu (Leaflet divIcon).
@@ -50,11 +51,22 @@ type Props = {
   sourceCounts: Record<SignalSource, number>;
 };
 
-const CHANNELS: { key: SignalSource; label: string; tone: string }[] = [
-  { key: "master", label: "Master", tone: "master" },
-  { key: "sat01", label: "Satellite 01", tone: "green" },
-  { key: "sat02", label: "Satellite 02", tone: "blue" },
-];
+/** Cihazin OLCUM YAPAN unite kanallari — MODELE gore.
+ *
+ * Horstmann SN 2.0'da ucuncu unite ANA unitedir (`master` olcum yapar).
+ * Pole Master Kit'in bir SETINDE ise ucu de uydudur: kitin `master`i ortak
+ * RTU'dur, bir faza kelepcelenmez ve setin telemetrisinde `master.*` HIC
+ * YOKTUR. Sabit liste kullansaydik set acildiginda hep bos bir "Master"
+ * kanali gorunur, gercek ucuncu unite (`sat03`) ise hic gorunmezdi.
+ * Kit seviyesindeki degerler ayri bir "Pole Master" sekmesinde.
+ */
+function channelsFor(device: DeviceRow): { key: SignalSource; label: string; tone: string }[] {
+  const isSet = (device.parentDeviceId ?? null) !== null;
+  const keys: SignalSource[] = isSet
+    ? ["sat01", "sat02", "sat03"]
+    : ["master", "sat01", "sat02"];
+  return keys.map((key) => ({ key, label: sourceLabel(key), tone: sourceTone(key) }));
+}
 
 // RSSI -> sebeke sinyali (dBm). -70 ust iyi, -85 ust orta, alti zayif.
 // bars: 4 kademeli sinyal cubugu (0..4).
@@ -198,7 +210,7 @@ export function DeviceSidebar({
       <section className="device-sidebar-section">
         <span className="device-sidebar-kicker">{t("deviceDetail.sidebar.channel")}</span>
         <ul className="device-sidebar-channels">
-          {CHANNELS.map((ch) => {
+          {channelsFor(device).map((ch) => {
             const n = sourceCounts[ch.key] ?? 0;
             const active = activeSource === ch.key;
             const sn = channelSerials?.[ch.key];

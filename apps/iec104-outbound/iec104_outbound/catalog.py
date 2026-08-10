@@ -99,12 +99,18 @@ def _build_signature(
     default_ca = int(target.get("iec104_common_address") or 1)
     # Whitelist degisirse de redeploy tetiklensin diye signature'a dahil et.
     allowed_peers_str = (target.get("iec104_allowed_peers") or "").strip()
+    # MODEL IMZAYA DAHIL: nokta uretimi artik cihaz modeli ile sinyal
+    # modelini eslestiriyor (bkz. registry.build_point_registry). Model
+    # imzada olmasaydi, bir cihazin modeli degistirildiginde imza AYNI kalir,
+    # worker yeniden deploy ETMEZ ve ESKI nokta haritasiyla calismaya devam
+    # ederdi — degisiklik hicbir yerde gorunmezdi.
     device_sigs = tuple(sorted(
         (
             str(d.get("code") or ""),
             int(d["iec104_common_address"])
             if d.get("iec104_common_address") is not None else -1,
             bool(d.get("is_active", True)),
+            str(d.get("model") or ""),
         )
         for d in devices
     ))
@@ -114,6 +120,7 @@ def _build_signature(
             int(s.get("iec104_type_id") or -1),
             _resolve_signal_ioa_for_sig(s),
             bool(s.get("is_active", True)),
+            str(s.get("model") or ""),
         )
         for s in signals
     ))

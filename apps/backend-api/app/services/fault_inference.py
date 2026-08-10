@@ -62,6 +62,24 @@ S_DIDT_DIR_RED = "delta_i_delta_t_fault_direction_red_b"
 #: Unite -> faz varsayilani. Kurulum farkliysa `source_phase` ile gecilir.
 DEFAULT_SOURCE_PHASE: dict[str, str] = {"master": "a", "sat01": "b", "sat02": "c"}
 
+#: MODELE OZEL unite -> faz varsayilanlari.
+#:
+#: Horstmann SN2'de olcum yapan uc unitenin biri ANA unitedir (`master`);
+#: Pole Master Kit'in bir setinde ise ucu de uydudur — kitin master'i ortak
+#: RTU'dur, bir faza kelepcelenmez. Bu ayrim SESSIZ bir veri kaybi
+#: uretebilirdi: `sat03` haritada olmasaydi `phase_from_sources` o unitenin
+#: gordugu arizadan faz URETMEZ, `FaultEvent.phase` NULL kalir ve tek-faz /
+#: uc-faz ayrimi (kural #5) ile faz dagilimi raporu bu arizalari hic saymazdi.
+#: Hicbir hata da olusmazdi.
+SOURCE_PHASE_BY_MODEL: dict[str, dict[str, str]] = {
+    "horstmann_pmk_set": {"sat01": "a", "sat02": "b", "sat03": "c"},
+}
+
+
+def default_source_phase(model: str | None = None) -> dict[str, str]:
+    """Modelin unite -> faz varsayilani (kopya doner, cagiran degistirebilir)."""
+    return dict(SOURCE_PHASE_BY_MODEL.get(model or "", DEFAULT_SOURCE_PHASE))
+
 #: "Bu unite arizayi GORDU" anlamina gelen sinyaller. Faz cikarimi yalnizca
 #: bunlara bakar; `battery_status` ya da `config_update` gibi isletme
 #: bayraklari bir fazi arizali gostermemeli.

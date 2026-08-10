@@ -2366,15 +2366,22 @@
         "phaseUnit": {
           "master": "Master",
           "sat01": "Satellite 01",
-          "sat02": "Satellite 02"
-        }
+          "sat02": "Satellite 02",
+          "sat03": "Satellite 03"
+        },
+        "setCount": "Bağlı set sayısı",
+        "setCountOption": "{{count}} set (Satellite {{from}}-{{to}})",
+        "setCountHint": "Set sayısını AZALTMAK, kaldırılan setin telemetrisini, alarmlarını, arıza geçmişini ve hat yerleşimini de siler. Geri alınamaz.",
+        "setCountCreateHint": "Kit tek bir cihaz olarak bağlanır ama her set ayrı bir cihaz olarak eklenir: hatta ayrı yerleştirilir, arızası kendine düşer ve kendi detay sayfası olur.",
+        "setCountReduceConfirm": "{{count}} set silinecek: {{codes}}\n\nBu setlerin telemetrisi, alarmları, arıza geçmişi ve hat yerleşimi de silinir. Bu işlem geri alınamaz. Devam edilsin mi?"
       },
       "footer": {
         "ok": "OK",
         "gwDisconnected": "Gateway bağlı değil",
         "stale": "Kesik / bekleniyor",
         "lastData": "Son veri:"
-      }
+      },
+      "deviceImageAltPmk": "Horstmann Pole Master Kit cihaz görseli"
     },
     "devices": {
       "title": "Cihaz Yönetimi",
@@ -2651,7 +2658,10 @@
         "level": "Seviye",
         "active": "Aktif",
         "actions": "İşlem"
-      }
+      },
+      "deviceModelScope": "Cihaz modeli",
+      "deviceModelScopeAll": "Tüm modeller",
+      "deviceModelScopeHint": "Bir model seçilirse kural yalnızca o modeldeki cihazlarda değerlendirilir ve sinyal listesi de o modele daralır. Sinyaller modeller arasında ortak değildir."
     },
     "outbound": {
       "title": "Outbound Hedefleri",
@@ -3949,7 +3959,8 @@
       "overview": "Genel Bakış",
       "trends": "Trendler",
       "events": "Olaylar",
-      "all": "Tümü"
+      "all": "Tümü",
+      "poleMaster": "Pole Master"
     },
     "charts": {
       "signal": "Sinyal",
@@ -4210,6 +4221,17 @@
         "lastGood": "Son İyi Akım",
         "tripLevel": "Trip Seviyesi"
       }
+    },
+    "poleMaster": {
+      "note": "Aşağıdaki değerler {{code}} kitinin TAMAMINA aittir ve kite bağlı tüm setlerde aynıdır. Setin kendi ölçümleri için diğer sekmeleri kullanın.",
+      "empty": "Kit seviyesinde henüz veri gelmedi.",
+      "groups": {
+        "power": "Besleme",
+        "comm": "Haberleşme",
+        "identity": "Kimlik ve Konum",
+        "status": "Cihaz Durumu",
+        "other": "Diğer"
+      }
     }
   },
   "map": {
@@ -4451,6 +4473,9 @@
     "topRegions": "Bölgelere Göre Dağılım",
     "topRegionsHint": "Hangi ekibin sahası daha çok yük taşıyor",
     "allPhases": "Üç faz",
-    "lowLabelInline": "Kayıtların yalnızca %{{percent}}'i etiketli — bu dağılım tek başına sonuç sayılmamalı"
+    "lowLabelInline": "Kayıtların yalnızca %{{percent}}'i etiketli — bu dağılım tek başına sonuç sayılmamalı",
+    "loading": "Yükleniyor…",
+    "rssiAvg": "Ortalama",
+    "rssiWorst": "Dip"
   }
 }

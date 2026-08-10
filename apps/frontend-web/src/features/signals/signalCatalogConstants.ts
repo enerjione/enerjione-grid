@@ -60,13 +60,57 @@ export const DATA_TYPES: SignalDataType[] = [
   "binary_output"
 ];
 
-export const SOURCES: SignalSource[] = ["master", "sat01", "sat02"];
+/** Sistemdeki TÜM sinyal kaynakları — sıralı ve TEK KAYNAK.
+ *
+ *  Horstmann SN 2.0 üç ünite kullanır (master + sat01 + sat02). Horstmann
+ *  Pole Master Kit'in FİZİKSEL kaydı dokuz uydu taşır (sat01..sat09), kitin
+ *  sanal setleri ise üçer uydu (sat01..sat03).
+ *
+ *  NEDEN TEK LİSTE: bu eşleme daha önce dört ayrı dosyada elle yazılmıştı.
+ *  Bir kaynak eklendiğinde bazıları `Record<SignalSource, …>` olduğu için
+ *  derleme hatası verir, `Record<string, …>` olanlar ise SESSİZCE boş etiket
+ *  döndürürdü — yani derleyici hepsini yakalamazdı. */
+export const SOURCES: SignalSource[] = [
+  "master",
+  "sat01",
+  "sat02",
+  "sat03",
+  "sat04",
+  "sat05",
+  "sat06",
+  "sat07",
+  "sat08",
+  "sat09"
+];
 
-export const SOURCE_LABEL: Record<SignalSource, string> = {
-  master: "Master",
-  sat01: "Satellite 01",
-  sat02: "Satellite 02"
-};
+/** `sat07` → "Satellite 07". Etiket DESENDEN üretilir; elle yazılmış bir
+ *  sözlük dokuz uydunun yedisini yarı çevrilmiş bırakırdı. */
+export function sourceLabel(source: string): string {
+  if (source === "master") return "Master";
+  const m = /^sat(\d{1,2})$/.exec(source);
+  return m ? `Satellite ${m[1].padStart(2, "0")}` : source;
+}
+
+export const SOURCE_LABEL: Record<SignalSource, string> = Object.fromEntries(
+  SOURCES.map((s) => [s, sourceLabel(s)])
+) as Record<SignalSource, string>;
+
+/** Kaynağın arayüzdeki renk tonu. Bir setin üç ünitesi (sat01/02/03) her
+ *  zaman FARKLI ton alır ki grafik/alarm listesinde ayırt edilebilsinler. */
+const SOURCE_TONES = ["green", "blue", "amber"] as const;
+
+export function sourceTone(source: string): string {
+  if (source === "master") return "master";
+  const m = /^sat(\d{1,2})$/.exec(source);
+  if (!m) return "master";
+  return SOURCE_TONES[(Number(m[1]) - 1) % SOURCE_TONES.length];
+}
+
+/** `sat04.fault_current` → `sat04`. Bilinmeyen önekte `master`. */
+export function signalSourceOf(signalKey: string | null | undefined): SignalSource {
+  const prefix = (signalKey ?? "").split(".", 1)[0];
+  return (SOURCES as string[]).includes(prefix) ? (prefix as SignalSource) : "master";
+}
 
 export const DATA_TYPE_LABEL: Record<SignalDataType, string> = {
   analog: "Analog Input",

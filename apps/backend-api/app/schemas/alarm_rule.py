@@ -106,6 +106,9 @@ class AlarmRuleBase(BaseModel):
     hysteresis: float = 0.0
     debounce_sec: int = 0
     device_code_filter: str | None = None
+    # Virgulle ayrili cihaz MODELI kodlari; bos = tum modeller.
+    # Sinyaller modeller arasinda ortak degildir (bkz. models/alarm_rule.py).
+    device_model_filter: str | None = None
     is_active: bool = True
     # Kural-bazli bildirim kanallari (web bildirimi her zaman gider).
     # Default false: kullanici acmadan email/sms/telegram gitmez.
@@ -145,6 +148,7 @@ class AlarmRuleUpdate(BaseModel):
     hysteresis: float | None = None
     debounce_sec: int | None = None
     device_code_filter: str | None = None
+    device_model_filter: str | None = None
     is_active: bool | None = None
     notify_email: bool | None = None
     notify_sms: bool | None = None

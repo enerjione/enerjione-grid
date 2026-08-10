@@ -1,0 +1,366 @@
+"""Cok uniteli kit cihazlari (Horstmann Pole Master Kit) — TEK KAYNAK.
+
+NE COZUYOR
+----------
+Pole Master Kit tek bir DNP3 outstation'dir ama uzerindeki 9 uydu ucerli
+setler halinde sahada BIRBIRINDEN BAGIMSIZ noktalara kelepcelenir. Kullanici
+her seti ayri bir cihaz gibi gormeli: hatta ayri yerlestirmeli, ayri detay
+sayfasi acmali, arizasi dogru sete dusmeli.
+
+Bu yuzden her set icin AYRI bir `devices` satiri acilir:
+
+    PMK-001        model=horstmann_pole_master_kit   parent=NULL   (FIZIKSEL)
+    PMK-001-S1     model=horstmann_pmk_set           parent=PMK-001, set 1
+    PMK-001-S2     model=horstmann_pmk_set           parent=PMK-001, set 2
+    PMK-001-S3     model=horstmann_pmk_set           parent=PMK-001, set 3
+
+NEDEN AYRI SATIR, NEDEN TEK SATIRDA UC SET DEGIL
+------------------------------------------------
+`line_segments.device_id` TEKILDIR: bir Device satiri hattin yalnizca TEK
+noktasina oturabilir. Ustelik ariza motoru, IEC 104 Common Address'i,
+telemetri anahtari (`device_id`, `signal_key`) ve operator kapsam filtresi
+bastan sona `device_id` uzerinden calisir. Her set ayri satir olunca bu
+zincirin TAMAMI hicbir degisiklik olmadan dogru calisir; tek satirda tutmak
+ise once topolojide imkansiz, sonra ariza konumunda yanlis olurdu.
+
+FIZIKSEL SATIR NE ISE YARAR
+---------------------------
+DNP3 baglantisini (IP, port, master adresi), gateway bagini, seri numarasini,
+yapilandirma dosyasini ve KIT SEVIYESINDEKI telemetriyi (modem, GPS, sebeke,
+solar/AC besleme, cihaz sicakligi, komutlar) O tasir. Kullanici listesinde
+GORUNMEZ — arayuz onu setlerin altinda toplayan bir baslik olarak kullanir ve
+kit seviyesindeki degerleri her setin "Pole Master" sekmesinde gosterir.
+
+MASTER VERISI NEDEN COGALTILMIYOR
+---------------------------------
+Kit seviyesindeki olcumler uc setin ORTAK varligidir. Bunlari uc sanal cihaza
+da yazmak "bir giren = bir cikan" kuralini bozardi: telemetri tuketicisi
+`processed_messages` uzerinde (consumer, message_id) TEKIL kisiti tutuyor,
+ikinci satir IntegrityError verir, batch geri alinir ve mesaj SONSUZA KADAR
+yeniden teslim edilir. Bu yuzden master telemetrisi fiziksel satirda kalir ve
+setler onu OKUMA TARAFINDA devralir (`master_source_device`).
+"""
+
+from __future__ import annotations
+
+import logging
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.data.device_models import is_kit_model, max_sets_for, subunit_model_for
+from app.models.device import Device
+
+log = logging.getLogger(__name__)
+
+#: Sanal set kodunun uretimi: `<kit kodu>-S<sira>`.
+#:
+#: Kod `devices.code` uzerinde TEKIL ve `String(50)`; kit kodu 47 karakteri
+#: asarsa uretilen kod sinira takilir — bu yuzden uretim once dogrulanir.
+SUBUNIT_CODE_SUFFIX = "-S{index}"
+_MAX_CODE_LEN = 50
+
+
+def subunit_code(parent_code: str, set_index: int) -> str:
+    return f"{parent_code}{SUBUNIT_CODE_SUFFIX.format(index=set_index)}"
+
+
+def subunit_name(parent_name: str, set_index: int) -> str:
+    return f"{parent_name} / Set {set_index}"
+
+
+def is_kit(device: Device | None) -> bool:
+    return device is not None and is_kit_model(device.model)
+
+
+def is_subunit(device: Device | None) -> bool:
+    return device is not None and device.parent_device_id is not None
+
+
+def list_subunits(db: Session, parent_id: int) -> list[Device]:
+    return list(
+        db.scalars(
+            select(Device)
+            .where(Device.parent_device_id == parent_id)
+            .order_by(Device.subunit_index.asc())
+        ).all()
+    )
+
+
+def master_source_device(db: Session, device: Device) -> Device | None:
+    """Bu cihazin KIT SEVIYESINDEKI verisini hangi satir tasiyor?
+
+    Sanal set icin fiziksel kit, digerleri icin cihazin kendisi. Arayuzun
+    "Pole Master" sekmesi ve komut ucu bunu kullanir — boylece uc set de ayni
+    modem/GPS/besleme degerlerini ve ayni komut kumesini gorur, ama veri tek
+    yerde tutulur.
+    """
+    if device.parent_device_id is None:
+        return device
+    return db.get(Device, device.parent_device_id)
+
+
+def command_target(db: Session, device: Device) -> Device:
+    """Komut hangi FIZIKSEL cihaza gonderilecek?
+
+    Sanal setin kendi DNP3 oturumu yoktur; "Yapilandirmayi guncelle" ya da
+    "Tum FCI'lari sifirla" komutu kitin outstation'ina gider. Bunu yapmazsak
+    komut ya `unknown_device` ile reddedilir ya da hicbir yere ulasmadan
+    kuyrukta kalir.
+
+    DIKKAT: komut KIT GENELINDE etkilidir. "Tum FCI'lari sifirla" dokuz
+    uydunun hepsini sifirlar, yalnizca komutu veren seti degil — arayuz bunu
+    acikca yazmali.
+    """
+    if device.parent_device_id is None:
+        return device
+    return db.get(Device, device.parent_device_id) or device
+
+
+# --------------------------------------------------------------------------
+# Set sayisi yonetimi
+# --------------------------------------------------------------------------
+
+
+def normalize_set_count(model: str | None, istenen: int | None) -> int | None:
+    """Modelin kabul ettigi set sayisini dondur; kit degilse None.
+
+    Kit modelinde deger ZORUNLUDUR: kac set takildigi sahada belli olur,
+    varsayilan uydurmak (orn. "hep 3") kullanilmayan iki set kaydi acar ve o
+    setler hattta "veri gelmiyor" diye gorunur.
+    """
+    if not is_kit_model(model):
+        return None
+    tavan = max_sets_for(model)
+    if istenen is None:
+        raise ValueError(
+            f"Bu model icin bagli set sayisi zorunlu (1..{tavan})."
+        )
+    if not 1 <= istenen <= tavan:
+        raise ValueError(f"Set sayisi 1 ile {tavan} arasinda olmali.")
+    return istenen
+
+
+def validate_kit_codes(parent_code: str, set_count: int) -> None:
+    """Uretilecek set kodlari `devices.code` sinirina sigiyor mu?
+
+    Sigmiyorsa kit HIC olusturulmamali: yarim kalmis bir kit (fiziksel satir
+    var, setleri yok) telemetriyi hicbir yere yazamaz ve arayuzde bos gorunur.
+    """
+    for i in range(1, set_count + 1):
+        kod = subunit_code(parent_code, i)
+        if len(kod) > _MAX_CODE_LEN:
+            raise ValueError(
+                f"Cihaz kodu cok uzun: '{kod}' ({len(kod)} karakter, en fazla "
+                f"{_MAX_CODE_LEN}). Kit kodunu kisaltin."
+            )
+
+
+def create_subunits(
+    db: Session, parent: Device, set_count: int, *, mevcut_kodlar: set[str] | None = None
+) -> list[Device]:
+    """Kit icin eksik set kayitlarini uretir ve doner (var olanlara dokunmaz).
+
+    Setler fiziksel kayitla AYNI konumdan baslar; kurulumcu her setini hat
+    uzerine yerlestirdiginde koordinat topolojiden yeniden turetilir
+    (`grid_topology._resync_slot`).
+    """
+    from app.repositories.device_repository import DeviceRepository
+
+    repository = DeviceRepository(db)
+    varolan = {d.subunit_index: d for d in list_subunits(db, parent.id)}
+    kullanilan = mevcut_kodlar if mevcut_kodlar is not None else set()
+    child_model = subunit_model_for(parent.model)
+    uretilen: list[Device] = []
+
+    for index in range(1, set_count + 1):
+        if index in varolan:
+            continue
+        kod = subunit_code(parent.code, index)
+        if kod in kullanilan or repository.get_by_code(kod) is not None:
+            raise ValueError(
+                f"Set kodu zaten kullanimda: {kod}. Kit kodunu degistirin."
+            )
+        child = Device(
+            code=kod,
+            name=subunit_name(parent.name, index),
+            description=parent.description,
+            model=child_model,
+            installation_date=parent.installation_date,
+            # BAGLANTI ALANLARI FIZIKSEL KAYITTAN KOPYALANIR ama sanal set
+            # gateway'e POLL HEDEFI OLARAK VERILMEZ (bkz. api/gateways.py).
+            # Kopyalanmalarinin tek nedeni sema zorunlulugu ve arayuzde
+            # "hangi outstation'dan geliyor" sorusunun cevaplanabilmesidir.
+            gateway_code=parent.gateway_code,
+            ip_address=parent.ip_address,
+            dnp3_outstation_port=parent.dnp3_outstation_port,
+            dnp3_address=parent.dnp3_address,
+            poll_interval_sec=parent.poll_interval_sec,
+            timeout_ms=parent.timeout_ms,
+            retry_count=parent.retry_count,
+            signal_profile=parent.signal_profile,
+            latitude=parent.latitude,
+            longitude=parent.longitude,
+            parent_device_id=parent.id,
+            subunit_index=index,
+        )
+        # Her setin KENDI Common Address'i olur: SCADA uc seti ayri cihaz
+        # olarak gorur. Ortak CA verilseydi uc setin ayni IOA'lari birbirini
+        # ezerdi ve carpisma hicbir yerde loglanmazdi.
+        child.iec104_common_address = repository.next_free_iec104_ca()
+        db.add(child)
+        db.flush()
+        uretilen.append(child)
+
+    return uretilen
+
+
+#: Sanal setin FIZIKSEL kayittan devraldigi alanlar.
+#:
+#: Setin kendi DNP3 oturumu yoktur; bu alanlar yalnizca "hangi outstation'dan
+#: geliyor" sorusunun cevabini tasir. Ama TASIYORLARSA GUNCEL OLMAK ZORUNDA:
+#: `delete_all_for_gateway` silinecek cihazlari SADECE `gateway_code` ile
+#: seciyor. Kit baska bir gateway'e tasindiginda setler eski kodda kalirsa,
+#: eski gateway silindiginde SETLER GIDER, KIT KALIR — hat yerlesimi, ariza
+#: gecmisi ve alarmlar geri alinamaz sekilde silinir.
+#:
+#: DISARIDA BIRAKILANLAR ve nedeni:
+#:   code / name          setin kendi kimligi; kullanici degistirmis olabilir
+#:   latitude / longitude her set hat uzerinde AYRI noktada; topolojiden
+#:                        turetilir (`grid_topology._resync_slot`)
+#:   iec104_common_address her setin KENDI adresi olmali (SCADA ayri cihaz gorur)
+#:   phase_*              setin kendi kelepce duzeni
+#:   dnp3_extended        yalnizca fiziksel oturumun ozelligi
+_INHERITED_FIELDS = (
+    "gateway_code",
+    "ip_address",
+    "dnp3_outstation_port",
+    "dnp3_address",
+    "poll_interval_sec",
+    "timeout_ms",
+    "retry_count",
+    "signal_profile",
+)
+
+
+def propagate_to_subunits(db: Session, parent: Device) -> list[str]:
+    """Fiziksel kayittan devralinan alanlari setlere yansitir.
+
+    Donus: degisen set kodlari. Cagiran taraf gateway config nonce'unu buna
+    gore artirmali.
+    """
+    degisen: list[str] = []
+    for child in list_subunits(db, parent.id):
+        fark = False
+        for alan in _INHERITED_FIELDS:
+            yeni = getattr(parent, alan)
+            if getattr(child, alan) != yeni:
+                setattr(child, alan, yeni)
+                fark = True
+        if fark:
+            degisen.append(child.code)
+    if degisen:
+        db.flush()
+    return degisen
+
+
+def sync_subunits(db: Session, parent: Device, set_count: int) -> dict[str, list[str]]:
+    """Set sayisini istenen degere getirir.
+
+    Donus: {"created": [kod...], "deleted": [kod...]}
+
+    AZALTMA VERI SILER: kaldirilan setin telemetrisi, alarmlari, ariza
+    gecmisi ve hat yerlesimi de gider (FK'lar CASCADE). Bu geri alinamaz;
+    cagiran taraf kullaniciya ACIKCA sormali. Burada sessizce yapilmasinin
+    nedeni, yarim kalmis bir kitin (fazladan set kaydi acikta) daha kotu
+    olmasi: o setler telemetri almaz ama haritada saglikli gorunur.
+    """
+    from app.repositories.device_repository import DeviceRepository
+
+    repository = DeviceRepository(db)
+    validate_kit_codes(parent.code, set_count)
+
+    silinen: list[str] = []
+    for child in list_subunits(db, parent.id):
+        if (child.subunit_index or 0) > set_count:
+            silinen.append(child.code)
+            repository.delete(child)
+
+    uretilen = [d.code for d in create_subunits(db, parent, set_count)]
+    return {"created": uretilen, "deleted": silinen}
+
+
+# --------------------------------------------------------------------------
+# Okuma tarafi zenginlestirme
+# --------------------------------------------------------------------------
+
+
+def annotate(db: Session, devices: list[Device]) -> list[Device]:
+    """`parent_device_code` ve `satellite_set_count` alanlarini doldurur.
+
+    Ikisi de KOLON DEGIL, turetilmis alandir. Iliski (relationship) ile
+    cozmek cazip ama 600+ cihazli listede satir basina bir sorgu demekti;
+    burada TOPLAM IKI sorgu ile hallediliyor.
+    """
+    if not devices:
+        return devices
+
+    parent_ids = {d.parent_device_id for d in devices if d.parent_device_id}
+    kodlar: dict[int, str] = {}
+    if parent_ids:
+        kodlar = dict(
+            db.execute(
+                select(Device.id, Device.code).where(Device.id.in_(parent_ids))
+            ).all()
+        )
+
+    kit_ids = [d.id for d in devices if is_kit_model(d.model)]
+    sayilar: dict[int, int] = {}
+    if kit_ids:
+        sayilar = dict(
+            db.execute(
+                select(Device.parent_device_id, func.count(Device.id))
+                .where(Device.parent_device_id.in_(kit_ids))
+                .group_by(Device.parent_device_id)
+            ).all()
+        )
+
+    for d in devices:
+        d.parent_device_code = kodlar.get(d.parent_device_id) if d.parent_device_id else None
+        d.satellite_set_count = sayilar.get(d.id) if is_kit_model(d.model) else None
+    return devices
+
+
+def annotate_one(db: Session, device: Device) -> Device:
+    return annotate(db, [device])[0]
+
+
+def signal_model(device: Device | None) -> str | None:
+    """Cihazin sinyal katalogunu hangi model kodu tasiyor?
+
+    Su an her model kendi katalogunu tasiyor, yani bu cihazin modelidir.
+    Ayri bir fonksiyon olmasinin nedeni, katalogtan sinyal cozen cagrilarin
+    (komut cozumu, outbound kayit defteri) `device.model`'i DOGRUDAN okumak
+    yerine tek bir yerden gecmesi — ileride bir modelin baska bir modelin
+    katalogunu paylasmasi gerekirse tek satir degisir.
+    """
+    return getattr(device, "model", None)
+
+
+__all__ = [
+    "annotate",
+    "annotate_one",
+    "command_target",
+    "create_subunits",
+    "is_kit",
+    "is_subunit",
+    "list_subunits",
+    "master_source_device",
+    "normalize_set_count",
+    "propagate_to_subunits",
+    "signal_model",
+    "subunit_code",
+    "subunit_name",
+    "sync_subunits",
+    "validate_kit_codes",
+]

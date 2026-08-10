@@ -213,6 +213,20 @@ def build_point_registry(
     for s in signals:
         if not s.get("is_active", True):
             continue
+        # SINYAL BAZINDA YAYIN KAPATMA — backend registry'si bunu filtreliyordu
+        # ama BU servis (SCADA'nin gercekten konustugu servis) alani HIC
+        # OKUMUYORDU. Operator arayuzden bir sinyalin IEC 104 yayinini
+        # kapatiyor, arayuz ve CSV disa aktarim "kapali" gosteriyor, veri ise
+        # SCADA'ya AKMAYA DEVAM EDIYORDU.
+        if s.get("iec104_enabled", True) is False:
+            continue
+        # Katalogta duran ama o cihaz kaydinda HIC saklanmayan nokta
+        # (Pole Master Kit'in uydu satirlari — telemetrileri SETLERE
+        # yonlendirilir) adres tablosuna girmemeli; girerse SCADA'ya hicbir
+        # zaman veri gelmeyen yuzlerce adres bildirilir. Karar backend'de
+        # tek yerde uretilir: SignalCatalog.outbound_eligible.
+        if s.get("outbound_eligible", True) is False:
+            continue
         type_id_raw = s.get("iec104_type_id")
         if type_id_raw is None:
             continue
@@ -287,6 +301,22 @@ def build_point_registry(
             ",".join(sorted(ALLOWED_COMMAND_SLUGS)),
         )
 
+    # MODEL FILTRESI — ZORUNLU.
+    #
+    # Nokta uretimi cihaz x sinyal KARTEZYEN carpimidir. Katalog tek modelli
+    # oldugu surece bu tesadufen dogru calisiyordu. Ikinci bir model
+    # eklendiginde SN2 cihazlarina Pole Master Kit sinyalleri (ve tersi)
+    # yapisir: SCADA'ya hicbir zaman veri gelmeyen yuzlerce nokta bildirilir
+    # ve ayni (CA, IOA) cifti iki farkli sinyale duserek carpisir. Carpisma
+    # bu serviste HIC loglanmiyor (`by_address` uretim kodunda cagrilmiyor),
+    # yani belirti tamamen sessiz olurdu.
+    signals_by_model: dict[str, list] = {}
+    for eslesme in mapped_signals:
+        signals_by_model.setdefault(str(eslesme[0].get("model") or ""), []).append(eslesme)
+    commands_by_model: dict[str, list] = {}
+    for eslesme in komut_adaylari:
+        commands_by_model.setdefault(str(eslesme[0].get("model") or ""), []).append(eslesme)
+
     points: list[PointAddress] = []
     commands: list[CommandAddress] = []
     # Adresi olmayan cihazlar — hepsi varsayilan CA'ya duser ve BIRBIRININ
@@ -299,7 +329,8 @@ def build_point_registry(
         if device.get("iec104_common_address") is None:
             adressiz.append(device_code)
         ca = _resolve_device_ca(device, default=default_common_address)
-        for signal, type_id, ioa, with_ts in mapped_signals:
+        device_model = str(device.get("model") or "")
+        for signal, type_id, ioa, with_ts in signals_by_model.get(device_model, ()):
             signal_key = str(signal.get("key") or "")
             if not signal_key:
                 continue
@@ -313,7 +344,7 @@ def build_point_registry(
                     with_timestamp=with_ts,
                 )
             )
-        for signal, type_id, ioa, slug in komut_adaylari:
+        for signal, type_id, ioa, slug in commands_by_model.get(device_model, ()):
             signal_key = str(signal.get("key") or "")
             if not signal_key:
                 continue

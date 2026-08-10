@@ -1,4 +1,4 @@
-from sqlalchemy import JSON, Boolean, Float, Integer, String
+from sqlalchemy import JSON, Boolean, Float, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -34,12 +34,36 @@ class SignalCatalog(Base):
       - sat02      : Satellite 02 (2. fazin olcum/ariza bilgileri)
     Ayni sinyal ismi (ornegin "overcurrent_tripped") farkli kaynaklarda ayri
     key olarak tutulur ki alarmin hangi fazdan/uniteden geldigi karismasin.
+
+    Pole Master Kit'te ayni sema 10 kaynaga cikar (master + sat01..sat09) ve
+    kitin sanal setleri yine uc kaynakla (sat01/sat02/sat03) calisir.
+
+    ANAHTAR TEKILLIGI MODEL BAZINDADIR
+    ----------------------------------
+    `key` uzun sure GLOBAL tekildi. Bu, tek modelli bir sistemde zararsiz
+    gorunuyordu ama coklu modelde YANLIS bir kisittir: her Horstmann modelinin
+    bir `master` unitesi ve `master.actual_current` gibi ayni ADI tasiyan ama
+    BASKA DNP3 adresine oturan bir sinyali vardir. Global tekillik ikinci
+    modelin bu sinyali tanimlamasini imkansiz kiliyor, tek cikis yolu olarak
+    `pmk_master.actual_current` gibi uydurma onekler dayatiyordu — ki bu da
+    sistemin her yerinde `signal_key.split(".", 1)[0]` ile KAYNAK cikaran
+    mantigi (ariza fazi, alarm etiketi, MQTT topic'i, IEC104 kaynak alani)
+    sessizce bozardi.
+
+    Bu yuzden tekillik `(model, key)` ciftine tasindi. Kazanci sadece yeni
+    model tanimlayabilmek degil: ayni ada sahip sinyaller modeller arasinda
+    ORTAK KALIR, yani `sat01.overcurrent_tripped` icin yazilmis bir alarm
+    kurali SN2'de de, Pole Master Kit setinde de calisir.
+
+    BUNUN BEDELI: anahtardan tek basina satira gitmek artik BELIRSIZDIR.
+    Katalogtan sinyal cozen her yer cihazin modelini de vermelidir (bkz.
+    `device_command_service.resolve_command_index`).
     """
 
     __tablename__ = "signal_catalog"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    key: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    key: Mapped[str] = mapped_column(String(120), index=True)
     # Sinyal hangi cihaz modeline ait. Kullanici (cihaz formundan) modeli sectiginde,
     # bu cihaza ait okuma listesi sadece ayni `model` degerine sahip sinyallerden olur.
     model: Mapped[str] = mapped_column(String(80), default="horstmann_sn_2_0", index=True)
@@ -153,3 +177,26 @@ class SignalCatalog(Base):
     # "Fabrika ayarlarina don" ucu bu listeyi temizler — o eylem operatorun
     # BILINCLI tercihidir, acilistaki otomatik senkron degil.
     user_overrides: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+    @property
+    def outbound_eligible(self) -> bool:
+        """Bu sinyal DIS SISTEME (Modbus / IEC 104) yayinlanabilir mi?
+
+        Katalog cihazin DNP3 ADRES HARITASIDIR; okunan her nokta o cihaz
+        kaydinda SAKLANMAZ. Pole Master Kit'in dokuz uydusu tag-engine
+        tarafindan SETLERE yonlendirilir ve fiziksel kayitta yalnizca
+        `master.*` kalir — yani kitin uydu satirlari icin uretilecek Modbus
+        adresi ya da IEC 104 IOA'si HICBIR ZAMAN veri tasimaz.
+
+        Bayrak burada, ORM'de duruyor ki hem backend kayit defterleri hem
+        `/internal/signals` uzerinden besleneni worker AYNI karari okusun;
+        kural iki yere kopyalanirsa zamanla ayrisir.
+        """
+        from app.data.device_models import is_stored_signal
+
+        return is_stored_signal(self.model, self.source)
+
+    __table_args__ = (
+        # Anahtar MODEL BAZINDA tekildir; gerekcesi sinif docstring'inde.
+        UniqueConstraint("model", "key", name="uq_signal_catalog_model_key"),
+    )

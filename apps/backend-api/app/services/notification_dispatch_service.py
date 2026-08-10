@@ -149,21 +149,43 @@ def _build_alarm_email(
     # (device_name, signal_source, line_name, region_name, value, threshold)
     from app.models.notification import Notification
     meta: dict = {}
-    notif = db.scalar(
+    # KAYIT ALARMIN KENDISINE CAPALANIR — "en son yayin bildirimi" DEGIL.
+    #
+    # YASANAN: sorgu `created_at DESC LIMIT 1` ile en son olusan yayin
+    # bildirimini cekiyor, sonra `alarm_id` tutmazsa metadata'yi tamamen
+    # bosaltiyordu. Uretimde bu istisna degil KURAL:
+    # `notification_inline_dispatch_enabled` varsayilani False, yani mail
+    # alarm ingest'inden AYRI bir HTTP isteginde (notification-worker ->
+    # /internal/notifications/dispatch/{alarm_id}) uretiliyor. Arada ingest
+    # edilen tek bir alarm bile eslesmeyi bozuyor — tek arizanin uc faz
+    # alarminda uc mailin ikisi sakat gidiyordu.
+    #
+    # KAYBOLAN NEYDI: Olcum, Esik, Kaynak (faz), Hat, Bolge. Yani mailin
+    # operatoru sahaya yonlendiren TUM icerigi; geriye cihaz adi ve zaman
+    # kaliyordu. Hicbir hata, hicbir log uretmiyordu.
+    #
+    # `metadata_json` serbest JSON metni oldugu icin dizge araması yapilir;
+    # aday kume kucuk (yalnizca yayin alarm bildirimleri) ve eslesme
+    # ardindan `alarm_id` ile KESIN dogrulanir, yani LIKE'in yanlis
+    # yakalamasi sonucu etkilemez.
+    adaylar = db.scalars(
         select(Notification)
         .where(Notification.category == "alarm")
         .where(Notification.recipient_username.is_(None))
+        .where(Notification.metadata_json.like(f'%"alarm_id":%{alarm.id}%'))
         .order_by(Notification.created_at.desc())
-        .limit(1)
-    )
-    # Daha guvenli yol: alarm.id metadata icinde aramak
-    if notif is not None and notif.metadata_json:
+        .limit(10)
+    ).all()
+    for notif in adaylar:
+        if not notif.metadata_json:
+            continue
         try:
             parsed = json.loads(notif.metadata_json)
-            if isinstance(parsed, dict) and parsed.get("alarm_id") == alarm.id:
-                meta = parsed
         except Exception:  # noqa: BLE001
-            pass
+            continue
+        if isinstance(parsed, dict) and parsed.get("alarm_id") == alarm.id:
+            meta = parsed
+            break
 
     device = db.get(Device, alarm.device_id) if alarm.device_id else None
     subject, html_body = render_alarm_email(

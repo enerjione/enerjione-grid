@@ -30,14 +30,23 @@ class DeviceRepository:
         stmt = select(Device).where(Device.code == code)
         return self.db.scalar(stmt)
 
-    def create(self, payload: DeviceCreate) -> Device:
+    def create(self, payload: DeviceCreate, **overrides) -> Device:
         alanlar = payload.model_dump()
+        # `satellite_set_count` bir KOLON DEGIL, kurulum girdisidir: kac sanal
+        # set uretilecegini soyler. `Device(**alanlar)` icine sizarsa
+        # TypeError verir; sessizce gecmesi de kotu olurdu (kolonu olmayan bir
+        # alan ORM nesnesine yapisip hicbir sey yapmazdi).
+        alanlar.pop("satellite_set_count", None)
         # DNP3 ek ayarlari: yalnizca ISTEMCININ GONDERDIGI anahtarlar yazilir.
         # Tum alanlari somutlastirmak, operatorun dokunmadigi ayarlari merkezi
         # varsayilanlarla sabitler (2026-08-07: master_address=100 boyle
         # yazildi ve gercek cihazin haberlesmesini kesti — bkz.
         # schemas/dnp3_extended.py docstring'i).
         alanlar["dnp3_extended"] = dnp3_extended_to_store(payload.dnp3_extended)
+        # Sanal set kayitlarinda cagiran taraf parent_device_id / subunit_index
+        # / model gibi alanlari BURADAN gecirir; istemci payload'i bunlari
+        # tasiyamaz (alt cihaz elle olusturulmaz).
+        alanlar.update(overrides)
         device = Device(**alanlar)
         if device.iec104_common_address is None:
             device.iec104_common_address = self.next_free_iec104_ca()
@@ -77,6 +86,10 @@ class DeviceRepository:
 
     def update(self, device: Device, payload: DeviceUpdate) -> Device:
         for key, value in payload.model_dump(exclude_unset=True).items():
+            # Kolon degil, kurulum girdisi — set sayisini router
+            # `device_kit_service.sync_subunits` ile isler (bkz. create()).
+            if key == "satellite_set_count":
+                continue
             if key == "dnp3_extended":
                 # Gonderilen anahtarlar MEVCUT kaydin uzerine biner; gonderilmeyen
                 # alan OLDUGU GIBI kalir. Tam sozluk yazmak, dokunulmamis alanlari
@@ -155,7 +168,7 @@ class DeviceRepository:
         self.db.flush()
         return counts
 
-    def delete_all_for_gateway(self, gateway_code: str) -> tuple[list[str], dict[str, int]]:
+    def delete_all_for_gateway(self, gateway_code: str) -> tuple[list[str], dict[str, int | None]]:
         """Gateway cihazlarini ayni transaction icinde temizle; commit caller'da."""
         devices = list(
             self.db.scalars(
@@ -166,7 +179,19 @@ class DeviceRepository:
         for device in devices:
             counts = self._delete_telemetry_and_alarms_for_device(device.id, device.code)
             for key, value in counts.items():
-                total[key] = total.get(key, 0) + value
+                if value is None:
+                    # `telemetry_history` BILEREK None doner ("kac satir
+                    # silindigi BILINMIYOR"; arsiv arka planda temizlenir).
+                    # Korunmali: 0 yazmak "arsiv bostu" demek olurdu.
+                    #
+                    # Toplama bunu gormeyince `0 + None` TypeError veriyordu
+                    # ve `DELETE /gateways/{code}` en az BIR cihaz varken
+                    # 500 donuyordu — yani cihazi olan bir gateway hic
+                    # silinemiyordu. Tekil cihaz silme yolu toplama
+                    # yapmadigi icin bu hic fark edilmemisti.
+                    total.setdefault(key, None)  # type: ignore[arg-type]
+                    continue
+                total[key] = (total.get(key) or 0) + value
             self.db.delete(device)
         self.db.flush()
         return [device.code for device in devices], total

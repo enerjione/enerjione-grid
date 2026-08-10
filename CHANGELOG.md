@@ -14,6 +14,88 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.62.0] — 2026-08-10
+
+Yeni cihaz modeli **Horstmann Pole Master Kit**, bileşen tabanlı e-posta
+şablonları ve Arıza Analizi'ne ısı haritası + sağlık sekmeleri.
+
+### Eklendi
+
+- **Horstmann Pole Master Kit desteği.** Kit tek bir DNP3 outstation'dır ama
+  üzerindeki 9 uydu üçerli setler hâlinde sahada birbirinden bağımsız
+  noktalara kelepçelenir. Her set artık **ayrı bir cihaz** olarak eklenir:
+  hatta ayrı yerleştirilir, arızası kendine düşer, kendi detay sayfası ve
+  kendi IEC 104 / Modbus adresi olur. Cihaz eklerken "bağlı set sayısı"
+  (1–3) sorulur; sayı sonradan artırılıp azaltılabilir — azaltma veri
+  sildiği için silinecek setler adıyla listelenip onay istenir.
+  Veri kaynağı tek: bölme telemetri hattında (tag-engine) yapılır, gateway
+  yine tek cihaz görür.
+- **"Pole Master" sekmesi.** Kit seviyesindeki ölçümler (modem, GPS, şebeke,
+  solar/AC besleme, cihaz sıcaklığı) üç setin ortak varlığıdır; her setin
+  ayrı bir sekmesinde gösterilir. Setin kendi ölçümleriyle aynı listede
+  olsalardı hangi değerin sete hangisinin kite ait olduğu karışırdı.
+- **Alarm kurallarına cihaz modeli kapsamı.** Sinyaller modeller arasında
+  ortak değil: kitte `solar_power`/`ac_power` var, SN 2.0'da yok; SN 2.0'da
+  `nominal_voltage` ve GPS alanları var, kitte yok. Bir model seçilirse kural
+  yalnızca o modelde değerlendirilir ve sinyal listesi de o modele daralır.
+  Boş bırakılan kurallar eskisi gibi tüm cihazlarda çalışır.
+- **Arıza Analizi: Harita & Akış, Sistem Sağlığı, Cihaz Sağlığı sekmeleri.**
+  Isı haritası, Bölge → Hat → Faz akış şeması (Sankey), en çok tetikleyen
+  kurallar, haberleşmesi en çok kopan ve bataryası en hızlı tükenen cihazlar,
+  gün içi sinyal profili (yerel saate çevrilmiş). Sekmeler yalnızca düzen
+  değil performans kararı: harita ve sağlık sorguları ancak o sekme açılınca
+  çalışır.
+- **E-posta önizleme betiği** (`scripts/preview_emails.py`): yedi temsilî
+  varyantı SMTP kurmadan tarayıcıda gösterir.
+
+### Değişti
+
+- **E-posta şablonları bileşen tabanlı yeniden yazıldı.** Ortak primitifler
+  ve tek renk/ölçü token seti (`email_components.py`); şablonlar artık ham
+  HTML yazmıyor. Görsel olarak: alarmın sayısı tablo satırı yerine sol renkli
+  şeritli vurgu panelinde, gelen kutusu önizlemesinde "cihaz – ölçüm – zaman",
+  koyu tema ve mobil yığılma desteği, Outlook'ta bozulmayan buton.
+- **Bir Pole Master Kit lisans kotasından tek cihaz sayılır.** Setler kotadan
+  düşmez — üç ayrı satır olmalarının nedeni lisanslama değil topolojidir.
+- Sinyal kataloğunda anahtar tekilliği **model bazına** taşındı. Her Horstmann
+  modelinin bir `master` ünitesi ve aynı adı taşıyan ama başka DNP3 adresine
+  oturan sinyalleri var; global tekillik ikinci modelin bunları tanımlamasını
+  imkânsız kılıyordu. Yan fayda: `sat01.overcurrent_tripped` için yazılmış bir
+  alarm kuralı hem SN 2.0'da hem kit setinde çalışır.
+
+### Düzeltildi
+
+- **Alarm e-postaları Ölçüm, Eşik, Kaynak, Hat ve Bölge alanlarını sessizce
+  kaybediyordu.** Zenginleştirilmiş veri "en son yayın bildirimi" satırından
+  çekiliyordu; araya başka bir alarm girdiğinde eşleşme bozuluyor ve mailde
+  yalnızca cihaz adı ile zaman kalıyordu. Tek bir arızanın üç faz alarmında
+  üç mailin ikisi sakat gidiyordu. Sorgu artık alarmın kendisine çapalı.
+- **Arızalı parça yanlış yerde çiziliyordu.** Tek-tel döneminden kalan ikinci
+  bir çizim, arızalı parçayı hiçbir iletkenin geçmediği merkez çizgiye ve
+  gerçek faz çizgisinden daha kalın koyuyordu; arızanın hangi fazda olduğu
+  bilgisi görsel olarak siliniyordu.
+- **Branşman girişindeki cihaz çizimden düşüyordu.** Kolun giriş segmenti
+  "komşu direkler arası değil" sayılıp eleniyor, dolayısıyla "gördüm" diyen
+  cihaz bulunamıyor ve **aktif bir arıza kartı tertemiz, arızasız bir hat
+  gösteriyordu.** Cihaz artık dallanma direğine çiziliyor; gördüğü arıza kolun
+  aşağısında olduğu için ana hatta kırmızı parça tanımlamıyor.
+- **Branşman kolları çizim alanının dışına taşıyordu** — kırpılıyor ve
+  kaydırarak dahi görülemiyordu. Ayrıca arıza bölgesinde iki kol varsa
+  iletkenleri üst üste binip tek kol gibi okunuyordu; kollar artık çakışmadan
+  kendi satırlarına yerleşiyor.
+- **Şemada tekerlekle yakınlaşırken sayfa da kayıyordu.** React 18 `wheel`
+  dinleyicisini passive bağladığı için `preventDefault()` etkisizdi.
+- Cihaz eklerken Pole Master Kit seçilince artık **doğru cihaz görseli**
+  gösteriliyor (eskiden her modelde Smart Navigator 2.0 fotoğrafı çıkıyordu).
+- Arıza Analizi'nin yeni sekmeleri açılırken **çeviri yerine ham anahtar**
+  görünüyordu; ısı haritası ipucu İngilizce'de "1 faults" diyordu; gün içi
+  profil grafiğinin seri adları İngilizce arayüzde Türkçe kalıyordu.
+- Isı haritası renk skalasının metin karşılığı ekran okuyuculardan gizliydi.
+- **Cihazı olan bir gateway hiç silinemiyordu**: silme özeti toplanırken
+  arşiv sayısı "bilinmiyor" değeriyle toplanmaya çalışılıyor ve istek 500
+  dönüyordu. Tekil cihaz silme yolu bu toplamayı yapmadığı için fark
+  edilmemişti.
+
 ## [2.61.0] — 2026-08-10
 
 Hat arızası şematik çizimi baştan tasarlandı.

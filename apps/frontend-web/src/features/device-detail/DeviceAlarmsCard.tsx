@@ -10,6 +10,12 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 import { formatDateTime, formatRelative } from "../../shared/format";
+import {
+  SOURCES,
+  signalSourceOf,
+  sourceLabel,
+  sourceTone
+} from "../signals/signalCatalogConstants";
 import type { AlarmEvent, SignalSource } from "../../shared/types";
 
 type Props = {
@@ -20,18 +26,14 @@ type Props = {
   limit?: number;
 };
 
-const SRC_META: Record<SignalSource, { label: string; tone: string }> = {
-  master: { label: "Master", tone: "master" },
-  sat01: { label: "Satellite 01", tone: "green" },
-  sat02: { label: "Satellite 02", tone: "blue" },
-};
+// Kaynak etiketi/tonu TEK KAYNAKTAN gelir (signalCatalogConstants). Elle
+// yazilmis bir sozluk, Pole Master Kit'in dokuz uydusunda eksik kalirdi.
+const SRC_META: Record<SignalSource, { label: string; tone: string }> =
+  Object.fromEntries(
+    SOURCES.map((s) => [s, { label: sourceLabel(s), tone: sourceTone(s) }])
+  ) as Record<SignalSource, { label: string; tone: string }>;
 
-function sourceOf(signalKey: string | null | undefined): SignalSource {
-  const k = signalKey ?? "";
-  if (k.startsWith("sat01.")) return "sat01";
-  if (k.startsWith("sat02.")) return "sat02";
-  return "master";
-}
+const sourceOf = signalSourceOf;
 
 function levelTone(level: string): "err" | "warn" | "info" {
   const l = level.toLowerCase();

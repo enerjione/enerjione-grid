@@ -2369,15 +2369,22 @@
         "phaseUnit": {
           "master": "Master",
           "sat01": "Satellite 01",
-          "sat02": "Satellite 02"
-        }
+          "sat02": "Satellite 02",
+          "sat03": "Satellite 03"
+        },
+        "setCount": "Connected set count",
+        "setCountOption": "{{count}} set(s) (Satellite {{from}}-{{to}})",
+        "setCountHint": "REDUCING the set count also deletes the removed set's telemetry, alarms, fault history and line placement. This cannot be undone.",
+        "setCountCreateHint": "The kit connects as a single device, but each set is added as a separate device: placed on the line on its own, raising its own faults and having its own detail page.",
+        "setCountReduceConfirm": "{{count}} set(s) will be deleted: {{codes}}\n\nTheir telemetry, alarms, fault history and line placement will be deleted too. This cannot be undone. Continue?"
       },
       "footer": {
         "ok": "OK",
         "gwDisconnected": "Gateway not connected",
         "stale": "Disconnected / waiting",
         "lastData": "Last data:"
-      }
+      },
+      "deviceImageAltPmk": "Horstmann Pole Master Kit device image"
     },
     "devices": {
       "title": "Device Management",
@@ -2654,7 +2661,10 @@
         "level": "Level",
         "active": "Active",
         "actions": "Action"
-      }
+      },
+      "deviceModelScope": "Device model",
+      "deviceModelScopeAll": "All models",
+      "deviceModelScopeHint": "Selecting a model limits the rule to devices of that model and narrows the signal list accordingly. Signals are not shared across models."
     },
     "outbound": {
       "title": "Outbound Targets",
@@ -3952,7 +3962,8 @@
       "overview": "Overview",
       "trends": "Trends",
       "events": "Events",
-      "all": "All"
+      "all": "All",
+      "poleMaster": "Pole Master"
     },
     "charts": {
       "signal": "Signal",
@@ -4213,6 +4224,17 @@
         "lastGood": "Last Good Current",
         "tripLevel": "Trip Level"
       }
+    },
+    "poleMaster": {
+      "note": "The values below belong to the WHOLE {{code}} kit and are identical across every set on it. Use the other tabs for the set's own measurements.",
+      "empty": "No kit-level data received yet.",
+      "groups": {
+        "power": "Power",
+        "comm": "Communication",
+        "identity": "Identity & Location",
+        "status": "Device Status",
+        "other": "Other"
+      }
     }
   },
   "map": {
@@ -4454,6 +4476,13 @@
     "topRegions": "Distribution by Region",
     "topRegionsHint": "Which team's area carries more load",
     "allPhases": "All phases",
-    "lowLabelInline": "Only {{percent}} of records are labeled — do not read this distribution as a conclusion on its own"
+    "lowLabelInline": "Only {{percent}} of records are labeled — do not read this distribution as a conclusion on its own",
+    "loading": "Loading…",
+    "heatCount_one": "{{count}} fault",
+    "heatCount_other": "{{count}} faults",
+    "daysToLow_one": "~{{count}} day to threshold",
+    "daysToLow_other": "~{{count}} days to threshold",
+    "rssiAvg": "Average",
+    "rssiWorst": "Worst"
   }
 }

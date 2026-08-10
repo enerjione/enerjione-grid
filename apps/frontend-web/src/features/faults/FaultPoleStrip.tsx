@@ -88,6 +88,15 @@ const GREEN = "#16a34a";
 const DIM_INK = "#b45309";
 const BRANCH = "#7c3aed";
 
+/** Kolun son direginin etiketinden sonra birakilan sag pay (birim). */
+const BRANCH_LABEL_PAD = 26;
+
+/** Iki bransman satiri arasindaki dusey mesafe.
+ *
+ * Dal kati BRANCH_NAME_Y (228) ile BRANCH_LABEL_Y (288) arasinda, yani 60
+ * birim; ustune nefes payi. */
+const BRANCH_ROW_H = 72;
+
 /** Faz sirasi — bir SN2 govdesindeki uc sensor, hattin uc fazi. */
 const PHASES = ["master", "sat01", "sat02"] as const;
 
@@ -213,116 +222,9 @@ export function FaultPoleStrip({
 
   const { seqs, poles: poleList, width, wire, devices, span, xOf, pointAt } = geo;
 
-  // ---- Gorunum penceresi (zoom + pan) ----------------------------------
-  //
-  // TABAN GORUNUM = CIZIMIN TAMAMI. Onceki surumde viewBox yuksekligi
-  // kapsayicinin en-boy oranindan turetiliyordu; kapsayici uzadikca pencere
-  // de uzuyor, icerik yukarida kucucuk kaliyor ve altinda ucu bucagi
-  // gorunmeyen bos bir alan aciliyordu — "canvas sonsuza dek asagi kayiyor"
-  // sikayeti tam olarak buydu. Artik pencere icerige bagli, kapsayiciya
-  // degil: SVG sabit yukseklikte cizilir ve `preserveAspectRatio` ile
-  // ortalanir. Kaydirma sinirlari da bu tabana gore kapatildi (asagida),
-  // yani cizim disina asla cikilamaz.
-  const base: View = useMemo(
-    () => ({ x: 0, y: 0, w: width, h: STRIP_H }),
-    [width]
-  );
-  const [view, setView] = useState<View | null>(null);
-  const v = view ?? base;
-  const svgRef = useRef<SVGSVGElement | null>(null);
-  const drag = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
-
-  /** Ekran pikselini viewBox birimine cevirir (zoom seviyesinden bagimsiz). */
-  const birimBasinaPx = useCallback(() => {
-    const el = svgRef.current;
-    if (!el) return { sx: 1, sy: 1 };
-    const r = el.getBoundingClientRect();
-    return { sx: v.w / (r.width || 1), sy: v.h / (r.height || 1) };
-  }, [v.w, v.h]);
-
-  const zoomAt = useCallback(
-    (carpan: number, oranX = 0.5, oranY = 0.5) => {
-      setView((mevcut) => {
-        const c = mevcut ?? base;
-        // Alt sinir: tum hat. Ust sinir: bir direk araliginin ~1/8'i —
-        // daha ilerisi cizimde anlam tasimayan bir buyutme olurdu.
-        const enAz = base.w / 40;
-        const yeniW = Math.min(base.w, Math.max(enAz, c.w / carpan));
-        const oran = yeniW / c.w;
-        const yeniH = c.h * oran;
-        // Imlecin altindaki nokta SABIT kalsin.
-        const odakX = c.x + c.w * oranX;
-        const odakY = c.y + c.h * oranY;
-        let x = odakX - yeniW * oranX;
-        let y = odakY - yeniH * oranY;
-        // Cizim disina tasma: kenarlarda bosluga bakmak kafa karistirir.
-        // Tam sinir: pencere cizimin DISINA cikamaz.
-        x = Math.max(0, Math.min(Math.max(0, base.w - yeniW), x));
-        y = Math.max(0, Math.min(Math.max(0, base.h - yeniH), y));
-        return { x, y, w: yeniW, h: yeniH };
-      });
-    },
-    [base]
-  );
-
-  const onWheel = useCallback(
-    (e: React.WheelEvent<SVGSVGElement>) => {
-      // Sayfa kaydirmasini engelle: tekerlek burada zoom demek.
-      e.preventDefault();
-      const r = e.currentTarget.getBoundingClientRect();
-      const oranX = (e.clientX - r.left) / (r.width || 1);
-      const oranY = (e.clientY - r.top) / (r.height || 1);
-      zoomAt(e.deltaY < 0 ? 1.18 : 1 / 1.18, oranX, oranY);
-    },
-    [zoomAt]
-  );
-
-  const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
-    // Cihaz/direk isaretlerinde surukleme baslatma — onlar ipucu hedefi.
-    e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { x: e.clientX, y: e.clientY, vx: v.x, vy: v.y };
-  };
-  const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    const d = drag.current;
-    if (!d) return;
-    const { sx, sy } = birimBasinaPx();
-    const x = d.vx - (e.clientX - d.x) * sx;
-    const y = d.vy - (e.clientY - d.y) * sy;
-    setView({
-      x: Math.max(0, Math.min(Math.max(0, base.w - v.w), x)),
-      y: Math.max(0, Math.min(Math.max(0, base.h - v.h), y)),
-      w: v.w,
-      h: v.h
-    });
-  };
-  const onPointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
-    drag.current = null;
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      /* yakalama zaten birakilmis olabilir */
-    }
-  };
-
-  const yakinlasti = v.w < base.w - 0.5;
-
-  // ---- Ariza ve olcu ----------------------------------------------------
-  const faultColor = active ? RED : GREY;
+  // ---- Ariza araligi (bransman yerlesimi de buna bagli) ----------------
   const hotFrom = span ? Math.floor(span.a) : -1;
   const hotTo = span ? Math.ceil(span.b) : -1;
-  const hotPath = hotPathOf(geo);
-
-  /** Arizali FAZLAR — "gordum" diyen cihazin acik alarmlarindan.
-   *  Bos ise faz bilinmiyor (eski kayit) ve uc iletken de vurgulanir. */
-  const arizaliFazlar = useMemo(() => {
-    const k = (lastRedDeviceCode ?? "").trim();
-    const kaynaklar = k ? alarmsByDevice?.[k]?.sources ?? [] : [];
-    return new Set(kaynaklar);
-  }, [alarmsByDevice, lastRedDeviceCode]);
-  const dimA = span ? pointAt(span.a).x : null;
-  const dimB = span ? pointAt(span.b).x : null;
-  const spanM =
-    zoneStartM != null && zoneEndM != null ? Math.max(0, zoneEndM - zoneStartM) : null;
 
   // ---- Bransman kollari -------------------------------------------------
   // Kol ana hattin ALTINA iner: ana hat yatay ekseni korur, dal asagi dogru
@@ -344,6 +246,8 @@ export function FaultPoleStrip({
       hot: boolean;
       poleCount: number;
       endX: number;
+      /** Kolun dal katindaki satiri (0 = en ust). Cakisan kollar alt satira iner. */
+      row: number;
     }[] = [];
     const GOSTER = 4;
     for (const b of branches ?? []) {
@@ -387,11 +291,184 @@ export function FaultPoleStrip({
         poleCount: b.poleCount,
         endX: cizilecek.length
           ? cizilecek[cizilecek.length - 1].x
-          : anchorX + 26
+          : anchorX + 26,
+        row: 0
       });
+    }
+
+    // KOLLARI SATIRLARA DAGIT.
+    //
+    // Her kol kendi anchorX'inden saga dogru uzuyor ve hepsi AYNI sabit
+    // satirda ciziliyordu. Ana hat araligi 132, kolun direk adimi 86 — yani
+    // dort direkli bir kol 258 birim yer kaplarken komsu dallanma diregi
+    // 132 birim otede. Ariza bolgesinde iki kol varsa iletkenleri ve direk
+    // etiketleri ust uste biniyor, ikisi TEK BIR KOL gibi okunuyordu; oysa
+    // cizimin cevaplamasi gereken soru "ekip hangi kola gidecek".
+    //
+    // Greedy yerlestirme: soldan saga, her kolu CAKISMADIGI en ust satira
+    // koy. Kollar seyrekse hepsi 0. satirda kalir (gorunum degismez).
+    const satirSonu: number[] = [];
+    for (const b of [...out].sort((a, z) => a.anchorX - z.anchorX)) {
+      const bas = b.anchorX - 14;
+      let satir = satirSonu.findIndex((son) => son <= bas);
+      if (satir === -1) {
+        satir = satirSonu.length;
+        satirSonu.push(0);
+      }
+      satirSonu[satir] = b.endX + BRANCH_LABEL_PAD;
+      b.row = satir;
     }
     return out;
   }, [branches, seqs, xOf, active, hotFrom, hotTo]);
+
+  /** Kollarin kapladigi en sag nokta ve en alt satir — cizim alani bunlari
+   *  kapsayacak kadar buyutulur (asagida `base`). */
+  const branchExtent = useMemo(() => {
+    let sag = 0;
+    let satir = 0;
+    for (const b of branchDraw) {
+      sag = Math.max(sag, b.endX + BRANCH_LABEL_PAD);
+      satir = Math.max(satir, b.row);
+    }
+    return { sag, satir };
+  }, [branchDraw]);
+
+  // ---- Gorunum penceresi (zoom + pan) ----------------------------------
+  //
+  // TABAN GORUNUM = CIZIMIN TAMAMI. Onceki surumde viewBox yuksekligi
+  // kapsayicinin en-boy oranindan turetiliyordu; kapsayici uzadikca pencere
+  // de uzuyor, icerik yukarida kucucuk kaliyor ve altinda ucu bucagi
+  // gorunmeyen bos bir alan aciliyordu — "canvas sonsuza dek asagi kayiyor"
+  // sikayeti tam olarak buydu. Artik pencere icerige bagli, kapsayiciya
+  // degil: SVG sabit yukseklikte cizilir ve `preserveAspectRatio` ile
+  // ortalanir. Kaydirma sinirlari da bu tabana gore kapatildi (asagida),
+  // yani cizim disina asla cikilamaz.
+  // CIZIM ALANI KOLLARI DA KAPSAR.
+  //
+  // Kollar `anchorX + 26 + i * BRANCH_SPAN_W` ile saga uzuyor ama viewBox
+  // tam `geo.width` idi: hattin sagindaki bir dallanma diregine takili dort
+  // direkli kol cizim alanindan TASIYOR, kirpiliyor ve kaydirma siniri da
+  // tam `width` oldugu icin kaydirarak dahi GORULEMIYORDU. Ekip icin
+  // "gezilecek kol" bilgisi sessizce kayboluyordu.
+  //
+  // Ayni sekilde alt satira inen kollar icin yukseklik buyutulur.
+  const base: View = useMemo(
+    () => ({
+      x: 0,
+      y: 0,
+      w: Math.max(width, branchExtent.sag),
+      h: STRIP_H + branchExtent.satir * BRANCH_ROW_H
+    }),
+    [width, branchExtent]
+  );
+  const [view, setView] = useState<View | null>(null);
+  const v = view ?? base;
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const drag = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
+
+  /** Ekran pikselini viewBox birimine cevirir (zoom seviyesinden bagimsiz). */
+  const birimBasinaPx = useCallback(() => {
+    const el = svgRef.current;
+    if (!el) return { sx: 1, sy: 1 };
+    const r = el.getBoundingClientRect();
+    return { sx: v.w / (r.width || 1), sy: v.h / (r.height || 1) };
+  }, [v.w, v.h]);
+
+  const zoomAt = useCallback(
+    (carpan: number, oranX = 0.5, oranY = 0.5) => {
+      setView((mevcut) => {
+        const c = mevcut ?? base;
+        // Alt sinir: tum hat. Ust sinir: bir direk araliginin ~1/8'i —
+        // daha ilerisi cizimde anlam tasimayan bir buyutme olurdu.
+        const enAz = base.w / 40;
+        const yeniW = Math.min(base.w, Math.max(enAz, c.w / carpan));
+        const oran = yeniW / c.w;
+        const yeniH = c.h * oran;
+        // Imlecin altindaki nokta SABIT kalsin.
+        const odakX = c.x + c.w * oranX;
+        const odakY = c.y + c.h * oranY;
+        let x = odakX - yeniW * oranX;
+        let y = odakY - yeniH * oranY;
+        // Cizim disina tasma: kenarlarda bosluga bakmak kafa karistirir.
+        // Tam sinir: pencere cizimin DISINA cikamaz.
+        x = Math.max(0, Math.min(Math.max(0, base.w - yeniW), x));
+        y = Math.max(0, Math.min(Math.max(0, base.h - yeniH), y));
+        return { x, y, w: yeniW, h: yeniH };
+      });
+    },
+    [base]
+  );
+
+  // TEKERLEK: React'in `onWheel` prop'u ile DEGIL, dogrudan DOM uzerinden.
+  //
+  // React 18 `wheel` dinleyicisini kok kapsayiciya PASSIVE olarak bagliyor
+  // (react-dom addTrappedEventListener: touchstart/touchmove/wheel icin
+  // isPassiveListener = true). Passive bir dinleyicide `preventDefault()`
+  // hicbir sey yapmaz — tarayici konsola uyari bile basmadan yok sayar.
+  // Sonuc: semada zoom yaparken SAYFA DA kayiyordu; kullanici bir noktaya
+  // yakinlasmaya calisirken cizim ekrandan cikiyordu.
+  //
+  // Cozum: dinleyiciyi { passive: false } ile kendimiz bagliyoruz. React'in
+  // sentetik olayi bu is icin kullanilamaz.
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const isle = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      const oranX = (e.clientX - r.left) / (r.width || 1);
+      const oranY = (e.clientY - r.top) / (r.height || 1);
+      zoomAt(e.deltaY < 0 ? 1.18 : 1 / 1.18, oranX, oranY);
+    };
+    el.addEventListener("wheel", isle, { passive: false });
+    return () => el.removeEventListener("wheel", isle);
+  }, [zoomAt]);
+
+  const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    // Cihaz/direk isaretlerinde surukleme baslatma — onlar ipucu hedefi.
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { x: e.clientX, y: e.clientY, vx: v.x, vy: v.y };
+  };
+  const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    const d = drag.current;
+    if (!d) return;
+    const { sx, sy } = birimBasinaPx();
+    const x = d.vx - (e.clientX - d.x) * sx;
+    const y = d.vy - (e.clientY - d.y) * sy;
+    setView({
+      x: Math.max(0, Math.min(Math.max(0, base.w - v.w), x)),
+      y: Math.max(0, Math.min(Math.max(0, base.h - v.h), y)),
+      w: v.w,
+      h: v.h
+    });
+  };
+  const onPointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
+    drag.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* yakalama zaten birakilmis olabilir */
+    }
+  };
+
+  const yakinlasti = v.w < base.w - 0.5;
+
+  // ---- Ariza ve olcu ----------------------------------------------------
+  const faultColor = active ? RED : GREY;
+  const hotPath = hotPathOf(geo);
+
+  /** Arizali FAZLAR — "gordum" diyen cihazin acik alarmlarindan.
+   *  Bos ise faz bilinmiyor (eski kayit) ve uc iletken de vurgulanir. */
+  const arizaliFazlar = useMemo(() => {
+    const k = (lastRedDeviceCode ?? "").trim();
+    const kaynaklar = k ? alarmsByDevice?.[k]?.sources ?? [] : [];
+    return new Set(kaynaklar);
+  }, [alarmsByDevice, lastRedDeviceCode]);
+  const dimA = span ? pointAt(span.a).x : null;
+  const dimB = span ? pointAt(span.b).x : null;
+  const spanM =
+    zoneStartM != null && zoneEndM != null ? Math.max(0, zoneEndM - zoneStartM) : null;
+
 
   // ---- Ipucu ------------------------------------------------------------
   const hoveredDevice =
@@ -407,7 +484,7 @@ export function FaultPoleStrip({
     : hoveredPole
       ? { x: xOf(seqs.indexOf(hoveredPole.seq)), y: MAIN_ARM_Y + 26 }
       : hoveredBranch
-        ? { x: hoveredBranch.anchorX, y: BRANCH_NAME_Y + 4 }
+        ? { x: hoveredBranch.anchorX, y: BRANCH_NAME_Y + hoveredBranch.row * BRANCH_ROW_H + 4 }
         : null;
   // Ipucu HTML katmaninda; viewBox birimini kapsayicinin yuzdesine cevir.
   const tipStyle = tipUnit
@@ -433,7 +510,6 @@ export function FaultPoleStrip({
               ? t("faults.poleStrip.range", { from: fromSeq ?? "?", to: toSeq ?? "?" })
               : t("faults.poleStrip.unknown")
           }
-          onWheel={onWheel}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -550,6 +626,15 @@ export function FaultPoleStrip({
                TAM cizilir; digerleri soluk kalir ki kalabalik etmesin. */}
           {branchDraw.map((b) => {
             const renk = b.hot ? RED : BRANCH;
+            // Satir kaydirmasi: yalnizca DAL KATI iner. Capraz inisin
+            // BASLANGICI ana direkte kalmali (MAIN_ARM_Y kaydirilmaz),
+            // yoksa kol havada baslamis gibi gorunur.
+            const dy = b.row * BRANCH_ROW_H;
+            const armY = BRANCH_MAIN_ARM_Y + dy;
+            const wireY = BRANCH_WIRE_Y + dy;
+            const groundY = BRANCH_GROUND_Y + dy;
+            const labelY = BRANCH_LABEL_Y + dy;
+            const nameY = BRANCH_NAME_Y + dy;
             return (
               <g
                 key={b.key}
@@ -561,7 +646,7 @@ export function FaultPoleStrip({
                   x={b.anchorX - 12}
                   y={MAIN_ARM_Y}
                   width={b.endX - b.anchorX + 74}
-                  height={BRANCH_LABEL_Y - MAIN_ARM_Y + 12}
+                  height={labelY - MAIN_ARM_Y + 12}
                   fill="transparent"
                 />
                 {/* CAPRAZ INIS: ana direkte traversten ayrilir, dal katina
@@ -571,7 +656,7 @@ export function FaultPoleStrip({
                   x1={b.anchorX + ARM_HALF * 0.7}
                   y1={MAIN_ARM_Y + 6}
                   x2={b.poles[0]?.x ?? b.anchorX + 40}
-                  y2={BRANCH_MAIN_ARM_Y}
+                  y2={armY}
                   stroke={renk}
                   strokeWidth={1.8}
                   strokeLinecap="round"
@@ -579,7 +664,7 @@ export function FaultPoleStrip({
                 {/* Kol adi — capraz inisin yaninda, kendi satirinda. */}
                 <text
                   x={b.anchorX + 6}
-                  y={BRANCH_NAME_Y}
+                  y={nameY}
                   fontSize={9.5}
                   fontWeight={800}
                   fill={b.hot ? "#b91c1c" : "#6d28d9"}
@@ -590,9 +675,9 @@ export function FaultPoleStrip({
                 {/* Dal zemini */}
                 <line
                   x1={(b.poles[0]?.x ?? b.anchorX) - 16}
-                  y1={BRANCH_GROUND_Y}
+                  y1={groundY}
                   x2={b.endX + 16}
-                  y2={BRANCH_GROUND_Y}
+                  y2={groundY}
                   stroke="#e2e8f0"
                   strokeWidth={1}
                   strokeDasharray="3 4"
@@ -601,7 +686,7 @@ export function FaultPoleStrip({
                     uc renkli tel burada gurultu olurdu. */}
                 <path
                   d={b.poles
-                    .map((pt, i) => `${i === 0 ? "M" : "L"}${pt.x} ${BRANCH_WIRE_Y}`)
+                    .map((pt, i) => `${i === 0 ? "M" : "L"}${pt.x} ${wireY}`)
                     .join(" ")}
                   fill="none"
                   stroke={b.hot ? renk : "#cbd5e1"}
@@ -611,22 +696,22 @@ export function FaultPoleStrip({
                 {/* Kolun direkleri — ana hattakinin sadelestirilmis hali. */}
                 {b.poles.map((pt) => (
                   <g key={pt.x} stroke={renk} strokeWidth={1.3} strokeLinecap="round" fill="none">
-                    <line x1={pt.x} y1={BRANCH_MAIN_ARM_Y} x2={pt.x} y2={BRANCH_GROUND_Y} />
+                    <line x1={pt.x} y1={armY} x2={pt.x} y2={groundY} />
                     <line
                       x1={pt.x - 8}
-                      y1={BRANCH_MAIN_ARM_Y}
+                      y1={armY}
                       x2={pt.x + 8}
-                      y2={BRANCH_MAIN_ARM_Y}
+                      y2={armY}
                     />
-                    <line x1={pt.x} y1={BRANCH_GROUND_Y - 10} x2={pt.x - 5} y2={BRANCH_GROUND_Y} />
-                    <line x1={pt.x} y1={BRANCH_GROUND_Y - 10} x2={pt.x + 5} y2={BRANCH_GROUND_Y} />
+                    <line x1={pt.x} y1={groundY - 10} x2={pt.x - 5} y2={groundY} />
+                    <line x1={pt.x} y1={groundY - 10} x2={pt.x + 5} y2={groundY} />
                   </g>
                 ))}
                 {b.poles.map((pt) => (
                   <text
                     key={`bl-${pt.x}`}
                     x={pt.x}
-                    y={BRANCH_LABEL_Y}
+                    y={labelY}
                     textAnchor="middle"
                     fontSize={8.5}
                     fontWeight={b.hot ? 700 : 500}
@@ -638,7 +723,7 @@ export function FaultPoleStrip({
                 {b.fazla > 0 ? (
                   <text
                     x={b.endX + 14}
-                    y={BRANCH_WIRE_Y + 3}
+                    y={wireY + 3}
                     fontSize={8.5}
                     fontWeight={700}
                     fill={GREY}
@@ -650,27 +735,15 @@ export function FaultPoleStrip({
             );
           })}
 
-          {/* ARIZALI PARCA */}
-          {hotPath ? (
-            <>
-              <path
-                d={hotPath}
-                fill="none"
-                stroke={faultColor}
-                strokeWidth={7}
-                strokeLinecap="round"
-                filter="url(#fx-wire-glow)"
-                opacity={active ? 0.45 : 0.18}
-              />
-              <path
-                d={hotPath}
-                fill="none"
-                stroke={faultColor}
-                strokeWidth={3.6}
-                strokeLinecap="round"
-              />
-            </>
-          ) : null}
+          {/* NOT: Burada IKINCI bir "arizali parca" cizimi vardi (dx=0/dy=0,
+              yani MERKEZ cizgi) ve kaldirildi.
+              Tek-tel doneminden kalmisti: uc renkli iletkene gecildikten
+              sonra hicbir iletkenin gecmedigi orta hatta, ustelik gercek faz
+              cizgisinden DAHA KALIN (7/3.6 vs 5/2.2) duruyordu. Sonuc, uzerinde
+              en cok emek harcanan bilgiyi — arizanin HANGI FAZDA oldugunu —
+              gorsel olarak siliyordu: goz once kalin merkez cizgiyi okuyor,
+              faz teli ikincil kaliyordu. Dogru cizim yukarida, iletken basina
+              yapiliyor (bkz. "ARIZALI PARCA — arizali fazin telinde"). */}
 
           {poleList.map((p, idx) => (
             <StripTower

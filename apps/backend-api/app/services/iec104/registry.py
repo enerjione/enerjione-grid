@@ -107,6 +107,10 @@ def build_point_registry(
         # ama kullanici gecici olarak yayindan cekmis). Default True.
         if getattr(s, "iec104_enabled", True) is False:
             continue
+        # Katalogta duran ama bu cihaz kaydinda HIC saklanmayan nokta
+        # (bkz. SignalCatalog.outbound_eligible) adres tablosuna girmemeli.
+        if getattr(s, "outbound_eligible", True) is False:
+            continue
         type_id = getattr(s, "iec104_type_id", None)
         if type_id is None:
             continue
@@ -118,9 +122,25 @@ def build_point_registry(
     seen: dict[tuple[int, int], tuple[str, str]] = {}
     points: list[PointAddress] = []
 
+    # MODEL FILTRESI — ZORUNLU.
+    #
+    # Nokta uretimi cihaz x sinyal KARTEZYEN carpimidir. Katalog tek modelli
+    # oldugu surece bu tesadufen dogru calisiyordu. Ikinci bir model
+    # eklendiginde ise SN2 cihazlarina Pole Master Kit sinyalleri, kit
+    # cihazlarina SN2 sinyalleri yapisir: SCADA'ya hicbir zaman veri gelmeyen
+    # yuzlerce nokta bildirilir ve — daha kotusu — ayni (CA, IOA) cifti iki
+    # farkli sinyale duserek carpisir.
+    signals_by_model: dict[str, list] = {}
+    for eslesme in mapped_signals:
+        signals_by_model.setdefault(str(getattr(eslesme[0], "model", "") or ""), []).append(
+            eslesme
+        )
+
     for device in active_devices:
         ca = _resolve_device_ca(device, default=default_common_address)
-        for signal, type_id, ioa in mapped_signals:
+        for signal, type_id, ioa in signals_by_model.get(
+            str(getattr(device, "model", "") or ""), ()
+        ):
             key = (ca, ioa)
             if key in seen:
                 prev_dev, prev_sig = seen[key]
