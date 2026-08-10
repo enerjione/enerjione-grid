@@ -24449,359 +24449,378 @@ th.event-col-category {
 /* ===========================================================================
    Hat Arizalari — DETAY MODAL (popup)
    =========================================================================== */
-.fault-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.55);
-  backdrop-filter: blur(4px);
-  /* Header (.header) z-index: 1100 oldugundan modal onun ustune
-     cikmali. 1500 ile her durumda header'in onunde durur. */
-  z-index: 1500;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  animation: fault-modal-fade 0.18s ease-out;
-}
-@keyframes fault-modal-fade {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-.fault-modal {
-  background: #ffffff;
-  border-radius: 18px;
-  width: 100%;
-  max-width: 1480px;
-  max-height: calc(100vh - 40px);
-  overflow: hidden;
+/* =========================================================================
+   Ariza Detayi — TAM SAYFA (kendi sekmesinde)
+
+   Onceki hali modaldi ve icerik modal cercevesine sigmadigi icin UC DAR
+   kolona sikismisti: harita 300 piksel kaliyordu, kart basliklari kirpiliyor,
+   yorum alani bir serit haline geliyordu. Oysa bu ekranin en degerli parcasi
+   harita — sahaya hangi acikliga gidilecegini o soyluyor.
+
+   Sayfa duzeni: solda ANA kolon (harita + olcumler), sagda sabit genislikte
+   RAY (durum, sebep, not, saha raporu). Ray sabit 400px cunku icindekiler
+   FORM: bir select ya da textarea 1fr ile buyudukce okunakli olmuyor, sadece
+   satir uzuyor.
+   ========================================================================= */
+.fd-page {
+  --fd-ink: #0f172a;
+  --fd-muted: #475569;
+  --fd-faint: #94a3b8;
+  --fd-line: #e6ebf2;
+  --fd-surface: #ffffff;
+  --fd-sunken: #f6f8fb;
+  --fd-brand: #2563eb;
+  --fd-radius: 14px;
+
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.4);
-  animation: fault-modal-slide 0.22s ease-out;
-  position: relative;
-}
-@keyframes fault-modal-slide {
-  from { transform: translateY(12px); opacity: 0.6; }
-  to   { transform: translateY(0); opacity: 1; }
-}
-.fault-modal-close {
-  position: absolute;
-  top: 18px;
-  right: 22px;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(15, 23, 42, 0.06);
-  color: #475569;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2;
-  transition: background 0.15s ease;
-}
-.fault-modal-close:hover {
-  background: rgba(15, 23, 42, 0.14);
-  color: #0f172a;
-}
-.fault-modal-head {
-  position: relative;
-  padding: 22px 56px 18px 24px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  align-items: flex-start;
-  justify-content: space-between;
-}
-.fault-modal-head-left {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-.fault-modal-head-left h2 {
-  margin: 0;
-  font-size: 20px;
-  color: #0f172a;
-}
-.fault-modal-status-pill {
-  align-self: flex-start;
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.fault-modal-breadcrumbs {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  color: #64748b;
-  flex-wrap: wrap;
-}
-.fault-modal-breadcrumbs .material-symbols-outlined {
-  font-size: 16px !important;
-}
-.fault-modal-breadcrumbs strong {
-  color: #6366f1;
-}
-.fault-modal-bc-sep {
-  color: #cbd5e1;
-}
-.fault-modal-head-right {
-  display: flex;
-  gap: 10px;
-  align-items: stretch;
-  flex-wrap: wrap;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 18px 24px;
 }
 
-/* === Modern zaman pill'leri (Acilis + Ariza Suresi) === */
-.fault-modal-time-pill {
+.fd-page--bare {
+  align-items: flex-start;
+}
+
+/* ---- Ust serit ---------------------------------------------------------- */
+.fd-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.fd-head-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fd-back {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 14px 8px 10px;
-  border-radius: 12px;
-  background: #f8fafc;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  min-width: 160px;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  gap: 6px;
+  padding: 6px 12px 6px 8px;
+  border: 1px solid var(--fd-line);
+  border-radius: 999px;
+  background: var(--fd-surface);
+  color: var(--fd-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
 }
-.fault-modal-time-pill > div {
+
+.fd-back:hover {
+  background: var(--fd-sunken);
+  color: var(--fd-ink);
+  border-color: #cbd5e1;
+}
+
+.fd-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.fd-title {
+  margin: 0;
+  font-size: 1.55rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--fd-ink);
+}
+
+.fd-breadcrumb {
   display: flex;
-  flex-direction: column;
-  gap: 0;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--fd-faint);
+}
+
+.fd-breadcrumb svg {
+  flex-shrink: 0;
+}
+
+.fd-breadcrumb em {
+  font-style: normal;
+  color: #cbd5e1;
+}
+
+.fd-breadcrumb strong {
+  color: var(--fd-muted);
+  font-weight: 600;
+}
+
+/* Olcum seridi — Ariza Analizi ekranindaki `fa-kpis` ile AYNI gorsel dil.
+   Iki ekran arasinda gecen operator ayni bicimi yeniden ogrenmesin. */
+.fd-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 1px;
+  background: var(--fd-line);
+  border: 1px solid var(--fd-line);
+  border-radius: var(--fd-radius);
+  overflow: hidden;
+}
+
+.fd-metric {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 15px;
+  background: var(--fd-surface);
   min-width: 0;
 }
-.fault-modal-time-pill-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #94a3b8;
-  font-weight: 700;
-  line-height: 1.2;
-  margin-bottom: 2px;
-}
-.fault-modal-time-pill strong {
-  font-size: 14px;
-  color: #0f172a;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
-  line-height: 1.25;
-  white-space: nowrap;
-}
-.fault-modal-time-pill-icon {
+
+.fd-metric-icon {
+  display: grid;
+  place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   flex-shrink: 0;
-}
-.fault-modal-time-pill-icon .material-symbols-outlined {
-  font-size: 18px !important;
-}
-
-/* Acilis: morumsu, sakin */
-.fault-modal-time-pill--opened {
-  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
-  border-color: rgba(99, 102, 241, 0.25);
-}
-.fault-modal-time-pill--opened .fault-modal-time-pill-icon {
-  background: rgba(99, 102, 241, 0.18);
-  color: #6366f1;
-}
-.fault-modal-time-pill--opened .fault-modal-time-pill-label {
-  color: #6366f1;
+  border-radius: 9px;
+  background: #eff4ff;
+  color: var(--fd-brand);
 }
 
-/* Ariza Suresi (canli) — kirmizi vurgu */
-.fault-modal-time-pill--elapsed.is-live {
-  background: linear-gradient(135deg, #fef2f2 0%, #ffe4e6 100%);
-  border-color: rgba(239, 68, 68, 0.35);
-  box-shadow: 0 2px 10px rgba(239, 68, 68, 0.1);
-}
-.fault-modal-time-pill--elapsed.is-live .fault-modal-time-pill-icon {
-  background: rgba(239, 68, 68, 0.18);
-}
-.fault-modal-time-pill--elapsed.is-live .fault-modal-time-pill-label {
-  color: #b91c1c;
-}
-.fault-modal-time-pill--elapsed.is-live strong {
-  color: #b91c1c;
+.fd-metric.is-live .fd-metric-icon {
+  background: #fef2f2;
+  color: #dc2626;
 }
 
-/* Toplam Sure (final) — yesil sakin */
-.fault-modal-time-pill--elapsed.is-final {
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-  border-color: rgba(16, 185, 129, 0.3);
-}
-.fault-modal-time-pill--elapsed.is-final .fault-modal-time-pill-icon {
-  background: rgba(16, 185, 129, 0.18);
-  color: #10b981;
-}
-.fault-modal-time-pill--elapsed.is-final .fault-modal-time-pill-label {
-  color: #047857;
-}
-.fault-modal-time-pill--elapsed.is-final strong {
-  color: #047857;
-}
-
-/* Canli pulse rozeti (icon icinde) */
-.fault-modal-elapsed-pulse {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #ef4444;
-  display: inline-block;
-  box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6);
-  animation: fault-elapsed-pulse 1.4s ease-out infinite;
-  position: relative;
-}
-.fault-modal-elapsed-pulse::after {
-  content: "";
-  position: absolute;
-  inset: 4px;
-  border-radius: 50%;
-  background: #fff;
-  opacity: 0.6;
-}
-@keyframes fault-elapsed-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); }
-  70%  { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-}
-.fault-modal-body {
-  flex: 1;
-  display: grid;
-  /* 3 kolon: harita+koordinatlar | ticket islemleri | yorumlar */
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.85fr) minmax(320px, 1fr);
-  gap: 0;
-  overflow: hidden;
-}
-@media (max-width: 1200px) {
-  .fault-modal-body {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
-  }
-  .fault-modal-comments-col {
-    grid-column: 1 / -1;
-    border-top: 1px solid rgba(148, 163, 184, 0.18);
-    border-left: none !important;
-  }
-}
-@media (max-width: 900px) {
-  .fault-modal-body {
-    grid-template-columns: 1fr;
-    overflow-y: auto;
-  }
-}
-.fault-modal-left,
-.fault-modal-mid,
-.fault-modal-comments-col {
-  padding: 18px 22px;
+.fd-metric-body {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 1px;
   min-width: 0;
 }
-.fault-modal-mid,
-.fault-modal-comments-col {
-  overflow-y: auto;
+
+.fd-metric-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  color: var(--fd-faint);
 }
-/* Sol kolon scroll YOK — kullanici talebi. Icerik (harita+koordinat
-   listesi+cihaz akisi) sabit kompakt yerleseck. */
-.fault-modal-left {
-  border-right: 1px solid rgba(148, 163, 184, 0.18);
+
+.fd-metric-value {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--fd-ink);
+  font-variant-numeric: tabular-nums;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.fault-modal-mid {
-  border-right: 1px solid rgba(148, 163, 184, 0.18);
-  background: #fcfcfd;
+
+/* Devam eden arizada sayacin yanindaki nabiz. Sayinin "canli" oldugunu
+   soyleyen tek isaret; olmadan durmus bir sayacla ayirt edilemez. */
+.fd-pulse {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #dc2626;
+  animation: fd-pulse 1.6s ease-in-out infinite;
 }
-.fault-modal-comments-col {
-  background: #f8fafc;
+
+@keyframes fd-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
 }
-@media (max-width: 900px) {
-  .fault-modal-left,
-  .fault-modal-mid {
-    border-right: none;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-    overflow-y: visible;
+
+/* ---- Govde: ana kolon + sabit ray -------------------------------------- */
+.fd-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 14px;
+  align-items: start;
+}
+
+/* Ray asagi kayinca formlar ekrandan cikiyordu; harita uzun oldugu icin
+   sayfa da uzun. 1200'un altinda tek kolona duser. */
+@media (max-width: 1200px) {
+  .fd-body {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
-.fault-modal-section h4 {
-  margin: 0 0 10px 0;
-  font-size: 13px;
-  font-weight: 700;
-  color: #0f172a;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+
+.fd-main,
+.fd-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.fd-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 15px 17px;
+  background: var(--fd-surface);
+  border: 1px solid var(--fd-line);
+  border-radius: var(--fd-radius);
+  min-width: 0;
+}
+
+.fd-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.fd-card-head h2 {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-.fault-modal-section--comments h4 {
-  margin-bottom: 8px;
-}
-.fault-modal-count {
-  background: #6366f1;
-  color: #fff;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  text-transform: none;
-  letter-spacing: 0;
+  margin: 0;
+  font-size: 13.5px;
   font-weight: 700;
+  letter-spacing: -0.005em;
+  color: var(--fd-ink);
 }
-.fault-modal-map-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.fault-modal-map {
-  width: 100%;
-  height: 240px;
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  z-index: 0;
+
+.fd-card-head h2 svg {
   flex-shrink: 0;
+  color: var(--fd-faint);
 }
-.fault-modal-map-empty {
-  padding: 40px;
-  text-align: center;
-  color: #94a3b8;
-  font-size: 13px;
-  background: #f8fafc;
-  border-radius: 10px;
-  border: 1px dashed rgba(148, 163, 184, 0.3);
-}
-.fault-modal-map-legend {
-  display: flex;
-  gap: 14px;
+
+.fd-card-head small {
   font-size: 11.5px;
-  color: #64748b;
+  line-height: 1.45;
+  color: var(--fd-faint);
+}
+
+/* Harita kartinin basligi tek satirda: baslik solda, odak secici sagda. */
+.fd-card--map .fd-card-head {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   flex-wrap: wrap;
 }
-.fault-modal-map-legend i {
-  display: inline-block;
-  width: 14px;
-  height: 4px;
-  margin-right: 5px;
-  vertical-align: middle;
+
+.fd-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #eff4ff;
+  color: var(--fd-brand);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ---- Harita ------------------------------------------------------------- */
+.fd-map-wrap {
+  position: relative;
+  border-radius: 11px;
+  border: 1px solid var(--fd-line);
+  overflow: hidden;
+}
+
+.fd-map {
+  height: 480px;
+  width: 100%;
+  z-index: 0; /* Leaflet panelleri ust serite tirmanmasin. */
+}
+
+@media (max-width: 900px) {
+  .fd-map {
+    height: 340px;
+  }
+}
+
+/* ODAK SECICI: ariza araligina zoom yapinca "bu hattin neresi?" belirsiz
+   kaliyor, tum hatta bakinca ariza noktasi igne ucu kadar kaliyordu. */
+.fd-focus {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--fd-sunken);
+  border: 1px solid var(--fd-line);
+}
+
+.fd-focus button {
+  padding: 5px 11px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--fd-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s, color 0.14s;
+}
+
+.fd-focus button:hover {
+  color: var(--fd-ink);
+}
+
+.fd-focus button.is-active {
+  background: var(--fd-surface);
+  color: var(--fd-brand);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+
+.fd-legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fd-muted);
+}
+
+.fd-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fd-legend-line {
+  display: block;
+  width: 18px;
+  height: 3px;
   border-radius: 2px;
 }
-.fault-modal-pole-icon-wrap {
+
+.fd-legend-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+/* Leaflet divIcon'lari — global (Leaflet DOM'u React agacinin disinda). */
+.fd-pole-icon-wrap,
+.fd-dev-icon-wrap {
   background: transparent !important;
   border: none !important;
 }
-.fault-modal-pole-icon {
+
+.fd-pole-icon {
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -24815,9 +24834,7 @@ th.event-col-category {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
-/* Cihaz marker (mini): yıldırım simgesi yesil/kirmizi disk */
-.fault-modal-dev-icon-wrap { background: transparent !important; border: none !important; }
-.fault-modal-dev-icon {
+.fd-dev-icon {
   --c: #10b981;
   width: 22px;
   height: 22px;
@@ -24830,7 +24847,8 @@ th.event-col-category {
   justify-content: center;
   position: relative;
 }
-.fault-modal-dev-icon::after {
+
+.fd-dev-icon::after {
   content: "";
   position: absolute;
   inset: -3px;
@@ -24840,627 +24858,491 @@ th.event-col-category {
   pointer-events: none;
 }
 
-/* Lejandda nokta tipi (cihaz simgeleri icin) */
-.fault-modal-map-legend .fault-modal-legend-dot {
-  width: 10px !important;
-  height: 10px !important;
-  border-radius: 50% !important;
-  margin-right: 6px;
-}
-
-/* ===== Orta kolon — modern kart tasarımı ===== */
-.fault-modal-card {
-  background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 14px;
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-}
-.fault-modal-card-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.fault-modal-card-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.fault-modal-card-icon .material-symbols-outlined {
-  font-size: 20px !important;
-}
-.fault-modal-card-head h4 {
-  margin: 0;
-  font-size: 13.5px;
-  font-weight: 700;
-  text-transform: none;
-  letter-spacing: 0;
-  color: #0f172a;
-}
-.fault-modal-card-head p {
-  margin: 1px 0 0 0;
-  font-size: 11.5px;
-  color: #64748b;
-  font-weight: 500;
-}
-.fault-modal-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* Atanan kullanici display (operator icin readonly gorunum) */
-.fault-modal-assignee-display {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: #f8fafc;
-  border-radius: 10px;
-  padding: 8px 12px;
-}
-.fault-modal-assignee-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: #6366f1;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 11px;
-  letter-spacing: 0.04em;
-}
-.fault-modal-assignee-display strong {
-  font-size: 13px;
-  display: block;
-  color: #0f172a;
-}
-.fault-modal-assignee-display small {
-  font-size: 11px;
-  color: #64748b;
-}
-.fault-modal-assignee-empty {
-  font-style: italic;
-  color: #94a3b8;
-}
-
-/* Status grid — durum butonlari kart formatinda 2x2 */
-.fault-modal-status-grid {
+/* ---- Harita altindaki uclu satir --------------------------------------- */
+.fd-subgrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-.fault-modal-status-card {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 12px;
-  background: #fff;
-  border: 1.5px solid rgba(148, 163, 184, 0.35);
-  border-radius: 10px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #0f172a;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  text-align: left;
-}
-.fault-modal-status-card:hover:not(:disabled) {
-  background: #f8fafc;
-  border-color: #6366f1;
-}
-.fault-modal-status-card:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-.fault-modal-status-card.active {
-  font-weight: 700;
-}
-.fault-modal-status-card-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.7);
-}
-.fault-modal-status-card.active .fault-modal-status-card-dot {
-  background: rgba(255, 255, 255, 0.85) !important;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4);
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  align-items: start;
 }
 
-/* Kart icindeki textarea/select — kart background'a uyumlu */
-.fault-modal-card textarea,
-.fault-modal-card select {
-  padding: 9px 12px;
-  border: 1.5px solid rgba(148, 163, 184, 0.35);
-  border-radius: 10px;
-  font-family: inherit;
-  font-size: 13px;
-  background: #f9fafb;
-  color: #0f172a;
-  resize: none;
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-.fault-modal-card textarea:focus,
-.fault-modal-card select:focus {
-  outline: none;
-  border-color: #6366f1;
-  background: #fff;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-}
-.fault-modal-card .fault-modal-save-btn {
-  align-self: flex-end;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.fault-modal-card .fault-modal-save-btn .material-symbols-outlined {
-  font-size: 16px !important;
-}
-
-/* Kisa Not kart — orta kolonun kalan tum yukseklugini doldursun.
-   Orta kolon flex-column oldugundan flex:1 ile geri kalan alani kaplar;
-   icindeki textarea da flex:1 olarak butun ic alani doldurur — kullanici
-   yorumu yazarken alan en alta kadar uzanir. */
-/* ---- Ariza sebebi karti ----
-   Analiz katmaninin ogrenecegi TEK insan etiketi buradan giriliyor. */
-.fault-cause-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-/* Kural onerisi. Bilerek SOLGUN ve ayri: bir oneridir, girilmis bir deger
-   degil. Operator "Oneriyi kullan"a basmadan istatistige girmez. */
-.fault-cause-suggestion {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 8px 10px;
-  border-radius: 9px;
-  background: #f5f3ff;
-  border: 1px solid #ddd6fe;
-  color: #5b21b6;
-  font-size: 12.5px;
-  line-height: 1.45;
-}
-.fault-cause-suggestion > .material-symbols-outlined {
-  font-size: 17px;
-  flex-shrink: 0;
-}
-.fault-cause-apply {
-  margin-left: auto;
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 1px solid #c4b5fd;
-  background: #fff;
-  color: #6d28d9;
-  font-size: 11.5px;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.fault-cause-apply:hover {
-  background: #ede9fe;
-}
-
-.fault-cause-select {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 9px;
-  font-size: 13px;
-  background: #fff;
-  color: #0f172a;
-}
-.fault-cause-select:disabled {
-  background: #f8fafc;
-  color: #94a3b8;
-}
-
-.fault-cause-detail {
-  width: 100%;
-  min-height: 58px;
-  resize: vertical;
-  padding: 8px 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 9px;
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.fault-modal-card--note {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  min-height: 200px;
-}
-.fault-modal-card--note textarea {
-  flex: 1 1 auto;
-  min-height: 140px;
-}
-
-/* Koordinat listesi (arıza aralığındaki direkler) */
-.fault-modal-poles-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  background: #f8fafc;
-  border-radius: 10px;
-  padding: 6px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-}
-.fault-modal-pole-row {
+/* Ariza tespit eden cihaz CIFTI — arizanin yerini daraltan sey bu ikili. */
+.fd-devices {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
   gap: 10px;
-  align-items: center;
-  padding: 6px 10px;
-  background: #ffffff;
-  border-radius: 8px;
-  font-size: 12.5px;
-  border-left: 3px solid transparent;
 }
-.fault-modal-pole-row.is-start {
-  border-left-color: #ef4444;
-  background: rgba(239, 68, 68, 0.04);
-}
-.fault-modal-pole-row.is-end {
-  border-left-color: #10b981;
-  background: rgba(16, 185, 129, 0.04);
-}
-.fault-modal-pole-seq {
-  font-weight: 700;
-  color: #6366f1;
-  font-size: 12px;
-  min-width: 30px;
-}
-.fault-modal-pole-name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+
+.fd-device {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "dot role"
+    "dot name"
+    "dot code";
+  column-gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--fd-line);
+  background: var(--fd-sunken);
   min-width: 0;
 }
-.fault-modal-pole-name strong {
-  font-weight: 600;
-  color: #0f172a;
-  font-size: 12.5px;
+
+.fd-device-dot {
+  grid-area: dot;
+  align-self: center;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
 }
-.fault-modal-pole-tag {
-  padding: 2px 6px;
-  border-radius: 999px;
-  font-size: 9.5px;
+
+.fd-device--red {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.fd-device--red .fd-device-dot {
+  background: #dc2626;
+}
+
+.fd-device--green {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.fd-device--green .fd-device-dot {
+  background: #10b981;
+}
+
+.fd-device-role {
+  grid-area: role;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
+  color: var(--fd-faint);
 }
-.fault-modal-pole-tag--red {
-  background: rgba(239, 68, 68, 0.15);
-  color: #b91c1c;
-}
-.fault-modal-pole-tag--green {
-  background: rgba(16, 185, 129, 0.15);
-  color: #047857;
-}
-.fault-modal-pole-coords {
-  font-family: monospace;
-  font-size: 11px;
-  color: #64748b;
+
+.fd-device strong {
+  grid-area: name;
+  font-size: 13px;
+  color: var(--fd-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* --- tel mesafesi bolumu (ariza detay modali) --- */
-.fault-modal-distance {
+.fd-device small {
+  grid-area: code;
+  font-size: 11px;
+  color: var(--fd-faint);
+}
+
+.fd-device-arrow {
+  color: #cbd5e1;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .fd-devices {
+    grid-template-columns: 1fr;
+  }
+  .fd-device-arrow {
+    transform: rotate(90deg);
+    justify-self: center;
+  }
+}
+
+/* Etiket/deger listesi (tel mesafesi). */
+.fd-kv {
+  margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  border-radius: 8px;
-  background: rgba(254, 243, 199, 0.4);
-  overflow: hidden;
+  gap: 8px;
 }
-.fault-modal-distance-row {
+
+.fd-kv > div {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
 }
-.fault-modal-distance-row + .fault-modal-distance-row {
-  border-top: 1px solid rgba(245, 158, 11, 0.22);
+
+.fd-kv > div:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
 }
-.fault-modal-distance-label {
+
+.fd-kv dt {
   font-size: 12px;
-  color: #92400e;
+  color: var(--fd-muted);
+  min-width: 0;
 }
-.fault-modal-distance-value {
-  font-size: 14px;
+
+.fd-kv dd {
+  margin: 0;
+  font-size: 13px;
   font-weight: 700;
-  color: #0f172a;
-  white-space: nowrap;
+  color: var(--fd-ink);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
-.fault-modal-distance-hint {
-  margin-top: 6px;
-  font-size: 11px;
-  line-height: 1.45;
-  color: #94a3b8;
-}
-.fault-modal-devices {
-  display: flex;
-  align-items: stretch;
-  gap: 10px;
-}
-.fault-modal-device {
-  flex: 1;
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  background: #f8fafc;
-  border-radius: 10px;
-  padding: 12px 14px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-}
-.fault-modal-device--red {
-  border-left: 4px solid #ef4444;
-  background: rgba(239, 68, 68, 0.05);
-}
-.fault-modal-device--green {
-  border-left: 4px solid #10b981;
-  background: rgba(16, 185, 129, 0.05);
-}
-.fault-modal-device-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  margin-top: 4px;
-  flex-shrink: 0;
-}
-.fault-modal-device--red .fault-modal-device-dot {
-  background: #ef4444;
-  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2);
-}
-.fault-modal-device--green .fault-modal-device-dot {
-  background: #10b981;
-  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
-}
-.fault-modal-device > div {
+
+/* Ariza araligindaki direkler. */
+.fd-poles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  /* Uzun hatlarda liste kartlari asagi itiyordu; kendi icinde kayar. */
+  max-height: 240px;
+  overflow-y: auto;
 }
-.fault-modal-device-role {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #64748b;
-  font-weight: 700;
-}
-.fault-modal-device strong {
-  font-size: 14px;
-  color: #0f172a;
-  font-weight: 700;
-}
-.fault-modal-device small {
-  font-size: 11px;
-  color: #94a3b8;
-  font-family: monospace;
-}
-.fault-modal-device-arrow {
+
+.fd-poles li {
   display: flex;
   align-items: center;
-  color: #cbd5e1;
+  gap: 9px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 12.5px;
 }
-.fault-modal-device-arrow .material-symbols-outlined {
-  font-size: 22px !important;
+
+.fd-poles li:last-child {
+  border-bottom: none;
 }
-.fault-modal-devices-hint {
-  margin: 8px 0 0 0;
-  font-size: 11.5px;
-  color: #64748b;
-  font-style: italic;
+
+.fd-poles li strong {
+  color: var(--fd-ink);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.fault-modal-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 10px;
+
+.fd-pole-seq {
+  flex-shrink: 0;
+  min-width: 34px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--fd-faint);
+  font-variant-numeric: tabular-nums;
 }
-.fault-modal-label {
+
+.fd-poles li.is-start .fd-pole-seq {
+  color: #dc2626;
+}
+
+.fd-poles li.is-end .fd-pole-seq {
+  color: #10b981;
+}
+
+.fd-tag {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.fd-tag--red {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.fd-tag--green {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+/* ---- Ray: form ogeleri -------------------------------------------------- */
+.fd-label {
+  display: block;
   font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.055em;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #94a3b8;
+  color: var(--fd-faint);
+}
+
+.fd-select,
+.fd-textarea {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--fd-line);
+  border-radius: 9px;
+  background: var(--fd-surface);
+  color: var(--fd-ink);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.fd-textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.fd-select:focus-visible,
+.fd-textarea:focus-visible {
+  outline: 2px solid var(--fd-brand);
+  outline-offset: 1px;
+  border-color: var(--fd-brand);
+}
+
+.fd-select:disabled,
+.fd-textarea:disabled {
+  background: var(--fd-sunken);
+  color: var(--fd-faint);
+  cursor: not-allowed;
+}
+
+.fd-assignee {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fd-assignee strong {
+  display: block;
+  font-size: 13px;
+  color: var(--fd-ink);
+}
+
+.fd-assignee small {
+  font-size: 11px;
+  color: var(--fd-faint);
+}
+
+.fd-avatar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #eff4ff;
+  color: var(--fd-brand);
+  font-size: 11px;
   font-weight: 700;
 }
-.fault-modal-row select,
-.fault-modal-section textarea {
-  padding: 8px 10px;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  border-radius: 8px;
-  font-family: inherit;
-  font-size: 13px;
-  background: #f9fafb;
-  resize: vertical;
+
+.fd-muted {
+  color: var(--fd-faint);
+  font-size: 12.5px;
 }
-.fault-modal-row select:focus,
-.fault-modal-section textarea:focus {
-  outline: none;
-  border-color: #ff8c00;
-  background: #fff;
+
+/* Durum akisi: atandi -> devam -> normale dondu -> kapatildi. Dort kutu,
+   iki sutun; sirali okunsun diye satir satir degil ikili ikili. */
+.fd-status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
-.fault-modal-value {
-  padding: 8px 10px;
-  background: #f8fafc;
-  border-radius: 8px;
-  color: #0f172a;
-  font-weight: 500;
-}
-.fault-modal-status-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.fault-modal-status-btn {
-  padding: 6px 12px;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  background: #fff;
-  border-radius: 999px;
+
+.fd-status-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 11px;
+  border: 1px solid var(--fd-line);
+  border-radius: 9px;
+  background: var(--fd-surface);
+  color: var(--fd-muted);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
 }
-.fault-modal-status-btn:hover:not(:disabled) {
-  border-color: #6366f1;
-  color: #6366f1;
+
+.fd-status-btn:hover:not(:disabled):not(.is-active) {
+  background: var(--fd-sunken);
+  color: var(--fd-ink);
 }
-.fault-modal-status-btn:disabled {
-  opacity: 0.6;
+
+.fd-status-btn:disabled {
+  opacity: 0.55;
   cursor: not-allowed;
 }
-.fault-modal-save-btn {
-  align-self: flex-start;
-  padding: 6px 14px;
-  margin-top: 6px;
-  background: #ff8c00;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-size: 12.5px;
-  font-weight: 600;
+
+.fd-status-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.fd-status-btn.is-active .fd-status-dot {
+  background: #fff !important;
+}
+
+/* Kural onerisi. Bilerek SOLGUN ve ayri: bir oneridir, girilmis bir deger
+   degil. Operator "Oneriyi kullan"a basmadan istatistige girmez. */
+.fd-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  color: #5b21b6;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.fd-suggestion svg {
+  flex-shrink: 0;
+}
+
+.fd-suggestion button {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid #c4b5fd;
+  border-radius: 999px;
+  background: #fff;
+  color: #6d28d9;
+  font-size: 11px;
+  font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
 }
-.fault-modal-save-btn:hover:not(:disabled) {
-  background: #e67c00;
+
+.fd-suggestion button:hover {
+  background: #f5f3ff;
 }
-.fault-modal-save-btn:disabled {
-  opacity: 0.6;
+
+.fd-save {
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 15px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--fd-brand);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.14s;
+}
+
+.fd-save:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.fd-save:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
-.fault-modal-comments {
+
+.fd-save--send {
+  background: #16a34a;
+}
+
+.fd-save--send:hover:not(:disabled) {
+  background: #15803d;
+}
+
+/* ---- Saha raporu -------------------------------------------------------- */
+.fd-comments {
   list-style: none;
-  margin: 0 0 10px 0;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  flex: 1;
-  min-height: 200px;
+  /* Uzun bir yorum akisi sayfayi sonsuz uzatiyordu; kendi icinde kayar. */
+  max-height: 360px;
   overflow-y: auto;
 }
-.fault-modal-comments-col .fault-modal-section--comments {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-.fault-modal-comments-empty {
-  padding: 20px;
-  text-align: center;
-  font-size: 12.5px;
-  color: #94a3b8;
-  background: #f8fafc;
-  border-radius: 10px;
-  border: 1px dashed rgba(148, 163, 184, 0.3);
-}
-.fault-modal-comment {
-  background: #f8fafc;
-  border-radius: 10px;
+
+.fd-comment {
   padding: 10px 12px;
-  border-left: 3px solid #6366f1;
+  border-radius: 10px;
+  background: var(--fd-sunken);
+  border: 1px solid var(--fd-line);
 }
-.fault-modal-comment header {
+
+.fd-comment header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  font-size: 12px;
+  gap: 8px;
   margin-bottom: 6px;
 }
-.fault-modal-comment-author {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+
+.fd-comment header strong {
+  font-size: 12px;
+  color: var(--fd-ink);
 }
-.fault-modal-comment-avatar {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #6366f1;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  font-weight: 700;
+
+.fd-comment header time {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--fd-faint);
+  white-space: nowrap;
 }
-.fault-modal-comment-author strong {
-  color: #0f172a;
-  font-weight: 700;
-}
-.fault-modal-comment-time {
-  font-size: 11px;
-  color: #94a3b8;
-}
-.fault-modal-comment p {
+
+.fd-comment p {
   margin: 0;
-  font-size: 13px;
-  color: #0f172a;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--fd-muted);
   white-space: pre-wrap;
-  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
-.fault-modal-comment-add {
+
+.fd-comment-add {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.fault-modal-comment-add textarea {
-  width: 100%;
-}
-.fault-modal-comment-add button {
-  align-self: flex-end;
-  display: inline-flex;
+
+/* ---- Bos / hata durumlari ---------------------------------------------- */
+.fd-empty,
+.fd-placeholder {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 7px 16px;
-  background: #16a34a;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
+  justify-content: center;
+  gap: 10px;
+  margin: 0;
+  padding: 28px 18px;
+  border: 1px dashed var(--fd-line);
+  border-radius: 11px;
+  background: var(--fd-sunken);
+  color: var(--fd-faint);
   font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
+  line-height: 1.5;
+  text-align: center;
 }
-.fault-modal-comment-add button:hover:not(:disabled) {
-  background: #15803d;
+
+.fd-placeholder {
+  width: 100%;
+  min-height: 220px;
+  margin-top: 14px;
 }
-.fault-modal-comment-add button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.fault-modal-comment-add button .material-symbols-outlined {
-  font-size: 16px !important;
-}
-.fault-modal-error {
-  padding: 8px 12px;
-  background: rgba(239, 68, 68, 0.1);
+
+.fd-error {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 9px;
+  border-left: 3px solid #dc2626;
+  background: #fef2f2;
   color: #b91c1c;
-  border-radius: 8px;
   font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
 }
+
+
 
 /* ===========================================================================
    Yedekler & Geri Yukleme paneli
@@ -39404,38 +39286,6 @@ th.event-col-category {
    Tek gorunum yetmiyordu: ariza araligina zoom yapinca "bu hattin neresi?"
    belirsiz kaliyor, tum hatta bakinca ariza noktasi igne ucu kadar
    kaliyordu. Ucu de ayni haritada, tek tikla. */
-.fault-modal-section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.fault-modal-focus {
-  display: inline-flex;
-  padding: 2px;
-  border-radius: 8px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-}
-.fault-modal-focus button {
-  padding: 4px 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: #64748b;
-  font-size: 11.5px;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.14s ease, color 0.14s ease;
-}
-.fault-modal-focus button:hover { color: #334155; }
-.fault-modal-focus button.is-active {
-  background: #fff;
-  color: #1d4ed8;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
-}
 
 /* =========================================================================
    Ariza Analizi (Muhendislik > Izleme > Ariza Analizi)

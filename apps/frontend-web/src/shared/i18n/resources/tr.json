@@ -984,6 +984,10 @@
       "systemClean": "Sistem temiz. Sahada arıza tespit edilince burada listelenecek."
     },
     "detail": {
+      "backToList": "Hat Arızaları",
+      "loading": "Arıza kaydı yükleniyor…",
+      "notFound": "#{{id}} numaralı arıza kaydı bulunamadı. Silinmiş olabilir ya da görüntüleme yetkiniz dışında.",
+      "tabFallback": "Arıza",
       "title": "Arıza Detayı",
       "tickets": "Sorumluluk",
       "ticketsHint": "Arızadan sorumlu kişi ve mevcut durum",

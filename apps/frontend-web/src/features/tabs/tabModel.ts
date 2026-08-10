@@ -56,7 +56,11 @@ export type TabRoute =
   // Muhendislik alt sayfalari
   | { kind: "engineering"; page: EngineeringPage }
   // Cihaz detay sayfasi (ileride grafikler/veri). Simdilik placeholder.
-  | { kind: "device-detail"; deviceId: number };
+  | { kind: "device-detail"; deviceId: number }
+  // Ariza detay sayfasi. Eskiden modaldi; modal sekme sisteminde yer
+  // almadigi icin yenilemede kayboluyor, iki arizayi yan yana koymak
+  // imkansiz oluyor ve saha ekibine gonderilebilecek bir adresi olmuyordu.
+  | { kind: "fault-detail"; faultId: number };
 
 export type Tab = { key: string; route: TabRoute };
 
@@ -69,6 +73,8 @@ export function routeKey(route: TabRoute): string {
       return `eng:${route.page}`;
     case "device-detail":
       return `device:${route.deviceId}`;
+    case "fault-detail":
+      return `fault:${route.faultId}`;
   }
 }
 
@@ -92,7 +98,8 @@ type TFn = (key: string, opts?: Record<string, unknown>) => string;
 export function tabLabel(
   route: TabRoute,
   t: TFn,
-  deviceLookup?: (id: number) => { code?: string; name?: string } | undefined
+  deviceLookup?: (id: number) => { code?: string; name?: string } | undefined,
+  faultLookup?: (id: number) => string | undefined
 ): string {
   switch (route.kind) {
     case "page": {
@@ -137,6 +144,13 @@ export function tabLabel(
       const dev = deviceLookup?.(route.deviceId);
       return dev?.code || dev?.name || `#${route.deviceId}`;
     }
+    case "fault-detail": {
+      // Hat adi lookup ile cozulur. Cozulemezse ("kapanmis ariza, listede
+      // yok") kimlik yine de gorunur kalir — bos bir sekme basligindansa
+      // "Ariza #12" cok daha iyi.
+      const ad = faultLookup?.(route.faultId);
+      return ad ? `${ad} #${route.faultId}` : `${t("faults.detail.tabFallback")} #${route.faultId}`;
+    }
   }
 }
 
@@ -151,7 +165,7 @@ export function tabLabel(
  *  ele alir. engineeringPage her zaman gecerli bir deger dondurur (App state
  *  tipini bozmamak icin). */
 export function routeToPageState(route: TabRoute): {
-  pageMode: PageMode | "device-detail";
+  pageMode: PageMode | "device-detail" | "fault-detail";
   engineeringPage: EngineeringPage;
 } {
   switch (route.kind) {
@@ -161,6 +175,8 @@ export function routeToPageState(route: TabRoute): {
       return { pageMode: "engineering", engineeringPage: route.page };
     case "device-detail":
       return { pageMode: "device-detail", engineeringPage: "devices" };
+    case "fault-detail":
+      return { pageMode: "fault-detail", engineeringPage: "devices" };
   }
 }
 
@@ -226,6 +242,10 @@ export function canAccessRoute(route: TabRoute, role: UserRole): boolean {
     }
     case "device-detail":
       return true; // cihaz detay herkes (gorunur cihaz zaten scope'lu)
+    case "fault-detail":
+      // Ariza listesi zaten herkese acik; kapsam backend'de hat bazinda
+      // uygulaniyor (gorunmemesi gereken ariza 404 doner).
+      return true;
   }
 }
 
@@ -306,6 +326,9 @@ function isValidRoute(route: TabRoute): boolean {
   }
   if (route.kind === "device-detail") {
     return typeof route.deviceId === "number" && Number.isFinite(route.deviceId);
+  }
+  if (route.kind === "fault-detail") {
+    return typeof route.faultId === "number" && Number.isFinite(route.faultId);
   }
   return false;
 }

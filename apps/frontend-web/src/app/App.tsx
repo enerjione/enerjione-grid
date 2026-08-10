@@ -155,6 +155,7 @@ const DeviceDetailPage = lazy(() => import("../features/device-detail/DeviceDeta
 const DeviceManagementPanel = lazy(() => import("../features/devices/DeviceManagementPanel").then((m) => ({ default: m.DeviceManagementPanel })));
 const EventsPage = lazy(() => import("../features/events/EventsPage").then((m) => ({ default: m.EventsPage })));
 const DeviceConfigPage = lazy(() => import("../features/device-config/DeviceConfigPage").then((m) => ({ default: m.DeviceConfigPage })));
+const FaultDetailPage = lazy(() => import("../features/faults/FaultDetailPage").then((m) => ({ default: m.FaultDetailPage })));
 const FaultListPage = lazy(() => import("../features/faults/FaultListPage").then((m) => ({ default: m.FaultListPage })));
 const FieldToolsPage = lazy(() => import("../features/field-tools/FieldToolsPage").then((m) => ({ default: m.FieldToolsPage })));
 const FirewallPage = lazy(() => import("../features/firewall/FirewallPage").then((m) => ({ default: m.FirewallPage })));
@@ -391,6 +392,8 @@ export function App() {
     tabsApi.activeRoute.kind === "device-detail"
       ? tabsApi.activeRoute.deviceId
       : null;
+  const activeFaultDetailId =
+    tabsApi.activeRoute.kind === "fault-detail" ? tabsApi.activeRoute.faultId : null;
 
   // Uzaktan bakim izni acikken HER SAYFADA gorunen header rozeti icin.
   // AnyDesk mantiginda en buyuk risk "acik unutmak"; rozet bunu aktif olarak
@@ -888,6 +891,11 @@ export function App() {
   // Cihaz detay sekmesi ac (harita popup / sidebar "tum detaylar").
   const openDeviceDetail = useCallback(
     (deviceId: number) => openTab({ kind: "device-detail", deviceId }),
+    [openTab]
+  );
+  /** Arizayi kendi sekmesinde ac — detay artik modal degil sayfa. */
+  const openFaultTab = useCallback(
+    (faultId: number) => openTab({ kind: "fault-detail", faultId }),
     [openTab]
   );
 
@@ -2633,7 +2641,13 @@ export function App() {
         fullName={currentUser?.full_name ?? session.username}
         role={session.role}
         accessToken={session.accessToken}
-        activePage={pageMode === "device-detail" ? "home" : pageMode}
+        activePage={
+          pageMode === "device-detail"
+            ? "home"
+            : pageMode === "fault-detail"
+              ? "faults"
+              : pageMode
+        }
         onChangePage={handleChangePage}
         isEngineeringView={pageMode === "engineering"}
         onToggleEngineering={() => handleChangePage("engineering")}
@@ -2709,6 +2723,27 @@ export function App() {
               canConfig={session.role === "installer"}
               onDeviceCommand={handleDeviceCommand}
               token={session.accessToken}
+            />
+          </main>
+        ) : pageMode === "fault-detail" && activeFaultDetailId !== null ? (
+          <main className="content">
+            <FaultDetailPage
+              faultId={activeFaultDetailId}
+              faults={faults}
+              users={users}
+              currentUsername={session.username}
+              canAssign={session.role === "engineer" || session.role === "installer"}
+              accessToken={session.accessToken}
+              gridSnapshot={gridSnapshot}
+              devices={devices}
+              alarms={alarms}
+              onBack={() => openTab({ kind: "page", page: "faults" })}
+              onAssign={handleAssignFault}
+              onUpdateStatus={handleUpdateFaultStatus}
+              onUpdateNote={handleUpdateFaultNote}
+              onUpdateCause={handleUpdateFaultCause}
+              onLoadComments={handleLoadFaultComments}
+              onAddComment={handleAddFaultComment}
             />
           </main>
         ) : pageMode === "engineering" ? (
@@ -3019,6 +3054,7 @@ export function App() {
             {pageMode === "faults" ? (
               <FaultListPage
                 faults={faults}
+                onOpenFault={openFaultTab}
                 stats={faultStats}
                 users={users}
                 currentUsername={session.username}

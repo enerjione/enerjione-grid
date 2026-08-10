@@ -88,5 +88,7 @@ export function routeIcon(route: TabRoute): LucideIcon {
       return ENGINEERING_PAGE_ICON[route.page];
     case "device-detail":
       return Cpu;
+    case "fault-detail":
+      return TriangleAlert;
   }
 }

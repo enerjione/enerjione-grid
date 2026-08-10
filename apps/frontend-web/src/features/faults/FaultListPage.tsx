@@ -24,11 +24,9 @@ import { useTranslation } from "react-i18next";
 import { CheckCircle2, Clock, FileText, RefreshCw, TriangleAlert } from "lucide-react";
 
 import type { GridSnapshot } from "../../shared/api";
-import { fetchFaultCauses } from "../../shared/api";
 import type {
   AlarmEvent,
   DeviceRow,
-  FaultCauseCatalog,
   FaultComment,
   FaultEvent,
   FaultStats,
@@ -36,11 +34,12 @@ import type {
 } from "../../shared/types";
 import { ActiveFaultCard } from "./ActiveFaultCard";
 import type { StripBranch, StripPole } from "./FaultPoleStrip";
-import { FaultDetailModal } from "./FaultDetailModal";
 import { FaultHistoryTable } from "./FaultHistoryTable";
 
 type Props = {
   faults: FaultEvent[];
+  /** Arizayi kendi SEKMESINDE ac. Detay artik modal degil sayfa. */
+  onOpenFault: (faultId: number) => void;
   /** Backend'den gelen ozet istatistikler (avg_resolution_seconds vb).
    * null ise henuz yuklenmedi/erisilmedi — chip'te "—" gosterilir. */
   stats?: FaultStats | null;
@@ -95,6 +94,7 @@ function fmtDurationSeconds(totalSec: number): string {
 
 export function FaultListPage({
   faults,
+  onOpenFault,
   stats: backendStats,
   users,
   currentUsername,
@@ -115,7 +115,10 @@ export function FaultListPage({
   const { t, i18n } = useTranslation();
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const [tab, setTab] = useState<"active" | "history">("active");
-  const [openFaultId, setOpenFaultId] = useState<number | null>(null);
+  // Detay artik MODAL degil, kendi sekmesinde bir sayfa (bkz.
+  // FaultDetailPage). Modal sekme sisteminde yer almadigi icin
+  // yenilemede kayboluyor ve iki arizayi yan yana koymayi imkansiz
+  // kiliyordu.
 
   // Canli sure sayaci — kartlardaki "x sa y dk" guncel kalsin. Kart sayisi
   // az, 30sn'lik tick yeterli (ms hassasiyet anlamsiz).
@@ -137,26 +140,6 @@ export function FaultListPage({
     () => faults.filter((f) => f.status === "resolved" || f.status === "closed"),
     [faults]
   );
-
-  /** Sebep katalogu — sayfa basina BIR KEZ. Backend tek kaynak
-   *  (`app/data/fault_causes.py`); frontend'e gomulseydi ikisi ayrisir ve
-   *  arayuzde secilen kod backend'de taninmaz olurdu. */
-  const [causeCatalog, setCauseCatalog] = useState<FaultCauseCatalog | null>(null);
-  useEffect(() => {
-    let iptal = false;
-    fetchFaultCauses(accessToken)
-      .then((k) => {
-        if (!iptal) setCauseCatalog(k);
-      })
-      .catch(() => {
-        // Katalog alinamazsa sebep secimi devre disi kalir; sayfanin geri
-        // kalani (ariza listesi) etkilenmez.
-        if (!iptal) setCauseCatalog(null);
-      });
-    return () => {
-      iptal = true;
-    };
-  }, [accessToken]);
 
   /** line_id -> hattin tum direk sira numaralari (sematik serit icin). */
   const poleSeqsByLine = useMemo(() => {
@@ -249,11 +232,6 @@ export function FaultListPage({
     () =>
       activeFaults.find((f) => f.id === activeFaultId) ?? activeFaults[0] ?? null,
     [activeFaults, activeFaultId]
-  );
-
-  const openFault = useMemo(
-    () => (openFaultId !== null ? faults.find((f) => f.id === openFaultId) ?? null : null),
-    [faults, openFaultId]
   );
 
   const avgText =
@@ -371,9 +349,9 @@ export function FaultListPage({
               localeTag={localeTag}
               now={now}
               canAssign={canAssign}
-              onOpenDetail={() => setOpenFaultId(shownFault.id)}
-              onAssignClick={() => setOpenFaultId(shownFault.id)}
-              onShowOnMap={() => setOpenFaultId(shownFault.id)}
+              onOpenDetail={() => onOpenFault(shownFault.id)}
+              onAssignClick={() => onOpenFault(shownFault.id)}
+              onShowOnMap={() => onOpenFault(shownFault.id)}
             />
           </div>
         )
@@ -387,25 +365,6 @@ export function FaultListPage({
         />
       )}
 
-      {openFault ? (
-        <FaultDetailModal
-          fault={openFault}
-          users={users}
-          currentUsername={currentUsername}
-          canAssign={canAssign}
-          gridSnapshot={gridSnapshot}
-          devices={devices}
-          alarms={alarms}
-          onClose={() => setOpenFaultId(null)}
-          onAssign={onAssign}
-          onUpdateStatus={onUpdateStatus}
-          onUpdateNote={onUpdateNote}
-          onUpdateCause={onUpdateCause}
-          causeCatalog={causeCatalog}
-          onLoadComments={onLoadComments}
-          onAddComment={onAddComment}
-        />
-      ) : null}
     </div>
   );
 }

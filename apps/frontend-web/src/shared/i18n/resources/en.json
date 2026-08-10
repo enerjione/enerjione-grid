@@ -987,6 +987,10 @@
       "systemClean": "System is clean. New faults will appear here when detected."
     },
     "detail": {
+      "backToList": "Line Faults",
+      "loading": "Loading fault record…",
+      "notFound": "Fault #{{id}} was not found. It may have been deleted, or it is outside your visibility.",
+      "tabFallback": "Fault",
       "title": "Fault Details",
       "tickets": "Responsibility",
       "ticketsHint": "Person responsible for the fault and current status",

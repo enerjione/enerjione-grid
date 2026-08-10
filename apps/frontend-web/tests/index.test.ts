@@ -27,6 +27,10 @@ import "./lineFocus.test";
 // cihazin arasinda. Yanlis konum sahada yanlis direge gitmek demek.
 import "./faultStrip.test";
 
+// Ariza detay haritasi: kirmizi parca SON algilayan ile ILK algilamayan
+// cihazin arasinda olmali. Bir direk kaymasi ekibi yanlis acikliga gonderir.
+import "./faultMapView.test";
+
 // Ana haritada cihaz secilince kamera: hat ekrana sigsin, uzaklasmasin.
 import "./deviceFocus.test";
 
