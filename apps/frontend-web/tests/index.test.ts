@@ -27,6 +27,9 @@ import "./lineFocus.test";
 // cihazin arasinda. Yanlis konum sahada yanlis direge gitmek demek.
 import "./faultStrip.test";
 
+// Ana haritada cihaz secilince kamera: hat ekrana sigsin, uzaklasmasin.
+import "./deviceFocus.test";
+
 // Ariza Analizi grafiklerinin renk sozlesmesi: palet sirasi CVD (renk
 // korlugu) dogrulamasindan gecen dizilim olmali. Sira degisirse ekran renk
 // koru bir operator icin sessizce okunamaz hale gelir.
