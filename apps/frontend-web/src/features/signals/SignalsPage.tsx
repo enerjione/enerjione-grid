@@ -29,7 +29,13 @@ type Props = {
   deviceModels: DeviceModelOption[];
   loading: boolean;
   error?: string;
-  onUpdate: (signalKey: string, payload: Partial<Omit<SignalCatalogRow, "id" | "key">>) => Promise<void>;
+  onUpdate: (
+    signalKey: string,
+    payload: Partial<Omit<SignalCatalogRow, "id" | "key">>,
+    // Anahtar (model, key) ile tekil — model olmadan backend belirsiz
+    // anahtarlari 409 ile reddeder.
+    model?: string
+  ) => Promise<void>;
   /** Toplu arsiv ayari. Tekil duzenleme de buradan gecer: tek kod yolu =
    *  tek kural yolu (ariza korumasi hem burada hem sunucuda ayni). */
   onBulkHistorian: (payload: SignalHistorianBulkPayload) => Promise<SignalHistorianBulkResult>;
@@ -227,6 +233,7 @@ export function SignalsPage({
     setNotice("");
     try {
       const sonuc = await onBulkHistorian({
+        model: modelFilter,
         signal_keys: istek.keys,
         ...(istek.historize === undefined ? {} : { historize: istek.historize }),
         ...(istek.deadband === undefined ? {} : { historize_deadband: istek.deadband }),

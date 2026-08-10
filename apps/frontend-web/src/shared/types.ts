@@ -1100,6 +1100,8 @@ export type SignalCatalogRow = {
 
 /** Toplu arsiv ayari istegi (POST /signals/historian/bulk). */
 export type SignalHistorianBulkPayload = {
+  /** Sinyallerin ait oldugu cihaz modeli — anahtar (model, key) ile tekil. */
+  model?: string;
   signal_keys: string[];
   historize?: boolean;
   historize_deadband?: number;

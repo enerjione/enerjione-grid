@@ -141,6 +141,7 @@ def toplu_historian_guncelle(
     historize: bool | None,
     deadband: float | None,
     ariza_onayi: bool,
+    model: str | None = None,
 ) -> dict:
     """Cok sinyalin arsiv ayarini tek islemde gunceller.
 
@@ -164,7 +165,17 @@ def toplu_historian_guncelle(
     _olu_bant_sinirini_dogrula(deadband, [])
 
     istenen = list(dict.fromkeys(signal_keys))  # sira korunur, tekrar atilir
-    rows = list(db.scalars(select(SignalCatalog).where(SignalCatalog.key.in_(istenen))).all())
+    # MODELE GORE DARALT.
+    #
+    # Tekillik `(model, key)` ciftinde ve 192 anahtar birden fazla modelde
+    # var. `{row.key: row}` sozlugu SON satiri saklayip digerlerini sessizce
+    # dusuruyordu: kullanici bir modelin sinyallerini secip arsivini
+    # kapatiyor, islem "basarili" donuyor ve denetim kaydi yaziliyor — ama
+    # degisen satir BASKA modelin satiri olabiliyordu.
+    stmt = select(SignalCatalog).where(SignalCatalog.key.in_(istenen))
+    if isinstance(model, str) and model.strip():
+        stmt = stmt.where(SignalCatalog.model == model)
+    rows = list(db.scalars(stmt).all())
     bulunan = {row.key: row for row in rows}
     not_found = [k for k in istenen if k not in bulunan]
 

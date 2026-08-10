@@ -148,6 +148,11 @@ class SignalHistorianBulkUpdate(BaseModel):
     """
 
     signal_keys: list[str] = Field(min_length=1, max_length=5_000)
+    #: Sinyallerin ait oldugu CIHAZ MODELI. Anahtar tekilligi (model, key)
+    #: ciftinde ve 192 anahtar birden fazla modelde var; model verilmezse
+    #: ayni adli satirlardan yalnizca biri guncellenir ve HANGISI oldugu
+    #: belirsiz kalir. Arayuz zaten bir model secili halde calisiyor.
+    model: str | None = None
     historize: bool | None = None
     historize_deadband: float | None = Field(default=None, ge=0.0, le=OLU_BANT_UST_SINIR)
     #: Ariza gecisi tasiyan sinyaller secimde varsa ve arsiv KAPATILIYORSA

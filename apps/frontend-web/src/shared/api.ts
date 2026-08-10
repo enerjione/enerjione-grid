@@ -940,6 +940,26 @@ export async function fetchFaults(
   return (await response.json()) as import("./types").FaultEvent[];
 }
 
+/**
+ * Tek ariza — detay SAYFASI icin.
+ *
+ * NEDEN AYRI UC: detay artik bir sekme ve sekmeler localStorage'a
+ * yaziliyor. Tarayici yenilendiginde sekme geri geliyor ama arizanin
+ * listede olacaginin garantisi yok: kapanmis bir ariza aktif listede
+ * DEGILDIR (gecmisten acilmisti). Sayfa yalnizca listeye guvenseydi
+ * yenilemeden sonra bos acilirdi.
+ */
+export async function fetchFault(
+  token: string,
+  faultId: number
+): Promise<import("./types").FaultEvent> {
+  const response = await apiFetch(`${API_BASE_URL}/faults/${faultId}`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Arıza kaydı alınamadı.");
+  return (await response.json()) as import("./types").FaultEvent;
+}
+
 export async function fetchFaultStats(
   token: string
 ): Promise<import("./types").FaultStats> {
@@ -2688,12 +2708,17 @@ export async function createSignal(
   return (await response.json()) as SignalCatalogRow;
 }
 
+/** Sinyal anahtari MODEL BAZINDA tekildir; 192 anahtar birden fazla modelde
+ *  var. `model` gonderilmezse backend belirsiz anahtarlari 409 ile reddeder —
+ *  eskiden keyfi bir satiri (cogu zaman BASKA modelin satirini) duzenliyordu. */
 export async function updateSignal(
   token: string,
   signalKey: string,
-  payload: Partial<Omit<SignalCatalogRow, "id" | "key">>
+  payload: Partial<Omit<SignalCatalogRow, "id" | "key">>,
+  model?: string
 ): Promise<SignalCatalogRow> {
-  const response = await apiFetch(`${API_BASE_URL}/signals/${encodeURIComponent(signalKey)}`, {
+  const qs = model ? `?model=${encodeURIComponent(model)}` : "";
+  const response = await apiFetch(`${API_BASE_URL}/signals/${encodeURIComponent(signalKey)}${qs}`, {
     method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify(payload)
@@ -2721,8 +2746,13 @@ export async function updateSignalsHistorian(
   return (await response.json()) as SignalHistorianBulkResult;
 }
 
-export async function deleteSignal(token: string, signalKey: string): Promise<void> {
-  const response = await apiFetch(`${API_BASE_URL}/signals/${encodeURIComponent(signalKey)}`, {
+export async function deleteSignal(
+  token: string,
+  signalKey: string,
+  model?: string
+): Promise<void> {
+  const qs = model ? `?model=${encodeURIComponent(model)}` : "";
+  const response = await apiFetch(`${API_BASE_URL}/signals/${encodeURIComponent(signalKey)}${qs}`, {
     method: "DELETE",
     headers: authHeaders(token)
   });

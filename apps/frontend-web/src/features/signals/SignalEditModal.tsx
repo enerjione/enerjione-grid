@@ -20,7 +20,11 @@ type Props = {
   signal: SignalCatalogRow;
   onSave: (
     signalKey: string,
-    payload: Partial<Omit<SignalCatalogRow, "id" | "key">>
+    payload: Partial<Omit<SignalCatalogRow, "id" | "key">>,
+    /** Duzenlenen satirin MODELI. Anahtar (model, key) ile tekil; model
+     *  gonderilmezse backend belirsiz anahtarlari 409 ile reddeder — eskiden
+     *  keyfi bir satiri, cogu zaman BASKA modelin satirini duzenliyordu. */
+    model?: string
   ) => Promise<void>;
   onClose: () => void;
 };
@@ -137,7 +141,7 @@ export function SignalEditModal({ signal, onSave, onClose }: Props) {
         modbus_function: parseIntOrNull(editModbusFunction),
         modbus_address: parseIntOrNull(editModbusAddress),
         mqtt_topic: editMqttTopic.trim() || null
-      });
+      }, signal.model);
       onClose();
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : t("engineering.signals.form.saveFail"));

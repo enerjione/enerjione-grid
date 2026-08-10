@@ -58,15 +58,68 @@ def list_signals(
     return list(db.scalars(stmt).all())
 
 
+def _satiri_coz(db: Session, signal_key: str, model: str | None) -> SignalCatalog:
+    """Anahtari MODEL BAZINDA satira cevirir.
+
+    Tekillik `(model, key)` ciftinde (bkz. SignalCatalog docstring) ama bu
+    uclar satiri YALNIZCA `key` ile seciyordu ve `ORDER BY` de yoktu; hangi
+    modelin satirinin geldigi KEYFIYDI.
+
+    YASANAN: 192 anahtar birden fazla modelde var. Sanal set sayfasindan bir
+    sinyali kapatmak FIZIKSEL KIT'in satirini vuruyor, o DNP3 noktasi gateway
+    okuma listesinden sessizce dusuyor ve set sayfasinda sinyal hala "aktif"
+    gorunuyordu — cunku kapanan satir BASKA modelin satiriydi. Duzenleme
+    modali tum alanlari gonderdigi icin ayni yoldan bir etiket degisikligi
+    SN2 filosunun DNP3 adresini de kaydirabiliyordu.
+
+    Model verilmezse ve anahtar tek bir modelde ise eski davranis korunur;
+    birden fazla modelde ise 409 ile BELIRSIZ denir — sessizce birini
+    secmektense islemi reddetmek dogru.
+    """
+    # Bu repoda uclar testlerden DOGRUDAN cagriliyor (httpx/TestClient yok),
+    # yani FastAPI varsayilanlari uygulanmaz ve `model` bir `Query` nesnesi
+    # olarak gelir — truthy oldugu icin sorguya SQL parametresi diye girip
+    # "type 'Query' is not supported" ile patlar. Yalnizca gercek bir dizgeyi
+    # filtre sayiyoruz.
+    model_kodu = model if isinstance(model, str) and model.strip() else None
+    stmt = select(SignalCatalog).where(SignalCatalog.key == signal_key)
+    if model_kodu:
+        stmt = stmt.where(SignalCatalog.model == model_kodu)
+    satirlar = list(db.scalars(stmt.order_by(SignalCatalog.model.asc())).all())
+    if not satirlar:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Signal not found")
+    if len(satirlar) > 1:
+        modeller = ", ".join(s.model for s in satirlar)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"'{signal_key}' birden fazla cihaz modelinde tanimli ({modeller}). "
+                "Hangi modelin sinyali duzenlenecegi `model` parametresiyle "
+                "belirtilmeli."
+            ),
+        )
+    return satirlar[0]
+
+
 @router.post("", response_model=SignalCatalogRead, status_code=status.HTTP_201_CREATED)
 def create_signal(
     payload: SignalCatalogCreate,
     current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
-    existing = db.scalar(select(SignalCatalog).where(SignalCatalog.key == payload.key))
+    # Cakisma kontrolu DB kisitiyla AYNI olmali: tekillik (model, key).
+    # Yalnizca `key`e bakmak, silinen bir kit sinyalini geri eklemeyi
+    # imkansiz kiliyordu (baska modelde ayni ad var diye 409).
+    existing = db.scalar(
+        select(SignalCatalog).where(
+            SignalCatalog.key == payload.key, SignalCatalog.model == payload.model
+        )
+    )
     if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Signal key already exists")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"'{payload.key}' bu modelde zaten tanimli ({payload.model})",
+        )
     row = SignalCatalog(**payload.model_dump())
     db.add(row)
     db.flush()
@@ -90,12 +143,11 @@ def create_signal(
 def update_signal(
     signal_key: str,
     payload: SignalCatalogUpdate,
+    model: str | None = Query(default=None, description="Sinyalin ait oldugu cihaz modeli"),
     current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
-    row = db.scalar(select(SignalCatalog).where(SignalCatalog.key == signal_key))
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Signal not found")
+    row = _satiri_coz(db, signal_key, model)
     changes = payload.model_dump(exclude_none=True)
     # Onay bayragi bir SUTUN DEGIL, bir izindir: `changes` icinde kalirsa
     # `setattr` ile modele yazilmaya calisilirdi.
@@ -189,6 +241,7 @@ def bulk_update_historian(
             historize=payload.historize,
             deadband=payload.historize_deadband,
             ariza_onayi=payload.confirm_fault_signals,
+            model=payload.model,
         )
     except signal_catalog_service.HistorianPolitikaHatasi as hata:
         raise HTTPException(
@@ -247,12 +300,11 @@ def bulk_update_historian(
 @router.delete("/{signal_key}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_signal(
     signal_key: str,
+    model: str | None = Query(default=None, description="Sinyalin ait oldugu cihaz modeli"),
     current_user: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
-    row = db.scalar(select(SignalCatalog).where(SignalCatalog.key == signal_key))
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Signal not found")
+    row = _satiri_coz(db, signal_key, model)
     label = row.label
     key = row.key
     db.delete(row)
