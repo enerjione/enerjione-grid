@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LayersControl, MapContainer, Marker, Polyline, Tooltip } from "react-leaflet";
+import { LayersControl, MapContainer, Marker, Polyline, Tooltip, useMap } from "react-leaflet";
 import { MAP_LAYERS } from "../../shared/mapTiles";
 import { ResilientTileLayer } from "../../components/ResilientTileLayer";
 import L from "leaflet";
@@ -99,6 +99,33 @@ function lerp(
   ];
 }
 
+/**
+ * Secilen odaga gore haritayi cerceveler.
+ *
+ * `useMap` yalnizca MapContainer'in ICINDE calisir, bu yuzden ayri bir
+ * bilesen. Nokta listesi degistiginde (odak butonlari) yeniden cerceveler;
+ * kullanicinin elle yaptigi kaydirma/zoom bir sonraki odak degisimine kadar
+ * korunur.
+ */
+function FitFocus({ points }: { points: [number, number][] }) {
+  const map = useMap();
+  // Anahtar: nokta sayisi + ilk/son nokta. Tum diziyi bagimlilik yapmak her
+  // render'da yeni referans uretip sonsuz fitBounds dongusu kurardi.
+  const anahtar = points.length
+    ? `${points.length}|${points[0].join()}|${points[points.length - 1].join()}`
+    : "bos";
+  useEffect(() => {
+    if (points.length === 0) return;
+    if (points.length === 1) {
+      map.setView(points[0], 16, { animate: true });
+      return;
+    }
+    map.fitBounds(L.latLngBounds(points), { padding: [28, 28], animate: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, anahtar]);
+  return null;
+}
+
 export function FaultDetailModal({
   fault,
   users,
@@ -125,6 +152,8 @@ export function FaultDetailModal({
   const [causeDetailDraft, setCauseDetailDraft] = useState(fault.cause_detail ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  /** Harita odagi: ariza bolgesi / tum hat / tum sebeke. */
+  const [mapFocus, setMapFocus] = useState<"zone" | "line" | "grid">("zone");
   // Canlı süre sayacı için "now" state'i her saniye güncellenir.
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => {
@@ -400,12 +429,40 @@ export function FaultDetailModal({
       isEnd: p.id === fault.to_pole_id
     }));
 
+    // ODAK SINIRLARI — haritanin ne kadarini gosterecegi.
+    //
+    // Tek bir gorunum yetmiyordu: ariza araligina zoom yapinca operator
+    // "bu hattin neresi?" diye soruyor, tum hatta bakinca ariza noktasi
+    // igne ucu kadar kaliyordu. Ucu de ayni haritada, secilebilir.
+    const zoneBounds: [number, number][] =
+      faultRed.length >= 2 ? faultRed : fullLine;
+    const lineBounds: [number, number][] = fullLine;
+    // Tum sebeke: ayni BOLGEDEKI diger hatlar da — komsu hat bilgisi
+    // "ariza hangi besleme kolunda" sorusunu cevapliyor.
+    const otherLines: { lineId: number; name: string; path: [number, number][] }[] = [];
+    for (const ln of gridSnapshot.lines ?? []) {
+      if (ln.id === fault.line_id) continue;
+      const pts = gridSnapshot.poles
+        .filter((p) => p.line_id === ln.id)
+        .sort((a, b) => a.sequence_no - b.sequence_no)
+        .map((p) => [p.latitude, p.longitude] as [number, number]);
+      if (pts.length >= 2) otherLines.push({ lineId: ln.id, name: ln.name, path: pts });
+    }
+    const gridBounds: [number, number][] = [
+      ...fullLine,
+      ...otherLines.flatMap((l) => l.path)
+    ];
+
     return {
       preGreen,
       faultRed,
       postGreen,
       center,
       zoom,
+      zoneBounds,
+      lineBounds,
+      gridBounds,
+      otherLines,
       polesWithRole: linePoles.map((p) => ({
         p,
         isFromFault: p.id === fault.from_pole_id,
@@ -594,7 +651,26 @@ export function FaultDetailModal({
           {/* Sol kolon: harita + cihaz bilgisi */}
           <div className="fault-modal-left">
             <div className="fault-modal-section">
-              <h4>{t("faults.detail.mapTitle")}</h4>
+              <div className="fault-modal-section-head">
+                <h4>{t("faults.detail.mapTitle")}</h4>
+                {/* ODAK SECICI: ariza bolgesine zoom yapinca "bu hattin
+                    neresi?" belirsiz kaliyor, tum hatta bakinca ariza
+                    noktasi kayboluyordu. Ucu de ayni haritada. */}
+                {mapView ? (
+                  <div className="fault-modal-focus" role="group">
+                    {(["zone", "line", "grid"] as const).map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        className={mapFocus === k ? "is-active" : undefined}
+                        onClick={() => setMapFocus(k)}
+                      >
+                        {t(`faults.detail.focus.${k}`)}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
               {mapView ? (
                 <div className="fault-modal-map-wrap">
                   <MapContainer
@@ -625,6 +701,28 @@ export function FaultDetailModal({
                       </LayersControl.BaseLayer>
                     </LayersControl>
                     <MapLayerSwitchFix />
+                    <FitFocus
+                      points={
+                        mapFocus === "zone"
+                          ? mapView.zoneBounds
+                          : mapFocus === "line"
+                            ? mapView.lineBounds
+                            : mapView.gridBounds
+                      }
+                    />
+                    {/* Tum sebeke gorunumunde komsu hatlar SOLUK cizilir —
+                        ariza hatti one cikmaya devam etsin. */}
+                    {mapFocus === "grid"
+                      ? mapView.otherLines.map((l) => (
+                          <Polyline
+                            key={`ol-${l.lineId}`}
+                            positions={l.path}
+                            pathOptions={{ color: "#94a3b8", weight: 2.5, opacity: 0.45 }}
+                          >
+                            <Tooltip>{l.name}</Tooltip>
+                          </Polyline>
+                        ))
+                      : null}
                     {/* Sırayla: pre yeşil, ariza kirmizi kesik, post yeşil.
                         Üç parça hattin gercek geometrisini takip eder; eski
                         from->to duz cizgi yanlistı. */}
@@ -732,20 +830,13 @@ export function FaultDetailModal({
                           })}
                         </strong>
                       </div>
-                      <div className="fault-modal-distance-row">
-                        <span className="fault-modal-distance-label">
-                          {t("faults.detail.distanceSpanLabel")}
-                        </span>
-                        <strong className="fault-modal-distance-value">
-                          {formatDistanceM(fault.zone_length_m)}
-                        </strong>
-                      </div>
                     </>
                   ) : null}
                 </div>
-                <p className="fault-modal-distance-hint">
-                  {t("faults.detail.distanceHint")}
-                </p>
+                {/* Olcum yonteminin uzun aciklamasi KALDIRILDI (bir paragraf
+                    kot farki/sarkma notu). Ekipe operasyonel bilgi vermiyor,
+                    her acilista okunmasi gereken bir metin gibi duruyordu;
+                    ayni bilgi baslik altindaki tek satirlik ipucunda. */}
               </div>
             ) : null}
 
@@ -774,9 +865,11 @@ export function FaultDetailModal({
                           </span>
                         ) : null}
                       </div>
-                      <span className="fault-modal-pole-coords" title={t("faults.detail.poleCoordsTooltip")}>
-                        {rp.latitude.toFixed(6)}, {rp.longitude.toFixed(6)}
-                      </span>
+                      {/* Ondalik koordinat KALDIRILDI: ekip sahada
+                          "37.812390, 41.567505" ile yon bulmuyor, haritayi
+                          ya da direk adini kullaniyor. Konum zaten ustteki
+                          haritada isaretli; burada iki sutun sayi listesi
+                          karti gereksiz teknik gosteriyordu. */}
                     </li>
                   ))}
                 </ul>

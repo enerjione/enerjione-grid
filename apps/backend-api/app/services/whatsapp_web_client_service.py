@@ -1,3 +1,4 @@
+import base64
 import json
 import urllib.error
 import urllib.request
@@ -58,6 +59,35 @@ def send_test_message(recipient_phone: str, message: str) -> None:
         raise RuntimeError(f"WhatsApp Web gateway'e ulaşılamadı: {exc}") from exc
     if not result.get("ok"):
         raise RuntimeError(result.get("error") or "WhatsApp mesajı gönderilemedi.")
+
+
+def send_image(recipient: str, image_png: bytes, caption: str = "") -> None:
+    """Gorsel + alt yazi gonderir (hat arizasi harita gorseli).
+
+    Metin tek basina "nerede" sorusunu tam cevaplamiyor: koordinat linkini
+    tiklamak, uygulama degistirmek gerekiyor. Harita gorseli sohbette aninda
+    gorunur — ekip mesaja bakip yola cikar.
+
+    Zaman asimi metinden UZUN (45 sn): Baileys medyayi WhatsApp sunucusuna
+    yukluyor, bu yukleme baglanti hizina bagli.
+    """
+    if not recipient:
+        raise ValueError("Alıcı boş.")
+    if not image_png:
+        raise ValueError("Görsel içeriği boş.")
+    payload = {
+        "to": recipient,
+        "image": base64.b64encode(image_png).decode("ascii"),
+        "caption": caption,
+    }
+    try:
+        result = _request("POST", "/send-image", payload, timeout=45)
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"WhatsApp Web gateway hatası: HTTP {exc.code}") from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise RuntimeError(f"WhatsApp Web gateway'e ulaşılamadı: {exc}") from exc
+    if not result.get("ok"):
+        raise RuntimeError(result.get("error") or "WhatsApp görseli gönderilemedi.")
 
 
 def logout() -> None:

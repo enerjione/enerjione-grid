@@ -128,6 +128,30 @@ async function sendMessage(to, message) {
   await state.sock.sendMessage(jid, { text: message || "" });
 }
 
+/**
+ * Gorsel + alt yazi gonderir (hat arizasi harita gorseli icin).
+ *
+ * NEDEN: ariza bildiriminde metin tek basina "nerede" sorusunu tam
+ * cevaplamiyor — koordinat linki tiklamak, uygulama degistirmek gerekiyor.
+ * Harita gorseli sohbette ANINDA gorunur; ekip mesaja bakip yola cikar.
+ *
+ * `imageBase64` ham base64 (data: oneki OLMADAN). Metin gonderimiyle ayni
+ * baglanti/oturum kullanilir.
+ */
+async function sendImage(to, imageBase64, caption) {
+  if (state.status !== "connected" || !state.sock) {
+    throw new Error("WhatsApp Web bagli degil.");
+  }
+  if (!imageBase64) {
+    throw new Error("Gorsel icerigi bos.");
+  }
+  const jid = toJid(to);
+  await state.sock.sendMessage(jid, {
+    image: Buffer.from(imageBase64, "base64"),
+    caption: caption || ""
+  });
+}
+
 async function logout() {
   if (state.sock) {
     try {
@@ -161,4 +185,4 @@ async function listGroups() {
   }));
 }
 
-module.exports = { connect, sendMessage, logout, getStatus, getQr, listGroups };
+module.exports = { connect, sendMessage, sendImage, logout, getStatus, getQr, listGroups };

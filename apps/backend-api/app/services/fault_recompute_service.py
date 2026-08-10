@@ -428,10 +428,15 @@ def recompute_faults(db: Session) -> None:
         from_pole = poles_by_id.get(slot[1])
         if from_pole is None:
             continue
+        # BRANSMAN BAGLANTI SEGMENTI: kolun ilk segmenti ana hattaki dallanma
+        # diregiyle baslar, yani `from_pole` BASKA bir hattin diregidir ve
+        # sequence_no'su bu kolun numaralandirmasiyla kiyaslanamaz (ana hatta
+        # 10, kolun direkleri 1,2,3...). Ham haliyle siralandiginda bu cihaz
+        # kolun SONUNA dusuyor; oysa kolun GIRISIDIR — "gordum/gormedim"
+        # zinciri ters okunur ve ariza araligi yanlis cikar.
+        sira = 0 if from_pole.line_id != line_id else from_pole.sequence_no
         for idx, seg in enumerate(segs):
-            devices_per_line.setdefault(line_id, []).append(
-                (from_pole.sequence_no, idx, seg.id, seg)
-            )
+            devices_per_line.setdefault(line_id, []).append((sira, idx, seg.id, seg))
     # Hat icindeki cihaz listesini siralayalim (slot fromSeq, sonra slot ici idx)
     for arr in devices_per_line.values():
         arr.sort(key=lambda t: (t[0], t[1], t[2]))

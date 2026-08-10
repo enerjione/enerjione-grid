@@ -69,6 +69,15 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, { ok: true });
       return;
     }
+    if (req.method === "POST" && req.url === "/send-image") {
+      // Ariza harita gorseli. `image` ham base64 (data: oneki olmadan);
+      // govde buyuk olabilecegi icin readBody sinirini asmamak adina
+      // backend PNG'yi makul cozunurlukte uretir.
+      const body = await readBody(req);
+      await baileys.sendImage(body.to, body.image, body.caption);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
     if (req.method === "POST" && req.url === "/logout") {
       await baileys.logout();
       sendJson(res, 200, { ok: true });

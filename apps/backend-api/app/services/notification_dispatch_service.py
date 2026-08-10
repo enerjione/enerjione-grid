@@ -563,6 +563,41 @@ def dispatch_fault_notifications(
     sms_metin = chat_templates.fault_sms(**fault_ctx)
     wa_metin = chat_templates.fault_whatsapp(**fault_ctx)
 
+    # ARIZA HARITA GORSELI — WhatsApp icin.
+    # Metin "nerede" sorusunu tam cevaplamiyor: koordinat linkini tiklamak,
+    # uygulama degistirmek gerekiyor. Harita gorseli sohbette aninda gorunur.
+    # Ayni PNG e-postada da kullaniliyor (fault_map_render); burada bir kez
+    # uretilip tum WhatsApp alicilarina yeniden kullanilir.
+    # Render hatasi bildirimi DUSURMEMELI — gorsel yoksa metin yine gider.
+    harita_png: bytes | None = None
+    if settings.whatsapp_web_enabled and fault_row is not None:
+        try:
+            from app.services.fault_map_render import render_fault_map_png
+
+            harita_png = render_fault_map_png(db, fault_row) or None
+        except Exception:  # noqa: BLE001
+            logger.exception("fault_map_render_failed fault_id=%s", fault_id)
+
+    def _wa_gonder(hedef: str) -> None:
+        """Gorsel varsa gorseli alt yaziyla, yoksa duz metni gonder.
+
+        GORSEL BASARISIZ OLURSA METNE DUSER. Gateway'in medya ucu eski
+        surumde YOK (`/send-image` 404 doner); bu durumda gorsel denemesinin
+        basarisizligi ariza bildirimini tamamen yutardi. Bildirim kaybi,
+        gorselsiz bildirimden cok daha kotu.
+        """
+        if harita_png:
+            try:
+                whatsapp_web_client_service.send_image(hedef, harita_png, wa_metin)
+                return
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "fault_whatsapp_image_failed hedef=%s fault_id=%d error=%s "
+                    "— duz metne dusuluyor",
+                    hedef, fault_id, exc,
+                )
+        whatsapp_web_client_service.send_test_message(hedef, wa_metin)
+
     for user in recipients:
         pref = _get_pref(db, user.id)
         if settings.smtp_enabled and user.email and pref.email_enabled:
@@ -604,9 +639,7 @@ def dispatch_fault_notifications(
             and getattr(pref, "whatsapp_web_enabled", True)
         ):
             try:
-                whatsapp_web_client_service.send_test_message(
-                    user.phone_number, wa_metin
-                )
+                _wa_gonder(user.phone_number)
                 logger.info(
                     "fault_whatsapp_sent user=%s fault_id=%d", user.username, fault_id
                 )
@@ -626,7 +659,7 @@ def dispatch_fault_notifications(
         ]
         for jid in jids:
             try:
-                whatsapp_web_client_service.send_test_message(jid, wa_metin)
+                _wa_gonder(jid)
                 logger.info(
                     "fault_whatsapp_group_sent jid=%s fault_id=%d", jid, fault_id
                 )

@@ -78,6 +78,17 @@ def giden(monkeypatch):
         wa, "send_test_message",
         lambda hedef, mesaj: kayit["whatsapp"].append((hedef, mesaj)),
     )
+    # Ariza bildirimi harita GORSELI ile gidiyor. Gorsel ucu yakalanmazsa
+    # test gercek aga cikip zaman asimina ugrar; render de karo indirmeye
+    # calisir. Ikisini de kapatiyoruz — bu dosya KANAL KAPILARINI olcuyor,
+    # gorsel yolu test_fault_bildirim_gitmiyor.py'de dogrulanir.
+    monkeypatch.setattr(
+        wa, "send_image",
+        lambda hedef, png, caption="": kayit["whatsapp"].append((hedef, caption)),
+    )
+    import app.services.fault_map_render as fmr
+
+    monkeypatch.setattr(fmr, "render_fault_map_png", lambda db, fault: None)
     return kayit
 
 

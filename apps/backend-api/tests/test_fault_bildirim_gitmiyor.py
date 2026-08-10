@@ -44,6 +44,19 @@ from app.models.notification_settings import NotificationSettings
 from app.services import notification_dispatch_service as nds
 
 
+@pytest.fixture(autouse=True)
+def _harita_render_kapali(monkeypatch):
+    """Ariza bildirimi WhatsApp'a harita GORSELI ekliyor.
+
+    Render karo indirmeye calisiyor; test ortaminda ag yok ve her cagri
+    zaman asimina kadar bekliyor (suite suresi iki katina cikmisti). Gorsel
+    yolunun kendisi `test_harita_gorseli_*` testlerinde dogrulanir; buradaki
+    senaryolar metin akisini olcuyor.
+    """
+    import app.services.fault_map_render as fmr
+
+    monkeypatch.setattr(fmr, "render_fault_map_png", lambda db, fault: None)
+
 @pytest.fixture()
 def db():
     eng = create_engine("sqlite:///:memory:")
@@ -111,6 +124,13 @@ def test_bekleyen_ariza_ALARM_OLMADAN_gonderilir(db, monkeypatch):
         "send_test_message",
         lambda hedef, mesaj: gonderilen.append((hedef, mesaj)),
     )
+    # Ariza bildirimi artik harita GORSELI ile gidiyor; gorsel ucu
+    # yakalanmazsa test gercek aga cikip zaman asimina ugrar.
+    monkeypatch.setattr(
+        nds.whatsapp_web_client_service,
+        "send_image",
+        lambda hedef, png, caption="": gonderilen.append((hedef, caption)),
+    )
     _kurulum(db)
 
     sent = nds.dispatch_pending_fault_notifications(db)
@@ -132,6 +152,11 @@ def test_ayni_ariza_IKI_KEZ_gonderilmez(db, monkeypatch):
         "send_test_message",
         lambda hedef, mesaj: gonderilen.append(hedef),
     )
+    monkeypatch.setattr(
+        nds.whatsapp_web_client_service,
+        "send_image",
+        lambda hedef, png, caption="": gonderilen.append(hedef),
+    )
     _kurulum(db)
 
     assert nds.dispatch_pending_fault_notifications(db) == 1
@@ -145,6 +170,11 @@ def test_kapanmis_ariza_gonderilmez(db, monkeypatch):
         nds.whatsapp_web_client_service,
         "send_test_message",
         lambda hedef, mesaj: gonderilen.append(hedef),
+    )
+    monkeypatch.setattr(
+        nds.whatsapp_web_client_service,
+        "send_image",
+        lambda hedef, png, caption="": gonderilen.append(hedef),
     )
     fault = _kurulum(db)
     fault.status = "resolved"
@@ -162,6 +192,11 @@ def test_SMTP_kapali_olsa_bile_WhatsApp_grubuna_duser(db, monkeypatch):
         "send_test_message",
         lambda hedef, mesaj: gonderilen.append(hedef),
     )
+    monkeypatch.setattr(
+        nds.whatsapp_web_client_service,
+        "send_image",
+        lambda hedef, png, caption="": gonderilen.append(hedef),
+    )
     _kurulum(db, whatsapp_group=True, smtp=False)
 
     nds.dispatch_pending_fault_notifications(db)
@@ -176,6 +211,11 @@ def test_whatsapp_hatasi_damgayi_engellemez(db, monkeypatch):
         raise RuntimeError("whatsapp gateway down")
 
     monkeypatch.setattr(nds.whatsapp_web_client_service, "send_test_message", _patla)
+    monkeypatch.setattr(
+        nds.whatsapp_web_client_service,
+        "send_image",
+        lambda hedef, png, caption="": _patla(hedef, caption),
+    )
     fault = _kurulum(db)
 
     nds.dispatch_pending_fault_notifications(db)
@@ -237,3 +277,62 @@ def test_tekrarlanan_alarm_mesaji_ariza_gonderimini_ENGELLEMEZ():
         break
     else:  # pragma: no cover
         raise AssertionError("duplicate_ignored dali bulunamadi")
+
+
+# ------------------------------------------------------- harita gorseli
+
+
+def test_harita_gorseli_WHATSAPPA_gonderilir(db, monkeypatch):
+    """Ariza mesajinda metin tek basina "nerede" sorusunu tam cevaplamiyor:
+    koordinat linkini tiklamak, uygulama degistirmek gerekiyor. Harita
+    gorseli sohbette aninda gorunur."""
+    import app.services.fault_map_render as fmr
+
+    monkeypatch.setattr(fmr, "render_fault_map_png", lambda db, fault: b"PNGDATA")
+    gorseller: list[tuple[str, bytes, str]] = []
+    monkeypatch.setattr(
+        nds.whatsapp_web_client_service,
+        "send_image",
+        lambda hedef, png, caption="": gorseller.append((hedef, png, caption)),
+    )
+    monkeypatch.setattr(
+        nds.whatsapp_web_client_service,
+        "send_test_message",
+        lambda hedef, mesaj: pytest.fail("gorsel varken duz metne dusuldu"),
+    )
+    _kurulum(db)
+
+    nds.dispatch_pending_fault_notifications(db)
+
+    assert gorseller, "harita gorseli gonderilmedi"
+    hedef, png, caption = gorseller[0]
+    assert png == b"PNGDATA"
+    # Alt yazi metnin KENDISI olmali — gorsel metnin yerine gecmez, yaninda
+    # gider; aksi halde mesafe/alarm bilgisi kaybolurdu.
+    assert "HAT ARIZASI" in caption and "HAT-1" in caption
+
+
+def test_gorsel_gonderilemezse_DUZ_METNE_duser(db, monkeypatch):
+    """Gateway'in medya ucu eski surumde YOK (`/send-image` 404). Gorsel
+    denemesinin basarisizligi ariza bildirimini tamamen yutmamali —
+    bildirim kaybi, gorselsiz bildirimden cok daha kotu."""
+    import app.services.fault_map_render as fmr
+
+    monkeypatch.setattr(fmr, "render_fault_map_png", lambda db, fault: b"PNGDATA")
+
+    def _medya_yok(hedef, png, caption=""):
+        raise RuntimeError("HTTP 404")
+
+    metinler: list[str] = []
+    monkeypatch.setattr(nds.whatsapp_web_client_service, "send_image", _medya_yok)
+    monkeypatch.setattr(
+        nds.whatsapp_web_client_service,
+        "send_test_message",
+        lambda hedef, mesaj: metinler.append(mesaj),
+    )
+    _kurulum(db)
+
+    nds.dispatch_pending_fault_notifications(db)
+
+    assert metinler, "gorsel patlayinca bildirim tamamen kayboldu"
+    assert "HAT ARIZASI" in metinler[0]

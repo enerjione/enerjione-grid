@@ -26,6 +26,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ChevronRight,
+  GitBranch,
   List,
   MapPin,
   Map as MapIcon,
@@ -154,6 +155,15 @@ export function ActiveFaultCard({
             {f.region_name}
           </div>
           <h3 className="fx-head-line">
+            {/* Kayit bir bransman kolundaysa hangi ana hattan ciktigi
+                basliktan okunmali; yoksa "BR-4" tek basina nereye ait
+                oldugunu soylemiyor. */}
+            {f.is_branch_line && f.parent_line_name ? (
+              <span className="fx-head-parent">
+                {f.parent_line_name}
+                <ChevronRight size={13} strokeWidth={2.6} />
+              </span>
+            ) : null}
             {f.line_name}
             <span className="fx-head-range">
               <ChevronRight size={16} strokeWidth={2.6} />
@@ -291,6 +301,43 @@ export function ActiveFaultCard({
               </ul>
             )}
           </div>
+
+          {/* --- ariza araliginda kalan bransman kollari ---
+              Ana hattaki ariza bir dallanma diregini kapsiyorsa o kol da
+              enerjisiz kalir; ekip sahaya ciktiginda kolu da kontrol
+              etmelidir. Bu bilgi hicbir yerde gorunmuyordu. */}
+          {(f.affected_branches?.length ?? 0) > 0 ? (
+            <div className="fx-ev-block">
+              <h4 className="fx-ev-title">
+                <GitBranch size={13} strokeWidth={2.3} />
+                {t("faults.card.branchesTitle")}
+              </h4>
+              <ul className="fx-branch-list">
+                {f.affected_branches!.map((b) => (
+                  <li
+                    key={b.line_id}
+                    className={`fx-branch${b.has_own_fault ? " is-confirmed" : ""}`}
+                  >
+                    <strong>{b.line_name}</strong>
+                    <small>
+                      {t("faults.card.branchAt", {
+                        pole: b.branch_pole_name || `#${b.branch_pole_seq ?? "?"}`
+                      })}
+                    </small>
+                    {b.has_own_fault ? (
+                      <span className="fx-branch-tag">
+                        {t("faults.card.branchConfirmed")}
+                      </span>
+                    ) : (
+                      <span className="fx-branch-tag fx-branch-tag--check">
+                        {t("faults.card.branchCheck")}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           {/* --- ariza bolgesinin sinirlari --- */}
           <div className="fx-ev-block">

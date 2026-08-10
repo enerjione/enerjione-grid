@@ -32,6 +32,26 @@ class FaultTriggerAlarm(BaseModel):
     created_at: datetime
 
 
+class FaultBranchRef(BaseModel):
+    """Ariza bolgesinin ICINDE kalan bir bransman kolu.
+
+    NEDEN: hat tek bir zincir degil — dallanma diregine bagli kollar var ve
+    kol AYRI bir hattir (`Line.branched_from_pole_id`). Ana hattaki ariza
+    araligi bir dallanma diregini kapsiyorsa o kol da enerjisiz kalir ya da
+    ariza dogrudan kolda olabilir; ekip sahaya ciktiginda kolu da kontrol
+    etmelidir. Bu bilgi hicbir yerde gorunmuyordu: operator ana hattaki
+    araliga bakip kolu atliyordu.
+    """
+
+    line_id: int
+    line_name: str
+    #: Kolun ayrildigi direk — arama bu direkten baslar.
+    branch_pole_seq: int | None = None
+    branch_pole_name: str | None = None
+    #: Kolda O AN acik bir ariza kaydi var mi (yani ariza kolda dogrulandi).
+    has_own_fault: bool = False
+
+
 class FaultEventRead(BaseModel):
     id: int
     line_id: int
@@ -72,6 +92,15 @@ class FaultEventRead(BaseModel):
     #: Arizayi doguran ACIK alarmlar (son "gordum" diyen cihazdan), en yeni
     #: once. Bos liste: alarm bu arada normale dondu ya da kayit eski.
     trigger_alarms: list[FaultTriggerAlarm] = []
+
+    #: Ariza araliginin icinde kalan bransman kollari — sahada kontrol
+    #: edilmesi gereken ek hatlar. Bos liste: aralikta dallanma yok.
+    affected_branches: list[FaultBranchRef] = []
+    #: Bu ariza kaydinin KENDISI bir bransman kolunda mi? Arayuz basligi
+    #: "ANA HAT > BR-1 kolu" seklinde gosterir.
+    is_branch_line: bool = False
+    parent_line_id: int | None = None
+    parent_line_name: str | None = None
 
     # ---- ANALIZ ALANLARI ----
     #: Insanin girdigi sebep (katalogdan). NULL = henuz doldurulmadi.
