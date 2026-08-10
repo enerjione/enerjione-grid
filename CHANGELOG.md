@@ -14,6 +14,57 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.57.0] — 2026-08-10
+
+v2.56.0 arıza analizinin veri temelini kurmuştu ama girilecek bir yer yoktu.
+Bu sürüm onu kullanılabilir yapıyor.
+
+### Eklendi
+
+- **Saha ekibi arıza sebebini girebiliyor.** Arıza detayında katalogdan seçim
+  (aileye göre gruplu: dış etken / ekipman / hava / işletme / bilinmiyor) +
+  serbest ayrıntı alanı. Sebep **durumdan bağımsız** girilir: ekip arızayı
+  kapatırken sebebi bilmeyebilir ya da kapattıktan sonra öğrenebilir.
+  Yanlış seçilmişse boşa çekilerek geri alınabilir.
+- **Kural önerisi gösteriliyor ama seçili gelmiyor.** Cihaz verisinden
+  türetilen öneri ("dI/dt tetiklendi, aşırı akım yok → tipik ağaç teması")
+  bir tık uzakta duruyor. Operatör onaylamadan bir etiket "girilmiş"
+  sayılsaydı istatistik, kimsenin bakmadığı bir tahminle dolardı. İnsan
+  etiketi ile kural önerisi ayrı kolonlarda — ikisini karşılaştırmak
+  kuralların isabetini ölçen tek şey.
+- **Ünite → faz eşleme formları.** Cihaz Yönetimi'nde istisna cihazlar için,
+  Proje Ayarları'nda kurulumun genel konvansiyonu için. Boş seçim = "üst
+  katmanı kullan"; zincir cihaz → proje → varsayılan. v2.56.0'da eşleme
+  şemaya girmişti ama değiştirilecek yer yoktu; varsayılan dışında kurulmuş
+  bir sahada faz etiketleri sessizce yanlış birikiyordu.
+
+### Düzeltildi
+
+- **Dışarı çıkan mesajlarda saat yanlıştı.** Saat 11:00'de oluşan bir alarmın
+  WhatsApp mesajında 08:00 yazıyordu. Sistem zamanı her yerde UTC saklıyor ve
+  bu doğru (sıralama, SLA ölçümü ve tekrar önleme buna dayanır); ama dışarı
+  giden metni sahadaki insan okuyor ve duvar saatine bakıyor. Yerel saate
+  çevirme tek kaynağa alındı.
+- **Branşman kolunun ilk segmentine cihaz bağlanamıyordu.** Segment
+  doğrulaması "iki direk de aynı hatta olmalı" diyordu; branşmanın ilk
+  segmenti doğası gereği ana hattaki dallanma direği ile kolun ilk direğini,
+  yani iki farklı hattın direklerini birleştirir.
+- **Uydu katmanında çok yaklaşınca karoların üzerinde "Map data not yet
+  available" yazıyordu.** Sağlayıcı, veri olmayan bir zoom için hata
+  döndürmüyor — o metnin yazılı olduğu geçerli bir görseli başarılı yanıt
+  olarak veriyor. Sağlayıcı zoom sınırı uygulandı.
+
+### Güvenlik
+
+- Faz eşlemesi **kimlik doğrulamalı** bir uçtan servis ediliyor.
+  `GET /project-settings` bilinçli olarak halka açık (login ekranı logoyu
+  oturum yokken çeker) ve oraya eklenen her alan anonim çağırana açılır. Faz
+  eşlemesi marka değil şebeke yapılandırmasıdır; login ekranının ona ihtiyacı
+  yok. Okuma şekli (public) ile yazma şekli ayrı tutuldu ve alanın public
+  uçta olmadığı testle kilitlendi.
+
+---
+
 ## [2.56.0] — 2026-08-10
 
 Arıza analiz katmanının **veri temeli**. Bu sürümden sonra açılan her arıza,
