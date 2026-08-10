@@ -308,6 +308,9 @@ def ingest_alarm(
         signal_key=payload.signal_key,
         produces_fault=payload.produces_fault,
         created_at=datetime.now(timezone.utc),
+        # Kural tetikledi (haberlesme kopmasi DEGIL) — analiz katmani
+        # ikisini ayirmak zorunda; bkz. AlarmEvent.kind.
+        kind="rule",
     )
     db.add(alarm)
     db.flush()  # alarm.id'yi notification metadata'sinda kullanabilmek icin

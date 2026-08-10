@@ -288,3 +288,147 @@ def test_tum_analiz_ekranin_ihtiyaci_olan_HER_SEYI_doner(db):
         "cause_distribution", "rule_accuracy", "phase_distribution", "monthly_trend",
     }
     assert beklenen <= set(sonuc), f"eksik: {beklenen - set(sonuc)}"
+
+
+# ===========================================================================
+# SISTEM SAGLIGI — alarm sikligi ve haberlesme kararliligi
+# ===========================================================================
+#
+# Bu sayilara bakip SAHAYA TEKNISYEN gonderilecek. "Su cihaz gunde 40 kez
+# kopuyor" satirinin yanlis olmasi, bosa yol demektir. Ayirt edici alan
+# (`kind`) tam bu yuzden eklendi; basliga/`signal_key`e bakan bir sezgi
+# sessizce yanlis kovaya atardi.
+
+from app.models.alarm import AlarmEvent  # noqa: E402
+
+
+def _alarm(db, dev_id: int, *, baslik="Asiri akim", kind="rule",
+           gun_once=1, onayli=False, seviye="warning") -> AlarmEvent:
+    a = AlarmEvent(
+        device_id=dev_id,
+        level=seviye,
+        title=baslik,
+        description="",
+        created_at=datetime.now(timezone.utc) - timedelta(days=gun_once),
+        acknowledged=onayli,
+        kind=kind,
+    )
+    db.add(a)
+    db.flush()
+    return a
+
+
+def test_alarm_sikligi_KURAL_bazinda(db):
+    s = Saha(db)
+    for _ in range(3):
+        _alarm(db, s.dev.id, baslik="Asiri akim")
+    _alarm(db, s.dev.id, baslik="Batarya dusuk")
+
+    kurallar = analiz.alarm_sikligi(db, days=365, visible_device_ids=None)
+
+    assert kurallar[0]["rule_name"] == "Asiri akim"
+    assert kurallar[0]["count"] == 3
+    assert kurallar[1]["count"] == 1
+
+
+def test_haberlesme_alarmlari_KURAL_siralamasina_karismaz(db):
+    """Aksi halde 'en sik alarm' listesi cihaz kopmalariyla dolardi."""
+    s = Saha(db)
+    _alarm(db, s.dev.id, baslik="Asiri akim")
+    for _ in range(5):
+        _alarm(db, s.dev.id, baslik="F1 haberleşme alarmı", kind="comm_loss")
+
+    kurallar = analiz.alarm_sikligi(db, days=365, visible_device_ids=None)
+
+    assert [k["rule_name"] for k in kurallar] == ["Asiri akim"]
+
+
+def test_onay_orani_bildiriliyor(db):
+    """Cok tetikleyip HIC onaylanmayan kural, gormezden gelinen kuraldir."""
+    s = Saha(db)
+    _alarm(db, s.dev.id, onayli=True)
+    _alarm(db, s.dev.id, onayli=False)
+    _alarm(db, s.dev.id, onayli=False)
+
+    kural = analiz.alarm_sikligi(db, days=365, visible_device_ids=None)[0]
+
+    assert kural["count"] == 3
+    assert kural["acknowledged"] == 1
+
+
+def test_haberlesme_kararsizligi_KESINTI_sayar(db):
+    s = Saha(db)
+    for _ in range(4):
+        _alarm(db, s.dev.id, kind="comm_loss")
+    _alarm(db, s.dev.id, kind="rule")  # kural alarmi -> sayilmamali
+
+    kopanlar = analiz.haberlesme_kararsizligi(db, days=365, visible_device_ids=None)
+
+    assert len(kopanlar) == 1
+    assert kopanlar[0]["code"] == "SN2-1"
+    assert kopanlar[0]["outages"] == 4
+
+
+def test_SINIFLANMAMIS_eski_kayit_haberlesmeye_SAYILMAZ(db):
+    """`kind` NULL = eski kayit. Onlari 'kopma' saymak, olcumu uydurmakti."""
+    s = Saha(db)
+    _alarm(db, s.dev.id, kind=None, baslik="F1 haberleşme alarmı")
+
+    kopanlar = analiz.haberlesme_kararsizligi(db, days=365, visible_device_ids=None)
+
+    assert kopanlar == []
+
+
+def test_siniflanmamis_sayisi_GORUNUR(db):
+    """Haberlesme sayisinin neden dusuk oldugunu aciklayan tek sey bu."""
+    s = Saha(db)
+    _alarm(db, s.dev.id, kind=None)
+    _alarm(db, s.dev.id, kind="comm_loss")
+
+    ozet = analiz.alarm_ozeti(db, days=365, visible_device_ids=None)
+
+    assert ozet["total"] == 2
+    assert ozet["unclassified"] == 1
+    assert ozet["comm_outages"] == 1
+
+
+def test_alarm_kapsami_uygulanir(db):
+    s = Saha(db)
+    baska = Device(
+        code="SN2-2", name="F2", ip_address="10.0.0.6", latitude=39.5, longitude=35.5
+    )
+    db.add(baska)
+    db.flush()
+    _alarm(db, s.dev.id)
+    _alarm(db, baska.id)
+
+    ozet = analiz.alarm_ozeti(db, days=365, visible_device_ids={s.dev.id})
+
+    assert ozet["total"] == 1
+
+
+def test_bos_alarm_kapsami_hicbir_sey_gostermez(db):
+    s = Saha(db)
+    _alarm(db, s.dev.id)
+    assert analiz.alarm_ozeti(db, days=365, visible_device_ids=set())["total"] == 0
+
+
+def test_pencere_disi_alarm_sayilmaz(db):
+    s = Saha(db)
+    _alarm(db, s.dev.id, gun_once=5)
+    _alarm(db, s.dev.id, gun_once=400)
+    assert analiz.alarm_ozeti(db, days=30, visible_device_ids=None)["total"] == 1
+
+
+def test_sistem_sagligi_sozlesmesi(db):
+    s = Saha(db)
+    _alarm(db, s.dev.id)
+    sonuc = analiz.sistem_sagligi(db, days=365, visible_device_ids=None)
+    assert {"window_days", "alarm_summary", "top_rules", "flapping_devices"} <= set(sonuc)
+
+
+def test_bos_veride_sistem_sagligi_COKMEZ(db):
+    sonuc = analiz.sistem_sagligi(db, days=365, visible_device_ids=None)
+    assert sonuc["alarm_summary"]["total"] == 0
+    assert sonuc["top_rules"] == []
+    assert sonuc["flapping_devices"] == []

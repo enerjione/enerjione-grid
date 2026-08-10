@@ -28,6 +28,20 @@ class AlarmEvent(Base):
     # produces_fault=True alarmlari dikkate alir. Kural sonradan degisse de bu
     # alarmin davranisi sabit kalir. Default True -> eski kayitlar ariza uretir.
     produces_fault: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    #: Alarm NEREDEN dogdu: "rule" (alarm kurali tetikledi) | "comm_loss"
+    #: (cihazla haberlesme koptu, motor kendiliginden acti).
+    #:
+    #: NEDEN ACIK BIR ALAN: analiz katmani "hangi cihazin haberlesmesi sik
+    #: kopuyor" sorusunu cevapliyor ve bunun icin haberlesme alarmlarini
+    #: kural alarmlarindan ayirmasi gerek. Yapisal bir ayirt edici YOKTU:
+    #: `signal_key` haberlesme alarminda NULL ama sema kural alarmlarinda da
+    #: NULL'a izin veriyor, basliga bakmak ise cihaz adina ve dile bagimli.
+    #: Sessizce yanlis kovaya atan bir metrik, metrik olmamasindan kotudur —
+    #: cunku ona bakip sahaya teknisyen gonderilecek.
+    #:
+    #: NULL = eski kayit (bu alan eklenmeden once yazilmis).
+    kind: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 

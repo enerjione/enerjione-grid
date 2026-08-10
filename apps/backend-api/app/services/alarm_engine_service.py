@@ -513,6 +513,10 @@ def handle_telemetry_alarm_event(db: Session, payload: dict) -> None:
         title=f"{device_name} haberleşme alarmı",
         description=f"{signal_key} sinyalinde kalite '{quality}' olarak geldi.",
         created_at=datetime.now(timezone.utc),
+        # Analiz katmani "hangi cihazin haberlesmesi sik kopuyor" sorusunu
+        # bu alandan cevapliyor; baslik/`signal_key` guvenilir ayirt edici
+        # degil (bkz. AlarmEvent.kind).
+        kind="comm_loss",
     )
     db.add(alarm)
     record_event(

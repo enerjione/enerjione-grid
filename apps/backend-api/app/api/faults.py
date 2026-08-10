@@ -450,6 +450,115 @@ def fault_stats(
     return counts
 
 
+# --- SABIT YOLLAR ---
+#
+# `/analytics` ve `/causes`, `/{fault_id}` deseninden ONCE tanimli olmak
+# ZORUNDA. FastAPI yollari SIRAYLA eslestirir; parametreli desen once
+# gelirse `GET /faults/analytics` istegi `/{fault_id}` ile eslesir ve
+# "analytics" tam sayiya cevrilmeye calisilir:
+#   422 — "fault_id: Input should be a valid integer"
+# Ariza Analizi sayfasi bu yuzden tamamen bos aciliyordu.
+# Yeni sabit yol eklerken de bu blogun ICINE koyun.
+
+@router.get("/analytics")
+def fault_analytics(
+    days: int = Query(default=365, ge=1, le=3650),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Ariza analizi — hangi hat, hangi bolge, hangi sebep, ne kadar surede.
+
+    TEK UC: ekran alti ayri istek atsaydi hepsi ayni pencereyi ve ayni
+    kapsami tekrar tekrar hesaplardi; ustelik biri hata verince ekranin bir
+    parcasi sessizce bos kalirdi.
+
+    KAPSAM: operator yalnizca sorumluluk alanindaki hatlarin arizalarini
+    sayar. Analiz ekrani "tum sahanin ozeti" gibi durdugu icin kapsami
+    unutmak, gormemesi gereken hatlari toplam sayilar icinde gizlenmis
+    halde sizdirmak olurdu.
+    """
+    from app.services import fault_analytics_service as analiz
+
+    line_scope = get_visible_line_ids(db, current_user)
+    return analiz.tum_analiz(
+        db,
+        days=days,
+        visible_line_ids=set(line_scope) if line_scope is not None else None,
+    )
+
+
+@router.get("/system-health")
+def fault_system_health(
+    days: int = Query(default=365, ge=1, le=3650),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Sistem sagligi: alarm sikligi + haberlesme kararliligi.
+
+    Ariza analizi "sahada ne oldu" der; burasi "SISTEM kendisi nasil
+    davraniyor". Ikisi ayri kararlar urettirir:
+      * Cok tetikleyip hic onaylanmayan bir kural -> esik yanlis; operator
+        onu gormezden gelmeye baslar ve GERCEK alarmi kacirir.
+      * Gunde onlarca kez kopan bir cihaz -> sorun arizada degil o
+        cihazda/modemde. Tek tek alarmlara bakan biri bunu fark edemez.
+
+    KAPSAM: operator yalnizca gorunur hatlarindaki CIHAZLARIN alarmlarini
+    sayar (ariza analiziyle ayni kural, cihaz duzeyinde).
+    """
+    from app.models.grid_topology import LineSegment
+    from app.services import fault_analytics_service as analiz
+
+    line_scope = get_visible_line_ids(db, current_user)
+    device_scope: set[int] | None = None
+    if line_scope is not None:
+        # Hat kapsami CIHAZ kapsamina cevrilir: alarm cihaza baglidir, hatta
+        # degil. Cihaz -> hat baglantisi `line_segments` uzerinden kurulur
+        # (cihaz bir segmentin uzerinde oturur). Bu cevrimi atlamak, alarm
+        # sorgusunu hic filtrelememek anlamina gelirdi.
+        if not line_scope:
+            device_scope = set()
+        else:
+            device_scope = {
+                row[0]
+                for row in db.execute(
+                    select(LineSegment.device_id)
+                    .where(LineSegment.line_id.in_(line_scope))
+                    .where(LineSegment.device_id.is_not(None))
+                ).all()
+            }
+    return analiz.sistem_sagligi(db, days=days, visible_device_ids=device_scope)
+
+
+@router.get("/causes")
+def list_fault_causes(_: User = Depends(get_current_user)):
+    """Ariza sebep katalogu — arayuzdeki secim listesi.
+
+    KIMLIK DOGRULAMASI: bu uc `Depends(get_current_user)` ALMIYORDU, yani
+    halka aciksti. Fark edilmemesinin sebebi baska bir hataydi: `/causes`
+    `/{fault_id}` deseninin ARKASINDA kaldigi icin istek hic buraya
+    ulasmiyor, parametreli uce dusup onun auth'una takiliyordu. Yol sirasi
+    duzeltilince gercek durum ortaya cikti — bir hata digerini
+    maskeliyordu.
+
+    KATALOG TEK KAYNAKTAN gelir (`app/data/fault_causes.py`). Frontend'e
+    ayri bir liste gomulseydi ikisi zamanla ayrisir ve arayuzde secilen bir
+    kod backend'de taninmaz olurdu.
+
+    Yetki: giris yapmis herkes. Operator de sebep girecegi icin listeyi
+    gorebilmeli.
+    """
+    from app.data.fault_causes import CAUSE_GROUPS, FAULT_CAUSES, FAULT_KINDS, PHASES
+
+    return {
+        "causes": [dict(c) for c in FAULT_CAUSES],
+        "groups": list(CAUSE_GROUPS),
+        "kinds": [
+            {"code": k, "label_tr": tr, "label_en": en} for k, tr, en in FAULT_KINDS
+        ],
+        "phases": sorted(PHASES),
+    }
+
+
 @router.get("/{fault_id}", response_model=FaultEventRead)
 def get_fault(
     fault_id: int,
@@ -584,56 +693,6 @@ def assign_fault(
     db.commit()
     db.refresh(f)
     return _serialize_fault(db, f)
-
-
-@router.get("/analytics")
-def fault_analytics(
-    days: int = Query(default=365, ge=1, le=3650),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Ariza analizi — hangi hat, hangi bolge, hangi sebep, ne kadar surede.
-
-    TEK UC: ekran alti ayri istek atsaydi hepsi ayni pencereyi ve ayni
-    kapsami tekrar tekrar hesaplardi; ustelik biri hata verince ekranin bir
-    parcasi sessizce bos kalirdi.
-
-    KAPSAM: operator yalnizca sorumluluk alanindaki hatlarin arizalarini
-    sayar. Analiz ekrani "tum sahanin ozeti" gibi durdugu icin kapsami
-    unutmak, gormemesi gereken hatlari toplam sayilar icinde gizlenmis
-    halde sizdirmak olurdu.
-    """
-    from app.services import fault_analytics_service as analiz
-
-    line_scope = get_visible_line_ids(db, current_user)
-    return analiz.tum_analiz(
-        db,
-        days=days,
-        visible_line_ids=set(line_scope) if line_scope is not None else None,
-    )
-
-
-@router.get("/causes")
-def list_fault_causes():
-    """Ariza sebep katalogu — arayuzdeki secim listesi.
-
-    KATALOG TEK KAYNAKTAN gelir (`app/data/fault_causes.py`). Frontend'e
-    ayri bir liste gomulseydi ikisi zamanla ayrisir ve arayuzde secilen bir
-    kod backend'de taninmaz olurdu.
-
-    Yetki: giris yapmis herkes. Operator de sebep girecegi icin listeyi
-    gorebilmeli.
-    """
-    from app.data.fault_causes import CAUSE_GROUPS, FAULT_CAUSES, FAULT_KINDS, PHASES
-
-    return {
-        "causes": [dict(c) for c in FAULT_CAUSES],
-        "groups": list(CAUSE_GROUPS),
-        "kinds": [
-            {"code": k, "label_tr": tr, "label_en": en} for k, tr, en in FAULT_KINDS
-        ],
-        "phases": sorted(PHASES),
-    }
 
 
 @router.patch("/{fault_id}/cause", response_model=FaultEventRead)

@@ -27,7 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.models.fault import FaultEvent
@@ -372,4 +372,165 @@ def tum_analiz(
             db, days=days, visible_line_ids=visible_line_ids
         ),
         "monthly_trend": aylik_egilim(db, days=days, visible_line_ids=visible_line_ids),
+    }
+
+
+# ===========================================================================
+# SISTEM SAGLIGI — alarm sikligi ve haberlesme kararliligi
+# ===========================================================================
+#
+# Ariza analizi "sahada ne oldu" sorusunu cevapliyor; bu bolum "SISTEM
+# kendisi nasil davraniyor" sorusunu. Ikisi ayri sorular ve ayri kararlar
+# urettirir:
+#
+#   * Bir alarm kurali cok sik tetikliyor ama hicbir zaman arizaya
+#     donusmuyorsa esik yanlistir — kural "kurt geldi" diye bagiriyor ve
+#     operator bir sure sonra hepsini gormezden gelmeye baslar. Bu, gercek
+#     alarmin kacirilmasinin en yaygin sebebidir.
+#   * Bir cihazin haberlesmesi gunde onlarca kez kopup geliyorsa sorun
+#     arizada degil o cihazda/modemde/anten hattindadir. Tek tek alarmlara
+#     bakan biri bunu FARK EDEMEZ; ancak sayilinca gorunur.
+
+from app.models.alarm import AlarmEvent  # noqa: E402
+from app.models.device import Device  # noqa: E402
+
+
+def _alarm_temel(days: int, visible_device_ids: set[int] | None):
+    stmt = select(AlarmEvent).where(AlarmEvent.created_at >= _window_start(days))
+    if visible_device_ids is None:
+        return stmt
+    if not visible_device_ids:
+        return stmt.where(False)
+    return stmt.where(AlarmEvent.device_id.in_(visible_device_ids))
+
+
+def alarm_sikligi(
+    db: Session, *, days: int, visible_device_ids: set[int] | None, limit: int = TOP_N
+) -> list[dict]:
+    """Hangi alarm kurali kac kez tetikledi — ve kaci ONAYLANDI.
+
+    `title` alarm kuralinin adidir (bkz. `_resolve_active_rule`). Onay orani
+    ikinci sutun olarak doner: cok tetikleyip HIC onaylanmayan bir kural,
+    operatorun gormezden geldigi bir kuraldir. Bu, esigi gozden gecirmek
+    icin sayidan daha guclu bir sinyaldir.
+    """
+    base = _alarm_temel(days, visible_device_ids).subquery()
+    a = base.c
+    rows = db.execute(
+        select(
+            a.title,
+            a.level,
+            func.count().label("adet"),
+            func.sum(case((a.acknowledged.is_(True), 1), else_=0)).label("onayli"),
+            func.max(a.created_at).label("son"),
+        )
+        .select_from(base)
+        # Haberlesme alarmlari ayri bir olcut (asagida); kural siralamasina
+        # karistirmak "en sik alarm" listesini cihaz kopmalariyla doldururdu.
+        .where(func.coalesce(a.kind, "rule") != "comm_loss")
+        .group_by(a.title, a.level)
+        .order_by(func.count().desc())
+        .limit(limit)
+    ).all()
+    return [
+        {
+            "rule_name": r[0],
+            "level": r[1],
+            "count": int(r[2]),
+            "acknowledged": int(r[3] or 0),
+            "last_at": r[4],
+        }
+        for r in rows
+    ]
+
+
+def haberlesme_kararsizligi(
+    db: Session, *, days: int, visible_device_ids: set[int] | None, limit: int = TOP_N
+) -> list[dict]:
+    """Haberlesmesi en sik kopup gelen cihazlar.
+
+    Haberlesme alarmi kesinti BASINA bir kez acilir (motor ayni cihaz icin
+    acik alarm varken ikincisini yaratmaz), yani bu sayi dogrudan KESINTI
+    SAYISIDIR — mesaj sayisi degil.
+
+    `kind` alani eklenmeden onceki kayitlar NULL'dur ve buraya GIRMEZ; onlari
+    "kural alarmi" sayip disarida birakmak, "haberlesme kopmasi" sayip iceri
+    almaktan daha guvenli. Sayi bu yuzden alanin eklendigi surumden itibaren
+    anlamlidir.
+    """
+    base = _alarm_temel(days, visible_device_ids).subquery()
+    a = base.c
+    rows = db.execute(
+        select(
+            a.device_id,
+            Device.code,
+            Device.name,
+            func.count().label("kesinti"),
+            func.max(a.created_at).label("son"),
+        )
+        .select_from(base)
+        .join(Device, Device.id == a.device_id)
+        .where(a.kind == "comm_loss")
+        .group_by(a.device_id, Device.code, Device.name)
+        .order_by(func.count().desc())
+        .limit(limit)
+    ).all()
+    return [
+        {
+            "device_id": r[0],
+            "code": r[1],
+            "name": r[2],
+            "outages": int(r[3]),
+            "last_at": r[4],
+        }
+        for r in rows
+    ]
+
+
+def alarm_ozeti(
+    db: Session, *, days: int, visible_device_ids: set[int] | None
+) -> dict:
+    """Ust serit: toplam alarm, onaylanan, haberlesme kesintisi, siniflanmamis."""
+    base = _alarm_temel(days, visible_device_ids).subquery()
+    a = base.c
+    toplam = db.scalar(select(func.count()).select_from(base)) or 0
+    if toplam == 0:
+        return {
+            "total": 0,
+            "acknowledged": 0,
+            "comm_outages": 0,
+            "unclassified": 0,
+            "ack_ratio": 0.0,
+        }
+    onayli = db.scalar(
+        select(func.count()).select_from(base).where(a.acknowledged.is_(True))
+    ) or 0
+    kesinti = db.scalar(
+        select(func.count()).select_from(base).where(a.kind == "comm_loss")
+    ) or 0
+    # `kind` eklenmeden onceki kayitlar. GORUNUR OLMALI: haberlesme
+    # sayisinin neden dusuk oldugunu aciklayan tek sey bu.
+    siniflanmamis = db.scalar(
+        select(func.count()).select_from(base).where(a.kind.is_(None))
+    ) or 0
+    return {
+        "total": int(toplam),
+        "acknowledged": int(onayli),
+        "comm_outages": int(kesinti),
+        "unclassified": int(siniflanmamis),
+        "ack_ratio": round(onayli / toplam, 4),
+    }
+
+
+def sistem_sagligi(
+    db: Session, *, days: int = DEFAULT_WINDOW_DAYS, visible_device_ids: set[int] | None
+) -> dict:
+    """Alarm sikligi + haberlesme kararliligi — tek cagrida."""
+    return {
+        "window_days": days,
+        "alarm_summary": alarm_ozeti(db, days=days, visible_device_ids=visible_device_ids),
+        "top_rules": alarm_sikligi(db, days=days, visible_device_ids=visible_device_ids),
+        "flapping_devices": haberlesme_kararsizligi(
+            db, days=days, visible_device_ids=visible_device_ids
+        ),
     }
