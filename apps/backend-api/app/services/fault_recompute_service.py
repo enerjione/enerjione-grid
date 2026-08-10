@@ -535,6 +535,14 @@ def recompute_faults(db: Session) -> None:
                 assigned_at=None,
             )
             db.add(fault)
+            # ANALIZ ANLIK GORUNTUSU — arizayi tespit eden cihazin o andaki
+            # alarm imzasi + olcumleri kaydin KENDISINE yazilir. Ham telemetri
+            # 90 gunde dusuyor; ariza analizi ise yillar boyunca anlamli
+            # olmali. Hata yutulur: goruntu alinamazsa ariza yine acilir
+            # (bkz. fault_snapshot.apply_snapshot).
+            from app.services.fault_snapshot import apply_snapshot
+
+            apply_snapshot(db, fault)
             newly_created.append(fault)
             logger.info(
                 "fault_opened line_id=%d from_pole_seq=%s to_pole_seq=%s last_red_dev=%s first_green_dev=%s assigned=None",

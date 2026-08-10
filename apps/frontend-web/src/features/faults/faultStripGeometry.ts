@@ -30,6 +30,9 @@ export type StripDevice = {
   /** Global konum: span indeksi + oran. */
   pos: number;
   tone: "red" | "green" | "idle";
+  /** Cihazin oturdugu direk araligi — tooltip "Direk 3 – 4 arasi" der. */
+  fromSeq: number;
+  toSeq: number;
 };
 
 export type StripSpan = {
@@ -51,15 +54,25 @@ export type StripGeometry = {
 };
 
 // ---- Cizim sabitleri (viewBox koordinati) ---------------------------------
-export const STRIP_H = 118;
-export const PAD_X = 30;
-export const SPAN_W = 78;
-export const GROUND_Y = 92;
-export const CROSSARM_Y = 22;
-export const WIRE_Y = 34;
-export const SAG = 9;
-export const LABEL_Y = 108;
-const SAMPLES = 14;
+//
+// OLCU: onceki surumde bir span 78 birimdi ve serit 118 birim yuksekti; kart
+// icinde ~520px'e sikistigi icin direkler birbirine giriyor, cihaz isaretleri
+// ust uste biniyordu. Artik span 116 — hat "uzun" okunuyor ve cihaz/faz
+// isaretleri birbirine degmiyor. Yukseklik artisi ise ALTTAKI OLCU SERIDI
+// icin: mesafe artik metin kutusunda degil, cizimin uzerinde.
+export const STRIP_H = 176;
+export const PAD_X = 38;
+export const SPAN_W = 116;
+export const GROUND_Y = 96;
+export const CROSSARM_Y = 20;
+export const WIRE_Y = 36;
+export const SAG = 11;
+export const LABEL_Y = 114;
+/** Olcu (dimension) cizgisinin y'si — teknik resimdeki kot cizgisi gibi. */
+export const DIM_Y = 140;
+/** Olcu etiketinin taban cizgisi. */
+export const DIM_LABEL_Y = 162;
+const SAMPLES = 16;
 
 /** Katener yukseklik ofseti: uclarda 0, ortada `SAG`. */
 export function sagAt(t: number): number {
@@ -95,7 +108,7 @@ export function buildStripGeometry({
         })();
 
   const count = seqs.length;
-  const width = Math.max(240, PAD_X * 2 + (count - 1) * SPAN_W);
+  const width = Math.max(360, PAD_X * 2 + (count - 1) * SPAN_W);
   const step = count > 1 ? (width - PAD_X * 2) / (count - 1) : 0;
   const xOf = (idx: number) => PAD_X + idx * step;
   const idxOf = (seq: number) => seqs.indexOf(seq);
@@ -139,7 +152,9 @@ export function buildStripGeometry({
       code,
       label: seg.device_name || code,
       pos: iA + tt,
-      tone: code === lastRedDeviceCode ? "red" : code === firstGreenDeviceCode ? "green" : "idle"
+      tone: code === lastRedDeviceCode ? "red" : code === firstGreenDeviceCode ? "green" : "idle",
+      fromSeq: seqs[iA],
+      toSeq: seqs[iB]
     });
   }
   devices.sort((x, y) => x.pos - y.pos);

@@ -23399,196 +23399,133 @@ th.event-col-category {
   min-height: 0;
 }
 
-/* ---------- Aktif ariza kartlari ---------- */
+/* ---------- Aktif ariza kartlari ----------
+   TASARIM DILI: elektrik tek hat semasi / teknik resim.
+   Blueprint zeminli cizim alani, ok uclu olcu seridi, tabular rakamlar.
+   Pastel dolgulu yuvarlak kutucuk yok; her renk bir DURUM tasiyor. */
 .fx-active-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .fx-card {
-  display: grid;
-  grid-template-columns: minmax(230px, 300px) minmax(0, 1fr) minmax(170px, 190px);
-  gap: 20px;
-  align-items: stretch;
-  padding: 18px 20px;
   background: #fff;
   border: 1px solid #e2e8f0;
   border-left: 4px solid #ef4444;
-  border-radius: 16px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
-  transition: box-shadow 0.18s ease;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
 }
-.fx-card:hover { box-shadow: 0 4px 16px rgba(15, 23, 42, 0.09); }
+.fx-card:hover {
+  box-shadow: 0 6px 22px rgba(15, 23, 42, 0.08);
+  border-color: #cbd5e1;
+}
 .fx-card--assigned    { border-left-color: #f59e0b; }
 .fx-card--in_progress { border-left-color: #3b82f6; }
+.fx-card--resolved,
+.fx-card--closed      { border-left-color: #22c55e; }
 
-@media (max-width: 1240px) {
-  .fx-card {
+/* ---------- 1. UST SERIT ---------- */
+.fx-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 18px;
+  padding: 13px 18px;
+  background: linear-gradient(180deg, #fcfdfe, #f8fafc);
+  border-bottom: 1px solid #eef2f7;
+}
+@media (max-width: 1180px) {
+  .fx-head {
     grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
   }
 }
 
-/* --- sol: kimlik --- */
-.fx-card-ident {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-.fx-card-region {
+.fx-head-id { min-width: 0; }
+.fx-head-region {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11.5px;
+  gap: 4px;
+  font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #2563eb;
+  color: #64748b;
 }
-.fx-card-line {
-  margin: 2px 0 6px;
-  font-size: 26px;
+.fx-head-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 1px 0 0;
+  font-size: 22px;
   font-weight: 800;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
   color: #0f172a;
-  line-height: 1.05;
+  line-height: 1.15;
 }
-.fx-card-range-label {
-  font-size: 11px;
-  color: #94a3b8;
-  font-weight: 600;
-}
-.fx-card-range {
-  font-size: 15px;
+/* Ayni hatta iki ariza olabilir; kartlari ayiran sey direk araligidir,
+   o yuzden hat adiyla AYNI satirda ve vurgulu duruyor. */
+.fx-head-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-size: 14px;
   font-weight: 700;
   color: #dc2626;
-  margin-bottom: 8px;
+  font-variant-numeric: tabular-nums;
 }
+.fx-head-range svg { color: #cbd5e1; }
 
-/* --- tel mesafesi (hat basindan hesaplanmis ariza araligi) --- */
-.fx-card-distance {
+/* --- olcu/zaman bilgileri: yatay, ayracli --- */
+.fx-head-facts {
+  display: flex;
+  align-items: stretch;
+  gap: 18px;
+}
+.fx-fact {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 6px 9px;
-  margin-bottom: 10px;
-  border-left: 3px solid #f59e0b;
-  border-radius: 0 6px 6px 0;
-  background: #fffbeb;
+  padding-left: 18px;
+  border-left: 1px solid #eef2f7;
 }
-.fx-card-distance-head {
+.fx-head-facts > .fx-fact:first-child { padding-left: 0; border-left: 0; }
+.fx-fact-key {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #b45309;
-}
-.fx-card-distance-value {
-  font-size: 14.5px;
-  font-weight: 700;
-  color: #0f172a;
-  font-variant-numeric: tabular-nums;
-}
-.fx-card-distance-hint {
-  font-size: 10.5px;
-  color: #a16207;
-}
-
-.fx-card-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-
-.fx-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 700;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  color: #475569;
+  color: #94a3b8;
   white-space: nowrap;
 }
-.fx-badge--status-open {
-  background: #fee2e2;
-  border-color: #fecaca;
-  color: #b91c1c;
-}
-.fx-badge--status-assigned {
-  background: #fef3c7;
-  border-color: #fde68a;
-  color: #92400e;
-}
-.fx-badge--status-in_progress {
-  background: #dbeafe;
-  border-color: #bfdbfe;
-  color: #1d4ed8;
-}
-.fx-badge--status-resolved,
-.fx-badge--status-closed {
-  background: #dcfce7;
-  border-color: #bbf7d0;
-  color: #15803d;
-}
-.fx-badge--located {
-  background: #ecfdf5;
-  border-color: #a7f3d0;
-  color: #047857;
-}
-
-.fx-card-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  margin: 0;
-}
-.fx-card-meta > div {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.fx-card-meta dt {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 86px;
-  flex-shrink: 0;
-  font-size: 12px;
-  color: #94a3b8;
-}
-.fx-card-meta dt svg { color: #cbd5e1; }
-.fx-card-meta dd {
-  margin: 0;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #334155;
-  font-variant-numeric: tabular-nums;
-}
-.fx-card-meta-live {
+.fx-fact-val {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #dc2626 !important;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
+.fx-fact--live .fx-fact-val { color: #dc2626; }
 .fx-live-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #ef4444;
   animation: fx-pulse 1.6s ease-in-out infinite;
 }
 @keyframes fx-pulse {
   0%, 100% { opacity: 1; }
-  50%      { opacity: 0.3; }
+  50%      { opacity: 0.25; }
 }
 .fx-dim {
   color: #94a3b8;
@@ -23596,81 +23533,337 @@ th.event-col-category {
   font-weight: 500;
 }
 
-/* --- orta: sematik ariza bolgesi --- */
-.fx-card-zone {
+.fx-head-badges {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 0 8px;
+  gap: 6px;
 }
-.fx-card-zone-title {
+.fx-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.01em;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  white-space: nowrap;
+}
+.fx-badge--status-open {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+.fx-badge--status-assigned {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+.fx-badge--status-in_progress {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+.fx-badge--status-resolved,
+.fx-badge--status-closed {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+.fx-badge--located {
+  background: #f0fdfa;
+  border-color: #99f6e4;
+  color: #0f766e;
+}
+
+.fx-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+@media (max-width: 1180px) {
+  .fx-head-actions { flex-wrap: wrap; }
+}
+
+/* ---------- 2. CIZIM + 3. KANIT ---------- */
+.fx-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 0;
+}
+@media (max-width: 1180px) {
+  .fx-body { grid-template-columns: minmax(0, 1fr); }
+}
+
+.fx-zone {
+  min-width: 0;
+  padding: 12px 16px 6px;
+  /* Blueprint zemini: cok soluk bir kareli izgara. Cizimin "teknik belge"
+     oldugunu soyluyor ama okunurlugu bozmuyor. */
+  background-color: #fcfdff;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.09) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.fx-zone-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+.fx-zone-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #94a3b8;
 }
-.fx-strip {
-  width: 100%;
-  max-width: 520px;
-  height: auto;
-  display: block;
-}
-.fx-strip-pin.is-active {
-  animation: fx-pin-bob 2.4s ease-in-out infinite;
-  transform-box: fill-box;
-  transform-origin: center bottom;
-}
-@keyframes fx-pin-bob {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-3px); }
+.fx-zone-span {
+  font-size: 11px;
+  font-weight: 700;
+  color: #b45309;
+  font-variant-numeric: tabular-nums;
 }
 
-.fx-card-devices {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+.fx-strip-wrap {
+  position: relative;
   width: 100%;
-  max-width: 520px;
 }
-.fx-dev {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.fx-strip {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+/* Cihaz isareti: imlec hedefi genis, gecis yumusak. */
+.fx-strip-dev {
+  cursor: pointer;
+  transition: opacity 0.14s ease;
+  outline: none;
+}
+.fx-strip-dev:focus-visible rect:nth-of-type(2) {
+  stroke-dasharray: 2 2;
+}
+.fx-strip-dim text { font-variant-numeric: tabular-nums; }
+
+/* --- cihaz tooltip'i --- */
+.fx-strip-tip {
+  position: absolute;
+  z-index: 5;
+  transform: translate(-50%, -100%);
+  margin-top: -14px;
+  min-width: 168px;
+  max-width: 240px;
   padding: 9px 11px;
-  border-radius: 11px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  min-width: 0;
-}
-.fx-dev--red   { background: #fef2f2; border-color: #fecaca; }
-.fx-dev--green { background: #f0fdf4; border-color: #bbf7d0; }
-.fx-dev-icon {
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   border-radius: 9px;
-  background: #fff;
+  background: #0f172a;
+  color: #e2e8f0;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.3);
+  pointer-events: none;
+  animation: fx-tip-in 0.12s ease-out;
 }
-.fx-dev--red .fx-dev-icon   { color: #dc2626; }
-.fx-dev--green .fx-dev-icon { color: #059669; }
-.fx-dev-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
+@keyframes fx-tip-in {
+  from { opacity: 0; transform: translate(-50%, calc(-100% + 4px)); }
+  to   { opacity: 1; transform: translate(-50%, -100%); }
 }
-.fx-dev-text small {
-  font-size: 10.5px;
-  color: #64748b;
+.fx-strip-tip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 10px;
+  height: 10px;
+  background: #0f172a;
+  transform: translateX(-50%) rotate(45deg);
+  border-radius: 1px;
+}
+.fx-strip-tip-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
   line-height: 1.25;
 }
-.fx-dev-text strong {
+.fx-strip-tip-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  color: #94a3b8;
+}
+.fx-strip-tip-role {
+  margin-top: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.fx-strip-tip-role--red   { color: #fca5a5; }
+.fx-strip-tip-role--green { color: #86efac; }
+.fx-strip-tip-role--idle  { color: #cbd5e1; }
+.fx-strip-tip-row {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #cbd5e1;
+  font-variant-numeric: tabular-nums;
+}
+.fx-strip-tip-phases {
+  display: flex;
+  gap: 4px;
+  margin-top: 7px;
+}
+.fx-phase-chip {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: rgba(148, 163, 184, 0.18);
+  color: #94a3b8;
+}
+.fx-phase-chip.is-on {
+  background: #dc2626;
+  color: #fff;
+}
+.fx-strip-tip-alarm {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #fecaca;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- 3. KANIT PANELI ---------- */
+.fx-evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 13px 16px 14px;
+  border-left: 1px solid #eef2f7;
+  background: #fff;
+  min-width: 0;
+}
+@media (max-width: 1180px) {
+  .fx-evidence {
+    border-left: 0;
+    border-top: 1px solid #eef2f7;
+  }
+}
+.fx-ev-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+.fx-ev-title svg { color: #f59e0b; }
+.fx-ev-empty {
+  margin: 0;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* --- arizayi acan alarmlar --- */
+.fx-alarm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fx-alarm {
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid #fee2e2;
+  border-left: 3px solid #ef4444;
+  background: #fffbfb;
+  min-width: 0;
+}
+.fx-alarm--warning { border-left-color: #f59e0b; border-color: #fef3c7; background: #fffdf7; }
+.fx-alarm--info    { border-left-color: #3b82f6; border-color: #dbeafe; background: #fafcff; }
+.fx-alarm-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.fx-alarm-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fx-alarm-sub {
+  display: block;
+  margin-top: 1px;
+  font-size: 10.5px;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fx-alarm-dot { margin: 0 4px; color: #cbd5e1; }
+.fx-alarm-more {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  padding-left: 2px;
+}
+
+/* Faz rozeti: master/sat01/sat02 uc AYRI faza takilir. Renkler cihaz
+   detay sayfasindaki faz renkleriyle ayni — operator ayni kodu ogreniyor. */
+.fx-phase {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+}
+.fx-phase--sat01 { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+.fx-phase--sat02 { background: #fff7ed; border-color: #fed7aa; color: #c2410c; }
+
+/* --- ariza bolgesi sinirlari --- */
+.fx-bound {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 0;
+  min-width: 0;
+}
+.fx-bound + .fx-bound { border-top: 1px dashed #eef2f7; }
+.fx-bound > svg { flex-shrink: 0; margin-top: 2px; }
+.fx-bound--red > svg   { color: #dc2626; }
+.fx-bound--green > svg { color: #059669; }
+.fx-bound > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.fx-bound small {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+.fx-bound strong {
   font-size: 13px;
   font-weight: 700;
   color: #0f172a;
@@ -23678,27 +23871,12 @@ th.event-col-category {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.fx-dev-text code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10.5px;
-  color: #94a3b8;
-}
-/* Son arizali cihazin arkasindaki tel mesafesi araligi. */
-.fx-dev-dist {
-  display: block;
-  font-size: 10.5px;
+.fx-bound em {
   font-style: normal;
+  font-size: 10.5px;
   font-weight: 600;
   color: #b45309;
   font-variant-numeric: tabular-nums;
-}
-
-/* --- sag: aksiyonlar --- */
-.fx-card-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  justify-content: center;
 }
 
 .fx-btn {

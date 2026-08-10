@@ -5,6 +5,33 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
+class FaultTriggerAlarm(BaseModel):
+    """Arizayi doguran alarm — "bu ariza NEDEN acildi" sorusunun cevabi.
+
+    Ariza kaydi hangi DIREK ARALIGI oldugunu soyluyordu ama hangi olayin
+    onu actigini soylemiyordu; operator alarm sayfasina gidip zaman
+    damgasindan eslestirmek zorunda kaliyordu.
+
+    `signal_source` kritik: bir Horstmann SN2 govdesi uc ayri faz
+    sensorudur (master + sat01 + sat02) ve her biri hattin FARKLI bir
+    fazina takilir. "Hangi fazda ariza var" bilgisi dogrudan alarmin
+    signal_key prefix'inden gelir.
+    """
+
+    id: int
+    title: str
+    description: str | None = None
+    level: str
+    signal_key: str | None = None
+    #: signal_key prefix'i: "master" | "sat01" | "sat02" (yoksa None).
+    signal_source: str | None = None
+    device_id: int
+    device_code: str | None = None
+    device_name: str | None = None
+    acknowledged: bool = False
+    created_at: datetime
+
+
 class FaultEventRead(BaseModel):
     id: int
     line_id: int
@@ -41,6 +68,10 @@ class FaultEventRead(BaseModel):
     assigned_to_full_name: str | None = None
 
     comment_count: int = 0
+
+    #: Arizayi doguran ACIK alarmlar (son "gordum" diyen cihazdan), en yeni
+    #: once. Bos liste: alarm bu arada normale dondu ya da kayit eski.
+    trigger_alarms: list[FaultTriggerAlarm] = []
 
     model_config = ConfigDict(from_attributes=True)
 

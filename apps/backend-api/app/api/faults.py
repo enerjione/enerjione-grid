@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_roles
 from app.core.config import settings
 from app.db.session import get_db
+from app.models.alarm import AlarmEvent
 from app.models.device import Device
 from app.models.enums import UserRole
 from app.models.fault import FaultComment, FaultEvent
@@ -36,6 +37,7 @@ from app.schemas.fault import (
     FaultEventNoteUpdate,
     FaultEventRead,
     FaultEventStatusUpdate,
+    FaultTriggerAlarm,
 )
 from app.services.event_service import record_event
 from app.services.scope_service import get_visible_line_ids
@@ -55,7 +57,7 @@ class _FaultRefs:
     cekiliyor, yorum sayilari tek GROUP BY ile geliyor.
     """
 
-    __slots__ = ("lines", "regions", "devices", "users", "comment_counts")
+    __slots__ = ("lines", "regions", "devices", "users", "comment_counts", "alarms")
 
     def __init__(self) -> None:
         self.lines: dict[int, Line] = {}
@@ -63,6 +65,8 @@ class _FaultRefs:
         self.devices: dict[int, Device] = {}
         self.users: dict[str, User] = {}
         self.comment_counts: dict[int, int] = {}
+        #: device_id -> o cihazin ACIK alarmlari (en yeni once).
+        self.alarms: dict[int, list[AlarmEvent]] = {}
 
 
 def _load_fault_refs(db: Session, faults: list[FaultEvent]) -> _FaultRefs:
@@ -109,7 +113,31 @@ def _load_fault_refs(db: Session, faults: list[FaultEvent]) -> _FaultRefs:
                 .group_by(FaultComment.fault_id)
             )
         }
+
+    # Arizayi doguran alarmlar — yalnizca "gordum" diyen (last_red) cihazlar
+    # icin ve yalnizca ACIK olanlar (reset=False). Liste basina TEK sorgu;
+    # sayfa 5 sn'de bir polling yaptigi icin satir basina sorgu kabul edilemez.
+    red_ids = {f.last_red_device_id for f in faults if f.last_red_device_id is not None}
+    if red_ids:
+        for row in db.scalars(
+            select(AlarmEvent)
+            .where(AlarmEvent.device_id.in_(red_ids))
+            .where(AlarmEvent.reset.is_(False))
+            .order_by(AlarmEvent.created_at.desc())
+        ).all():
+            refs.alarms.setdefault(row.device_id, []).append(row)
     return refs
+
+
+def _signal_source(signal_key: str | None) -> str | None:
+    """`sat01.current_phase_a` -> `sat01`. Prefix yoksa None.
+
+    Bir SN2 govdesindeki uc sensor (master/sat01/sat02) hattin ayri
+    fazlarina takilir; arizanin hangi fazda oldugu bu prefix'ten okunur.
+    """
+    if not signal_key or "." not in signal_key:
+        return None
+    return signal_key.split(".", 1)[0].lower()
 
 
 def _serialize_fault(db: Session, f: FaultEvent, refs: _FaultRefs | None = None) -> FaultEventRead:
@@ -128,6 +156,22 @@ def _serialize_fault(db: Session, f: FaultEvent, refs: _FaultRefs | None = None)
     )
     assigned_user = refs.users.get(f.assigned_to_username) if f.assigned_to_username else None
     comment_count = refs.comment_counts.get(f.id, 0)
+    triggers = [
+        FaultTriggerAlarm(
+            id=a.id,
+            title=a.title,
+            description=a.description or None,
+            level=a.level,
+            signal_key=a.signal_key,
+            signal_source=_signal_source(a.signal_key),
+            device_id=a.device_id,
+            device_code=last_red.code if last_red else None,
+            device_name=last_red.name if last_red else None,
+            acknowledged=bool(a.acknowledged),
+            created_at=a.created_at,
+        )
+        for a in refs.alarms.get(f.last_red_device_id, [])
+    ]
     return FaultEventRead(
         id=f.id,
         line_id=f.line_id,
@@ -156,6 +200,7 @@ def _serialize_fault(db: Session, f: FaultEvent, refs: _FaultRefs | None = None)
         assigned_at=f.assigned_at,
         assigned_to_full_name=assigned_user.full_name if assigned_user else None,
         comment_count=int(comment_count),
+        trigger_alarms=triggers,
     )
 
 

@@ -854,7 +854,15 @@
   "faults": {
     "poleStrip": {
       "range": "Fault section: between poles {{from}} and {{to}}",
-      "unknown": "Fault section could not be determined"
+      "unknown": "Fault section could not be determined",
+      "spanLabel": "↔ {{span}} uncertainty range",
+      "between": "Between poles {{from}} – {{to}}",
+      "atDistance": "{{d}} from line start",
+      "role": {
+        "red": "DETECTED fault current",
+        "green": "did NOT detect fault current",
+        "idle": "Outside the fault zone"
+      }
     },
     "title": "Line Faults",
     "stats": {
@@ -941,7 +949,13 @@
       "commentCount": "{{count}} comment(s)",
       "durationLive": "Fault still active — live duration",
       "durationFinal": "Total fault duration",
-      "openTooltip": "Open detail — {{at}}"
+      "openTooltip": "Open detail — {{at}}",
+      "uncertainty": "{{span}} uncertainty",
+      "causeTitle": "Triggering Alarm",
+      "causeEmpty": "The triggering alarm has cleared.",
+      "alarmAcked": "acknowledged",
+      "alarmMore": "+{{count}} more alarms",
+      "boundsTitle": "Fault Zone Bounds"
     },
     "empty": {
       "errorTitle": "Could not load faults",
@@ -1009,6 +1023,11 @@
       "addCommentBtn": "Add Comment",
       "loadingComments": "Loading comments…",
       "close": "Close"
+    },
+    "phase": {
+      "master": "Master",
+      "sat01": "Satellite 01",
+      "sat02": "Satellite 02"
     }
   },
   "network": {

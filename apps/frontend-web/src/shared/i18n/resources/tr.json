@@ -851,7 +851,15 @@
   "faults": {
     "poleStrip": {
       "range": "Arıza aralığı: direk {{from}} ile {{to}} arası",
-      "unknown": "Arıza aralığı belirlenemedi"
+      "unknown": "Arıza aralığı belirlenemedi",
+      "spanLabel": "↔ {{span}} belirsizlik aralığı",
+      "between": "Direk {{from}} – {{to}} arasında",
+      "atDistance": "Hat başından {{d}}",
+      "role": {
+        "red": "Arıza akımını GÖRDÜ",
+        "green": "Arıza akımını GÖRMEDİ",
+        "idle": "Arıza bölgesi dışında"
+      }
     },
     "title": "Hat Arızaları",
     "stats": {
@@ -938,7 +946,13 @@
       "commentCount": "{{count}} yorum",
       "durationLive": "Arıza halen aktif — canlı süre",
       "durationFinal": "Toplam arıza süresi",
-      "openTooltip": "Detay görüntüle — {{at}}"
+      "openTooltip": "Detay görüntüle — {{at}}",
+      "uncertainty": "{{span}} belirsizlik",
+      "causeTitle": "Arızayı Açan Alarm",
+      "causeEmpty": "Arızayı açan alarm normale dönmüş.",
+      "alarmAcked": "onaylandı",
+      "alarmMore": "+{{count}} alarm daha",
+      "boundsTitle": "Arıza Bölgesi Sınırları"
     },
     "empty": {
       "errorTitle": "Arıza listesi alınamadı",
@@ -1006,6 +1020,11 @@
       "addCommentBtn": "Yorum Ekle",
       "loadingComments": "Yorumlar yükleniyor…",
       "close": "Kapat"
+    },
+    "phase": {
+      "master": "Master",
+      "sat01": "Satellite 01",
+      "sat02": "Satellite 02"
     }
   },
   "network": {

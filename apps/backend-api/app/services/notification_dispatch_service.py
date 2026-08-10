@@ -42,6 +42,7 @@ from app.models.notification_settings import NotificationSettings
 from app.models.project_settings import ProjectSettings
 from app.models.user import User
 from app.models.user_notification_preference import UserNotificationPreference
+from app.services import chat_templates
 from app.services.email_templates import render_alarm_email
 from app.services.notification_service import create_notification
 from app.services.notification_test_service import (
@@ -282,16 +283,58 @@ def _send_email_for_user(
         )
 
 
+def _alarm_context(db: Session, alarm: AlarmEvent) -> dict:
+    """Alarm mesajlarinin ortak govdesi — cihaz, faz, hat ve bolge.
+
+    Mesajlar eskiden yalnizca baslik + seviye tasiyordu; sahadaki ekip
+    "hangi cihaz, hangi faz, hangi hat" bilgisini mesajdan alamiyor,
+    arayuze bakmak zorunda kaliyordu. Bunlar tek sorguda cikarilabiliyor.
+    """
+    device = db.get(Device, alarm.device_id) if alarm.device_id else None
+    line_name: str | None = None
+    region_name: str | None = None
+    if alarm.device_id is not None:
+        try:
+            from app.models.grid_topology import Line, LineSegment, Region
+
+            seg = db.scalar(
+                select(LineSegment).where(LineSegment.device_id == alarm.device_id).limit(1)
+            )
+            if seg is not None:
+                line = db.get(Line, seg.line_id)
+                if line is not None:
+                    line_name = line.name
+                    region = db.get(Region, line.region_id)
+                    region_name = region.name if region else None
+        except Exception:  # noqa: BLE001
+            # Topoloji hatasi bildirimi engellemesin; alan bos kalir.
+            logger.debug("alarm_context_topology_failed alarm_id=%s", alarm.id)
+    return {
+        "title": alarm.title or "Alarm",
+        "level": alarm.level,
+        "description": alarm.description or None,
+        "device_name": device.name if device else None,
+        "device_code": device.code if device else None,
+        "signal_key": alarm.signal_key,
+        "line_name": line_name,
+        "region_name": region_name,
+        "occurred_at": alarm.created_at,
+    }
+
+
 def _send_sms_for_user(
-    settings: NotificationSettings | None, user: User, alarm: AlarmEvent
+    settings: NotificationSettings | None, user: User, alarm: AlarmEvent, ctx: dict
 ) -> None:
     if settings is None or not settings.sms_enabled:
         return
     if not user.phone_number:
         return
-    msg = f"Alarm: {alarm.title} - {alarm.description}"[:300]
     try:
-        send_sms_test(settings, recipient_phone=user.phone_number, message=msg)
+        send_sms_test(
+            settings,
+            recipient_phone=user.phone_number,
+            message=chat_templates.alarm_sms(**ctx),
+        )
         logger.info("alarm_sms_sent user=%s alarm_id=%d", user.username, alarm.id)
     except Exception as exc:  # noqa: BLE001
         logger.warning(
@@ -301,7 +344,7 @@ def _send_sms_for_user(
 
 
 def _send_telegram_broadcast(
-    settings: NotificationSettings | None, alarm: AlarmEvent
+    settings: NotificationSettings | None, alarm: AlarmEvent, ctx: dict
 ) -> None:
     """Telegram'a global broadcast — her bir chat_id'ye ayni mesaj.
     Kullanici-bazli tercihe bagli degil; settings.telegram_enabled + chat_ids
@@ -312,15 +355,8 @@ def _send_telegram_broadcast(
     chat_ids = [c.strip() for c in chat_ids_raw.split(",") if c.strip()]
     if not chat_ids:
         return
-    # Telegram HTML parse_mode: <b>, <i>, <a> destekler. Sade ozet.
-    title = (alarm.title or "Alarm").replace("<", "&lt;").replace(">", "&gt;")
-    desc = (alarm.description or "").replace("<", "&lt;").replace(">", "&gt;")
-    level = (alarm.level or "warning").upper()
-    text = (
-        f"⚠ <b>{title}</b>\n"
-        f"Seviye: <b>{level}</b>\n"
-        f"{desc}"
-    )
+    # Telegram HTML parse_mode: <b>, <i>, <a> destekler.
+    text = chat_templates.alarm_telegram_html(**ctx)
     for chat_id in chat_ids:
         try:
             send_telegram_test(settings, chat_id=chat_id, message=text)
@@ -333,15 +369,16 @@ def _send_telegram_broadcast(
 
 
 def _send_whatsapp_for_user(
-    settings: NotificationSettings | None, user: User, alarm: AlarmEvent
+    settings: NotificationSettings | None, user: User, alarm: AlarmEvent, ctx: dict
 ) -> None:
     if settings is None or not settings.whatsapp_web_enabled:
         return
     if not user.phone_number:
         return
-    msg = f"Alarm: {alarm.title} - {alarm.description}"[:1000]
     try:
-        whatsapp_web_client_service.send_test_message(user.phone_number, msg)
+        whatsapp_web_client_service.send_test_message(
+            user.phone_number, chat_templates.alarm_whatsapp(**ctx)
+        )
         logger.info("alarm_whatsapp_sent user=%s alarm_id=%d", user.username, alarm.id)
     except Exception as exc:  # noqa: BLE001
         logger.warning(
@@ -351,7 +388,7 @@ def _send_whatsapp_for_user(
 
 
 def _send_whatsapp_group_broadcast(
-    settings: NotificationSettings | None, alarm: AlarmEvent
+    settings: NotificationSettings | None, alarm: AlarmEvent, ctx: dict
 ) -> None:
     """WhatsApp grup/kisi JID listesine global broadcast (Telegram deseni)."""
     if settings is None or not settings.whatsapp_web_enabled:
@@ -360,9 +397,7 @@ def _send_whatsapp_group_broadcast(
     jids = [j.strip() for j in jids_raw.split(",") if j.strip()]
     if not jids:
         return
-    title = alarm.title or "Alarm"
-    level = (alarm.level or "warning").upper()
-    text = f"Alarm: {title}\nSeviye: {level}\n{alarm.description or ''}"
+    text = chat_templates.alarm_whatsapp(**ctx)
     for jid in jids:
         try:
             whatsapp_web_client_service.send_test_message(jid, text)
@@ -480,23 +515,53 @@ def dispatch_fault_notifications(
         f"Konum: {latitude}, {longitude}\n"
     )
 
-    # Kisa metin — SMS ve WhatsApp icin ortak.
-    zone_text = (
-        f" Direk #{from_pole_seq}-#{to_pole_seq}."
-        if from_pole_seq is not None and to_pole_seq is not None
-        else ""
-    )
-    konum_text = (
-        f" Konum: https://maps.google.com/?q={latitude},{longitude}"
-        if latitude is not None and longitude is not None
-        else ""
-    )
-    kisa_metin = (
-        f"HAT ARIZASI: {line.name}"
-        f"{f' ({region.name})' if region else ''}.{zone_text}"
-        f"{f' Son arizali cihaz: {last_red_dev.name}.' if last_red_dev else ''}"
-        f"{konum_text}"
-    )
+    # Mesaj govdesi — SMS / WhatsApp / Telegram ayni bilgiyi paylasir.
+    #
+    # Arizayi ACAN alarmlarin basliklari da mesaja girer: "hat arizasi var"
+    # demek yetmiyor, ekip "hangi olay" bilgisini de mesajdan gormeli.
+    # Ariza kaydi olustugunda bu alarmlar acik (reset=False) durumdadir.
+    # Tel mesafeleri kayittan okunur — cagiranlarin imzasini genisletmeye
+    # gerek yok, `fault_id` zaten elimizde.
+    from app.models.fault import FaultEvent as _FaultEvent
+
+    fault_row = db.get(_FaultEvent, fault_id)
+    zone_start_m = fault_row.zone_start_m if fault_row else None
+    zone_end_m = fault_row.zone_end_m if fault_row else None
+    zone_length_m = fault_row.zone_length_m if fault_row else None
+
+    trigger_titles: list[str] = []
+    if last_red_device_id is not None:
+        seen: set[str] = set()
+        for a in db.scalars(
+            select(AlarmEvent)
+            .where(AlarmEvent.device_id == last_red_device_id)
+            .where(AlarmEvent.reset.is_(False))
+            .order_by(AlarmEvent.created_at.desc())
+            .limit(6)
+        ).all():
+            faz = chat_templates.source_label(a.signal_key)
+            baslik = f"{a.title} ({faz})" if faz else (a.title or "")
+            if baslik and baslik not in seen:
+                seen.add(baslik)
+                trigger_titles.append(baslik)
+
+    fault_ctx = {
+        "line_name": line.name,
+        "region_name": region.name if region else None,
+        "from_pole_seq": from_pole_seq,
+        "to_pole_seq": to_pole_seq,
+        "last_red_name": last_red_dev.name if last_red_dev else None,
+        "first_green_name": first_green_dev.name if first_green_dev else None,
+        "zone_start_m": zone_start_m,
+        "zone_end_m": zone_end_m,
+        "zone_length_m": zone_length_m,
+        "trigger_titles": trigger_titles,
+        "latitude": latitude,
+        "longitude": longitude,
+        "opened_at": opened_at,
+    }
+    sms_metin = chat_templates.fault_sms(**fault_ctx)
+    wa_metin = chat_templates.fault_whatsapp(**fault_ctx)
 
     for user in recipients:
         pref = _get_pref(db, user.id)
@@ -523,7 +588,7 @@ def dispatch_fault_notifications(
         if settings.sms_enabled and user.phone_number and pref.sms_enabled:
             try:
                 send_sms_test(
-                    settings, recipient_phone=user.phone_number, message=kisa_metin[:300]
+                    settings, recipient_phone=user.phone_number, message=sms_metin
                 )
                 logger.info("fault_sms_sent user=%s fault_id=%d", user.username, fault_id)
             except Exception as exc:  # noqa: BLE001
@@ -540,7 +605,7 @@ def dispatch_fault_notifications(
         ):
             try:
                 whatsapp_web_client_service.send_test_message(
-                    user.phone_number, kisa_metin[:1000]
+                    user.phone_number, wa_metin
                 )
                 logger.info(
                     "fault_whatsapp_sent user=%s fault_id=%d", user.username, fault_id
@@ -561,7 +626,7 @@ def dispatch_fault_notifications(
         ]
         for jid in jids:
             try:
-                whatsapp_web_client_service.send_test_message(jid, kisa_metin[:1000])
+                whatsapp_web_client_service.send_test_message(jid, wa_metin)
                 logger.info(
                     "fault_whatsapp_group_sent jid=%s fault_id=%d", jid, fault_id
                 )
@@ -668,6 +733,9 @@ def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
         )
     group_mode = bool(settings is not None and settings.whatsapp_web_group_mode)
     alarm_rank = _level_rank(alarm.level)
+    # Mesaj govdesi (cihaz + faz + hat/bolge) bir kez cikarilir; SMS,
+    # WhatsApp ve Telegram ayni bilgiyi kendi bicimiyle basar.
+    ctx = _alarm_context(db, alarm)
     any_telegram_optin = False
     for user in recipients:
         pref = _get_pref(db, user.id)
@@ -681,7 +749,7 @@ def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
             _send_email_for_user(db, settings, user, alarm, project_title)
         # SMS: kuralda notify_sms AND kullanici tercihi acik
         if rule_sms and pref.sms_enabled:
-            _send_sms_for_user(settings, user, alarm)
+            _send_sms_for_user(settings, user, alarm, ctx)
         # WhatsApp kisisel — SADECE grup modu KAPALI iken. Grup modu aciksa
         # kisiye tek tek mesaj ATILMAZ (tek mod: gruba tek mesaj).
         if (
@@ -689,7 +757,7 @@ def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
             and getattr(pref, "whatsapp_web_enabled", True)
             and not group_mode
         ):
-            _send_whatsapp_for_user(settings, user, alarm)
+            _send_whatsapp_for_user(settings, user, alarm, ctx)
         # Telegram: kullanici bu kanali elle kapatmis mi?
         if getattr(pref, "telegram_enabled", True):
             any_telegram_optin = True
@@ -697,7 +765,7 @@ def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
     # varsa global broadcast. Bot tek bir kanaldan yayin yapar (ayar listesi
     # icinde tanimli chat_ids), bu yuzden kisi-bazli filtre yapamayiz.
     if rule_telegram and any_telegram_optin:
-        _send_telegram_broadcast(settings, alarm)
+        _send_telegram_broadcast(settings, alarm, ctx)
     # WhatsApp grup: grup modu acik ise secili grup JID listesine KOSULSUZ
     # broadcast — kural bazli kanal secimi ARANMAZ. Gerekce: grup hedefi
     # operator tarafindan "buraya her alarm dussun" niyetiyle secilir; tek
@@ -705,7 +773,7 @@ def dispatch_alarm_notifications(db: Session, alarm: AlarmEvent) -> None:
     # Master switch (whatsapp_web_enabled) ve grup JID listesi kontrolu
     # _send_whatsapp_group_broadcast icinde yapilir.
     if group_mode:
-        _send_whatsapp_group_broadcast(settings, alarm)
+        _send_whatsapp_group_broadcast(settings, alarm, ctx)
 
 
 def _unused_for_imports(_d: Device, _i: Iterable):  # pragma: no cover

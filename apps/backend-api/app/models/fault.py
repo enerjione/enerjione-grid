@@ -29,7 +29,7 @@ Mantik:
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -128,6 +128,101 @@ class FaultEvent(Base):
     # Damga ayni zamanda idempotency saglar (worker retry'inda ikinci mail yok).
     notified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
+    )
+
+    # ---------------- ANALIZ KATMANI ----------------
+    #
+    # NEDEN BU ALANLAR: "hangi hat en cok ariza cikariyor" sorusu bugun de
+    # cevaplanabiliyor (line_id + opened_at yeter). Cevaplanamayan soru
+    # "NEDEN" — ve bunun tek kaynagi serbest metin `note` ile yorumlardi.
+    # Serbest metinden istatistik cikmaz: ayni sebep on farkli cumleyle
+    # yazilir. Bu alanlar metnin YERINE degil YANINA gelir; `note` ve
+    # FaultComment aynen kalir.
+    #
+    # Hepsi NULLABLE ve varsayilan YOK: gecmis kayitlar ile saha ekibinin
+    # doldurmadigi kayitlar "bilinmiyor" olarak ayrismali. Bos gecilen bir
+    # alani "diger" saymak, analiz katmanina uydurma etiket beslemek olurdu.
+
+    #: Yapilandirilmis ariza sebebi. Serbest metin DEGIL, katalogdan secilir
+    #: (bkz. app/data/fault_causes.py). Cikarim katmaninin ogrenecegi etiket
+    #: budur; bu alan dolmadan model egitilecek bir sey yoktur.
+    cause_code: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    #: Sebebe ait serbest ek ("3. direkteki mesnet izolatoru catlak" gibi).
+    cause_detail: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    #: transient (gecici — kendiliginden duzeldi) | permanent (kalici, mudahale
+    #: gerekti) | unknown. Sebep dagilimindan BAGIMSIZ bir eksen: ayni sebep
+    #: (orn. agac temasi) ruzgarda gecici, dal kirilinca kalici olur.
+    #:
+    #: ELLE SORULMAZ: cihaz bunu zaten soyluyor (`master.permanent_fault` /
+    #: `master.momentary_fault`). Saha ekibine sormak hem gereksiz hem daha
+    #: hatali olurdu.
+    fault_kind: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+
+    #: Etkilenen faz: a | b | c | ab | ac | bc | abc | unknown.
+    phase: Mapped[str | None] = mapped_column(String(10), nullable=True)
+
+    # --- CIHAZIN ALARM IMZASI ---
+    #
+    # SEBEP CIKARIMININ ASIL KAYNAGI BURASI. Saha ekibinin yazdigi metin
+    # gecikmeli, eksik ve ozneldir; cihazin ariza aninda hangi bayraklari
+    # kaldirdigi ise olculmus veridir ve sebebi buyuk olcude belirler:
+    #
+    #   current_loss (asiri akim YOK)          -> iletken kopmasi
+    #   conductor_temperature_alarm + yuksek I -> asiri yuk
+    #   tamper_detection                       -> ucuncu sahis
+    #   delta_i_delta_t_tripped (asiri akim YOK)-> yuksek empedansli ariza
+    #                                             (tipik olarak agac temasi)
+    #   overcurrent_tripped + yuksek fault_current -> kisa devre
+    #
+    #: Ariza aninda AKTIF olan sinyal anahtarlari (JSON dizisi).
+    #: DENORMALIZE: cihaz silinse ya da alarm kaydi dusse bile imza kalir.
+    trigger_signals: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+    #: Yukaridaki imzadan KURAL ILE turetilen sebep onerisi. `cause_code`
+    #: (insanin girdigi) ile AYRI tutulur — ikisini karsilastirmak kurallarin
+    #: ne kadar isabetli oldugunu olcer. Bir cikarim katmani eklemeden once
+    #: bilmen gereken sey tam olarak budur; ustelik LLM'siz de calisir.
+    auto_cause_code: Mapped[str | None] = mapped_column(
+        String(40), nullable=True, index=True
+    )
+
+    #: Ariza yonu: green_a | red_b | unknown (FCI yon bayraklarindan).
+    fault_direction: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # --- Olcum anlik goruntusu ---
+    #
+    # NEDEN KOPYALANIYOR: ham telemetri 90 gunde dusuyor (saatlik ozet 2 yil
+    # kaliyor ama ondan BELIRLI bir arizanin tepe akimini geri cikarmak
+    # kayipli — kova ortalamasi/tepe degeri arizaya ait olmayabilir).
+    # Ariza analizi yillar boyunca anlamli olmali; bu yuzden arizayi tanimlayan
+    # birkac sayi kaydin KENDISINE yazilir. Bu bilincli bir denormalizasyondur.
+    #: Ariza aninda olculen ariza akimi (A) — `master.fault_current`.
+    fault_current_a: Mapped[float | None] = mapped_column(Float, nullable=True)
+    #: Ariza oncesi normal yuk akimi (A) — "asiri yuk muydu" sorusu icin.
+    load_current_before_a: Mapped[float | None] = mapped_column(Float, nullable=True)
+    #: Iletken sicakligi (°C) — asiri yuk / termal ariza ayrimi.
+    conductor_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    #: Cihazin ANLIK ariza sayaclari. Ardisik iki ariza arasindaki FARK, o
+    #: olayda kac kez tekrar kapama denendigini verir — "bu aciklikta surekli
+    #: gecici ariza var" bulgusunun olculebilir hali.
+    momentary_fault_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    permanent_fault_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: Yukaridaki olcumlerin alindigi an.
+    measured_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        # Sıklık analizi: "bu hatta/bolgede son 12 ayda kac ariza".
+        Index("ix_fault_line_opened", "line_id", "opened_at"),
+        Index("ix_fault_region_opened", "region_id", "opened_at"),
+        # TEKRARLAYAN ACIKLIK: "ayni iki direk arasi tekrar tekrar ariza
+        # yapiyor". Direk ID'leri kalicidir (sequence_no yeniden
+        # siralanabilir, ID siralanmaz) — bu yuzden anahtar ID ciftidir.
+        Index("ix_fault_span", "from_pole_id", "to_pole_id"),
+        # Sebep dagilimi.
+        Index("ix_fault_cause_opened", "cause_code", "opened_at"),
     )
 
 

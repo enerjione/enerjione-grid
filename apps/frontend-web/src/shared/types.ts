@@ -237,6 +237,26 @@ export type FaultEvent = {
   assigned_to_full_name?: string | null;
   assigned_at?: string | null;
   comment_count: number;
+  /** Arızayı açan alarmlar (son "gördüm" diyen cihazdan), en yeni önce. */
+  trigger_alarms?: FaultTriggerAlarm[];
+};
+
+/** Arızayı doğuran alarm — "bu arıza NEDEN açıldı" sorusunun cevabı.
+    `signal_source` kritik: bir SN2 gövdesindeki üç sensör (master/sat01/sat02)
+    hattın ayrı fazlarına takılır, yani arızanın hangi fazda olduğunu söyler. */
+export type FaultTriggerAlarm = {
+  id: number;
+  title: string;
+  description?: string | null;
+  level: string;
+  signal_key?: string | null;
+  /** "master" | "sat01" | "sat02" — signal_key prefix'i. */
+  signal_source?: string | null;
+  device_id: number;
+  device_code?: string | null;
+  device_name?: string | null;
+  acknowledged: boolean;
+  created_at: string;
 };
 
 export type FaultComment = {

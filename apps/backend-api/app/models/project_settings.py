@@ -57,3 +57,21 @@ class ProjectSettings(Base):
     # sayfasindan ve e-posta/SMS/Telegram/push kanallarindan erisilebilir
     # kalir; bu ayar yalnizca tarayicidaki gecici baloncugu etkiler.
     toast_muted: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    # --- UNITE -> FAZ ESLEMESI ------------------------------------------
+    #
+    # Horstmann SN2 tek cihazdir ama UC unitesi (master / sat01 / sat02)
+    # hatta UC AYRI FAZA kelepcelenir. Hangi unitenin hangi fazda oldugu
+    # KURULUM KARARIDIR — sahada kelepceyi takan kisi belirler.
+    #
+    # NEDEN AYAR: ariza analizinde "tek faz mi uc faz mi" ayrimi sebep
+    # cikariminin belirleyici girdisi (tek faz-toprak cogunlukla dis etken,
+    # uc faz cogunlukla ekipman/asiri yuk). Varsayilani sabit kabul etmek,
+    # farkli kurulmus bir sahada faz etiketlerinin SESSIZCE yanlis
+    # birikmesi demekti — ve bu, veri biriktikten sonra geri alinamaz.
+    #
+    # NULL = varsayilan (master=a, sat01=b, sat02=c). Bkz.
+    # fault_inference.DEFAULT_SOURCE_PHASE.
+    phase_master: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    phase_sat01: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    phase_sat02: Mapped[str | None] = mapped_column(String(4), nullable=True)
