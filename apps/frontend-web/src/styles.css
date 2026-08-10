@@ -39439,9 +39439,11 @@ th.event-col-category {
 
 /* =========================================================================
    Ariza Analizi (Muhendislik > Izleme > Ariza Analizi)
-   Grafik kutuphanesi YOK: CSS + inline SVG yeterli. Bir kutuphane eklemek
-   paket boyutunu ve saha cihazinda yuklenme suresini bu ekranin degerinden
-   fazla buyuturdu.
+
+   NOT: "grafik kutuphanesi YOK" gerekcesi ARTIK GECERSIZ. Cizim echarts'a
+   tasindi (zaten bagimliliktir, cihaz detay grafikleri kullaniyor) ve sayfa
+   lazy yukleniyor. Buradaki CSS kartlarin/listelerin duzenini tasir; seri
+   renkleri faultChartTheme.ts icinde.
    ========================================================================= */
 .fa-page {
   display: flex;
@@ -39705,4 +39707,120 @@ th.event-col-category {
   font-size: 10px;
   color: #94a3b8;
   font-variant-numeric: tabular-nums;
+}
+
+/* ---- Sekmeler ----
+   Sayfa dort bolume ayrildi. Sekme yalnizca duzen degil PERFORMANS karari:
+   harita ve akis sadece kendi sekmesi acilinca monte edilir. */
+.fa-tabs {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 4px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  overflow-x: auto;
+}
+
+.fa-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #64748b;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.fa-tab:hover {
+  color: #334155;
+}
+
+.fa-tab.is-active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.09);
+}
+
+.fa-tab svg {
+  flex-shrink: 0;
+}
+
+.fa-bar-sub {
+  flex-shrink: 0;
+}
+
+/* Etiket + sayi ikilisi. Varsayilan `.fa-list li` uc sutunludur (orta sutun
+   cubuk icin); iki cocuklu listelerde sayi ORTA sutuna dusup sagda bosluk
+   birakiyordu. */
+.fa-list--pairs li {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+/* Sayinin altindaki ikincil satir ("~40 gun sonra esigin altinda"). Tahmini
+   olcuden gorsel olarak ayirir. */
+.fa-list-count em {
+  display: block;
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+/* ---- Ariza yogunluk haritasi ---- */
+.fa-heat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fa-heat-map {
+  height: 420px;
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  z-index: 0; /* Leaflet panelleri sayfa ustundeki serite tirmanmasin. */
+}
+
+/* Isi katmani karolarin USTUNDE, isaretcilerin ALTINDA. Isaretciler kesin
+   adedi tasidigi icin lekenin altinda kalmamalari onemli. */
+.fa-heat-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transition: opacity 0.12s linear;
+}
+
+/* Lejant olmadan renk bir sey ifade etmez: "kirmizi cok mu, biraz mi?" */
+.fa-heat-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.fa-heat-ramp {
+  flex: 1;
+  height: 8px;
+  max-width: 240px;
+  border-radius: 999px;
+  /* Duraklar heatField.ts HEAT_STOPS ile AYNI; ikisi birlikte degisir. */
+  background: linear-gradient(
+    90deg,
+    rgba(37, 99, 235, 0.55) 0%,
+    rgba(234, 179, 8, 0.72) 33%,
+    rgba(234, 88, 12, 0.82) 66%,
+    rgba(190, 18, 60, 0.92) 100%
+  );
 }

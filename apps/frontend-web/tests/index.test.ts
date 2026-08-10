@@ -35,6 +35,10 @@ import "./deviceFocus.test";
 // koru bir operator icin sessizce okunamaz hale gelir.
 import "./faultChartTheme.test";
 
+// Ariza isi haritasi olcegi: "her yer kirmizi" ya da "hicbir yer sicak degil"
+// yalanlarinin ikisi de bakim butcesini yanlis yonlendirir.
+import "./heatField.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   DEFAULT_STALE_AFTER_MS,

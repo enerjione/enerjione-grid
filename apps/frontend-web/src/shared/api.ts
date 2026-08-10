@@ -977,6 +977,33 @@ export async function fetchFaultAnalytics(
   return (await response.json()) as import("./types").FaultAnalytics;
 }
 
+/** Sistem sağlığı: alarm sıklığı + haberleşme kararlılığı. */
+export async function fetchSystemHealth(
+  token: string,
+  days: number
+): Promise<import("./types").SystemHealth> {
+  const response = await apiFetch(`${API_BASE_URL}/faults/system-health?days=${days}`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Sistem sağlığı alınamadı.");
+  return (await response.json()) as import("./types").SystemHealth;
+}
+
+/** Cihaz sağlığı: batarya, sinyal, ısı haritası.
+ *
+ *  Varsayılan pencere ARIZA analizinden kısa (90 gün): ölçüm serisi saatlik
+ *  kovada tutuluyor ve 365 günlük tarama gereksiz ağır. */
+export async function fetchDeviceHealth(
+  token: string,
+  days: number
+): Promise<import("./types").DeviceHealth> {
+  const response = await apiFetch(`${API_BASE_URL}/faults/device-health?days=${days}`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Cihaz sağlığı alınamadı.");
+  return (await response.json()) as import("./types").DeviceHealth;
+}
+
 /** Arıza sebep kataloğu. Tek kaynak backend'dedir (`app/data/fault_causes.py`). */
 /** Ünite → faz eşlemesi (kimlik doğrulamalı; public ayarlardan AYRI). */
 export async function fetchPhaseMap(token: string): Promise<import("./types").PhaseMap> {

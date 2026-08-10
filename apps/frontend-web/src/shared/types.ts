@@ -352,6 +352,75 @@ export type FaultAnalytics = {
   };
   phase_distribution: { phase: string; count: number }[];
   monthly_trend: { month: string; count: number }[];
+  /** Bölge → Hat → Faz akışı. Fazı olmayan kayıt akışa GİRMEZ. */
+  sankey: {
+    nodes: { name: string; tier: "region" | "line" | "phase" | string }[];
+    links: { source: string; target: string; value: number }[];
+  };
+};
+
+/** Sistem sağlığı — `/faults/system-health`. */
+export type SystemHealth = {
+  window_days: number;
+  alarm_summary: {
+    total: number;
+    acknowledged: number;
+    comm_outages: number;
+    /** `kind` eklenmeden önceki kayıtlar. Haberleşme sayısının neden düşük
+     *  göründüğünü açıklayan tek alan. */
+    unclassified: number;
+    ack_ratio: number;
+  };
+  top_rules: {
+    rule_name: string;
+    level: string;
+    count: number;
+    /** Çok tetikleyip hiç onaylanmayan kural = görmezden gelinen kural. */
+    acknowledged: number;
+    last_at: string | null;
+  }[];
+  flapping_devices: {
+    device_id: number;
+    code: string;
+    name: string;
+    /** Kesinti sayısı (mesaj sayısı değil). */
+    outages: number;
+    last_at: string | null;
+  }[];
+};
+
+/** Cihaz sağlığı — `/faults/device-health`. */
+export type DeviceHealth = {
+  window_days: number;
+  battery_drain: {
+    device_id: number;
+    code: string;
+    name: string;
+    first_v: number;
+    last_v: number;
+    /** Pozitif = tükeniyor (V/gün). */
+    drop_per_day_v: number;
+    /** null = eğim ihmal edilebilir ya da batarya yükseliyor. */
+    days_to_low: number | null;
+    observed_days: number;
+    samples: number;
+  }[];
+  weak_signal: {
+    device_id: number;
+    code: string;
+    name: string;
+    avg_dbm: number;
+    /** Dip değer: ortalaması iyi ama dibe vuran cihaz daha sorunludur. */
+    worst_dbm: number | null;
+    samples: number;
+  }[];
+  signal_by_hour: {
+    hour_utc: number;
+    avg_dbm: number;
+    worst_dbm: number | null;
+    samples: number;
+  }[];
+  fault_heatmap: { latitude: number; longitude: number; weight: number }[];
 };
 
 export type FaultCauseCatalog = {
