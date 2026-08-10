@@ -23,6 +23,9 @@ class ModbusLayoutSummary(BaseModel):
     binary_count: int
     binary_output_count: int
     excluded_string_count: int
+    # int16 tavanina sigmadigi icin olcegi genisletilen sinyal sayisi
+    # (bkz. modbus_plan_service.resolve_int16_scale).
+    rescaled_count: int = 0
 
 
 class ModbusCapacity(BaseModel):
@@ -35,6 +38,13 @@ class ModbusCapacity(BaseModel):
     single_read_per_device: bool
     # address_space | bit_space | unit_id_range
     limit_reason: str
+    # Kapasiteye SIGMAYAN cihazlar. Servis bunlari hesapliyordu ama SEMADA
+    # ALAN YOKTU: pydantic fazla anahtarlari sessizce dusurdugu icin uyari
+    # ne arayuze ne worker'a ulasiyordu — `remaining: 0` tek basina "tam"
+    # gibi okunuyor, "N cihaz SCADA'ya hic yayinlanmiyor" bilgisi hicbir
+    # yerde gorunmuyordu (bkz. tests/test_modbus_capacity_overflow.py).
+    dropped_device_count: int = 0
+    dropped_device_codes: list[str] = Field(default_factory=list)
 
 
 class ModbusDeviceSlotRead(BaseModel):
@@ -63,6 +73,8 @@ class ModbusPlanPoint(BaseModel):
     offset: float
     # Katalogdaki manuel adres override'i ile mi geldi?
     manual: bool = False
+    # Olcek int16 tavani icin katalogdakinden genisletildi mi?
+    rescaled: bool = False
 
 
 class ModbusPlanRead(BaseModel):

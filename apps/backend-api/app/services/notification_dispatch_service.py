@@ -257,6 +257,7 @@ def _send_email_for_user(
             message=plain_text,
             html_body=html_body,
             attachments=attachments or None,
+            from_name=project_title,
         )
         logger.info(
             "alarm_email_sent user=%s alarm_id=%d map_attached=%s",
@@ -471,6 +472,7 @@ def dispatch_fault_notifications(
                 subject=subject,
                 message=plain_text,
                 html_body=html_body,
+                from_name=project_title,
             )
             logger.info(
                 "fault_email_sent user=%s fault_id=%d", user.username, fault_id

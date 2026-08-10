@@ -71,12 +71,19 @@ const HEALTH_ICON: Record<BackupHealth, string> = {
   empty: "cloud_off"
 };
 
-/** Durum seridi tonu — uygulama genelindeki `net-banner` paleti. */
+/** Ust serit ogesinin tonu — Ag Ayarlari'ndaki `net-access-item` paleti.
+ *
+ *  NEDEN BANT DEGIL: onceden bu satir `net-banner` idi, yani NORMAL durumda
+ *  bile sayfanin tepesinde dolu renkli bir uyari bandi duruyordu. Uygulamanin
+ *  geri kalaninda `net-banner` YALNIZCA sorun bildirir (Guvenlik Duvari, Ag
+ *  Ayarlari, Uzaktan Erisim hep boyle); "her sey yolunda"yi bantla soylemek
+ *  sayfayi digerlerinden ayirdigi gibi gercek uyarilari da degersizlestiriyordu.
+ *  Artik notr bir serit; renk yalnizca eskimis/basarisiz halde giriyor. */
 const HEALTH_TONE: Record<BackupHealth, string> = {
-  ok: "net-banner--ok",
-  stale: "net-banner--warn",
-  fail: "net-banner--bad",
-  empty: "net-banner--info"
+  ok: "",
+  stale: "is-warn",
+  fail: "is-bad",
+  empty: ""
 };
 
 /** Otomatik program kapaliysa bu suredan eski yedek "eski" sayilir. */
@@ -353,32 +360,66 @@ export function BackupsPanel({ accessToken, currentRole }: Props) {
         onChange={(e) => void handleFileChosen(e)}
       />
 
-      {/* DURUM SERIDI — eski "hero" blogunun yerine tek satir.
-          Buyuk rozet + degrade + dort sayac karti sayfayi uygulamanin geri
-          kalanindan bambaska gosteriyordu (kullanici istegi, 2026-08-06).
-          Ayni bilgi burada: saglik + son yedek kunyesi; sayilar liste
-          basligindaki sayac ve asagidaki satirlarda zaten var. */}
-      <p className={`net-banner ${HEALTH_TONE[health]} bk-status`}>
-        <span className="material-symbols-outlined">{HEALTH_ICON[health]}</span>
-        <strong>{t(`backups.hero.title.${health}`)}</strong>
-        {lastSuccess ? (
-          <span className="bk-status-meta">
-            {fmtDate(lastSuccess.created_at, localeTag)}
-            <i>·</i>
-            {fmtRelative(lastSuccess.created_at, localeTag)}
-            <i>·</i>
-            {fmtBytes(lastSuccess.size_bytes)}
-            {lastSuccess.created_by_username ? (
-              <>
-                <i>·</i>
-                {lastSuccess.created_by_username}
-              </>
-            ) : null}
+      {/* ---- Ust serit: yedekleme durumu + son yedegin kunyesi ----------
+          Ag Ayarlari / Uzaktan Erisim sayfalariyla AYNI dil: `net-access-bar`
+          ogeleri (ikon + etiket + deger), aralarinda ayirici. Onceden bu
+          satir `net-banner` idi ve normal durumda bile dolu renkli bir uyari
+          bandi gibi duruyordu; bant artik yalnizca GERCEK sorun icin
+          (asagidaki basarisiz yedek seridi). */}
+      <div className="net-access-bar bk-status-bar">
+        <div className={`net-access-item ${HEALTH_TONE[health]}`}>
+          <span className="net-access-icon">
+            <span className="material-symbols-outlined">{HEALTH_ICON[health]}</span>
           </span>
-        ) : (
-          <span className="bk-status-meta">{t("backups.hero.noneYet")}</span>
-        )}
-      </p>
+          <span className="net-access-body">
+            <span className="net-access-label">{t("backups.bar.stateLabel")}</span>
+            <strong className="net-access-value">{t(`backups.hero.title.${health}`)}</strong>
+          </span>
+        </div>
+
+        <span className="net-access-sep" aria-hidden="true" />
+
+        <div className="net-access-item">
+          <span className="net-access-icon">
+            <span className="material-symbols-outlined">schedule</span>
+          </span>
+          <span className="net-access-body">
+            <span className="net-access-label">{t("backups.bar.lastLabel")}</span>
+            <strong className="net-access-value">
+              {lastSuccess ? (
+                <>
+                  {fmtDate(lastSuccess.created_at, localeTag)}
+                  <em className="net-access-sub">
+                    {fmtRelative(lastSuccess.created_at, localeTag)}
+                  </em>
+                </>
+              ) : (
+                t("backups.hero.noneYet")
+              )}
+            </strong>
+          </span>
+        </div>
+
+        {lastSuccess ? (
+          <>
+            <span className="net-access-sep" aria-hidden="true" />
+            <div className="net-access-item">
+              <span className="net-access-icon">
+                <span className="material-symbols-outlined">database</span>
+              </span>
+              <span className="net-access-body">
+                <span className="net-access-label">{t("backups.bar.sizeLabel")}</span>
+                <strong className="net-access-value">
+                  {fmtBytes(lastSuccess.size_bytes)}
+                  {lastSuccess.created_by_username ? (
+                    <em className="net-access-sub">{lastSuccess.created_by_username}</em>
+                  ) : null}
+                </strong>
+              </span>
+            </div>
+          </>
+        ) : null}
+      </div>
 
       {/* Basarisiz yedek varsa sessiz gecmiyoruz — eski "0 BASARISIZ"
           sayac karti her zaman yer kapliyordu, bu serit yalnizca sorun

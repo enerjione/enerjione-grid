@@ -772,7 +772,52 @@
       "remote_access_apply_failed": "Uzaktan bakım isteği uygulanamadı: {{error}}",
       "firewall_enabled": "Güvenlik duvarı açıldı ({{rules}} kural, {{forwards}} yönlendirme)",
       "firewall_disabled": "Güvenlik duvarı kapatıldı",
-      "firewall_config_changed": "Güvenlik duvarı kuralları güncellendi ({{rules}} kural, {{forwards}} yönlendirme)"
+      "firewall_config_changed": "Güvenlik duvarı kuralları güncellendi ({{rules}} kural, {{forwards}} yönlendirme)",
+      "alarm_created": "Cihaz haberleşme alarmı açıldı: {{device}}",
+      "alarm_acknowledged": "Alarm onaylandı: {{title}}",
+      "alarm_reset": "Alarm sıfırlandı: {{title}}",
+      "alarm_deleted": "Alarm silindi: {{title}}",
+      "alarm_assigned": "Alarm atandı: {{title}} → {{user}}",
+      "alarm_comment_added": "Alarm yorumu eklendi: {{title}}",
+      "alarm_acknowledge_all": "Görünen alarmların tümü onaylandı ({{count}} alarm)",
+      "alarm_reset_all": "Görünen alarmların tümü sıfırlandı ({{count}} alarm)",
+      "alarm_notification_dispatched": "Alarm bildirimi dağıtıldı",
+      "alarm_notification_failed": "Alarm bildirimi gönderilemedi: {{error}}",
+      "signal_created": "Sinyal eklendi: {{label}} ({{key}})",
+      "signal_updated": "Sinyal güncellendi: {{label}} ({{key}})",
+      "signal_deleted": "Sinyal silindi: {{label}} ({{key}})",
+      "signal_historian_bulk_updated": "Toplu arşiv ayarı: {{count}} sinyal güncellendi ({{detail}})",
+      "signal_reset_defaults": "Sinyal kataloğu fabrika ayarlarına döndürüldü (eklenen {{inserted}}, güncellenen {{updated}}, silinen {{removed}})",
+      "api_key_created": "API anahtarı oluşturuldu: {{name}}",
+      "api_key_revoked": "API anahtarı iptal edildi: {{name}}",
+      "api_key_disabled": "API anahtarı devre dışı bırakıldı: {{name}}",
+      "api_key_enabled": "API anahtarı yeniden etkinleştirildi: {{name}}",
+      "api_key_purged": "API anahtarı kalıcı olarak silindi: {{name}}",
+      "api_key_auth_unknown": "Tanınmayan API anahtarıyla erişim denendi ({{ip}})",
+      "api_key_auth_unusable": "Kullanılamaz API anahtarıyla erişim denendi: {{name}} ({{reason}})",
+      "api_key_auth_ip_denied": "API anahtarı izinli IP dışından kullanıldı: {{name}} ({{ip}})",
+      "api_key_scope_denied": "API anahtarının yetkisi yetmedi: {{name}} — '{{scope}}' gerekli",
+      "user_invited": "{{actor}} yeni kullanıcı davet etti: {{user}}",
+      "user_invite_resent": "{{actor}} daveti yeniden gönderdi: {{user}}",
+      "password_setup": "{{user}} davet bağlantısıyla şifresini belirledi",
+      "gateway_batch_ingested": "Gateway paketi işlendi: {{name}} ({{count}} ölçüm)",
+      "outbound_batch_failed": "Toplu gönderim başarısız: {{target}} — {{error}}",
+      "gateway_local_install_requested": "Gateway kurulum isteği: {{name}} ({{code}})",
+      "gateway_local_remove_requested": "Gateway kaldırma isteği: {{name}} ({{code}})",
+      "gateway_local_update_requested": "Gateway güncelleme isteği: {{name}} ({{code}})",
+      "gateway_stale_devices_unknown": "Gateway sessiz: {{code}} — {{count}} cihazın durumu bilinmiyor",
+      "backup_jobs_reindexed": "Yedek listesi yeniden tarandı: {{count}} kayıt eklendi",
+      "backup_disk_warning": "Yedek diski %{{pct}} dolu — yer açılmazsa yedekleme duracak",
+      "backup_disk_critical": "Yedek diski %{{pct}} dolu — planlı yedek atlandı",
+      "license_request_downloaded": "Lisans istek dosyası indirildi",
+      "license_imported": "Lisans etkinleştirildi (cihaz limiti {{limit}})",
+      "license_import_rejected": "Lisans reddedildi: {{reason}}",
+      "map_pack_started": "Çevrimdışı harita indirme başlatıldı: {{name}} ({{tiles}} karo)",
+      "map_pack_deleted": "Çevrimdışı harita paketi silindi",
+      "notification_whatsapp_web_test_ok": "WhatsApp Web test başarılı: {{recipient}}",
+      "notification_whatsapp_web_test_failed": "WhatsApp Web test başarısız: {{error}}",
+      "notification_whatsapp_web_logout": "WhatsApp Web oturumu kapatıldı",
+      "topology_imported": "Topoloji içe aktarıldı: {{regions}} bölge, {{lines}} hat, {{poles}} direk"
     },
     "category": {
       "auth": "Giriş ve oturum",
@@ -797,7 +842,10 @@
       "faultComment": "Arıza yorumu",
       "system": "Sistem",
       "security": "Güvenlik",
-      "other": "Diğer"
+      "other": "Diğer",
+      "ftp": "FTP aktarımı",
+      "backup": "Yedekleme",
+      "license": "Lisans"
     }
   },
   "faults": {
@@ -1494,6 +1542,10 @@
         "title": "Erişim durumu hedefe getirilemedi",
         "hint": "Cihazın bildirdiği durum ile verilen izin uyuşmuyor. Birkaç dakika içinde tekrar bakın."
       }
+    },
+    "bar": {
+      "stateLabel": "Uzaktan bakım",
+      "grantedByLabel": "İzni veren"
     }
   },
   "systemStatus": {
@@ -1963,11 +2015,11 @@
       "batteryFullInvalid": "Tam voltaj geçersiz (0-10 V).",
       "batteryOrderInvalid": "Tam voltaj, düşük voltajdan büyük olmalı.",
       "projectName": "Proje Adı",
-      "projectNamePlaceholder": "Örn: Aras EDAŞ Smart Logger",
+      "projectNamePlaceholder": "Örn: Merkez Şebeke İzleme",
       "customerName": "Müşteri Adı",
-      "customerNamePlaceholder": "Örn: Aras EDAŞ",
+      "customerNamePlaceholder": "Örn: Elektrik Dağıtım A.Ş.",
       "siteTitle": "Tarayıcı Sekme Başlığı",
-      "siteTitlePlaceholder": "Örn: Aras EDAŞ Smart Logger",
+      "siteTitlePlaceholder": "Örn: EnerjiOne Grid",
       "siteTitleHint": "Tarayıcı sekmesinde ve yer imlerinde gözükür. Boş bırakılırsa varsayılan \"EnerjiOne Grid Dashboard\" kullanılır.",
       "loginLogoTitle": "Müşteri Logosu (Giriş Ekranı)",
       "loginLogoDesc": "Giriş ekranında merkezde gösterilir. Açık zeminli versiyon. Boş bırakılırsa sadece EnerjiOne markası gösterilir.",
@@ -2592,14 +2644,17 @@
         "pagerPrev": "Önceki",
         "pagerNext": "Sonraki",
         "pagerFirst": "İlk sayfa",
-        "pagerLast": "Son sayfa"
+        "pagerLast": "Son sayfa",
+        "droppedDevices": "{{count}} cihaz adres planına SIĞMADI ve SCADA'ya hiç yayınlanmıyor: {{codes}}. Çözüm tavanı büyütmek değil — yükü ikinci bir Modbus hedefine bölün (her hedefin kendi adres alanı vardır).",
+        "rescaledNote": "{{count}} sinyalin ölçeği int16 tavanına sığması için genişletildi (⤴ işaretli satırlar). SCADA tarafında bu sinyaller için katsayıyı tablodaki yeni değerle güncelleyin; tam çözünürlük isterseniz hedefi float32 formatına alın.",
+        "rescaledHint": "Ölçek genişletildi — bu adresin tavanı {{max}} {{unit}}"
       },
       "form": {
         "name": "Hedef Adı",
         "protocol": "Protokol",
         "endpoint": "Endpoint",
         "topic": "Topic (MQTT)",
-        "topicPlaceholder": "horstman/events",
+        "topicPlaceholder": "e1/saha/olaylar",
         "eventFilter": "Event Filtresi",
         "filterAll": "Tümü",
         "filterTelemetry": "Telemetry",
@@ -3329,7 +3384,12 @@
       "success": "Sistem yeniden başlatılıyor. Sayfa birazdan otomatik yenilenecek.",
       "fail": "Sistem yeniden başlatılamadı."
     },
-    "failedBanner": "{{count}} yedek başarısız oldu; ayrıntı için ilgili satıra bakın."
+    "failedBanner": "{{count}} yedek başarısız oldu; ayrıntı için ilgili satıra bakın.",
+    "bar": {
+      "stateLabel": "Yedekleme",
+      "lastLabel": "Son başarılı yedek",
+      "sizeLabel": "Boyut"
+    }
   },
   "notifications": {
     "title": "Bildirimler",

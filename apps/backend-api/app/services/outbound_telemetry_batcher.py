@@ -281,6 +281,8 @@ def _flush_once() -> None:
                         event_type="outbound_batch_failed",
                         severity="warning",
                         message=f"Batch delivery to {target.name} failed: {exc}",
+                        i18n_key="outbound_batch_failed",
+                        i18n_params={"target": target.name, "error": str(exc)},
                         metadata={
                             "target": target.name,
                             "protocol": target.protocol,

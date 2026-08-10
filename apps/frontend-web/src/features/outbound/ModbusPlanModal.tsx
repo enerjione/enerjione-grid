@@ -173,6 +173,31 @@ export function ModbusPlanModal({
               </div>
             </div>
 
+            {/* Kapasiteye SIGMAYAN cihazlar. `remaining: 0` tek basina "tam"
+                gibi okunuyordu; bu cihazlar SCADA'ya HIC yayinlanmiyor ve
+                operator onlari "sakin" saniyor. Cozum tavani buyutmek degil,
+                yuku ikinci bir hedefe bolmek. */}
+            {plan.capacity.dropped_device_count > 0 ? (
+              <p className="net-banner net-banner--bad">
+                <span className="material-symbols-outlined">error</span>
+                {t("engineering.outbound.modbus.droppedDevices", {
+                  count: plan.capacity.dropped_device_count,
+                  codes: plan.capacity.dropped_device_codes.join(", ")
+                })}
+              </p>
+            ) : null}
+
+            {/* Olcegi genisletilen sinyaller — SCADA tarafinda eski katsayiyla
+                kurulmus bir esleme varsa guncellenmeli. */}
+            {plan.summary.rescaled_count > 0 ? (
+              <p className="net-banner net-banner--warn">
+                <span className="material-symbols-outlined">straighten</span>
+                {t("engineering.outbound.modbus.rescaledNote", {
+                  count: plan.summary.rescaled_count
+                })}
+              </p>
+            ) : null}
+
             <p className="modbus-plan-note">
               {plan.capacity.single_read_per_device
                 ? t("engineering.outbound.modbus.noteSingleRead", { stride: plan.stride })
@@ -257,6 +282,17 @@ export function ModbusPlanModal({
                           ? `×${p.scale}${p.offset ? ` +${p.offset}` : ""}`
                           : "—"}
                         {p.unit ? ` ${p.unit}` : ""}
+                        {p.rescaled ? (
+                          <span
+                            className="modbus-rescaled-mark"
+                            title={t("engineering.outbound.modbus.rescaledHint", {
+                              max: (32767 * p.scale).toLocaleString(),
+                              unit: p.unit ?? ""
+                            })}
+                          >
+                            ⤴
+                          </span>
+                        ) : null}
                       </td>
                     </tr>
                   ))}

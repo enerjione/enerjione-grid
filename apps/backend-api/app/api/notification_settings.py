@@ -20,7 +20,9 @@ from app.schemas.notification import (
     WhatsappWebStatus,
     WhatsappWebTestRequest,
 )
+from app.models.project_settings import ProjectSettings
 from app.services import whatsapp_web_client_service
+from app.services.email_templates import PRODUCT_NAME
 from app.services.event_service import record_event
 from app.services.notification_settings_service import get_or_create_notification_settings
 from app.services.notification_test_service import (
@@ -42,6 +44,22 @@ _ENCRYPTED_FIELDS = (
     "sms_account_sid",
     "telegram_bot_token",
 )
+
+
+def _brand_title(db: Session) -> str:
+    """Test bildirimlerinde gorunecek ad.
+
+    Ayni oncelik notification_dispatch_service._project_title ile: kurulumun
+    kendi adi varsa o, yoksa urun adi. Test maili ile gercek alarm maili
+    ayni gondericiden gelmeli — aksi halde operator test'i gorup "tamam"
+    derken alarm baska bir isimle geliyor.
+    """
+    row = db.get(ProjectSettings, 1)
+    if row is not None:
+        for candidate in (row.site_title, row.project_name, row.customer_name):
+            if candidate and candidate.strip():
+                return candidate.strip()
+    return PRODUCT_NAME
 
 
 def _decrypted_view(row):
@@ -116,14 +134,20 @@ def test_smtp_settings(
     db: Session = Depends(get_db),
 ):
     settings_row = get_or_create_notification_settings(db)
-    subject = payload.subject or "Horstman SMTP Test"
-    message = payload.message or "Bu mesaj Horstman Smart Logger SMTP test gönderimidir."
+    # Marka: kurulumun kendi adi (Proje Ayarlari) varsa o, yoksa urun adi.
+    # Eskiden "Horstman ..." yaziyordu — Horstmann izlenen CIHAZIN ureticisi,
+    # bu yazilimin adi degil; test maili yanlis gonderenden gelmis gibi
+    # gorunuyordu.
+    brand = _brand_title(db)
+    subject = payload.subject or f"{brand} SMTP Test"
+    message = payload.message or f"Bu mesaj {brand} SMTP test gönderimidir."
     try:
         send_smtp_test(
             settings_row,
             recipient_email=payload.recipient_email,
             subject=subject,
             message=message,
+            from_name=brand,
         )
         record_event(
             db,
@@ -159,7 +183,7 @@ def test_sms_settings(
     db: Session = Depends(get_db),
 ):
     settings_row = get_or_create_notification_settings(db)
-    message = payload.message or "Bu mesaj Horstman Smart Logger SMS test gönderimidir."
+    message = payload.message or f"Bu mesaj {_brand_title(db)} SMS test gönderimidir."
     try:
         send_sms_test(
             settings_row,
@@ -205,7 +229,7 @@ def test_telegram_settings(
     db: Session = Depends(get_db),
 ):
     settings_row = get_or_create_notification_settings(db)
-    message = payload.message or "Horstman Smart Logger Telegram test."
+    message = payload.message or f"{_brand_title(db)} Telegram test."
     try:
         send_telegram_test(
             settings_row,

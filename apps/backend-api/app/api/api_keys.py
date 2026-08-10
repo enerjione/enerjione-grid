@@ -91,6 +91,8 @@ def create_api_key(
         severity="info",
         actor_username=user.username,
         message=f"API key created: {payload.name}",
+        i18n_key="api_key_created",
+        i18n_params={"name": payload.name},
         metadata={
             "api_key_id": row.id,
             "scopes": scopes_csv,
@@ -165,6 +167,8 @@ def revoke_api_key(
             severity="warning",
             actor_username=user.username,
             message=f"API key revoked: {row.name}",
+            i18n_key="api_key_revoked",
+            i18n_params={"name": row.name},
             metadata={"api_key_id": row.id, "owner_user_id": row.user_id},
         )
         db.commit()
@@ -193,6 +197,8 @@ def disable_api_key(
             db, category="security", event_type="api_key_disabled",
             severity="info", actor_username=user.username,
             message=f"API key disabled: {row.name}",
+            i18n_key="api_key_disabled",
+            i18n_params={"name": row.name},
             metadata={"api_key_id": row.id},
         )
         db.commit()
@@ -222,6 +228,8 @@ def enable_api_key(
             db, category="security", event_type="api_key_enabled",
             severity="info", actor_username=user.username,
             message=f"API key re-enabled: {row.name}",
+            i18n_key="api_key_enabled",
+            i18n_params={"name": row.name},
             metadata={"api_key_id": row.id},
         )
         db.commit()
@@ -256,6 +264,8 @@ def purge_api_key(
         db, category="security", event_type="api_key_purged",
         severity="warning", actor_username=user.username,
         message=f"API key permanently deleted: {name}",
+        i18n_key="api_key_purged",
+        i18n_params={"name": name},
         metadata={"api_key_id": row.id, "owner_user_id": row.user_id},
     )
     db.delete(row)

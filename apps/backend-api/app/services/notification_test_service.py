@@ -5,9 +5,11 @@ import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
+from email.headerregistry import Address
 from email.message import EmailMessage
 
 from app.models.notification_settings import NotificationSettings
+from app.services.email_templates import PRODUCT_NAME
 
 # SMTP soket zaman asimi (saniye).
 #
@@ -26,6 +28,22 @@ from app.models.notification_settings import NotificationSettings
 SMTP_TIMEOUT_SEC = 20
 
 
+def build_from_header(sender: str, from_name: str | None) -> str | Address:
+    """`From` basligi: "<Ad> <adres>". Ad cozulemezse duz adres.
+
+    `Address` kullaniliyor cunku ad Turkce karakter icerebilir ve elle
+    kurulan `"Ad" <adres>` dizgisi bu durumda RFC 2047 kodlamasi yapmaz —
+    bazi istemcilerde gonderen adi bozuk gorunur. Adres beklenmedik bir
+    bicimdeyse (yerel kisim/domain ayrilamiyorsa) ad DUSURULUR: gecersiz
+    bir `From` uretip tum gonderimi patlatmaktansa adsiz gondermek yeg.
+    """
+    name = (from_name or PRODUCT_NAME).strip()
+    local, _, domain = (sender or "").rpartition("@")
+    if not name or not local or not domain:
+        return sender
+    return Address(display_name=name, username=local, domain=domain)
+
+
 def send_smtp_test(
     settings_row: NotificationSettings,
     *,
@@ -34,6 +52,7 @@ def send_smtp_test(
     message: str,
     html_body: str | None = None,
     attachments: list[dict] | None = None,
+    from_name: str | None = None,
 ) -> None:
     """SMTP gonderim. html_body verilirse multipart/alternative gonderilir
     (plain text fallback + HTML), aksi halde sadece plain text.
@@ -43,6 +62,11 @@ def send_smtp_test(
        "cid": str | None}.
     cid verilirse inline (HTML icindeki <img src="cid:..."> referans
     edilebilir) olarak eklenir; aksi halde regular ek olarak.
+
+    from_name: `From` basliginda gorunecek AD. Bos ise kurulumun kendi adi
+    (Proje Ayarlari) yoksa `PRODUCT_NAME`. Onceden hic gorunen ad
+    YOKTU: alici kutusunda yalnizca `noreply@...` adresi ciktigi icin
+    posta istemcileri gonderen olarak adresin yerel kismini gosteriyordu.
     """
     if not settings_row.smtp_host:
         raise ValueError("SMTP sunucu adresi boş.")
@@ -51,7 +75,7 @@ def send_smtp_test(
 
     sender = settings_row.smtp_from_email or settings_row.smtp_username or "noreply@enerjione-grid.local"
     mail = EmailMessage()
-    mail["From"] = sender
+    mail["From"] = build_from_header(sender, from_name)
     mail["To"] = recipient_email
     mail["Subject"] = subject
     # Plain text body default — eski clientlar veya HTML render edemeyenler icin.

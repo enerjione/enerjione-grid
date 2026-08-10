@@ -12,6 +12,69 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ## [Yayınlanmamış]
 
+### Düzeltildi
+
+- **Modbus'ta akım değerleri 32.767 A'de kilitleniyordu.** Register ölçeği
+  olarak sinyal kataloğundaki katsayı kullanılıyordu; ama o katsayı DNP3
+  **çözme** katsayısıdır ve cihazın ham birimini anlatır (akımlar için mA).
+  Kodlayıcı tersini uygulayınca register'a mA yazılıyor ve `0.001` ölçeğinin
+  int16 tavanı **32.767 A** oluyordu. Bir dağıtım fideri rahatça 100–600 A
+  taşır, arıza akımı kA mertebesindedir — bu tavanın üstündeki her değer
+  32767'ye kilitleniyor, SCADA sonsuza dek aynı sayıyı okuyordu. Belirti
+  sinsiydi: değer "makul" görünür, sadece **hiç değişmez**. Ölçek artık
+  int16 tavanına sığacak şekilde ondalık basamak atlanarak genişletiliyor
+  (akım `0.001 → 0.1`, tavan 3276.7 A). Adres planı ekranı genişletilen
+  sinyalleri `⤴` ile işaretliyor. **SCADA tarafında bu sinyaller için
+  katsayının tablodaki yeni değerle güncellenmesi gerekir.**
+- **Kapasiteye sığmayan cihazların uyarısı hiçbir yere ulaşmıyordu.**
+  Adres planı servisi "N cihaz plana alınmadı" bilgisini üretiyordu ama
+  API şemasında karşılık gelen alan yoktu; pydantic fazla anahtarları
+  sessizce düşürdüğü için uyarı ne arayüze ne worker'a gidiyordu. Arayüz
+  `remaining: 0` değerini "tam" diye okuyor, o cihazlar SCADA'ya hiç
+  yayınlanmadığı halde operatör onları "sakin" sanıyordu.
+- **`unit` modunda Modbus bit adresleri cihaz başına kayıyordu.** Her cihaz
+  kendi slave id'sinde olduğu halde register'lar 0'dan, bitler
+  `cihaz_sırası × 100`'den başlıyordu; SCADA'da bit eşlemesi tutmuyordu.
+- **MQTT topic'i ilk turdan sonra susuyordu.** Yayıncı "değer değişmediyse
+  gönderme" yapıyor; saha sinyallerinin çoğu sabit olduğu için (seri no,
+  firmware, eşik değerleri, normal durumdaki arıza bayrakları) servis
+  açıldıktan sonra her şey bir kez yayınlanıyor, ardından topic sessizleşiyordu.
+  `retain` de varsayılan kapalı olduğundan **sonradan abone olan istemci
+  hiçbir şey görmüyordu.** Değişim anında yayın korunuyor; ek olarak her
+  sinyal en geç 5 dakikada bir tazeleniyor.
+- **Operatörün girdiği MQTT topic'i sessizce yok sayılıyordu.** Çözücü,
+  belgelenmiş olmasına rağmen `topic` alanını hiç okumuyor, yayını şablondan
+  üretilen başka bir topic'e gönderiyordu. "Otomatik Topic'ler" önizlemesi de
+  artık gerçekte yayınlanan topic'i gösteriyor.
+- **MQTT "Bağlı" rozeti broker düştükten sonra da bağlı gösteriyordu.**
+  Durum yalnızca ilk bağlantıda yazılıyordu; artık bağlan/kop geri
+  çağrılarıyla izleniyor.
+- **Olay kayıtlarının yarısı ham (çoğu İngilizce) metinle görünüyordu.**
+  188 `record_event` çağrısının 90'ında Türkçe şablon anahtarı yoktu; Olaylar
+  ekranı ve PDF/Excel dışa aktarımı "Alarm … acknowledged", "Signal updated",
+  "API key created", "Gateway … batch processed" gibi satırlar basıyordu.
+  Alarm yaşam döngüsü, sinyal kataloğu, API anahtarları, lisans, yedekleme ve
+  davet olaylarına Türkçe/İngilizce şablon eklendi. Ayrıca `ftp`, `backup` ve
+  `license` kategorileri eşlemede olmadığı için "Ftp/Backup/License" diye
+  görünüyordu.
+- **Bildirimler "Horstman" adıyla gidiyordu.** Horstmann izlenen **cihazın**
+  üreticisi, bu yazılımın adı değil; müşteri test e-postasını yanlış
+  göndericiden gelmiş sanıyordu. SMTP/SMS/Telegram testleri ve alarm bildirimi
+  konusu artık kurulumun kendi adını (Proje Ayarları), o da boşsa "EnerjiOne
+  Grid" kullanıyor. Giden e-postalarda **görünen gönderen adı hiç yoktu**
+  (yalnızca `noreply@…` adresi) — eklendi.
+
+### Değişti
+
+- **Yedek ve Uzaktan Erişim sayfalarının üst şeridi** diğer mühendislik
+  sekmeleriyle aynı dile getirildi (Ağ Ayarları / Güvenlik Duvarı'ndaki tek
+  satırlık durum şeridi). Uzaktan Erişim'deki başlık + açıklama paragrafı +
+  madde listesinden oluşan büyük blok ve Yedek'te normal durumda bile duran
+  dolu renkli uyarı bandı kaldırıldı; bilgi kaybı yok, "ne olur" açıklaması
+  zaten alttaki kartta. Renkli bant artık yalnızca gerçek sorunu bildiriyor.
+- Proje Ayarları'ndaki proje adı / müşteri adı / sekme başlığı
+  örneklerinden müşteri adı çıkarıldı.
+
 ---
 
 ## [2.54.3] — 2026-08-07

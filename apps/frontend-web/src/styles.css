@@ -3,25 +3,6 @@
 .net-access-item.is-bad .net-access-icon { color: #dc2626; }
 .net-access-item.is-bad .net-access-value { color: #b91c1c; }
 
-/* Uzaktan erisim: izin ile OLCULEN durum ayristi.
-   `down` modunda acmak kontrol duzlemine gitmeyi gerektirir ve basarisiz
-   olabilir; bunu sessiz gecmek "izin verdim, hicbir sey olmadi" demektir. */
-.rad-mismatch {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 12px 0 4px;
-  padding: 12px 14px;
-  border-radius: 11px;
-  border: 1px solid #fed7aa;
-  background: #fff7ed;
-  text-align: left;
-}
-.rad-mismatch > svg { color: #c2410c; flex-shrink: 0; margin-top: 1px; }
-.rad-mismatch > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.rad-mismatch strong { font-size: 13px; font-weight: 650; color: #7c2d12; }
-.rad-mismatch span { font-size: 12px; color: #9a3412; line-height: 1.55; }
-
 /* ---- WiFi ozet seridi (panelde kalan tek satirlik durum) ----
    Uc katman popup'a tasindi; panelde yalnizca "tek bakista durum" kaldi.
    Bagli ag burada cunku "hangi agdayim" en sik sorulan soru. */
@@ -32675,6 +32656,40 @@ th.event-col-category {
   white-space: nowrap;
 }
 
+/* Ayni degerin IKINCIL parcasi (adresin yaninda IP, tarihin yaninda "2 saat
+   once", surenin yaninda bitis saati). Ayri bir serit ogesi acmak yerine
+   burada duruyor — serit dar ekranda gereksiz sarmasin. */
+.net-access-sub {
+  font-style: normal;
+  font-weight: 600;
+  font-size: 11.5px;
+  color: #94a3b8;
+  margin-left: 7px;
+}
+
+/* `is-bad` daha once yalnizca metni kizartiyordu; ikon rozeti notr kaliyor
+   ve oge yarim boyanmis gorunuyordu (is-ok/is-warn ikisini de boyuyor). */
+.net-access-item.is-bad .net-access-icon { background: #fee2e2; }
+
+/* Yedekleme ve Uzaktan Erisim seritleri Ag Ayarlari ile ayni olcude; tek
+   fark aksiyon dugmesinin seridin sagina yaslanmasi. */
+.bk-status-bar,
+.rad-access-bar {
+  flex-shrink: 0;
+}
+
+.rad-access-bar > .rad-revoke-btn {
+  margin-left: auto;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+/* Serit icindeki material-symbols ikonu lucide ile ayni optik boyutta olsun. */
+.net-access-icon .material-symbols-outlined {
+  font-size: 18px;
+  line-height: 1;
+}
+
 .net-copy-btn {
   background: transparent;
   border: 1px solid #e2e8f0;
@@ -33868,6 +33883,14 @@ th.event-col-category {
   font-size: 12px;
   color: #1e40af;
   line-height: 1.5;
+}
+
+/* Olcegi genisletilmis satirin isareti — SCADA katsayisi degismis demektir. */
+.modbus-rescaled-mark {
+  margin-left: 5px;
+  color: #b45309;
+  font-weight: 700;
+  cursor: help;
 }
 
 .modbus-plan-toolbar {
@@ -35171,222 +35194,6 @@ th.event-col-category {
   overflow: hidden;
 }
 
-/* ---------- Durum blogu ----------
-   Diger sayfalardaki kartlarla AYNI dil: duz beyaz, ayni kenarlik ve
-   yaricap. ACIK hali net-banner--warn tonlariyla ayrisir — degrade, hale
-   ve dekoratif salter grafigi kaldirildi. */
-.rad-switch {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  flex-shrink: 0;
-  /* BASIK tutulur (kullanici istegi): ust blok dikeyde yer yemesin,
-     genislik zaten bol — bilgiler yatayda dagilir. */
-  padding: 10px 16px;
-  border: 1px solid var(--rad-line);
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-  transition: background 0.3s ease, border-color 0.3s ease;
-}
-
-.rad-switch.is-on {
-  background: var(--rad-on-bg);
-  border-color: var(--rad-on-line);
-}
-
-.rad-switch.is-unknown,
-.rad-switch.is-loading {
-  background: #fbfcfe;
-  border-style: dashed;
-}
-
-.rad-switch-body {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  flex: 1;
-}
-
-/* Meta satiri + cihaz cipleri ayni yatay akista dagilir — dikey yigilma
-   ust blogu gereksiz uzatiyordu. */
-.rad-switch-body > p { font-size: 13px; }
-
-/* Durum rozeti — diger sayfalardaki .net-chip ile ayni gorunum. */
-.rad-switch-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  align-self: flex-start;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: #f1f5f9;
-  color: var(--rad-muted);
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.rad-switch.is-on .rad-switch-pill {
-  background: var(--rad-on-line);
-  color: var(--rad-on-ink);
-}
-
-.rad-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #94a3b8;
-  flex-shrink: 0;
-}
-
-.rad-switch.is-on .rad-dot {
-  background: var(--rad-accent);
-  animation: rad-pulse 1.9s ease-in-out infinite;
-}
-
-@keyframes rad-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(233, 120, 0, 0.5); }
-  70% { box-shadow: 0 0 0 6px rgba(233, 120, 0, 0); }
-}
-
-.rad-switch-body h2 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 650;
-  color: var(--rad-ink);
-}
-
-.rad-switch.is-on .rad-switch-body h2 { color: var(--rad-on-ink); }
-
-.rad-switch-body > p {
-  margin: 0;
-  max-width: 68ch;
-  font-size: 13.5px;
-  line-height: 1.5;
-  color: #475569;
-}
-
-.rad-switch-meta {
-  list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
-  margin: 4px 0 0;
-  padding: 0;
-}
-
-.rad-switch-meta li {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  color: var(--rad-on-ink);
-}
-
-.rad-switch-meta li svg { opacity: 0.75; flex-shrink: 0; }
-
-/* Sag blok TEK YATAY SATIR: geri sayim + kapat dugmesi yan yana — dikey
-   yigilma hero'yu uzatiyor, sag taraf bos gorunuyordu. */
-.rad-switch-actions {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-shrink: 0;
-  padding-left: 18px;
-  border-left: 1px solid var(--rad-on-line);
-}
-
-/* KAHRAMAN OGE: kalan sure. .net-reboot-countdown ile ayni gorsel agirlik. */
-.rad-countdown {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-}
-
-.rad-countdown strong {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: clamp(1.9rem, 3.2vw, 2.6rem);
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  color: var(--rad-on-ink);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.rad-countdown span {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  /* #b07a3f amber zeminde (#fff8ed) yalnizca 3.49 kontrast veriyordu —
-     WCAG AA siniri 4.5. Kahraman geri sayimin NE OLDUGUNU soyleyen tek
-     etiket bu; okunaksiz kalmasi kabul edilemez. Panelin kendi vurgu
-     mureekkebi (--rad-on-ink = #9a4c07) 5.83 veriyor ve paleti bozmuyor. */
-  color: var(--rad-on-ink);
-}
-
-/* "Sureyi uzat" secimi sureyi KISALTIYORSA uyari. Engellemiyoruz; kasitli
-   kisaltma mesru — ama sessizce yapilmamali. */
-.rad-endsat-warn {
-  margin: 6px 0 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: #9a3412;
-}
-
-.rad-revoke-btn { white-space: nowrap; }
-
-/* Geri sayim: buyuk, monospace — saat bilgisi bir "gosterge" gibi okunmali. */
-.rad-countdown strong {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 1.35rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--rad-on-ink);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.rad-countdown span {
-  font-size: 11px;
-  color: var(--rad-muted);
-}
-
-/* Cihazin bakim agindaki kimligi — durum blogunda kucuk cipler. */
-.rad-switch-device {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 8px;
-  margin-top: 4px;
-}
-
-.rad-device-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 9px;
-  border-radius: 999px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  font-size: 11.5px;
-  color: #334155;
-}
-
-.rad-device-chip b {
-  font-weight: 600;
-  color: var(--rad-muted);
-  font-size: 10.5px;
-}
-
-.rad-device-chip.is-ok { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
-.rad-device-chip.is-off { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
-
 /* ---------- Iki sutun ---------- */
 .rad-columns {
   display: grid;
@@ -35995,17 +35802,6 @@ th.event-col-category {
 }
 
 @media (max-width: 860px) {
-  .rad-switch { flex-wrap: wrap; }
-  .rad-switch-actions {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    padding-left: 0;
-    padding-top: 12px;
-    border-left: none;
-    border-top: 1px solid var(--rad-on-line);
-  }
   .rad-log-row {
     grid-template-columns: 22px minmax(0, 1fr);
     grid-template-areas:
@@ -36019,12 +35815,8 @@ th.event-col-category {
   .rad-log-side { grid-area: side; justify-content: flex-end; }
 }
 
-/* Hareket duyarliligi: salter kolu ve nabiz durur, bilgi aynen kalir. */
+/* Hareket duyarliligi: nabiz durur, bilgi aynen kalir. */
 @media (prefers-reduced-motion: reduce) {
-  .rad-switch,
-  .rad-breaker-knob,
-  .rad-breaker-track { transition: none; }
-  .rad-switch.is-on .rad-dot,
   .header-remote-dot { animation: none; }
 }
 

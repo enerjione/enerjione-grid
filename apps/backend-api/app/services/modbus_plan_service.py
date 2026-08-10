@@ -102,6 +102,61 @@ WORD_ORDERS = ("big", "little")
 _REGISTER_TYPES = ("analog", "counter")
 _BIT_TYPES = ("binary", "binary_output")
 
+# --- int16 TAM-OLCEK KORUMASI ---------------------------------------------
+#
+# YASANAN ARIZA: register olcegi olarak katalogdaki `scale` kullaniliyordu.
+# Ama o olcek DNP3 COZME katsayisidir (ham deger * scale = muhendislik
+# degeri) ve cihazin ham birimini anlatir — akimlar icin mA. Kodlayici
+# tersini uyguluyor (raw = deger / scale), yani register'a mA yaziyordu:
+#
+#     master.actual_current, scale=0.001  ->  int16 tavani 32767 * 0.001
+#                                             = 32.767 A
+#
+# Bir dagitim fideri rahatca 100-600 A tasir; ariza akimi kA mertebesindedir.
+# 32.767 A'nin ustundeki HER deger `clamp_int16` ile 32767'ye kilitleniyor ve
+# SCADA sonsuza dek 32.767 A okuyor. Belirti sinsi: deger "makul" gorunur,
+# sadece hic degismez.
+#
+# COZUM: int16 modunda olcek, sinyalin fiziksel araligina gore ONDALIK
+# BASAMAK BASAMAK genisletilir. Secilen olcek adres tablosunda ve CSV'de
+# zaten her sinyal icin yaziyor, SCADA ayni katsayiyla geri cevirir.
+#
+# Buradaki hedefler "bu birimde beklenen en buyuk mutlak deger"dir. Yalnizca
+# katalog olceginin sahada GERCEKTEN tastigi birimler icin tanimlidir;
+# listede olmayan birim katalog olcegini oldugu gibi korur (orn. batarya
+# gerilimi 0.01 V -> 327 V tavan, 3.x V'luk bir hucre icin fazlasiyla yeterli
+# ve 0.01 V cozunurlugu kaybetmenin anlami yok).
+INT16_MAX = 32_767
+INT16_FULL_SCALE_TARGET: dict[str, float] = {
+    # Fider yuk akimi + ariza akimi. 0.001 -> 0.1 (tavan 3276.7 A).
+    "a": 3_000.0,
+    # Aci: tam tur 360 derece; 0.01'in tavani 327.67 ile tam turu bile
+    # tasiyamiyordu.
+    "°": 400.0,
+}
+
+
+def resolve_int16_scale(catalog_scale: float, unit: str | None) -> float:
+    """int16 modunda kullanilacak register olcegi.
+
+    Katalog olcegi hedef tam-olcegi karsilamiyorsa 10'un katlariyla
+    genisletilir (0.001 -> 0.01 -> 0.1 -> 1 ...). 10'un katlari bilincli:
+    SCADA tarafinda katsayi elle girilirken okunabilir kalsin.
+    """
+    scale = float(catalog_scale or 1.0)
+    if scale <= 0:
+        return 1.0
+    target = INT16_FULL_SCALE_TARGET.get((unit or "").strip().lower())
+    if not target:
+        return scale
+    # Ondalik basamak atlayarak buyut; olcek 1.0'i gectiginde durur (1'in
+    # ustu zaten 32767 tavan demek, daha fazlasi cozunurluk israfi olur).
+    while scale * INT16_MAX < target and scale < 1.0:
+        scale *= 10.0
+    # Kayan nokta birikimi (0.001*10*10 = 0.09999...) adres tablosunda
+    # cirkin gorunur ve SCADA'ya elle girilemez; ondalik basamaga yuvarla.
+    return round(scale, 6)
+
 
 @dataclass(frozen=True)
 class SignalSlot:
@@ -122,6 +177,10 @@ class SignalSlot:
     offset_value: float
     # Manuel override ile mi geldi (katalogdaki modbus_address dolu mu)?
     manual: bool = False
+    # int16 tavanina sigmadigi icin olcegi katalogdakinden GENISLETILDI mi?
+    # Arayuz bunu isaretler: SCADA'da eski katsayiyla kurulmus bir esleme
+    # varsa guncellenmesi gerektigini operator gormeli.
+    rescaled: bool = False
 
 
 @dataclass
@@ -136,6 +195,8 @@ class LayoutSummary:
     binary_count: int = 0
     binary_output_count: int = 0
     excluded_string_count: int = 0
+    # int16 tavanina sigmadigi icin olcegi genisletilen sinyal sayisi.
+    rescaled_count: int = 0
 
 
 @dataclass
@@ -182,6 +243,14 @@ def build_signal_layout(
             # Counter'lar 32-bit sayaclardir; int16 formatinda bile 2 word alir
             # (bir sayaci 16 bit'e sigdirmak 65535'te sarmasi demek olurdu).
             words = 2 if data_type == "counter" else analog_words
+            # Register olcegi: float32'de olcek YOKTUR (muhendislik birimi
+            # dogrudan yazilir) ve sayaclar ham tamsayidir; yalnizca int16
+            # analoglarda tam-olcek korumasi devreye girer.
+            if fmt == "int16" and data_type != "counter":
+                reg_scale = resolve_int16_scale(row["scale"], row["unit"])
+            else:
+                reg_scale = row["scale"]
+            rescaled = reg_scale != row["scale"]
             manual_fc = row["modbus_function"]
             manual_addr = row["modbus_address"]
             if manual_addr is not None:
@@ -198,9 +267,12 @@ def build_signal_layout(
                     key=row["key"], label=row["label"], source=row["source"],
                     data_type=data_type, unit=row["unit"],
                     function=function, offset=offset, word_count=words,
-                    scale=row["scale"], offset_value=row["offset"], manual=manual,
+                    scale=reg_scale, offset_value=row["offset"], manual=manual,
+                    rescaled=rescaled,
                 )
             )
+            if rescaled:
+                layout.summary.rescaled_count += 1
             if data_type == "counter":
                 layout.summary.counter_count += 1
             else:
@@ -489,20 +561,34 @@ class PlanPoint:
     scale: float
     offset: float
     manual: bool
+    # Olcek int16 tavani icin genisletildi mi (bkz. resolve_int16_scale).
+    rescaled: bool = False
 
 
 def build_plan_points(
-    *, slots: list[DeviceSlotPlan], layout: SignalLayout
+    *, slots: list[DeviceSlotPlan], layout: SignalLayout, mode: str = "block"
 ) -> list[PlanPoint]:
-    """Cihaz slotlari x sinyal duzeni -> mutlak adres tablosu."""
+    """Cihaz slotlari x sinyal duzeni -> mutlak adres tablosu.
+
+    `mode` bit alanlari icin SART: unit modunda her cihaz kendi unit
+    (slave) id'sindedir ve register'lar gibi bitler de 0'dan baslamalidir.
+    Eskiden mod ne olursa olsun `slot_index * BIT_STRIDE` uygulaniyordu;
+    yani unit modunda 2. cihazin bitleri KENDI unit'inde 100'den, 3.
+    cihazinki 200'den basliyordu. Modul docstring'i "hepsi AYNI offset
+    duzenini kullanir (0'dan baslar)" derken register'lar 0'dan, bitler
+    kaymis adresten yayinlaniyordu — SCADA'da bit eslemesi tutmuyordu.
+    """
+    bit_stride = BIT_STRIDE if mode != "unit" else 0
     points: list[PlanPoint] = []
     for slot in slots:
         for sig in layout.slots:
             if sig.function in (FC_HOLDING_REGISTER, FC_INPUT_REGISTER):
                 address = slot.block_start + sig.offset
             else:
-                # Bit alanlarinda blok boyutu register'dan bagimsizdir.
-                address = (slot.slot_index * BIT_STRIDE) + sig.offset
+                # Bit alanlarinda blok boyutu register'dan bagimsizdir
+                # (bit adres uzayi ayridir, `base_address` register uzayina
+                # aittir ve buraya uygulanmaz).
+                address = (slot.slot_index * bit_stride) + sig.offset
             points.append(
                 PlanPoint(
                     device_code=slot.device_code,
@@ -519,6 +605,7 @@ def build_plan_points(
                     scale=sig.scale,
                     offset=sig.offset_value,
                     manual=sig.manual,
+                    rescaled=sig.rescaled,
                 )
             )
     return points
@@ -538,7 +625,7 @@ def load_plan(
         signals, value_format=str(target.modbus_value_format or "int16")
     )
     slots, capacity = ensure_slots(db, target, devices, layout=layout, commit=commit)
-    points = build_plan_points(slots=slots, layout=layout)
+    points = build_plan_points(slots=slots, layout=layout, mode=capacity.mode)
     return layout, slots, points, capacity
 
 
@@ -576,6 +663,7 @@ def serialize_plan(db: Session, target: OutboundTarget, *, commit: bool = True) 
             "binary_count": layout.summary.binary_count,
             "binary_output_count": layout.summary.binary_output_count,
             "excluded_string_count": layout.summary.excluded_string_count,
+            "rescaled_count": layout.summary.rescaled_count,
         },
         "capacity": {
             "mode": capacity.mode,
@@ -618,6 +706,7 @@ def serialize_plan(db: Session, target: OutboundTarget, *, commit: bool = True) 
                 "scale": p.scale,
                 "offset": p.offset,
                 "manual": p.manual,
+                "rescaled": p.rescaled,
             }
             for p in points
         ],

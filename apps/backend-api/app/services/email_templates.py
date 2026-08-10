@@ -24,6 +24,15 @@ import html
 from datetime import datetime
 from typing import Any
 
+#: Urun adi — bildirim/e-posta yuzeylerinde markanin TEK kaynagi.
+#:
+#: Kurulumun kendi adi (Proje Ayarlari > site_title / project_name /
+#: customer_name) doluysa HER ZAMAN o kullanilir; bu sabit yalnizca
+#: hicbiri girilmemisken devreye giren yedektir. Once "Horstman Smart
+#: Logger" yaziyordu: Horstmann izlenen CIHAZIN ureticisi, bu yazilimin
+#: adi degil — musteri "Horstmann'dan mail geldi" saniyordu.
+PRODUCT_NAME = "EnerjiOne Grid"
+
 
 # --------- yardimci (escape, format) -----------------------------------
 
@@ -133,7 +142,7 @@ def render_alarm_email(
     """Alarm bildirimi HTML maili — (subject, html_body) doner."""
     lvl_label = _level_label_tr(level)
     lvl_color = _level_color(level)
-    title_safe = _esc(project_title or "Smart Logger")
+    title_safe = _esc(project_title or PRODUCT_NAME)
     rule_safe = _esc(rule_name)
     desc_safe = _esc(description) if description else ""
     device_label = device_name or device_code or "—"
@@ -284,7 +293,7 @@ def render_assignment_email(
     link_path) "Detayi Goruntule" yazar."""
     lvl_label = _level_label_tr(level)
     lvl_color = _level_color(level)
-    title_safe = _esc(project_title or "Smart Logger")
+    title_safe = _esc(project_title or PRODUCT_NAME)
     name_safe = _esc(recipient_full_name)
     rule_safe = _esc(title)
     desc_safe = _esc(description) if description else ""
@@ -405,7 +414,7 @@ def render_fault_email(
 ) -> tuple[str, str]:
     """Hat arizasi HTML maili. Konum verilmise harita gorseli + yol-tarifi linki
     dahil edilir."""
-    title_safe = _esc(project_title or "Smart Logger")
+    title_safe = _esc(project_title or PRODUCT_NAME)
     line_safe = _esc(line_name)
     line_code_safe = f" ({_esc(line_code)})" if line_code else ""
     region_safe = _esc(region_name) if region_name else "—"

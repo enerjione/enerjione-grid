@@ -38,11 +38,24 @@ export const DEFAULT_DNP3_EXTENDED: Dnp3ExtendedSettings = {
   socket_listening_timeout_sec: 600
 };
 
+/** Kayitli ayarlari varsayilanlarla tamamlar.
+ *
+ *  `null`/`undefined` alanlar ELENIR. Duz spread'de (`{...DEFAULT, ...raw}`)
+ *  raw'daki acik `null` varsayilani EZER — 2026-08-07'de master_address tam
+ *  boyle bosaldi: backend `null` donuyordu, buradaki 100 hicbir zaman
+ *  uygulanmiyordu ve saha cihazi sessizce susuyordu. Backend tarafi da ayni
+ *  kurali uygular (bkz. schemas/dnp3_extended.py merge_dnp3_extended).
+ */
 export function mergeDnp3Extended(
   raw: Partial<Dnp3ExtendedSettings> | undefined | null
 ): Dnp3ExtendedSettings {
   const rest = raw ? { ...raw } : {};
   delete (rest as Record<string, unknown>).tls_dnp3;
+  for (const [key, value] of Object.entries(rest)) {
+    if (value === null || value === undefined) {
+      delete (rest as Record<string, unknown>)[key];
+    }
+  }
   return { ...DEFAULT_DNP3_EXTENDED, ...rest };
 }
 
@@ -1139,6 +1152,8 @@ export type ModbusLayoutSummary = {
   binary_output_count: number;
   /** Modbus'a dahil edilmeyen string sinyal sayisi. */
   excluded_string_count: number;
+  /** int16 tavanina sigmadigi icin olcegi genisletilen sinyal sayisi. */
+  rescaled_count: number;
 };
 
 export type ModbusCapacity = {
@@ -1151,6 +1166,10 @@ export type ModbusCapacity = {
   single_read_per_device: boolean;
   /** address_space | bit_space | unit_id_range */
   limit_reason: string;
+  /** Kapasiteye sigmadigi icin plana ALINMAYAN cihaz sayisi. */
+  dropped_device_count: number;
+  /** Plana alinmayan cihaz kodlarindan ornekler (en fazla 20). */
+  dropped_device_codes: string[];
 };
 
 export type ModbusDeviceSlot = {
@@ -1178,6 +1197,8 @@ export type ModbusPlanPoint = {
   scale: number;
   offset: number;
   manual: boolean;
+  /** Olcek int16 tavani icin katalogdakinden genisletildi mi? */
+  rescaled: boolean;
 };
 
 export type ModbusPlan = {

@@ -147,6 +147,8 @@ def ingest_gateway_batch(db: Session, payload: GatewayTelemetryBatch, x_gateway_
         event_type="gateway_batch_ingested",
         severity="info",
         message=f"Gateway {gateway.name} batch processed",
+        i18n_key="gateway_batch_ingested",
+        i18n_params={"name": gateway.name, "count": accepted},
         metadata={"gateway_code": payload.gateway_code, "sequence_no": payload.sequence_no, "accepted": accepted},
     )
     db.commit()

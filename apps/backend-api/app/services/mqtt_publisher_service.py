@@ -55,11 +55,32 @@ except ImportError:  # pragma: no cover
     _PAHO_AVAILABLE = False
 
 
+#: Degeri degismese bile bir sinyalin YENIDEN yayinlanacagi ust sinir (sn).
+#:
+#: NEDEN VAR: publisher "degeri degismediyse gonderme" (dedup) yapiyor. Bu
+#: tek basina makul; ama saha sinyallerinin cogu SABIT (seri no, firmware,
+#: esik degerleri, normal durumdaki ariza bayraklari). Sonuc: servis
+#: acildiktan sonraki ILK turda her sey bir kez yayinlaniyor, ardindan
+#: topic sonsuza dek SESSIZ kaliyor. `retain` de varsayilan olarak kapali
+#: oldugu icin sonradan abone olan bir istemci HICBIR SEY gormuyor ve
+#: "MQTT yayin yapmiyor" tablosu ortaya cikiyor.
+#:
+#: Cozum: dedup korunur (degisim aninda hemen yayin) ama her sinyal en gec
+#: bu sure sonunda yeniden yayinlanir — yani topic bir "heartbeat" tasir.
+#: 300 sn: 10 sn'lik varsayilan flush periyoduna gore ~30 turda bir tam
+#: goruntu; bant genisligi ihmal edilebilir, sessizlik penceresi kabul
+#: edilebilir.
+FULL_SNAPSHOT_INTERVAL_SEC = 300
+
+
 @dataclass
 class _ReadingBuffer:
     """Per-target buffer: signal key -> en son reading dict."""
     readings: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict)
     last_sent: dict[tuple[str, str], Any] = field(default_factory=dict)
+    # (device, signal) -> son yayin zamani (monotonic). Dedup'in sonsuza
+    # kadar susturmasini engeller; bkz. FULL_SNAPSHOT_INTERVAL_SEC.
+    last_sent_at: dict[tuple[str, str], float] = field(default_factory=dict)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
 
@@ -106,6 +127,10 @@ def _to_snapshot(t: OutboundTarget) -> dict[str, Any]:
         if t.mqtt_publish_interval_sec is not None
         else 10,
         "mqtt_topic_template": t.mqtt_topic_template or DEFAULT_MQTT_TOPIC_TEMPLATE,
+        # Operator sablonu GERCEKTEN girdi mi? Yukaridaki alan bos olamaz
+        # (default ile doluyor), bu yuzden "legacy `topic` alani mi yoksa
+        # sablon mu kazanacak" kararini bu ham deger verir.
+        "mqtt_topic_template_explicit": (t.mqtt_topic_template or "").strip(),
         "mqtt_topic_prefix": t.mqtt_topic_prefix or "e1",
         "mqtt_customer_id": t.mqtt_customer_id or "default",
         "qos": t.qos or 0,
@@ -190,9 +215,13 @@ def _resolve_topics_for_reading(
 ) -> list[tuple[str, int, bool]]:
     """Bir reading icin (topic, qos, retain) listesi don.
 
-    1) Custom mapping match varsa onlar (birden fazla olabilir).
-    2) Hicbir mapping match etmedi ise default template render.
-    3) Legacy: snapshot['topic'] doluysa ve template bos ise tek topic.
+    Oncelik (yukaridan asagi, ilk eslesen kazanir):
+      1) Custom mapping match varsa onlar (birden fazla olabilir).
+      2) Legacy `topic` alani dolu VE operator sablonu elle girmemisse o.
+      3) Sablon (operatorunki, yoksa DEFAULT_MQTT_TOPIC_TEMPLATE).
+
+    `auto_topics_for_target` AYNI siralamayi izler — ekranda gosterilen
+    topic ile gercekte yayinlanan ayrisirsa teshis imkansizlasir.
     """
     device = str(reading.get("device_code", ""))
     signal = str(reading.get("signal_key", ""))
@@ -221,7 +250,20 @@ def _resolve_topics_for_reading(
     if matched_any:
         return out
 
-    # Default template
+    # 2) Legacy tek-topic alani. Docstring bunu HEP vaat ediyordu ama kod
+    #    hicbir zaman okumuyordu: `_to_snapshot` template'i bos birakmadigi
+    #    (yoksa default'u koyuyor) icin asagidaki dal her zaman kazaniyor ve
+    #    operatorun girdigi topic SESSIZCE yok sayiliyordu — abone o topic'i
+    #    dinlerken yayin bambaska bir yere gidiyordu.
+    legacy_topic = (snapshot.get("topic") or "").strip()
+    if legacy_topic and not (snapshot.get("mqtt_topic_template_explicit") or ""):
+        topic = _render_topic_template(
+            legacy_topic, prefix=prefix, customer=customer, device=device,
+            source=source, datatype=datatype,
+        )
+        return [(topic, snapshot["qos"], snapshot["retain"])]
+
+    # 3) Sablon
     template = snapshot["mqtt_topic_template"] or DEFAULT_MQTT_TOPIC_TEMPLATE
     topic = _render_topic_template(
         template, prefix=prefix, customer=customer, device=device,
@@ -234,8 +276,15 @@ def _resolve_topics_for_reading(
 # MQTT client lifecycle
 # ---------------------------------------------------------------------------
 
-def _build_client(snapshot: dict[str, Any]) -> Any:
-    """Yeni paho client + connect."""
+def _build_client(snapshot: dict[str, Any], worker: "_TargetWorker | None" = None) -> Any:
+    """Yeni paho client + connect.
+
+    `worker` verilirse baglanti durumu geri callback'lerle GERCEK zamanli
+    izlenir. Onceden `connected` yalnizca ilk `connect()` basarili olunca
+    True yapiliyor ve BIR DAHA hic degismiyordu: broker dustugunde arayuz
+    "Bagli" gostermeye devam ediyor, operator yayin akmadigini gorse bile
+    nedenini buradan ogrenemiyordu.
+    """
     if not _PAHO_AVAILABLE:
         raise RuntimeError("paho-mqtt kurulu degil.")
     client_id = snapshot["mqtt_client_id"] or f"e1-{snapshot['name']}-{uuid.uuid4().hex[:8]}"
@@ -244,6 +293,25 @@ def _build_client(snapshot: dict[str, Any]) -> Any:
         client_id=client_id,
         clean_session=True,
     )
+    if worker is not None:
+        def _on_connect(_c, _u, _flags, reason_code, _props=None):  # noqa: ANN001
+            ok = getattr(reason_code, "is_failure", None)
+            worker.connected = (not ok) if ok is not None else (reason_code == 0)
+            if not worker.connected:
+                logger.warning(
+                    "mqtt_publisher_connect_refused target=%s reason=%s",
+                    snapshot["name"], reason_code,
+                )
+
+        def _on_disconnect(_c, _u, _flags, reason_code, _props=None):  # noqa: ANN001
+            worker.connected = False
+            logger.warning(
+                "mqtt_publisher_disconnected target=%s reason=%s",
+                snapshot["name"], reason_code,
+            )
+
+        client.on_connect = _on_connect
+        client.on_disconnect = _on_disconnect
     if snapshot["mqtt_username"]:
         client.username_pw_set(
             snapshot["mqtt_username"], snapshot["mqtt_password"] or None
@@ -300,7 +368,7 @@ def _worker_loop(worker: _TargetWorker) -> None:
     # Initial connect (retry on failure)
     while not worker.stop_event.is_set():
         try:
-            worker.client = _build_client(snap)
+            worker.client = _build_client(snap, worker)
             worker.connected = True
             break
         except Exception as exc:  # noqa: BLE001
@@ -333,19 +401,27 @@ def _flush_once(worker: _TargetWorker) -> None:
     if worker.client is None:
         return
 
+    now = time.monotonic()
     with worker.buffer.lock:
         if not worker.buffer.readings:
             return
-        # Dedup: ayni (device, signal) icin son value gonderdiklerimizden farkliysa al
+        # Dedup: ayni (device, signal) icin son gonderdigimizden farkliysa al.
+        # ZAMAN ASIMI: deger ayni kalsa bile FULL_SNAPSHOT_INTERVAL_SEC
+        # gectiyse yeniden yayinla — aksi halde sabit sinyaller ilk turdan
+        # sonra hic gonderilmiyor ve topic sessizlesiyor (bkz. sabitin
+        # basindaki not).
         to_send: list[dict[str, Any]] = []
         for key, reading in worker.buffer.readings.items():
             new_val = reading.get("value")
             if new_val is None:
                 new_val = reading.get("value_string")
             last_val = worker.buffer.last_sent.get(key, _SENTINEL)
-            if last_val is _SENTINEL or last_val != new_val:
+            last_at = worker.buffer.last_sent_at.get(key)
+            bayat = last_at is None or (now - last_at) >= FULL_SNAPSHOT_INTERVAL_SEC
+            if last_val is _SENTINEL or last_val != new_val or bayat:
                 to_send.append(reading)
                 worker.buffer.last_sent[key] = new_val
+                worker.buffer.last_sent_at[key] = now
         worker.buffer.readings.clear()
 
     if not to_send:
@@ -554,7 +630,14 @@ def auto_topics_for_target(target_id: int, devices: list[dict[str, Any]]) -> lis
 
     prefix = snapshot["mqtt_topic_prefix"]
     customer = snapshot["mqtt_customer_id"]
-    template = snapshot["mqtt_topic_template"] or DEFAULT_MQTT_TOPIC_TEMPLATE
+    # Onizleme, resolver ile AYNI onceligi izlemeli; aksi halde ekran bir
+    # topic gosterirken yayin baska yere gider (tam da bu ayrisma yuzunden
+    # "topic'e yayin yapilmiyor" denmisti).
+    legacy_topic = (snapshot.get("topic") or "").strip()
+    if legacy_topic and not (snapshot.get("mqtt_topic_template_explicit") or ""):
+        template = legacy_topic
+    else:
+        template = snapshot["mqtt_topic_template"] or DEFAULT_MQTT_TOPIC_TEMPLATE
 
     seen: set[str] = set()
     rows: list[dict[str, Any]] = []

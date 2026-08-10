@@ -37,6 +37,7 @@ import {
   LockOpen,
   PlugZap,
   RefreshCw,
+  Server,
   ShieldAlert,
   ShieldCheck,
   Timer,
@@ -383,112 +384,142 @@ export function RemoteAccessPage({ accessToken }: Props) {
 
   return (
     <section className="tab-panel rad-page">
-      {/* ================= Durum blogu — sayfanin tek ana mesaji ============ */}
-      <div className={`rad-switch is-${mode}`}>
-        <div className="rad-switch-body">
-          {/* "ACIK/KAPALI" rozeti KALDIRILDI (kullanici istegi): baslik zaten
-              durumu soyluyor, rozet ayni bilgiyi tekrar edip yer yiyordu. */}
-          <h2>
+      {/* ---- Ust serit: durum + sure + cihaz kimligi --------------------
+          Ag Ayarlari / Guvenlik Duvari sayfalariyla AYNI dil: tek satirlik
+          `net-access-bar`. Onceden burada basligi, aciklama paragrafi ve
+          madde listesi olan buyuk bir "hero" blogu vardi; hicbir baska
+          muhendislik sekmesinde boyle bir blok yok ve sayfa uygulamanin
+          geri kalanindan kopuk duruyordu. Bilgi kaybi YOK: ayni alanlar
+          seridin ogeleri, "ne olur" aciklamasi zaten alttaki
+          `rad-explain` kartinda. */}
+      <div className={`net-access-bar rad-access-bar is-${mode}`}>
+        <div className={`net-access-item ${mode === "on" ? "is-warn" : ""}`}>
+          <span className="net-access-icon">
             {mode === "on" ? (
-              <LockOpen size={20} strokeWidth={2.2} />
+              <LockOpen size={16} strokeWidth={2.2} />
             ) : mode === "off" ? (
-              <Lock size={20} strokeWidth={2.2} />
+              <Lock size={16} strokeWidth={2.2} />
             ) : mode === "loading" ? (
-              <Loader2 size={20} strokeWidth={2.2} className="net-spin" />
+              <Loader2 size={16} strokeWidth={2.2} className="net-spin" />
             ) : (
-              <PlugZap size={20} strokeWidth={2.2} />
+              <PlugZap size={16} strokeWidth={2.2} />
             )}
-            {t(HERO_TEXT[mode].title)}
-          </h2>
-          <p>{t(HERO_TEXT[mode].lead)}</p>
-
-          {/* Izin verildi ama cihaz hedefe getirilemedi — SESSIZ GECILMEZ. */}
-          {mismatch ? (
-            <div className="rad-mismatch" role="alert">
-              <AlertTriangle size={16} strokeWidth={2.2} />
-              <div>
-                <strong>{t(`remoteAccess.mismatch.${mismatch}.title`, {
-                  defaultValue: t("remoteAccess.mismatch.generic.title")
-                })}</strong>
-                <span>{t(`remoteAccess.mismatch.${mismatch}.hint`, {
-                  defaultValue: t("remoteAccess.mismatch.generic.hint")
-                })}</span>
-              </div>
-            </div>
-          ) : null}
-
-          {mode === "on" ? (
-            <ul className="rad-switch-meta">
-              <li>
-                <CalendarClock size={14} />
-                {t("remoteAccess.hero.endsAt", {
-                  time: formatClockFull(status?.access.expires_at)
-                })}
-              </li>
-              {grantedBy ? (
-                <li>
-                  <UserCheck size={14} />
-                  {t("remoteAccess.hero.grantedBy", {
-                    user: grantedBy,
-                    time: formatClockFull(status?.access.granted_at)
-                  })}
-                </li>
-              ) : null}
-              {grantReason ? (
-                <li>
-                  <History size={14} />
-                  {t("remoteAccess.hero.grantReason", { note: grantReason })}
-                </li>
-              ) : null}
-            </ul>
-          ) : null}
-
-          {/* Cihazin bakim agindaki kimligi — KUCUK cipler halinde durum
-              blogunun icinde. Ayri bir tablo bolumu sayfanin dibinde
-              kaybolup gidiyordu (kullanici istegi). */}
-          {available ? (
-            <div className="rad-switch-device">
-              <span className="rad-device-chip">
-                <b>{t("remoteAccess.device.name")}</b>
-                {status?.tailscale.hostname ?? "—"}
-              </span>
-              <span className="rad-device-chip">
-                <b>{t("remoteAccess.device.address")}</b>
-                {status?.tailscale.ipv4 ?? "—"}
-              </span>
-              <span className={`rad-device-chip ${registered ? "is-ok" : "is-off"}`}>
-                <b>{t("remoteAccess.device.link")}</b>
-                {t(
-                  registered
-                    ? "remoteAccess.device.linkRegistered"
-                    : "remoteAccess.device.linkMissing"
-                )}
-              </span>
-            </div>
-          ) : null}
+          </span>
+          <span className="net-access-body">
+            <span className="net-access-label">{t("remoteAccess.bar.stateLabel")}</span>
+            <strong className="net-access-value">{t(HERO_TEXT[mode].title)}</strong>
+          </span>
         </div>
 
         {mode === "on" ? (
-          <div className="rad-switch-actions">
-            <div className="rad-countdown">
-              <strong>{formatRemaining(remaining, t)}</strong>
-              <span>{t("remoteAccess.hero.remaining")}</span>
+          <>
+            <span className="net-access-sep" aria-hidden="true" />
+            <div className="net-access-item is-warn">
+              <span className="net-access-icon">
+                <CalendarClock size={16} />
+              </span>
+              <span className="net-access-body">
+                <span className="net-access-label">{t("remoteAccess.hero.remaining")}</span>
+                <strong className="net-access-value">
+                  {formatRemaining(remaining, t)}
+                  <em className="net-access-sub">
+                    {formatClockFull(status?.access.expires_at)}
+                  </em>
+                </strong>
+              </span>
             </div>
-            {canGrant ? (
-              <button
-                type="button"
-                className="danger-btn rad-revoke-btn"
-                disabled={revoking}
-                onClick={() => void revoke()}
-              >
-                {revoking ? t("remoteAccess.revoke.working") : t("remoteAccess.revoke.button")}
-              </button>
+            {grantedBy ? (
+              <>
+                <span className="net-access-sep" aria-hidden="true" />
+                <div className="net-access-item">
+                  <span className="net-access-icon">
+                    <UserCheck size={16} />
+                  </span>
+                  <span className="net-access-body">
+                    <span className="net-access-label">
+                      {t("remoteAccess.bar.grantedByLabel")}
+                    </span>
+                    <strong className="net-access-value">{grantedBy}</strong>
+                  </span>
+                </div>
+              </>
             ) : null}
-          </div>
+          </>
+        ) : null}
+
+        {available ? (
+          <>
+            <span className="net-access-sep" aria-hidden="true" />
+            <div className="net-access-item">
+              <span className="net-access-icon">
+                <Server size={16} />
+              </span>
+              <span className="net-access-body">
+                <span className="net-access-label">{t("remoteAccess.device.name")}</span>
+                <strong className="net-access-value">
+                  {status?.tailscale.hostname ?? "—"}
+                  <em className="net-access-sub">{status?.tailscale.ipv4 ?? "—"}</em>
+                </strong>
+              </span>
+            </div>
+            <span className="net-access-sep" aria-hidden="true" />
+            <div className={`net-access-item ${registered ? "" : "is-bad"}`}>
+              <span className="net-access-icon">
+                <PlugZap size={16} />
+              </span>
+              <span className="net-access-body">
+                <span className="net-access-label">{t("remoteAccess.device.link")}</span>
+                <strong className="net-access-value">
+                  {t(
+                    registered
+                      ? "remoteAccess.device.linkRegistered"
+                      : "remoteAccess.device.linkMissing"
+                  )}
+                </strong>
+              </span>
+            </div>
+          </>
+        ) : null}
+
+        {mode === "on" && canGrant ? (
+          <button
+            type="button"
+            className="danger-btn rad-revoke-btn"
+            disabled={revoking}
+            onClick={() => void revoke()}
+          >
+            {revoking ? t("remoteAccess.revoke.working") : t("remoteAccess.revoke.button")}
+          </button>
         ) : null}
       </div>
 
-      {/* ================= Uyari seritleri ================= */}
+      {/* ================= Uyari seritleri =================
+          Izin verildi ama cihaz hedefe getirilemedi — SESSIZ GECILMEZ.
+          Diger uyarilarla ayni seride (Guvenlik Duvari sayfasindaki duzen);
+          eskiden durum blogunun ICINDE ayri bir kutuydu. */}
+      {mismatch ? (
+        <p className="net-banner net-banner--warn" role="alert">
+          <AlertTriangle size={16} />
+          <span>
+            <strong>
+              {t(`remoteAccess.mismatch.${mismatch}.title`, {
+                defaultValue: t("remoteAccess.mismatch.generic.title")
+              })}
+            </strong>{" "}
+            {t(`remoteAccess.mismatch.${mismatch}.hint`, {
+              defaultValue: t("remoteAccess.mismatch.generic.hint")
+            })}
+          </span>
+        </p>
+      ) : null}
+
+      {grantReason ? (
+        <p className="net-banner net-banner--info">
+          <History size={16} />
+          {t("remoteAccess.hero.grantReason", { note: grantReason })}
+        </p>
+      ) : null}
+
       {loadError ? <p className="net-banner net-banner--bad">{loadError}</p> : null}
 
       {overdue ? (

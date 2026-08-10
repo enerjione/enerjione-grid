@@ -10,8 +10,9 @@ from sqlalchemy import select
 from app.db.session import SessionLocal
 from app.models.notification_settings import NotificationSettings
 from app.models.user import User
+from app.services.email_templates import PRODUCT_NAME
 from app.services.event_service import record_event
-from app.services.notification_test_service import SMTP_TIMEOUT_SEC
+from app.services.notification_test_service import SMTP_TIMEOUT_SEC, build_from_header
 
 
 def handle_alarm_created(payload: dict[str, Any]) -> None:
@@ -35,6 +36,7 @@ def handle_alarm_created(payload: dict[str, Any]) -> None:
             event_type="alarm_notification_dispatched",
             severity="info",
             message="Alarm bildirimi dağıtımı tamamlandı",
+            i18n_key="alarm_notification_dispatched",
             metadata={"device_code": payload.get("device_code")},
         )
         db.commit()
@@ -45,6 +47,8 @@ def handle_alarm_created(payload: dict[str, Any]) -> None:
             event_type="alarm_notification_failed",
             severity="error",
             message=f"Alarm notification delivery failed: {ex}",
+            i18n_key="alarm_notification_failed",
+            i18n_params={"error": str(ex)},
         )
         db.commit()
     finally:
@@ -64,9 +68,11 @@ def _send_email_notifications(settings_row: NotificationSettings, users: list[Us
     smtp_password = creds.smtp_password or ""
 
     mail = EmailMessage()
-    mail["From"] = settings_row.smtp_from_email
+    # Gorunen ad + konu urun adindan gelir; "Horstman" izlenen CIHAZIN
+    # ureticisiydi, bu yazilimin adi degil (bkz. email_templates.PRODUCT_NAME).
+    mail["From"] = build_from_header(settings_row.smtp_from_email, None)
     mail["To"] = ", ".join(recipients)
-    mail["Subject"] = "Horstman Alarm Bildirimi"
+    mail["Subject"] = f"{PRODUCT_NAME} Alarm Bildirimi"
     mail.set_content(body)
 
     # timeout ZORUNLU — bkz. notification_test_service.SMTP_TIMEOUT_SEC.

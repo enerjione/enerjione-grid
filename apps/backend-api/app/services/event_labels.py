@@ -51,6 +51,11 @@ _CATEGORY_KEY = {
     "fault_comment": "faultComment",
     "system": "system",
     "security": "security",
+    # Bu uc kategori kullaniliyordu ama eslemede YOKTU; `_humanize` yedegine
+    # dusup ekranda "Ftp" / "Backup" / "License" diye Ingilizce gorunuyordu.
+    "ftp": "ftp",
+    "backup": "backup",
+    "license": "license",
 }
 
 # Olay tipi -> durum anahtari (frontend eventStatus.ts EXACT).

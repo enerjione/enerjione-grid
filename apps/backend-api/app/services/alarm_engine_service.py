@@ -109,6 +109,8 @@ def assign_alarm(db: Session, alarm_id: int, assigned_to: str | None, actor_user
         actor_username=actor_username,
         message=f"Alarm \"{alarm.title}\" assignment updated",
         metadata={"alarm_id": alarm.id, "assigned_to": new_assignee, "previous_assignee": previous_assignee},
+        i18n_key="alarm_assigned",
+        i18n_params={"title": alarm.title, "user": new_assignee or "—"},
     )
     # Bildirim mantigi:
     #  * Atanmis kisi degisti VE bos degil ise → atanan kisiye bildirim gonder
@@ -216,6 +218,7 @@ def _send_assignment_email(
         subject=subject,
         message=plain_text,
         html_body=html_body,
+        from_name=project_title,
     )
 
 
@@ -250,6 +253,8 @@ def create_alarm_comment(db: Session, alarm_id: int, comment: str, current_user:
         actor_username=current_user.username,
         message=f"Comment added to alarm \"{alarm.title}\"",
         metadata={"alarm_id": alarm.id},
+        i18n_key="alarm_comment_added",
+        i18n_params={"title": alarm.title},
     )
     # Yorum bildirimi: alarmin atandigi kullaniciya (yorum yazandan farkli ise).
     # Title: "Yeni yorum: <alarm adi>" -> bildirim panelinde eyebrow+main olur.
@@ -305,6 +310,8 @@ def acknowledge_alarm(db: Session, alarm_id: int, actor_username: str) -> AlarmE
         actor_username=actor_username,
         message=f"Alarm \"{alarm.title}\" acknowledged",
         metadata={"alarm_id": alarm.id},
+        i18n_key="alarm_acknowledged",
+        i18n_params={"title": alarm.title},
     )
     # SCADA modeli: cihaz zaten normale donmusse (reset) ve simdi onaylandiysa
     # alarm yasam dongusu tamamlanmistir -> kaydi sil (aktif alarm listesinde
@@ -346,6 +353,8 @@ def _finalize_acknowledged_reset(db: Session, alarm: AlarmEvent, actor_username:
         actor_username=actor_username,
         message=f"Alarm \"{title}\" onaylandi ve normale donmustu -> temizlendi",
         metadata={"alarm_id": alarm_id, "title": title},
+        i18n_key="alarm_auto_cleared_acked",
+        i18n_params={"title": title},
     )
     db.commit()
     # snapshot session'a hic eklenmedi -> zaten detached, dogrudan don.
@@ -366,6 +375,8 @@ def reset_alarm(db: Session, alarm_id: int, actor_username: str) -> AlarmEvent:
         actor_username=actor_username,
         message=f"Alarm \"{alarm.title}\" reset",
         metadata={"alarm_id": alarm.id},
+        i18n_key="alarm_reset",
+        i18n_params={"title": alarm.title},
     )
     db.commit()
     db.refresh(alarm)
@@ -406,6 +417,8 @@ def acknowledge_all_alarms(
         actor_username=actor_username,
         message="Tüm alarmlar onaylandı",
         metadata={"count": len(alarms)},
+        i18n_key="alarm_acknowledge_all",
+        i18n_params={"count": len(alarms)},
     )
     db.commit()
     return remaining
@@ -435,6 +448,8 @@ def reset_all_alarms(
         actor_username=actor_username,
         message="Tüm alarmlar resetlendi",
         metadata={"count": len(alarms)},
+        i18n_key="alarm_reset_all",
+        i18n_params={"count": len(alarms)},
     )
     db.commit()
     return alarms
@@ -462,6 +477,8 @@ def delete_alarm(db: Session, alarm_id: int, actor_username: str) -> None:
         actor_username=actor_username,
         message=f"Alarm \"{alarm_title}\" deleted",
         metadata={"alarm_id": alarm_id, "title": alarm_title},
+        i18n_key="alarm_deleted",
+        i18n_params={"title": alarm_title},
     )
     db.commit()
 
@@ -506,6 +523,8 @@ def handle_telemetry_alarm_event(db: Session, payload: dict) -> None:
         device_code=payload.get("device_code"),
         message=f"Automatic alarm raised for {device_name}",
         metadata={"signal_key": signal_key, "quality": quality},
+        i18n_key="alarm_created",
+        i18n_params={"device": device_name},
     )
     alarm_event_payload = {
         "message_id": str(uuid4()),

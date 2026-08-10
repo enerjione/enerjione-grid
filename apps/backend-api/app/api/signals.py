@@ -78,6 +78,8 @@ def create_signal(
         actor_username=current_user.username,
         message=f"Sinyal eklendi: {row.label} ({row.key})",
         metadata={"signal_key": row.key, "model": row.model},
+        i18n_key="signal_created",
+        i18n_params={"label": row.label, "key": row.key},
     )
     db.commit()
     db.refresh(row)
@@ -152,6 +154,8 @@ def update_signal(
         actor_username=current_user.username,
         message=f"Signal updated: {row.label} ({row.key})",
         metadata=metadata,
+        i18n_key="signal_updated",
+        i18n_params={"label": row.label, "key": row.key},
     )
     db.commit()
     db.refresh(row)
@@ -230,6 +234,11 @@ def bulk_update_historian(
                 # gormeyi biraktik" sorusunun cevabi budur.
                 "fault_signals": ariza_sinyalleri,
             },
+            i18n_key="signal_historian_bulk_updated",
+            i18n_params={
+                "count": sonuc["updated"],
+                "detail": ", ".join(parcalar) if parcalar else "—",
+            },
         )
     db.commit()
     return sonuc
@@ -255,6 +264,8 @@ def delete_signal(
         actor_username=current_user.username,
         message=f"Sinyal silindi: {label} ({key})",
         metadata={"signal_key": key},
+        i18n_key="signal_deleted",
+        i18n_params={"label": label, "key": key},
     )
     db.commit()
     return None
@@ -292,6 +303,12 @@ def reset_signals_to_defaults(
             f"silinen: {stats.get('removed', 0)})"
         ),
         metadata=stats,
+        i18n_key="signal_reset_defaults",
+        i18n_params={
+            "inserted": stats.get("inserted", 0),
+            "updated": stats.get("updated", 0),
+            "removed": stats.get("removed", 0),
+        },
     )
     db.commit()
     return {

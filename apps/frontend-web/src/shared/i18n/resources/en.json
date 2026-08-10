@@ -775,7 +775,52 @@
       "remote_access_apply_failed": "Remote maintenance request could not be applied: {{error}}",
       "firewall_enabled": "Firewall enabled ({{rules}} rules, {{forwards}} forwards)",
       "firewall_disabled": "Firewall disabled",
-      "firewall_config_changed": "Firewall rules updated ({{rules}} rules, {{forwards}} forwards)"
+      "firewall_config_changed": "Firewall rules updated ({{rules}} rules, {{forwards}} forwards)",
+      "alarm_created": "Device communication alarm raised: {{device}}",
+      "alarm_acknowledged": "Alarm acknowledged: {{title}}",
+      "alarm_reset": "Alarm reset: {{title}}",
+      "alarm_deleted": "Alarm deleted: {{title}}",
+      "alarm_assigned": "Alarm assigned: {{title}} → {{user}}",
+      "alarm_comment_added": "Comment added to alarm: {{title}}",
+      "alarm_acknowledge_all": "All visible alarms acknowledged ({{count}} alarms)",
+      "alarm_reset_all": "All visible alarms reset ({{count}} alarms)",
+      "alarm_notification_dispatched": "Alarm notification dispatched",
+      "alarm_notification_failed": "Alarm notification failed: {{error}}",
+      "signal_created": "Signal added: {{label}} ({{key}})",
+      "signal_updated": "Signal updated: {{label}} ({{key}})",
+      "signal_deleted": "Signal deleted: {{label}} ({{key}})",
+      "signal_historian_bulk_updated": "Bulk archive setting: {{count}} signals updated ({{detail}})",
+      "signal_reset_defaults": "Signal catalog reset to factory defaults (added {{inserted}}, updated {{updated}}, removed {{removed}})",
+      "api_key_created": "API key created: {{name}}",
+      "api_key_revoked": "API key revoked: {{name}}",
+      "api_key_disabled": "API key disabled: {{name}}",
+      "api_key_enabled": "API key re-enabled: {{name}}",
+      "api_key_purged": "API key permanently deleted: {{name}}",
+      "api_key_auth_unknown": "Access attempted with an unknown API key ({{ip}})",
+      "api_key_auth_unusable": "Access attempted with an unusable API key: {{name}} ({{reason}})",
+      "api_key_auth_ip_denied": "API key used from a non-allowlisted IP: {{name}} ({{ip}})",
+      "api_key_scope_denied": "API key lacks the required scope: {{name}} — '{{scope}}' required",
+      "user_invited": "{{actor}} invited a new user: {{user}}",
+      "user_invite_resent": "{{actor}} resent the invitation: {{user}}",
+      "password_setup": "{{user}} set their password via the invitation link",
+      "gateway_batch_ingested": "Gateway batch processed: {{name}} ({{count}} readings)",
+      "outbound_batch_failed": "Batch delivery failed: {{target}} — {{error}}",
+      "gateway_local_install_requested": "Gateway install requested: {{name}} ({{code}})",
+      "gateway_local_remove_requested": "Gateway removal requested: {{name}} ({{code}})",
+      "gateway_local_update_requested": "Gateway update requested: {{name}} ({{code}})",
+      "gateway_stale_devices_unknown": "Gateway silent: {{code}} — status of {{count}} devices unknown",
+      "backup_jobs_reindexed": "Backup list re-scanned: {{count}} records added",
+      "backup_disk_warning": "Backup disk {{pct}}% full — backups will stop unless space is freed",
+      "backup_disk_critical": "Backup disk {{pct}}% full — scheduled backup skipped",
+      "license_request_downloaded": "License request file downloaded",
+      "license_imported": "License activated (device limit {{limit}})",
+      "license_import_rejected": "License rejected: {{reason}}",
+      "map_pack_started": "Offline map download started: {{name}} ({{tiles}} tiles)",
+      "map_pack_deleted": "Offline map pack deleted",
+      "notification_whatsapp_web_test_ok": "WhatsApp Web test successful: {{recipient}}",
+      "notification_whatsapp_web_test_failed": "WhatsApp Web test failed: {{error}}",
+      "notification_whatsapp_web_logout": "WhatsApp Web session closed",
+      "topology_imported": "Topology imported: {{regions}} regions, {{lines}} lines, {{poles}} poles"
     },
     "category": {
       "auth": "Login & session",
@@ -800,7 +845,10 @@
       "faultComment": "Fault comment",
       "system": "System",
       "security": "Security",
-      "other": "Other"
+      "other": "Other",
+      "ftp": "FTP transfer",
+      "backup": "Backup",
+      "license": "License"
     }
   },
   "faults": {
@@ -1497,6 +1545,10 @@
         "title": "Access state did not reach the target",
         "hint": "The state reported by the device does not match the granted permission. Check again in a few minutes."
       }
+    },
+    "bar": {
+      "stateLabel": "Remote maintenance",
+      "grantedByLabel": "Granted by"
     }
   },
   "systemStatus": {
@@ -1966,11 +2018,11 @@
       "batteryFullInvalid": "Full voltage is invalid (0-10 V).",
       "batteryOrderInvalid": "Full voltage must be greater than low voltage.",
       "projectName": "Project Name",
-      "projectNamePlaceholder": "e.g. Aras EDAS Smart Logger",
+      "projectNamePlaceholder": "e.g. Central Grid Monitoring",
       "customerName": "Customer Name",
-      "customerNamePlaceholder": "e.g. Aras EDAS",
+      "customerNamePlaceholder": "e.g. Power Distribution Co.",
       "siteTitle": "Browser Tab Title",
-      "siteTitlePlaceholder": "e.g. Aras EDAS Smart Logger",
+      "siteTitlePlaceholder": "e.g. EnerjiOne Grid",
       "siteTitleHint": "Shown in the browser tab and bookmarks. Defaults to \"EnerjiOne Grid Dashboard\" when blank.",
       "loginLogoTitle": "Customer Logo (Login)",
       "loginLogoDesc": "Shown centered on the login screen. Light-background version. Leave empty to use EnerjiOne brand only.",
@@ -2595,14 +2647,17 @@
         "pagerPrev": "Previous",
         "pagerNext": "Next",
         "pagerFirst": "First page",
-        "pagerLast": "Last page"
+        "pagerLast": "Last page",
+        "droppedDevices": "{{count}} devices did NOT fit the address plan and are never published to SCADA: {{codes}}. The fix is not a bigger ceiling — split the load across a second Modbus target (each target has its own address space).",
+        "rescaledNote": "{{count}} signals had their scale widened to fit the int16 ceiling (rows marked ⤴). Update the factor for those signals on the SCADA side using the new value in the table; switch the target to float32 for full resolution.",
+        "rescaledHint": "Scale widened — this address tops out at {{max}} {{unit}}"
       },
       "form": {
         "name": "Target Name",
         "protocol": "Protocol",
         "endpoint": "Endpoint",
         "topic": "Topic (MQTT)",
-        "topicPlaceholder": "horstman/events",
+        "topicPlaceholder": "e1/saha/olaylar",
         "eventFilter": "Event Filter",
         "filterAll": "All",
         "filterTelemetry": "Telemetry",
@@ -3332,7 +3387,12 @@
       "success": "System is restarting. The page will reload shortly.",
       "fail": "Failed to restart the system."
     },
-    "failedBanner": "{{count}} backups failed; see the related row for details."
+    "failedBanner": "{{count}} backups failed; see the related row for details.",
+    "bar": {
+      "stateLabel": "Backups",
+      "lastLabel": "Last successful backup",
+      "sizeLabel": "Size"
+    }
   },
   "notifications": {
     "title": "Notifications",

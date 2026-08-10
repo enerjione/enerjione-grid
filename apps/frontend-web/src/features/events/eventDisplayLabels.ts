@@ -34,6 +34,11 @@ const CATEGORY_KEY: Record<string, string> = {
   fault_comment: "events.category.faultComment",
   system: "events.category.system",
   security: "events.category.security",
+  // Bu uc kategori kullaniliyordu ama eslemede YOKTU; _humanize yedegine
+  // dusup ekranda "Ftp" / "Backup" / "License" diye Ingilizce gorunuyordu.
+  ftp: "events.category.ftp",
+  backup: "events.category.backup",
+  license: "events.category.license",
 };
 
 /** Bilinmeyen kategori string'ini insan okur formata çevirir:
@@ -92,6 +97,9 @@ const CATEGORY_MOD: Record<string, string> = {
   fault_comment: "alarm",
   system: "system",
   security: "auth",
+  ftp: "telemetry",
+  backup: "system",
+  license: "system",
 };
 
 export function categoryPillClass(category: string): string {

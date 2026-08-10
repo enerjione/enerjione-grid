@@ -185,6 +185,8 @@ def _resolve_alarm(db, alarm: AlarmEvent, reason: str) -> str:
                 "reason": reason,
                 "auto_deleted": True,
             },
+            i18n_key="alarm_auto_cleared_acked",
+            i18n_params={"title": alarm.title},
         )
         db.delete(alarm)
         return "deleted"
@@ -202,6 +204,8 @@ def _resolve_alarm(db, alarm: AlarmEvent, reason: str) -> str:
             "signal_key": alarm.signal_key,
             "reason": reason,
         },
+        i18n_key="alarm_auto_cleared",
+        i18n_params={"title": alarm.title},
     )
     return "reset"
 
