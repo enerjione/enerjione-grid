@@ -261,62 +261,21 @@ export function FaultListPage({
       ? fmtDurationSeconds(backendStats.avg_resolution_seconds)
       : "—";
 
-  const kpis = [
-    {
-      key: "active",
-      tone: "bad",
-      icon: TriangleAlert,
-      label: t("faults.kpi.active"),
-      value: String(activeFaults.length)
-    },
-    {
-      key: "today",
-      tone: "ok",
-      icon: CheckCircle2,
-      label: t("faults.kpi.resolvedToday"),
-      value: String(backendStats?.resolved_today_count ?? 0)
-    },
-    {
-      key: "avg",
-      tone: "info",
-      icon: Clock,
-      label: t("faults.kpi.avgResolution"),
-      value: avgText
-    },
-    {
-      key: "history",
-      tone: "muted",
-      icon: FileText,
-      label: t("faults.kpi.history"),
-      value: String(historyFaults.length)
-    }
-  ] as const;
 
   return (
     <div className="faults-page">
-      {/* ---- KPI seridi ---- */}
-      <div className="fx-kpis">
-        {kpis.map((k) => {
-          const Icon = k.icon;
-          return (
-            <article key={k.key} className={`fx-kpi fx-kpi--${k.tone}`}>
-              <span className="fx-kpi-icon">
-                <Icon size={19} strokeWidth={2.1} />
-              </span>
-              <span className="fx-kpi-body">
-                <span className="fx-kpi-label">{k.label}</span>
-                <strong className="fx-kpi-value">{k.value}</strong>
-              </span>
-            </article>
-          );
-        })}
-        <div className="fx-kpi-updated" title={t("faults.kpi.updatedHint")}>
-          <RefreshCw size={14} strokeWidth={2.1} className={loading ? "fx-spin" : undefined} />
-          <span>
-            <small>{t("faults.kpi.lastUpdate")}</small>
-            <strong>{new Date(now).toLocaleTimeString(localeTag)}</strong>
-          </span>
-        </div>
+      {/* KPI SERIDI KALDIRILDI.
+          Toplam/bugun-cozulen/ortalama-sure sayilari ARIZA ANALIZI sayfasina
+          ait; bu ekranin isi "su an hangi ariza var, ekip nereye gidecek".
+          Ozet sayilar ust serit boyunca yer kapliyor ve asil icerigi (sematik
+          cizim) asagi itiyordu. Geriye yalnizca tazelik gostergesi kaldi:
+          liste 5 sn'de bir yenileniyor ve verinin ne kadar guncel oldugu
+          ekranin durustlugu acisindan gerekli. */}
+      <div className="fx-freshness">
+        <RefreshCw size={13} strokeWidth={2.1} className={loading ? "fx-spin" : undefined} />
+        <span title={t("faults.kpi.updatedHint")}>
+          {t("faults.kpi.lastUpdate")} {new Date(now).toLocaleTimeString(localeTag)}
+        </span>
       </div>
 
       {/* ---- Sekmeler ---- */}

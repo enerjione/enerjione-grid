@@ -86,38 +86,36 @@ const WIRE_GREY = "#cbd5e1";
 const RED = "#dc2626";
 const GREEN = "#16a34a";
 const DIM_INK = "#b45309";
-const BRANCH = "#7c3aed";
 
 /** Kolun son direginin etiketinden sonra birakilan sag pay (birim). */
 const BRANCH_LABEL_PAD = 26;
-
-/** Iki bransman satiri arasindaki dusey mesafe.
- *
- * Dal kati BRANCH_NAME_Y (228) ile BRANCH_LABEL_Y (288) arasinda, yani 60
- * birim; ustune nefes payi. */
-const BRANCH_ROW_H = 72;
 
 /** Faz sirasi — bir SN2 govdesindeki uc sensor, hattin uc fazi. */
 const PHASES = ["master", "sat01", "sat02"] as const;
 
 /**
- * UC ILETKEN — her faz kendi renginde ve kendi yuksekliginde.
+ * UC ILETKEN — hepsi AYNI GRI.
  *
- * Tek gri tel "hat" demiyordu; uc renkli iletken hem gercek bir havai hatta
- * benziyor hem de arizanin HANGI FAZDA oldugunu telin kendisinde
- * gosterebiliyor. Renkler cihaz ekranindaki kaynak renkleriyle ayni:
- * operator ayni kodu bir kez ogreniyor.
+ * RENK KIMLIGI KALDIRILDI. Once her faz kendi renginde ciziliyordu ve renk
+ * sistemi ayni anda uc isi birden yapiyordu: faz kimligi (mavi/yesil/
+ * turuncu), ariza durumu (kirmizi), bransman (mor). Bes renk ailesi tek
+ * ekranda yarisinca hicbiri anlam tasimiyor, hat "kablo demeti" gibi
+ * gorunuyordu.
  *
- * `dx`: ana traversteki izolator noktasinin merkeze gore ofseti.
- * `kaynak`: alarm faz eslemesi (master/sat01/sat02).
+ * Artik renk YALNIZCA DURUM tasir: gri = normal, kirmizi = arizali. Hangi
+ * fazin arizali oldugu bilgisi cizimden degil cihaz ipucundan ve karttaki
+ * alarm satirindan okunur — orada zaten metinle yaziyor.
+ *
+ * `dx`/`dy` yine de gerekli: uc telin ayri ayri gorunmesi icin (delta
+ * dizilim). Bu bir GEOMETRI karari, renkten bagimsiz.
  */
 const ILETKENLER = [
-  { faz: "L1", kaynak: "master", dx: -ARM_HALF, dy: 0, renk: "#2563eb" },
+  { faz: "L1", dx: -ARM_HALF, dy: 0 },
   // L2 UST traverste: uc fazi ayni yukseklikte yan yana dizmek travers
   // araliginda telleri birbirine yaklastiriyor, sarkma egrileri ust uste
   // binip tek kalin bir bant gibi okunuyordu.
-  { faz: "L2", kaynak: "sat01", dx: 0, dy: TOP_WIRE_Y - WIRE_Y, renk: "#16a34a" },
-  { faz: "L3", kaynak: "sat02", dx: ARM_HALF, dy: 0, renk: "#c2410c" }
+  { faz: "L2", dx: 0, dy: TOP_WIRE_Y - WIRE_Y },
+  { faz: "L3", dx: ARM_HALF, dy: 0 }
 ] as const;
 
 type Pt = { x: number; y: number };
@@ -171,6 +169,8 @@ function DeviceMark({
         stroke={color}
         strokeWidth={1.9}
       />
+      {/* Faz noktalari: alarm gelen faz DOLU, digerleri bos. Renk
+          tasimazlar — cizimde renk yalnizca DURUM icin ayrildi. */}
       {PHASES.map((ph, i) => {
         const on = alarmSources.includes(ph);
         return (
@@ -179,8 +179,8 @@ function DeviceMark({
             cx={-2.7 + i * 2.7}
             cy={3.4}
             r={1.15}
-            fill={on ? RED : "#fff"}
-            stroke={on ? RED : "#cbd5e1"}
+            fill={on ? color : "#fff"}
+            stroke={color}
             strokeWidth={0.8}
           />
         );
@@ -230,24 +230,28 @@ export function FaultPoleStrip({
   // Kol ana hattin ALTINA iner: ana hat yatay ekseni korur, dal asagi dogru
   // ayrilir. Boylece "hangi direkten ne cikiyor" tek bakista okunur.
   const branchDraw = useMemo(() => {
-    // Kol ana hattin ALTINDA kendi kati olarak cizilir. Onceki surumde dal
-    // kisa bir kesikli cizgi + nokta + etiketti; iki kol yan yana gelince
-    // etiketler ust uste biniyor ("BR-2 BR-3"), kolun KENDI direkleri hic
-    // gorunmuyordu. Kol ayri bir hattir — oyle de cizilmeli.
+    // DAL-BUDAK MODELI
+    // ----------------
+    // Kol ana hattan CAPRAZ ayrilir ve asagi-saga kendi ekseninde uzar.
+    // Once ana hatla PARALEL yatay bir "alt kat"ti; paralel durdugu icin
+    // ayri bir hat oldugu okunmuyor, dallanma hissi vermiyordu.
+    //
+    // Cizim cografi degil TOPOLOJIK: kolun sahadaki gercek yonu onemli
+    // degil, ana hattan AYRILDIGI ve kendi basina devam ettigi onemli.
     const out: {
       key: string;
       name: string;
       /** Ana hattaki dallanma diregi. */
       anchorX: number;
-      /** Dal katindaki direkler (en fazla GOSTER kadar). */
-      poles: { x: number; label: string }[];
+      /** Dallanma dugumu — ana direkte govdeden yana uzanan kolun ucu. */
+      nodeX: number;
+      nodeY: number;
+      /** Kolun direkleri — CAPRAZ eksen uzerinde (her biri kendi y'sinde). */
+      poles: { x: number; y: number; label: string }[];
       /** Gosterilemeyen direk sayisi ("+N"). */
       fazla: number;
       hot: boolean;
       poleCount: number;
-      endX: number;
-      /** Kolun dal katindaki satiri (0 = en ust). Cakisan kollar alt satira iner. */
-      row: number;
     }[] = [];
     const GOSTER = 4;
     for (const b of branches ?? []) {
@@ -268,69 +272,57 @@ export function FaultPoleStrip({
         Boolean(b.hasFault) || (active && idx >= hotFrom && idx <= hotTo);
       if (!ilgili) continue;
       const anchorX = xOf(idx);
+      // Dallanma dugumu: ana direkte govdeden yana uzanan kolun ucu.
+      // Dal buradan baslar; StripTower ayni noktaya dugum cizer.
+      const nodeX = anchorX + ARM_HALF * 0.7;
+      const nodeY = MAIN_ARM_Y + 6;
+
       const kolDirekleri = (b.poles ?? []).slice(0, GOSTER);
-      // Kol direk kaydi gelmediyse en azindan sayidan yer tutucu uret:
-      // dalin uzunlugu gorunsun.
       const adet = kolDirekleri.length || Math.min(GOSTER, Math.max(1, b.poleCount));
-      const cizilecek = kolDirekleri.length
-        ? kolDirekleri.map((p, i) => ({
-            x: anchorX + 26 + i * BRANCH_SPAN_W,
-            label: poleLabel(p)
-          }))
-        : Array.from({ length: adet }, (_, i) => ({
-            x: anchorX + 26 + i * BRANCH_SPAN_W,
-            label: `#${i + 1}`
-          }));
+      // CAPRAZ EKSEN: her direkte saga DX, asagi DY. Egim ~28 derece —
+      // dallandigi bariz, ama sahneden tasmayacak kadar yatik.
+      const DX = 62;
+      const DY = 33;
+      const cizilecek = Array.from({ length: adet }, (_, i) => ({
+        x: nodeX + 34 + i * DX,
+        y: nodeY + 46 + i * DY,
+        label: kolDirekleri[i] ? poleLabel(kolDirekleri[i]) : `#${i + 1}`
+      }));
+
       out.push({
         key: `${b.lineId}`,
         name: b.name,
         anchorX,
+        nodeX,
+        nodeY,
         poles: cizilecek,
         fazla: Math.max(0, b.poleCount - cizilecek.length),
         hot: true,
-        poleCount: b.poleCount,
-        endX: cizilecek.length
-          ? cizilecek[cizilecek.length - 1].x
-          : anchorX + 26,
-        row: 0
+        poleCount: b.poleCount
       });
     }
 
-    // KOLLARI SATIRLARA DAGIT.
-    //
-    // Her kol kendi anchorX'inden saga dogru uzuyor ve hepsi AYNI sabit
-    // satirda ciziliyordu. Ana hat araligi 132, kolun direk adimi 86 — yani
-    // dort direkli bir kol 258 birim yer kaplarken komsu dallanma diregi
-    // 132 birim otede. Ariza bolgesinde iki kol varsa iletkenleri ve direk
-    // etiketleri ust uste biniyor, ikisi TEK BIR KOL gibi okunuyordu; oysa
-    // cizimin cevaplamasi gereken soru "ekip hangi kola gidecek".
-    //
-    // Greedy yerlestirme: soldan saga, her kolu CAKISMADIGI en ust satira
-    // koy. Kollar seyrekse hepsi 0. satirda kalir (gorunum degismez).
-    const satirSonu: number[] = [];
-    for (const b of [...out].sort((a, z) => a.anchorX - z.anchorX)) {
-      const bas = b.anchorX - 14;
-      let satir = satirSonu.findIndex((son) => son <= bas);
-      if (satir === -1) {
-        satir = satirSonu.length;
-        satirSonu.push(0);
-      }
-      satirSonu[satir] = b.endX + BRANCH_LABEL_PAD;
-      b.row = satir;
-    }
+    // CAKISMA NOTU: yatay kat modelinde kollar ayni satirda saga dogru
+    // uzadigi icin iki kol birbirine giriyor ve satirlara dagitmak
+    // gerekiyordu. Capraz modelde her kol kendi ekseninde ASAGI da indigi
+    // icin iki kol dogal olarak ayrisir; ustelik yalnizca arizayla ILGILI
+    // kollar ciziliyor, yani ayni anda ikiden fazlasi pratikte olmuyor.
     return out;
   }, [branches, seqs, xOf, active, hotFrom, hotTo]);
 
   /** Kollarin kapladigi en sag nokta ve en alt satir — cizim alani bunlari
    *  kapsayacak kadar buyutulur (asagida `base`). */
   const branchExtent = useMemo(() => {
+    // Dal CAPRAZ indigi icin hem genisligi hem YUKSEKLIGI etkiler.
     let sag = 0;
-    let satir = 0;
+    let alt = 0;
     for (const b of branchDraw) {
-      sag = Math.max(sag, b.endX + BRANCH_LABEL_PAD);
-      satir = Math.max(satir, b.row);
+      for (const pt of b.poles) {
+        sag = Math.max(sag, pt.x + BRANCH_LABEL_PAD);
+        alt = Math.max(alt, pt.y + 44);
+      }
     }
-    return { sag, satir };
+    return { sag, alt };
   }, [branchDraw]);
 
   // ---- Gorunum penceresi (zoom + pan) ----------------------------------
@@ -357,7 +349,7 @@ export function FaultPoleStrip({
       x: 0,
       y: 0,
       w: Math.max(width, branchExtent.sag),
-      h: STRIP_H + branchExtent.satir * BRANCH_ROW_H
+      h: Math.max(STRIP_H, branchExtent.alt)
     }),
     [width, branchExtent]
   );
@@ -457,13 +449,6 @@ export function FaultPoleStrip({
   const faultColor = active ? RED : GREY;
   const hotPath = hotPathOf(geo);
 
-  /** Arizali FAZLAR — "gordum" diyen cihazin acik alarmlarindan.
-   *  Bos ise faz bilinmiyor (eski kayit) ve uc iletken de vurgulanir. */
-  const arizaliFazlar = useMemo(() => {
-    const k = (lastRedDeviceCode ?? "").trim();
-    const kaynaklar = k ? alarmsByDevice?.[k]?.sources ?? [] : [];
-    return new Set(kaynaklar);
-  }, [alarmsByDevice, lastRedDeviceCode]);
   const dimA = span ? pointAt(span.a).x : null;
   const dimB = span ? pointAt(span.b).x : null;
   const spanM =
@@ -484,7 +469,7 @@ export function FaultPoleStrip({
     : hoveredPole
       ? { x: xOf(seqs.indexOf(hoveredPole.seq)), y: MAIN_ARM_Y + 26 }
       : hoveredBranch
-        ? { x: hoveredBranch.anchorX, y: BRANCH_NAME_Y + hoveredBranch.row * BRANCH_ROW_H + 4 }
+        ? { x: hoveredBranch.nodeX, y: hoveredBranch.nodeY + 18 }
         : null;
   // Ipucu HTML katmaninda; viewBox birimini kapsayicinin yuzdesine cevir.
   const tipStyle = tipUnit
@@ -574,16 +559,14 @@ export function FaultPoleStrip({
             const yol = toPath(
               wire.map((pt) => ({ x: pt.x + ilt.dx, y: pt.y + ilt.dy }))
             );
-            const arizali = active && arizaliFazlar.has(ilt.kaynak);
             return (
               <g key={ilt.faz}>
                 <path
                   d={yol}
                   fill="none"
-                  stroke={ilt.renk}
-                  strokeWidth={1.7}
+                  stroke={WIRE_GREY}
+                  strokeWidth={1.6}
                   strokeLinecap="round"
-                  opacity={active && arizaliFazlar.size > 0 && !arizali ? 0.35 : 0.9}
                 />
               </g>
             );
@@ -592,9 +575,7 @@ export function FaultPoleStrip({
           {/* ARIZALI PARCA — arizali fazin telinde. Faz bilinmiyorsa
               (eski kayit) uc iletken de vurgulanir. */}
           {hotPath
-            ? ILETKENLER.filter(
-                (ilt) => arizaliFazlar.size === 0 || arizaliFazlar.has(ilt.kaynak)
-              ).map((ilt) => {
+            ? ILETKENLER.map((ilt) => {
                 const yol = hotPathOf(geo, ilt.dx, ilt.dy);
                 if (!yol) return null;
                 return (
@@ -625,16 +606,9 @@ export function FaultPoleStrip({
                Ariza ile ilgili kollar (bolge icinde ya da kendi arizasi olan)
                TAM cizilir; digerleri soluk kalir ki kalabalik etmesin. */}
           {branchDraw.map((b) => {
-            const renk = b.hot ? RED : BRANCH;
-            // Satir kaydirmasi: yalnizca DAL KATI iner. Capraz inisin
-            // BASLANGICI ana direkte kalmali (MAIN_ARM_Y kaydirilmaz),
-            // yoksa kol havada baslamis gibi gorunur.
-            const dy = b.row * BRANCH_ROW_H;
-            const armY = BRANCH_MAIN_ARM_Y + dy;
-            const wireY = BRANCH_WIRE_Y + dy;
-            const groundY = BRANCH_GROUND_Y + dy;
-            const labelY = BRANCH_LABEL_Y + dy;
-            const nameY = BRANCH_NAME_Y + dy;
+            const ucPt = b.poles[b.poles.length - 1];
+            const ucX = ucPt?.x ?? b.nodeX;
+            const ucY = ucPt?.y ?? b.nodeY;
             return (
               <g
                 key={b.key}
@@ -642,88 +616,75 @@ export function FaultPoleStrip({
                 onMouseEnter={() => setHover({ kind: "branch", key: b.key })}
                 onMouseLeave={() => setHover(null)}
               >
-                <rect
-                  x={b.anchorX - 12}
-                  y={MAIN_ARM_Y}
-                  width={b.endX - b.anchorX + 74}
-                  height={labelY - MAIN_ARM_Y + 12}
+                {/* Imlec hedefi — capraz seridi kapsayan dortgen. */}
+                <path
+                  d={`M${b.nodeX - 10} ${b.nodeY - 10} L${ucX + 26} ${ucY - 10} L${ucX + 26} ${ucY + 40} L${b.nodeX - 10} ${b.nodeY + 40} Z`}
                   fill="transparent"
                 />
-                {/* CAPRAZ INIS: ana direkte traversten ayrilir, dal katina
-                    egik bir dogru ile iner. Kesikli degil DUZ cizgi —
-                    iletken gercekten oradan gecer. */}
-                <line
-                  x1={b.anchorX + ARM_HALF * 0.7}
-                  y1={MAIN_ARM_Y + 6}
-                  x2={b.poles[0]?.x ?? b.anchorX + 40}
-                  y2={armY}
-                  stroke={renk}
-                  strokeWidth={1.8}
-                  strokeLinecap="round"
-                />
-                {/* Kol adi — capraz inisin yaninda, kendi satirinda. */}
-                <text
-                  x={b.anchorX + 6}
-                  y={nameY}
-                  fontSize={9.5}
-                  fontWeight={800}
-                  fill={b.hot ? "#b91c1c" : "#6d28d9"}
-                >
-                  {b.name}
-                </text>
 
-                {/* Dal zemini */}
-                <line
-                  x1={(b.poles[0]?.x ?? b.anchorX) - 16}
-                  y1={groundY}
-                  x2={b.endX + 16}
-                  y2={groundY}
-                  stroke="#e2e8f0"
-                  strokeWidth={1}
-                  strokeDasharray="3 4"
-                />
-                {/* Dal iletkeni — uc faz yerine tek hat: kol ikincil bilgi,
-                    uc renkli tel burada gurultu olurdu. */}
+                {/* DAL ILETKENI — dugumden son direge TEK surekli cizgi.
+                    Direkler bu eksenin uzerine oturur; hat gercekten oradan
+                    ayrilip asagi-saga devam ediyormus gibi okunur. */}
                 <path
-                  d={b.poles
-                    .map((pt, i) => `${i === 0 ? "M" : "L"}${pt.x} ${wireY}`)
-                    .join(" ")}
+                  d={[
+                    `M${b.nodeX} ${b.nodeY}`,
+                    ...b.poles.map((pt) => `L${pt.x} ${pt.y}`)
+                  ].join(" ")}
                   fill="none"
-                  stroke={b.hot ? renk : "#cbd5e1"}
-                  strokeWidth={b.hot ? 2.2 : 1.6}
+                  stroke={RED}
+                  strokeWidth={1.9}
                   strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
-                {/* Kolun direkleri — ana hattakinin sadelestirilmis hali. */}
+
+                {/* Kolun direkleri — ana hattakinin sadelestirilmis hali,
+                    eksenin uzerinde dik duruyor. */}
                 {b.poles.map((pt) => (
-                  <g key={pt.x} stroke={renk} strokeWidth={1.3} strokeLinecap="round" fill="none">
-                    <line x1={pt.x} y1={armY} x2={pt.x} y2={groundY} />
-                    <line
-                      x1={pt.x - 8}
-                      y1={armY}
-                      x2={pt.x + 8}
-                      y2={armY}
-                    />
-                    <line x1={pt.x} y1={groundY - 10} x2={pt.x - 5} y2={groundY} />
-                    <line x1={pt.x} y1={groundY - 10} x2={pt.x + 5} y2={groundY} />
+                  <g
+                    key={pt.x}
+                    stroke={RED}
+                    strokeWidth={1.35}
+                    strokeLinecap="round"
+                    fill="none"
+                  >
+                    <line x1={pt.x} y1={pt.y} x2={pt.x} y2={pt.y + 20} />
+                    <line x1={pt.x - 7.5} y1={pt.y} x2={pt.x + 7.5} y2={pt.y} />
+                    <line x1={pt.x} y1={pt.y + 13} x2={pt.x - 5.5} y2={pt.y + 20} />
+                    <line x1={pt.x} y1={pt.y + 13} x2={pt.x + 5.5} y2={pt.y + 20} />
                   </g>
                 ))}
+
+                {/* Direk adlari — govdenin altinda. */}
                 {b.poles.map((pt) => (
                   <text
                     key={`bl-${pt.x}`}
                     x={pt.x}
-                    y={labelY}
+                    y={pt.y + 31}
                     textAnchor="middle"
                     fontSize={8.5}
-                    fontWeight={b.hot ? 700 : 500}
-                    fill={b.hot ? "#b91c1c" : GREY}
+                    fontWeight={600}
+                    fill="#b91c1c"
                   >
                     {pt.label}
                   </text>
                 ))}
+
+                {/* Kol adi — dalin BASINDA, dugumun yaninda. */}
+                <text
+                  x={b.nodeX + 7}
+                  y={b.nodeY + 15}
+                  fontSize={10}
+                  fontWeight={800}
+                  fill="#b91c1c"
+                >
+                  {b.name}
+                </text>
+
+                {/* Dal daha uzun devam ediyor. */}
                 {b.fazla > 0 ? (
                   <text
-                    x={b.endX + 14}
-                    y={wireY + 3}
+                    x={ucX + 13}
+                    y={ucY + 5}
                     fontSize={8.5}
                     fontWeight={700}
                     fill={GREY}
