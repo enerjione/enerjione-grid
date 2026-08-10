@@ -1182,10 +1182,13 @@ export function App() {
 
   const handleUpdateSignal = async (
     signalKey: string,
-    payload: Partial<Omit<SignalCatalogRow, "id" | "key">>
+    payload: Partial<Omit<SignalCatalogRow, "id" | "key">>,
+    // Anahtar (model, key) ile tekil; model gonderilmezse backend belirsiz
+    // anahtarlari 409 ile reddeder. Eskiden keyfi bir satir duzenleniyordu.
+    model?: string
   ) => {
     if (!session) return;
-    await updateSignal(session.accessToken, signalKey, payload);
+    await updateSignal(session.accessToken, signalKey, payload, model);
     await reloadSignals();
     toast.success(t("toasts.signalUpdated"));
   };
@@ -1202,9 +1205,9 @@ export function App() {
     return sonuc;
   };
 
-  const handleDeleteSignal = async (signalKey: string) => {
+  const handleDeleteSignal = async (signalKey: string, model?: string) => {
     if (!session) return;
-    await deleteSignal(session.accessToken, signalKey);
+    await deleteSignal(session.accessToken, signalKey, model);
     await reloadSignals();
     toast.success(t("toasts.signalDeleted"));
   };

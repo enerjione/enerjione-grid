@@ -14,6 +14,39 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.64.0] — 2026-08-10
+
+Pole Master Kit setlerinde **sinyallerin sessizce kaybolmasını** giderir; arıza
+detayı kendi tam sayfasına taşındı.
+
+### Düzeltildi
+
+- **Bir setin 48 sinyali hiç gelmiyordu.** Yeni set kaydı konum varsayılanıyla
+  (1‑2‑3 / 4‑5‑6 / 7‑8‑9) körlemesine yazılıyor, kardeş setlere bakılmıyordu.
+  Bir setin uydu ataması değiştirilip sonra set sayısı artırılınca iki set aynı
+  fiziksel uyduyu iddia ediyor; bölme haritasında ilk eşleme kazanıyor ve geç
+  kalan setin o ünitesine ait bütün sinyaller düşüyordu. Çakışan uydular hiçbir
+  sete gitmediği için fiziksel kayıtta bayat değerle asılı kalıyordu. Arayüzde
+  set sağlıklı görünüyor, tek iz tag-engine günlüğündeki bir hata satırıydı.
+  **Mevcut kurulumlarda atama bir kez elle düzeltilmeli** — düzeltme bundan
+  sonrasını korur, geçmiş kaydı onarmaz.
+- **Sinyal düzenlemek yanlış modelin satırını değiştiriyordu.** Anahtar
+  tekilliği `(model, key)` çiftinde ama yazma uçları satırı yalnızca anahtarla,
+  sıralama olmadan seçiyordu; 192 anahtar birden fazla modelde var. Sanal set
+  sayfasından bir sinyali kapatmak fiziksel kitin satırını vuruyor ve o DNP3
+  noktası gateway okuma listesinden sessizce düşüyordu. Belirsiz anahtarlar
+  artık 409 döner.
+- `sat04`–`sat09` etiketleri ham görünüyordu (alarm kuralları, cihaz özeti,
+  harita ipucu, bildirim çanı).
+- Alt cihaz satırında ikon adı ham metin olarak basılıyordu.
+
+### Değişti
+
+- Arıza detayı modal yerine **kendi tam sayfa sekmesinde**.
+- Kit setleri cihaz listesinde daraltılabilir bir grup; alt cihazda yalnızca
+  kimlik, uydu–faz eşlemesi ve açıklama var (seri no, model ve montaj tarihi
+  kite ait). Cihaz türü alanı sette yanlış model gösteriyordu.
+
 ## [2.63.0] — 2026-08-10
 
 **2.62.0'daki kritik bir gerilemeyi giderir.** Ayrıca Pole Master Kit setleri

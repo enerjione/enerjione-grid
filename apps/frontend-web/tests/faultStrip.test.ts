@@ -10,14 +10,23 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  PHASE_LINES,
+  ROW_PITCH,
   SAG,
   WIRE_Y,
+  buildFaultScene,
   buildStripGeometry,
   hotPathOf,
   sagAt
 } from "../src/features/faults/faultStripGeometry";
 
 const POLES = [1, 2, 3, 4, 5];
+
+/** Travers payi: iletken direk EKSENINDEN degil travers UCUNDAN gerilir.
+ *  Geometriden turetilir ki sabit degisince test kendini duzeltsin. */
+function attachOf(geo: ReturnType<typeof buildStripGeometry>): number {
+  return geo.pointAt(0).x - geo.xOf(0);
+}
 
 /** 3-4 arasinda "gordum", 4-5 arasinda "gormedim" cihazi olan hat. */
 function segments() {
@@ -69,9 +78,26 @@ test("cihaz segment icindeki GERCEK oraninda konumlanir", () => {
   assert.ok(red);
   // 3-4 arasi = span indeksi 2; t=0.25.
   assert.equal(red.pos, 2.25);
-  const x3 = geo.xOf(2);
-  const x4 = geo.xOf(3);
-  assert.ok(Math.abs(geo.pointAt(red.pos).x - (x3 + (x4 - x3) * 0.25)) < 1e-9);
+  // Oran TEL uzerinde olculur: tel travers ucundan travers ucuna gerilir,
+  // direk ekseninden degil. Cihaz "spanin dortte birinde" derken kastedilen
+  // gerili telin dortte biridir.
+  const pay = attachOf(geo);
+  const x1 = geo.xOf(2) + pay;
+  const x2 = geo.xOf(3) - pay;
+  assert.ok(Math.abs(geo.pointAt(red.pos).x - (x1 + (x2 - x1) * 0.25)) < 1e-9);
+});
+
+test("iletken direk EKSENINDEN degil TRAVERS UCUNDAN gerilir", () => {
+  // Onceki modelde tel direk ekseninden geciyor ama izolatorler traversin
+  // uclarinda duruyordu: tel havada asili, izolator hicbir seyi tutmuyor
+  // gibi gorunuyordu.
+  const geo = buildStripGeometry({ poleSeqs: POLES, fromSeq: 1, toSeq: 2 });
+  const pay = attachOf(geo);
+  assert.ok(pay > 0, "travers payi uygulanmamis");
+  // Span sonu bir SONRAKI direkten pay kadar ONCE biter.
+  assert.ok(Math.abs(geo.pointAt(0.999999).x - (geo.xOf(1) - pay)) < 0.01);
+  // Direk uzerinde atlama (jumper): bir sonraki span pay kadar SONRA baslar.
+  assert.ok(Math.abs(geo.pointAt(1).x - (geo.xOf(1) + pay)) < 1e-9);
 });
 
 test("KIRMIZI PARCA son 'gordum' ile ilk 'gormedim' cihazi ARASINDA", () => {
@@ -136,11 +162,19 @@ test("tel SUREKLI — kopukluk veya geri donus yok", () => {
   const geo = buildStripGeometry({ poleSeqs: POLES, fromSeq: 1, toSeq: 2 });
   for (let i = 1; i < geo.wire.length; i += 1) {
     assert.ok(geo.wire[i].x > geo.wire[i - 1].x, `tel ${i}. noktada geri donuyor`);
-    assert.ok(geo.wire[i].pos > geo.wire[i - 1].pos, `pos ${i}. noktada artmiyor`);
+    // Direk uzerindeki atlama noktalari AYNI pos'u paylasir (span sonu ile
+    // sonraki span basi); geri gitmemesi yeterli.
+    assert.ok(geo.wire[i].pos >= geo.wire[i - 1].pos, `pos ${i}. noktada geriliyor`);
   }
-  // Son nokta son direge ulasmali.
+  // Tel iki uctan da gerdirilir: son nokta son traversin SAG ucudur.
+  const pay = attachOf(geo);
+  const ilkX = geo.wire[0].x;
   const sonX = geo.wire[geo.wire.length - 1].x;
-  assert.ok(Math.abs(sonX - geo.xOf(POLES.length - 1)) < 1e-9, "tel son direge ulasmiyor");
+  assert.ok(Math.abs(ilkX - (geo.xOf(0) - pay)) < 1e-9, "tel ilk direkte gerdirilmemis");
+  assert.ok(
+    Math.abs(sonX - (geo.xOf(POLES.length - 1) + pay)) < 1e-9,
+    "tel son direkte gerdirilmemis"
+  );
 });
 
 test("komsu OLMAYAN segment cihazi cizilmez (bozuk veri yanlis yere koymasin)", () => {
@@ -201,9 +235,23 @@ test("direk ad ve rolu cizime tasinir", () => {
 
 // ------------------------------------------------------- UC FAZ ILETKENI
 
+test("uc faz UC AYRI YUKSEKLIKTE — ayni seviyede iki tel yok", () => {
+  // Ayni yukseklikte yan yana dizilen teller sarkma egrileriyle ust uste
+  // biniyor ve hat tek kalin bir bant gibi okunuyordu. Ayrica ariza kendi
+  // telinde gosterilemiyordu.
+  const dyler = PHASE_LINES.map((f) => f.dy);
+  assert.equal(new Set(dyler).size, PHASE_LINES.length, "iki faz ayni yukseklikte");
+  // Faz araligi sarkmadan buyuk olmali; yoksa ustteki telin sarkmasi alttaki
+  // telin uzerine oturur.
+  const sirali = [...dyler].sort((a, b) => a - b);
+  for (let i = 1; i < sirali.length; i += 1) {
+    assert.ok(sirali[i] - sirali[i - 1] > SAG, "faz araligi sarkmadan dar");
+  }
+});
+
 test("arizali parca FAZ OFSETINE gore kayar", () => {
-  // Uc iletken ayri izolator noktalarindan gecer. Arizali parca tek bir orta
-  // cizgide gosterilseydi "hangi faz" bilgisi gorselden silinirdi.
+  // Uc iletken uc AYRI traverse asilir. Arizali parca tek bir cizgide
+  // gosterilseydi "hangi faz" bilgisi gorselden silinirdi.
   const geo = buildStripGeometry({
     poleSeqs: POLES,
     segments: segments(),
@@ -213,26 +261,29 @@ test("arizali parca FAZ OFSETINE gore kayar", () => {
     firstGreenDeviceCode: "SN2-GREEN"
   });
   const orta = hotPathOf(geo);
-  const sol = hotPathOf(geo, -22);
-  const sag = hotPathOf(geo, 22);
+  const ust = hotPathOf(geo, PHASE_LINES[0].dy);
+  const alt = hotPathOf(geo, PHASE_LINES[2].dy);
 
-  assert.ok(orta && sol && sag, "uc faz icin de path uretilmeli");
-  assert.notEqual(sol, orta, "sol faz ofseti uygulanmamis");
-  assert.notEqual(sag, orta, "sag faz ofseti uygulanmamis");
+  assert.ok(orta && ust && alt, "uc faz icin de path uretilmeli");
+  assert.notEqual(ust, orta, "ust faz ofseti uygulanmamis");
+  assert.notEqual(alt, orta, "alt faz ofseti uygulanmamis");
 
-  // Ofset YALNIZCA x'i kaydirmali: tel yuksekligi (sarkma) korunur.
+  // Ofset YALNIZCA y'yi kaydirmali: telin yatay yuruyusu korunur.
   const xler = (d: string) =>
     d.split(/[ML]/).filter(Boolean).map((par) => Number(par.trim().split(" ")[0]));
   const yler = (d: string) =>
     d.split(/[ML]/).filter(Boolean).map((par) => Number(par.trim().split(" ")[1]));
 
-  const xOrta = xler(orta);
-  const xSol = xler(sol);
-  assert.equal(xOrta.length, xSol.length);
-  for (let i = 0; i < xOrta.length; i += 1) {
-    assert.ok(Math.abs(xSol[i] - (xOrta[i] - 22)) < 0.11, `nokta ${i} ofseti yanlis`);
+  assert.deepEqual(xler(ust), xler(orta), "faz ofseti telin x'ini degistirmemeli");
+  const yOrta = yler(orta);
+  const yUst = yler(ust);
+  assert.equal(yOrta.length, yUst.length);
+  for (let i = 0; i < yOrta.length; i += 1) {
+    assert.ok(
+      Math.abs(yUst[i] - (yOrta[i] + PHASE_LINES[0].dy)) < 0.11,
+      `nokta ${i} ofseti yanlis`
+    );
   }
-  assert.deepEqual(yler(sol), yler(orta), "faz ofseti tel yuksekligini degistirmemeli");
 });
 
 test("ofset verilmezse davranis DEGISMEZ (geriye uyum)", () => {
@@ -321,4 +372,98 @@ test("iki ucu da bu hatta olmayan segment CIZILMEZ", () => {
     toSeq: 4
   });
   assert.equal(geo.devices.length, 0, "baska hattin cihazi cizime girmis");
+});
+
+/* ---------------------------------------------------------------------------
+ * COK SATIRLI SAHNE — ariza tek bir hat kesiminde olmayabilir
+ *
+ * Ariza bolgesi bir dallanma diregini kapsiyorsa ariza ana hatta da olabilir
+ * o kolda da. Harita bunu zaten iki ayri kirmizi kesik olarak ciziyordu; sema
+ * yalnizca ana hatti gosterince ekip hangi kolu gezecegini bilemiyordu.
+ * ------------------------------------------------------------------------- */
+
+test("kol AYRI BIR SATIR olarak, dallanma direginin ALTINA yerlesir", () => {
+  const scene = buildFaultScene([
+    { key: "main", kind: "main", title: "ANA", poleSeqs: POLES, fromSeq: 3, toSeq: 4 },
+    {
+      key: "b7",
+      kind: "branch",
+      title: "BR-7",
+      poleSeqs: [1, 2, 3],
+      parentKey: "main",
+      parentSeq: 4,
+      confirmed: false
+    }
+  ]);
+
+  assert.equal(scene.rows.length, 2);
+  assert.equal(scene.rows[1].y0, ROW_PITCH, "kol satiri bir adim asagida olmali");
+
+  // seq 4 = ana hattin 4. indeksi degil 3. indeksi (POLES 1..5).
+  const anchorX = scene.rows[0].geo.xOf(3);
+  assert.equal(scene.rows[1].link?.fromX, anchorX, "bag dallanma direginden cikmali");
+  assert.ok(
+    Math.abs(scene.rows[1].x0 + scene.rows[1].geo.xOf(0) - anchorX) < 1e-9,
+    "kolun ilk diregi dallanma direginin altinda olmali"
+  );
+  // Sahne kollari da kapsayacak kadar buyumeli; yoksa kol kirpilir ve
+  // kaydirarak dahi gorulemez.
+  assert.ok(scene.width >= scene.rows[1].x0 + scene.rows[1].geo.width);
+  assert.ok(scene.height > scene.rows[1].y0);
+});
+
+test("kendi kaydi OLMAYAN kol BASTAN SONA aday cizilir", () => {
+  // Kolun neresinde oldugunu soyleyecek cihaz yok: bir parcasini secip
+  // kirmiziya boyamak uydurma olurdu, ekibi yanlis direge gonderir.
+  const scene = buildFaultScene([
+    { key: "main", kind: "main", title: "ANA", poleSeqs: POLES, fromSeq: 3, toSeq: 4 },
+    {
+      key: "b7",
+      kind: "branch",
+      title: "BR-7",
+      poleSeqs: [1, 2, 3],
+      parentKey: "main",
+      parentSeq: 3,
+      confirmed: false
+    }
+  ]);
+  assert.deepEqual(scene.rows[1].geo.span, { a: 0, b: 2, byDevice: false });
+});
+
+test("kendi kaydi OLAN kol yalnizca o araligi kirmizi cizer", () => {
+  const scene = buildFaultScene([
+    { key: "main", kind: "main", title: "ANA", poleSeqs: POLES, fromSeq: 3, toSeq: 4 },
+    {
+      key: "b7",
+      kind: "branch",
+      title: "BR-7",
+      poleSeqs: [1, 2, 3, 4],
+      parentKey: "main",
+      parentSeq: 3,
+      fromSeq: 2,
+      toSeq: 3,
+      confirmed: true
+    }
+  ]);
+  assert.deepEqual(scene.rows[1].geo.span, { a: 1, b: 2, byDevice: false });
+});
+
+test("bagi cozulemeyen kol yine de cizilir (sessizce dusmez)", () => {
+  // Dallanma diregi ana hattin direk listesinde yoksa (eksik snapshot) kol
+  // baglantisiz kalir ama CIZILIR: gezilecek bir kolun ekrandan kaybolmasi
+  // yanlis hizalanmis bir bagdan cok daha agir bir hata.
+  const scene = buildFaultScene([
+    { key: "main", kind: "main", title: "ANA", poleSeqs: POLES, fromSeq: 3, toSeq: 4 },
+    {
+      key: "b7",
+      kind: "branch",
+      title: "BR-7",
+      poleSeqs: [1, 2],
+      parentKey: "main",
+      parentSeq: 99,
+      confirmed: false
+    }
+  ]);
+  assert.equal(scene.rows.length, 2);
+  assert.equal(scene.rows[1].link, null);
 });

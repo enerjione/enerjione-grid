@@ -874,7 +874,17 @@
       "zoomOut": "Uzaklaştır",
       "zoomFit": "Sığdır",
       "zoomHint": "Tekerlek ile yakınlaştır, sürükleyerek gez",
-      "branchPoles": "{{count}} direkli branşman kolu"
+      "mainLine": "ana hat",
+      "phaseShort": {
+        "master": "Master",
+        "sat01": "Sat 01",
+        "sat02": "Sat 02"
+      },
+      "branchAtPole": "{{pole}} direğinden branşman",
+      "branchConfirmed": "Arıza bu kolda doğrulandı",
+      "branchSuspect": "Aday — kontrol edilmeli",
+      "wholeLineSuspect": "↔ Kolun tamamı aday",
+      "moreBranches": "+{{count}} branşman kolu çizime sığmadı"
     },
     "title": "Hat Arızaları",
     "stats": {
@@ -963,6 +973,7 @@
       "durationFinal": "Toplam arıza süresi",
       "openTooltip": "Detay görüntüle — {{at}}",
       "uncertainty": "{{span}}'lik kesim",
+      "candidateSections": "{{count}} aday hat kesimi",
       "causeTitle": "Arızayı Açan Alarm",
       "causeEmpty": "Arızayı açan alarm normale dönmüş.",
       "alarmAcked": "onaylandı",
@@ -973,7 +984,40 @@
       "branchesTitle": "Etkilenen Branşman Kolları",
       "branchAt": "{{pole}} direğinden ayrılıyor",
       "branchConfirmed": "arıza var",
-      "branchCheck": "kontrol edin"
+      "branchCheck": "kontrol edin",
+      "stateElapsed": "süredir açık",
+      "locationUnknown": "Konum belirlenemedi",
+      "repeatTag": "{{count}}. kez",
+      "switchLabel": "Aktif arıza",
+      "switchPrev": "Önceki arıza",
+      "switchNext": "Sonraki arıza",
+      "specTitle": "Arıza Künyesi",
+      "specEmpty": "Cihazdan analiz verisi gelmedi.",
+      "specKind": "Tür",
+      "specPhase": "Etkilenen faz",
+      "specDirection": "Yön",
+      "specFaultCurrent": "Arıza akımı",
+      "specLoadCurrent": "Öncesi yük akımı",
+      "specTemp": "İletken sıcaklığı",
+      "specCause": "Sebep",
+      "specCauseAuto": "{{cause}} (öneri)",
+      "specSearchSpan": "Aranacak kesim",
+      "specMeasuredAt": "Ölçüm saati",
+      "kind": {
+        "permanent": "Kalıcı",
+        "transient": "Geçici"
+      },
+      "direction": {
+        "green_a": "İleri (Yeşil / A)",
+        "red_b": "Geri (Kırmızı / B)"
+      },
+      "historyTitle": "Bu Hattın Geçmişi",
+      "historyNone": "Son 90 günde bu hatta başka arıza kaydı yok.",
+      "historyCount": "kez daha arızalandı (son {{days}} gün)",
+      "historySameSection": "{{count}} tanesi AYNI kesimde — kök sebep sürüyor olabilir",
+      "historyLast": "En son: {{at}}",
+      "specLastRed": "Son algılayan",
+      "specFirstGreen": "İlk algılamayan"
     },
     "empty": {
       "errorTitle": "Arıza listesi alınamadı",

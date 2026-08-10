@@ -25,25 +25,25 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  Activity,
   ChevronRight,
   GitBranch,
+  History,
   List,
   MapPin,
-  Map as MapIcon,
   Radio,
   Timer,
   TriangleAlert,
   UserPlus,
-  User as UserIcon,
-  Zap,
-  ZapOff
+  User as UserIcon
 } from "lucide-react";
 
 import type { FaultEvent, FaultTriggerAlarm } from "../../shared/types";
 import { formatDistanceM } from "../../shared/lineDistance";
+import type { FaultRecurrence } from "./faultRecurrence";
 import { FaultPoleStrip } from "./FaultPoleStrip";
 import type {
-  StripBranch,
+  StripBranchRow,
   StripDeviceAlarms,
   StripPole,
   StripSegment
@@ -55,17 +55,24 @@ type Props = {
   poleSeqs: number[];
   /** Direk ad/rol bilgisi — etiketlerde sira numarasi yerine AD gosterilir. */
   poles?: StripPole[];
-  /** Bu hattan ayrilan bransman kollari — cizimde dal olarak gosterilir. */
-  branches?: StripBranch[];
+  /** Ariza bolgesine denk gelen ADAY hat kesimleri (bransman kollari).
+   *  Cizimde her biri AYRI BIR SATIR olarak tam hat halinde gosterilir. */
+  branchRows?: StripBranchRow[];
+  /** Sigmadigi icin cizilemeyen kol sayisi — cizimde "+N" notu. */
+  hiddenBranchCount?: number;
   /** Hattin segmentleri — cihazlari TELIN UZERINDE cizmek icin. */
   segments: StripSegment[];
   localeTag: string;
   /** Canli sure sayaci icin ortak "now" (parent 30sn'de bir gunceller). */
   now: number;
   canAssign: boolean;
+  /** Sebep etiketi (katalogdan cozulmus). `suggested` = cihaz onerisi,
+   *  insan henuz onaylamadi. */
+  cause?: { label: string; suggested: boolean } | null;
+  /** AYNI HATTA gecmis arizalar — tekrar eden ariza baska bir istir. */
+  history?: FaultRecurrence | null;
   onOpenDetail: () => void;
   onAssignClick: () => void;
-  onShowOnMap: () => void;
 };
 
 function fmtDateTime(iso: string | null | undefined, localeTag: string): string {
@@ -104,14 +111,16 @@ export function ActiveFaultCard({
   fault: f,
   poleSeqs,
   poles,
-  branches,
+  branchRows,
+  hiddenBranchCount = 0,
   segments,
   localeTag,
   now,
   canAssign,
+  cause,
+  history,
   onOpenDetail,
-  onAssignClick,
-  onShowOnMap
+  onAssignClick
 }: Props) {
   const { t } = useTranslation();
   const assignee = f.assigned_to_full_name ?? f.assigned_to_username ?? null;
@@ -153,6 +162,98 @@ export function ActiveFaultCard({
     return map;
   }, [alarms]);
 
+  /** ARIZALI FAZLAR — cizimde yalnizca bu fazlarin teli kirmizi cizilir.
+   *
+   *  Bir SN2 govdesindeki uc sensor hattin uc ayri fazina kelepcelenir;
+   *  alarm hangi kaynaktan geldiyse ariza o fazdadir. Onceki cizim uc telin
+   *  hepsini kirmiziya boyuyordu: "uc faz birden arizali" demek, tek fazli
+   *  bir ariza icin YANLIS bir ifade ve ekibi gereksiz genis bir kontrole
+   *  gonderiyor. Liste bos kalirsa (eski kayit) uc tel de vurgulanir —
+   *  "bilmiyorum"u tek bir faza indirgemek daha kotu olurdu. */
+  const faultPhases = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of alarms) {
+      if (a.signal_source) set.add(a.signal_source);
+    }
+    return Array.from(set);
+  }, [alarms]);
+
+  /** ARIZA KUNYESI — yalnizca DOLU alanlar.
+   *
+   *  Bos alan satiri hic cizilmez: "—" ile dolu bir tablo bilgi tasimadigi
+   *  gibi, gercekten bilinen iki degeri de gorunmez kilar. Cihaz analiz
+   *  alanlarini (tur/faz/yon/akim) hic doldurmadiysa bolum "veri gelmedi"
+   *  der — bos birakip "sorun yok" izlenimi vermez. */
+  const spec = useMemo(() => {
+    const rows: { key: string; label: string; value: string; tone?: "red" | "green" }[] = [];
+    const ekle = (
+      key: string,
+      label: string,
+      value: string | null | undefined,
+      tone?: "red" | "green"
+    ) => {
+      if (value == null || value === "") return;
+      rows.push({ key, label, value, tone });
+    };
+
+    if (f.fault_kind) {
+      ekle(
+        "kind",
+        t("faults.card.specKind"),
+        t(`faults.card.kind.${f.fault_kind}`, { defaultValue: f.fault_kind }),
+        f.fault_kind === "permanent" ? "red" : undefined
+      );
+    }
+    if (f.phase) {
+      // "abc" -> "A-B-C". Backend fazlari harf harf ve sirali yazar.
+      ekle("phase", t("faults.card.specPhase"), f.phase.toUpperCase().split("").join("-"), "red");
+    }
+    if (f.fault_direction) {
+      ekle(
+        "dir",
+        t("faults.card.specDirection"),
+        t(`faults.card.direction.${f.fault_direction}`, { defaultValue: f.fault_direction })
+      );
+    }
+    if (f.fault_current_a != null) {
+      ekle("ia", t("faults.card.specFaultCurrent"), `${f.fault_current_a.toFixed(1)} A`, "red");
+    }
+    if (f.load_current_before_a != null) {
+      ekle("il", t("faults.card.specLoadCurrent"), `${f.load_current_before_a.toFixed(1)} A`);
+    }
+    if (f.conductor_temp_c != null) {
+      ekle("temp", t("faults.card.specTemp"), `${f.conductor_temp_c.toFixed(0)} °C`);
+    }
+    if (cause) {
+      ekle(
+        "cause",
+        t("faults.card.specCause"),
+        cause.suggested ? t("faults.card.specCauseAuto", { cause: cause.label }) : cause.label
+      );
+    }
+    // Bolgeyi ceviren iki cihaz: cizimde kirmizi/yesil olarak duruyor ama
+    // ADI yalnizca burada yaziyor — telsizle "hangi cihaz" diye sorulur.
+    ekle(
+      "red",
+      t("faults.card.specLastRed"),
+      f.last_red_device_name ?? f.last_red_device_code ?? null,
+      "red"
+    );
+    ekle(
+      "green",
+      t("faults.card.specFirstGreen"),
+      f.first_green_device_name ?? f.first_green_device_code ?? t("faults.card.lineEnd"),
+      "green"
+    );
+    if (f.zone_length_m != null) {
+      ekle("span", t("faults.card.specSearchSpan"), formatDistanceM(f.zone_length_m));
+    }
+    if (f.measured_at) {
+      ekle("at", t("faults.card.specMeasuredAt"), fmtClock(f.measured_at, localeTag));
+    }
+    return rows;
+  }, [f, cause, t, localeTag]);
+
   return (
     <article className={`fx-card fx-card--${f.status}`}>
       {/* ---------- 1. UST SERIT: nerede, ne durumda ---------- */}
@@ -178,19 +279,44 @@ export function ActiveFaultCard({
               {rangeText}
             </span>
           </h3>
+
+          {/* DURUM SERIDI — kartin en cok bakilan satiri.
+              Onceden durum rozeti sagda, butonlarin arasinda kucuk bir
+              etiketti; "bu ariza acik mi, atandi mi, ne kadardir suruyor"
+              sorusu ekranin uc ayri yerinden toplanmak zorundaydi. Artik
+              hat adinin hemen altinda, tek bakista okunan bir serit. */}
+          <div className="fx-head-state">
+            <span className={`fx-state fx-state--${f.status}`}>
+              <span className="fx-state-dot" aria-hidden="true" />
+              {t(`faults.status.${f.status}`, { defaultValue: f.status })}
+            </span>
+            <span className="fx-state-time">
+              <Timer size={13} strokeWidth={2.3} />
+              <strong>{fmtElapsed(f.opened_at, now)}</strong>
+              {t("faults.card.stateElapsed")}
+            </span>
+            {hasLocation ? (
+              <span className="fx-state-tag">
+                <MapPin size={11} strokeWidth={2.4} />
+                {t("faults.card.locationFound")}
+              </span>
+            ) : (
+              <span className="fx-state-tag fx-state-tag--warn">
+                {t("faults.card.locationUnknown")}
+              </span>
+            )}
+            {/* Ayni hat daha once de arizalandiysa bu bir tekrardir ve
+                mudahalenin onceligini degistirir — basligin yaninda durur. */}
+            {history && history.total > 0 ? (
+              <span className="fx-state-tag fx-state-tag--repeat">
+                <History size={11} strokeWidth={2.4} />
+                {t("faults.card.repeatTag", { count: history.total + 1 })}
+              </span>
+            ) : null}
+          </div>
         </div>
 
         <div className="fx-head-facts">
-          <div className="fx-fact fx-fact--live">
-            <span className="fx-fact-key">
-              <Timer size={12} strokeWidth={2.2} />
-              {t("faults.card.duration")}
-            </span>
-            <span className="fx-fact-val">
-              <span className="fx-live-dot" aria-hidden="true" />
-              {fmtElapsed(f.opened_at, now)}
-            </span>
-          </div>
           <div className="fx-fact">
             <span className="fx-fact-key">{t("faults.card.openedAt")}</span>
             <span className="fx-fact-val">{fmtDateTime(f.opened_at, localeTag)}</span>
@@ -206,18 +332,9 @@ export function ActiveFaultCard({
           </div>
         </div>
 
-        <div className="fx-head-badges">
-          <span className={`fx-badge fx-badge--status-${f.status}`}>
-            {t(`faults.status.${f.status}`, { defaultValue: f.status })}
-          </span>
-          {hasLocation ? (
-            <span className="fx-badge fx-badge--located">
-              <MapPin size={11} strokeWidth={2.4} />
-              {t("faults.card.locationFound")}
-            </span>
-          ) : null}
-        </div>
-
+        {/* "Haritada Gor" KALDIRILDI: ayni modali aciyordu, yani ucuncu bir
+            buton olarak yer kapliyor ama yeni bir sey yapmiyordu. Harita
+            zaten Detay ekraninda. */}
         <div className="fx-head-actions">
           {canAssign ? (
             <button type="button" className="fx-btn fx-btn--primary" onClick={onAssignClick}>
@@ -229,10 +346,6 @@ export function ActiveFaultCard({
             <List size={15} strokeWidth={2.1} />
             {t("faults.card.detailAction")}
           </button>
-          <button type="button" className="fx-btn" onClick={onShowOnMap}>
-            <MapIcon size={15} strokeWidth={2.1} />
-            {t("faults.card.mapAction")}
-          </button>
         </div>
       </header>
 
@@ -241,6 +354,16 @@ export function ActiveFaultCard({
         <section className="fx-zone">
           <div className="fx-zone-head">
             <span className="fx-zone-title">{t("faults.card.zoneTitle")}</span>
+            {/* Ariza tek bir hat kesiminde olmayabilir: bolge bir dallanma
+                diregini kapsiyorsa kol da adaydir. Kac aday oldugu cizime
+                bakmadan once soylenir — ekip kac yer gezecegini bilsin. */}
+            {(branchRows?.length ?? 0) > 0 ? (
+              <span className="fx-zone-candidates">
+                {t("faults.card.candidateSections", {
+                  count: (branchRows?.length ?? 0) + 1
+                })}
+              </span>
+            ) : null}
             {f.zone_length_m != null ? (
               <span className="fx-zone-span">
                 {t("faults.card.uncertainty", {
@@ -250,9 +373,11 @@ export function ActiveFaultCard({
             ) : null}
           </div>
           <FaultPoleStrip
+            lineName={f.line_name}
             poleSeqs={poleSeqs}
             poles={poles}
-            branches={branches}
+            branchRows={branchRows}
+            hiddenBranchCount={hiddenBranchCount}
             segments={segments}
             fromSeq={f.from_pole_seq}
             toSeq={f.to_pole_seq}
@@ -261,12 +386,40 @@ export function ActiveFaultCard({
             zoneStartM={f.zone_start_m}
             zoneEndM={f.zone_end_m}
             alarmsByDevice={alarmsByDevice}
+            faultPhases={faultPhases}
             active
           />
         </section>
 
         <aside className="fx-evidence">
-          {/* --- arizayi acan alarmlar --- */}
+          {/* --- 1. ARIZA KUNYESI ---
+              Panel once "alarm + kollar + sinirlar" seklinde uc ayri kutuydu
+              ve arizanin KENDISI hakkinda tek bir sey yazmiyordu: turu,
+              fazi, akimi, yonu cihazdan geliyor ama hicbiri gorunmuyordu.
+              Kunye bunlari tek bir okunur listede toplar; olmayan satir hic
+              cizilmez — "—" ile dolu bir tablo bilgi tasimaz. */}
+          <div className="fx-ev-block">
+            <h4 className="fx-ev-title">
+              <Activity size={13} strokeWidth={2.3} />
+              {t("faults.card.specTitle")}
+            </h4>
+            {spec.length === 0 ? (
+              <p className="fx-ev-empty">{t("faults.card.specEmpty")}</p>
+            ) : (
+              <dl className="fx-spec">
+                {spec.map((row) => (
+                  <div key={row.key} className="fx-spec-row">
+                    <dt>{row.label}</dt>
+                    <dd className={row.tone ? `fx-spec-val--${row.tone}` : undefined}>
+                      {row.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+
+          {/* --- 2. arizayi acan alarmlar --- */}
           <div className="fx-ev-block">
             <h4 className="fx-ev-title">
               <TriangleAlert size={13} strokeWidth={2.3} />
@@ -311,7 +464,48 @@ export function ActiveFaultCard({
             )}
           </div>
 
-          {/* --- ariza araliginda kalan bransman kollari ---
+          {/* --- 3. BU HAT DAHA ONCE DE ARIZALANDI MI ---
+              Tekrar eden ariza baska bir istir: gecici bir olay degil,
+              cozulmemis bir kok sebep vardir (agac, izolator, kacak). Ekip
+              sahaya giderken bunu bilmeli. */}
+          {history ? (
+            <div className="fx-ev-block">
+              <h4 className="fx-ev-title">
+                <History size={13} strokeWidth={2.3} />
+                {t("faults.card.historyTitle")}
+              </h4>
+              {history.total === 0 ? (
+                <p className="fx-ev-empty">{t("faults.card.historyNone")}</p>
+              ) : (
+                <div className="fx-repeat">
+                  <div className="fx-repeat-head">
+                    <strong>{history.total}</strong>
+                    <span>
+                      {t("faults.card.historyCount", { days: history.windowDays })}
+                    </span>
+                  </div>
+                  <ul className="fx-repeat-list">
+                    {history.sameSection > 0 ? (
+                      <li className="fx-repeat-hit">
+                        {t("faults.card.historySameSection", {
+                          count: history.sameSection
+                        })}
+                      </li>
+                    ) : null}
+                    {history.lastAt ? (
+                      <li>
+                        {t("faults.card.historyLast", {
+                          at: fmtDateTime(history.lastAt, localeTag)
+                        })}
+                      </li>
+                    ) : null}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {/* --- 4. ariza araliginda kalan bransman kollari ---
               Ana hattaki ariza bir dallanma diregini kapsiyorsa o kol da
               enerjisiz kalir; ekip sahaya ciktiginda kolu da kontrol
               etmelidir. Bu bilgi hicbir yerde gorunmuyordu. */}
@@ -348,35 +542,10 @@ export function ActiveFaultCard({
             </div>
           ) : null}
 
-          {/* --- ariza bolgesinin sinirlari --- */}
-          <div className="fx-ev-block">
-            <h4 className="fx-ev-title">{t("faults.card.boundsTitle")}</h4>
-            <div className="fx-bound fx-bound--red">
-              <Zap size={14} strokeWidth={2.3} />
-              <span>
-                <small>{t("faults.card.lastRedLabel")}</small>
-                <strong>{f.last_red_device_name ?? f.last_red_device_code ?? "—"}</strong>
-                {f.zone_length_m != null ? (
-                  <em>
-                    {t("faults.card.distanceAhead", {
-                      span: formatDistanceM(f.zone_length_m)
-                    })}
-                  </em>
-                ) : null}
-              </span>
-            </div>
-            <div className="fx-bound fx-bound--green">
-              <ZapOff size={14} strokeWidth={2.3} />
-              <span>
-                <small>{t("faults.card.firstGreenLabel")}</small>
-                <strong>
-                  {f.first_green_device_name ??
-                    f.first_green_device_code ??
-                    t("faults.card.lineEnd")}
-                </strong>
-              </span>
-            </div>
-          </div>
+          {/* ARIZA BOLGESI SINIRLARI ayri bir kutu DEGIL artik: iki satirlik
+              bir bilgi icin baslikli bir bolum acmak paneli sisiriyordu ve
+              ayni bilgi cizimde zaten kirmizi/yesil cihaz olarak duruyor.
+              Cihaz adlari kunyeye iki satir olarak tasindi. */}
         </aside>
       </div>
     </article>

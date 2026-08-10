@@ -1,10 +1,10 @@
 /**
- * Ariza seridi (hattin yandan gorunusu) GEOMETRISI — saf fonksiyonlar.
+ * Ariza sahnesi (hatlarin yandan gorunusu) GEOMETRISI — saf fonksiyonlar.
  *
  * React'ten AYRI tutuluyor: projenin test kosucusu (esbuild + node:test,
  * jsdom YOK) yalnizca saf mantigi calistirabiliyor ve bu cizimdeki asil risk
  * matematikte — cihaz telin uzerine oturuyor mu, kirmizi parca dogru iki
- * cihazin arasinda mi. Cizim tarafi (SVG) bu modulun ciktisini basar.
+ * cihazin arasinda mi, kol dogru direge asilmis mi.
  *
  * KOORDINAT MODELI
  * ----------------
@@ -12,22 +12,29 @@
  * 4. direk arasinin tam ortasi". Hem cihaz konumu hem ariza sinirlari bu tek
  * olcekte ifade edilir; boylece "su cihazdan su cihaza kadar olan tel" bir
  * dilim islemine indirgenir.
+ *
+ * ILETKEN TRAVERS UCUNA BAGLANIR
+ * ------------------------------
+ * Bir span direk EKSENINDEN degil TRAVERS UCUNDAN travers ucuna gerilir
+ * (`ARM_HALF` kadar iceriden). Direk uzerindeki iki uc arasi ise duz bir
+ * atlama (jumper) ile gecilir. Onceki modelde tel direk ekseninden gecerken
+ * izolatorler traversin uclarinda duruyordu: tel havada asili, izolator
+ * hicbir seyi tutmuyor gibi gorunuyordu.
+ *
+ * UC FAZ = UC AYRI YUKSEKLIK
+ * --------------------------
+ * Uc iletken uc AYRI traverse asilir (master ustte, sat01 ortada, sat02
+ * altta). Ayni yukseklikte yan yana dizildiklerinde sarkma egrileri ust uste
+ * biniyor ve hat tek kalin bir bant gibi okunuyordu; artik hangi telin hangi
+ * faz oldugu tek bakista secilir ve arizali faz kendi telinde kirmizi cizilir.
+ *
+ * COK SATIRLI SAHNE
+ * -----------------
+ * Bir ariza tek bir hat parcasinda olmayabilir: ariza bolgesi bir dallanma
+ * diregini kapsiyorsa kol da adaydir. `buildFaultScene` bu yuzden ANA HAT +
+ * ADAY KOLLARI ust uste satirlar halinde yerlestirir; her satir kendi tam
+ * geometrisine sahiptir ve kol, asili oldugu direge dikey bir bagla baglanir.
  */
-
-/** Ana hattan ayrilan bransman kolu — cizimde ALT KAT olarak gosterilir. */
-export type StripBranch = {
-  lineId: number;
-  name: string;
-  /** Kolun ayrildigi ANA HAT diregi (sequence_no). */
-  atSeq: number;
-  /** Koldaki direk sayisi. */
-  poleCount: number;
-  /** Kolun direkleri (sirali). Cizimde alt katta gercek direk olarak
-   *  gosterilir — kol tek bir cizgi ucu degil, kendi hattidir. */
-  poles?: StripPole[];
-  /** Kolda O AN acik bir ariza var mi — varsa kol kirmizi cizilir. */
-  hasFault?: boolean;
-};
 
 /** Cizimdeki bir direk. `seq` zorunlu; ad/rol varsa etiket ve ipucu zenginlesir. */
 export type StripPole = {
@@ -77,7 +84,7 @@ export type StripGeometry = {
   /** `seqs` ile AYNI sirada direk bilgileri (ad/rol). */
   poles: StripPole[];
   width: number;
-  /** Iletken poligonu (ornekleme noktalari). */
+  /** Iletken poligonu (ornekleme noktalari) — ORTA fazin ekseni. */
   wire: { pos: number; x: number; y: number }[];
   devices: StripDevice[];
   span: StripSpan | null;
@@ -85,91 +92,99 @@ export type StripGeometry = {
   pointAt: (pos: number) => { x: number; y: number };
 };
 
-// ---- Cizim sabitleri (viewBox koordinati) ---------------------------------
-//
-// OLCU: onceki surumde bir span 78 birimdi ve serit 118 birim yuksekti; kart
-// icinde ~520px'e sikistigi icin direkler birbirine giriyor, cihaz isaretleri
-// ust uste biniyordu. Artik span 116 — hat "uzun" okunuyor ve cihaz/faz
-// isaretleri birbirine degmiyor. Yukseklik artisi ise ALTTAKI OLCU SERIDI
-// icin: mesafe artik metin kutusunda degil, cizimin uzerinde.
 // ---------------------------------------------------------------------------
 // SAHNE OLCULERI (viewBox birimi)
 // ---------------------------------------------------------------------------
-// Dizilim YUKARIDAN ASAGIYA:
-//   olcu seridi -> direk (tepe/travers/kafes govde) -> zemin -> direk adlari
-//   -> bransman dali (capraz inis + kendi direkleri)
+// Bir SATIRIN dizilimi YUKARIDAN ASAGIYA:
+//   satir basligi -> olcu seridi -> toprak teli -> uc faz traversi ->
+//   kafes govde -> zemin -> direk adlari
 //
 // OLCU SERIDI EN USTTE: aranacak hat kesimi operatorun ILK okudugu sayi.
-// Altta dururken direk adlariyla bransman etiketleri arasinda kayboluyordu.
-export const STRIP_H = 300;
-export const PAD_X = 52;
+// Altta dururken direk adlariyla kol etiketleri arasinda kayboluyordu.
+// ---------------------------------------------------------------------------
+
+export const PAD_X = 60;
 export const SPAN_W = 132;
 
+/** Satir basligi (hat adi + "N. direkten bransman"). */
+export const ROW_TITLE_Y = 13;
+
 /** Olcu (dimension) cizgisi ve etiketi — direklerin USTUNDE. */
-export const DIM_Y = 30;
-export const DIM_LABEL_Y = 18;
+export const DIM_LABEL_Y = 26;
+export const DIM_Y = 38;
 
 /** Direk tepesi (toprak teli tasiyicisi). */
 export const PEAK_Y = 52;
-/** Ust travers — toprak teli. */
-export const TOP_ARM_Y = 64;
-/** ANA travers — uc faz izolatoru buraya oturur. */
-export const MAIN_ARM_Y = 88;
-/** ANA traverse asilan iletkenler (L1 sol, L3 sag). */
-export const WIRE_Y = 100;
-/** UST traverse asilan iletken (L2 orta).
- *
- * NEDEN IKI SEVIYE: uc fazi ayni yukseklige yan yana dizmek travers
- * araliginda telleri birbirine yaklastiriyordu — sarkma egrileri ust uste
- * binip tek kalin bir bant gibi okunuyordu. Orta fazi ust traverse almak
- * gercek "delta" dizilimidir ve uc teli de ayri ayri gorunur kilar. */
-export const TOP_WIRE_Y = 74;
+/** Toprak teli traversi ve teli. */
+export const GW_ARM_Y = 60;
+export const GW_WIRE_Y = 66;
+
+/** UC FAZ TRAVERSI — yukaridan asagiya master / sat01 / sat02. */
+export const ARM_YS = [78, 104, 130] as const;
+/** Traverse asilan iletken (izolator zinciri boyu kadar asagida). */
+export const WIRE_YS = [88, 114, 140] as const;
+
+/** Referans iletken — `pointAt` bunun uzerinde calisir (ORTA faz). */
+export const WIRE_Y = WIRE_YS[1];
+
 /** Kafes govdenin zemine bastigi yer. */
-export const GROUND_Y = 190;
+export const GROUND_Y = 206;
 /** Direk adlari. */
-export const LABEL_Y = 206;
+export const LABEL_Y = 222;
+
+/** Bir SATIRIN toplam yuksekligi (baslik dahil). */
+export const ROW_H = 238;
+/** Iki satir arasindaki dusey adim — arada bag cizgisine yer kalir. */
+export const ROW_PITCH = 250;
+
+/** Tek satirlik sahnenin yuksekligi (geriye uyum adi). */
+export const STRIP_H = ROW_H;
 
 /** Iletken sarkmasi (katener derinligi). */
-export const SAG = 13;
+export const SAG = 11;
 
-/** Travers yari genisligi — faz izolatorleri buna gore dizilir. */
+/** Travers yari genisligi — iletken travers UCUNA baglanir. */
 export const ARM_HALF = 22;
 /** Ust (toprak) travers yari genisligi. */
-export const TOP_ARM_HALF = 11;
+export const GW_ARM_HALF = 10;
 
-// --- BRANSMAN DALI ---------------------------------------------------------
-// Dal ana direkten CAPRAZ asagi iner ve kendi direklerine baglanir. Onceki
-// surumde yalnizca kesikli bir cizgi + noktaydi; kolun kendi direkleri
-// gorunmuyor, iki kol yan yana gelince etiketleri ust uste biniyordu.
-/** Dalin ana traversten ayrildigi nokta ile dal katı arasindaki capraz inis. */
-export const BRANCH_MAIN_ARM_Y = 240;
-export const BRANCH_WIRE_Y = 248;
-export const BRANCH_GROUND_Y = 276;
-export const BRANCH_LABEL_Y = 288;
-/** Kolun kendi adi — capraz inisin yaninda. */
-export const BRANCH_NAME_Y = 228;
-/** Dal katinda bir direk araligi — ana hattan dar; kol ikincil bilgidir. */
-export const BRANCH_SPAN_W = 86;
+/** Faz anahtarlari — bir SN2 govdesindeki uc sensor, hattin uc fazi. */
+export type PhaseKey = "master" | "sat01" | "sat02";
 
-/** Geriye uyum: eski ad `CROSSARM_Y` ana travers demekti. */
-export const CROSSARM_Y = MAIN_ARM_Y;
+/**
+ * UC ILETKEN — yukaridan asagiya.
+ *
+ * `dy`: referans iletkene (orta faz) gore dusey ofset. Renk TASIMAZLAR:
+ * cizimde renk yalnizca DURUM anlatir (gri = saglam, kirmizi = arizali).
+ * Hangi telin hangi faz oldugu solda duran faz etiketinden okunur.
+ */
+export const PHASE_LINES: { key: PhaseKey; armY: number; wireY: number; dy: number }[] = [
+  { key: "master", armY: ARM_YS[0], wireY: WIRE_YS[0], dy: WIRE_YS[0] - WIRE_Y },
+  { key: "sat01", armY: ARM_YS[1], wireY: WIRE_YS[1], dy: WIRE_YS[1] - WIRE_Y },
+  { key: "sat02", armY: ARM_YS[2], wireY: WIRE_YS[2], dy: WIRE_YS[2] - WIRE_Y }
+];
 
 const SAMPLES = 16;
 
 /**
- * Cizimin SABIT ekran yuksekligi (px).
+ * Bir SATIRIN sabit ekran yuksekligi (px).
  *
- * NEDEN SABIT: SVG `width:100%` ile cizildiginde viewBox oranı korunarak
+ * NEDEN SABIT: SVG `width:100%` ile cizildiginde viewBox orani korunarak
  * esniyordu; yani olcek HATTIN DIREK SAYISINA gore degisiyordu. 6 direkli
  * bir hat kartin genisligine yayilip devasa gorunurken 17 direkli hat ayni
  * alana sikisip minicik kaliyordu — iki ariza karti yan yana
  * KARSILASTIRILAMIYORDU. Artik olcek sabit: bir direk araligi her hatta ayni
- * piksel genisligindedir, cizim sigmazsa yatay kaydirilir.
+ * piksel genisligindedir, cizim sigmazsa yakinlastirilip gezilir.
  */
-export const STRIP_PX_H = 340;
+export const STRIP_PX_H = 300;
 
 /** viewBox birimi -> ekran pikseli. */
-export const PX_PER_UNIT = STRIP_PX_H / STRIP_H;
+export const PX_PER_UNIT = STRIP_PX_H / ROW_H;
+
+/** Cok satirli sahnenin ekranda kaplayabilecegi EN FAZLA yukseklik (px).
+ *  Uc-dort satirli bir sahne bunu asarsa kucultulerek sigdirilir; kart
+ *  sonsuza kadar uzamaz. */
+export const SCENE_MAX_PX_H = 720;
 
 /** Katener yukseklik ofseti: uclarda 0, ortada `SAG`. */
 export function sagAt(t: number): number {
@@ -185,6 +200,11 @@ type Input = {
   toSeq?: number | null;
   lastRedDeviceCode?: string | null;
   firstGreenDeviceCode?: string | null;
+  /** Cihaz/aralik bilgisi olmasa bile TUM hat aday sayilsin mi?
+   *
+   *  Aday kollarda kullanilir: kolun kendi ariza kaydi yoktur ama ana hattaki
+   *  ariza dallanma diregini kapsadigi icin kol bastan sona suphelidir. */
+  wholeLineHot?: boolean;
 };
 
 export function buildStripGeometry({
@@ -194,7 +214,8 @@ export function buildStripGeometry({
   fromSeq,
   toSeq,
   lastRedDeviceCode,
-  firstGreenDeviceCode
+  firstGreenDeviceCode,
+  wholeLineHot
 }: Input): StripGeometry {
   const uniq = Array.from(new Set(poleSeqs)).sort((a, b) => a - b);
   const seqs =
@@ -213,24 +234,37 @@ export function buildStripGeometry({
   const xOf = (idx: number) => PAD_X + idx * step;
   const idxOf = (seq: number) => seqs.indexOf(seq);
 
+  // Iletken travers UCUNDAN travers ucuna gerilir; direk uzerindeki iki uc
+  // arasi atlama (jumper) ile gecilir. Kisa spanlarda travers payi span'i
+  // yutmasin diye ust sinir konur.
+  const attach = Math.min(ARM_HALF, step > 0 ? step * 0.28 : ARM_HALF);
+
   const pointAt = (pos: number) => {
     const s = Math.max(0, Math.min(Math.max(0, count - 2), Math.floor(pos)));
     const tt = Math.max(0, Math.min(1, pos - s));
-    const x1 = xOf(s);
-    const x2 = xOf(s + 1);
+    const x1 = xOf(s) + attach;
+    const x2 = xOf(s + 1) - attach;
     return { x: x1 + (x2 - x1) * tt, y: WIRE_Y + sagAt(tt) };
   };
 
-  // Iletken poligonu — span basina SAMPLES nokta, bitisler tekrarlanmaz.
+  // Iletken poligonu — span basina SAMPLES nokta. Span SONU ile bir sonraki
+  // span BASI ayni `pos`u paylasir ama farkli x'tedir (biri sol travers ucu,
+  // digeri sag): aradaki duz parca direk uzerindeki ATLAMADIR. Bu yuzden
+  // noktalar `pointAt` uzerinden uretilmez — `pointAt(s+1)` bir sonraki
+  // spanin BASINI dondurur ve span sonu kaybolurdu.
   const wire: { pos: number; x: number; y: number }[] = [];
+  // Hat basindaki gerdirme: tel ilk traversin SOL ucunda baslar.
+  wire.push({ pos: 0, x: xOf(0) - attach, y: WIRE_Y });
   for (let s = 0; s < count - 1; s += 1) {
-    const last = s === count - 2 ? SAMPLES : SAMPLES - 1;
-    for (let i = 0; i <= last; i += 1) {
+    const x1 = xOf(s) + attach;
+    const x2 = xOf(s + 1) - attach;
+    for (let i = 0; i <= SAMPLES; i += 1) {
       const tt = i / SAMPLES;
-      const p = pointAt(s + tt);
-      wire.push({ pos: s + tt, x: p.x, y: p.y });
+      wire.push({ pos: s + tt, x: x1 + (x2 - x1) * tt, y: WIRE_Y + sagAt(tt) });
     }
   }
+  // Hat sonundaki gerdirme.
+  if (count > 1) wire.push({ pos: count - 1, x: xOf(count - 1) + attach, y: WIRE_Y });
   if (wire.length === 0) wire.push({ pos: 0, x: xOf(0), y: WIRE_Y });
 
   // Cihazlar — segmentlerdeki gercek konumlariyla.
@@ -258,7 +292,7 @@ export function buildStripGeometry({
     // parca TANIMLAMAZ (bkz. `onBranch`): gordugu ariza kolun asagisindadir.
     const anaUc = iA !== -1 ? iA : iB;
     const digerUc = iA !== -1 ? iB : iA;
-    if (anaUc === -1) continue;  // iki uc da bu hatta degil: kayit bu cizime ait degil
+    if (anaUc === -1) continue; // iki uc da bu hatta degil: kayit bu cizime ait degil
     if (digerUc === -1) {
       devices.push({
         code,
@@ -303,6 +337,10 @@ export function buildStripGeometry({
     const iB = idxOf(Math.max(fromSeq, toSeq));
     if (iA !== -1 && iB !== -1 && iB > iA) span = { a: iA, b: iB, byDevice: false };
   }
+  if (span === null && wholeLineHot && count > 1) {
+    // ADAY KOL: kendi kaydi yok, ama bastan sona suphelidir.
+    span = { a: 0, b: count - 1, byDevice: false };
+  }
 
   // Direk bilgileri seqs ile AYNI sirada; kaydi olmayan direk icin yalnizca
   // sira numarasi tasiyan bir yer tutucu uretilir (cizim hep tam kalsin).
@@ -319,17 +357,167 @@ export function toPath(pts: { x: number; y: number }[]): string {
 
 /** Arizali parcanin path'i — uclar TAM cihaz konumunda baslar/biter.
  *
- * `dx`: faz ofseti. Uc iletken ayri izolator noktalarindan gectigi icin
- * arizali parca da hangi FAZIN telinde ise oraya cizilir; tek bir orta
- * cizgide gostermek "hangi faz" bilgisini gorselden siler.
+ * `dy`: faz ofseti. Uc iletken uc AYRI traverse asili oldugu icin arizali
+ * parca da hangi FAZIN telinde ise oraya cizilir; tek bir cizgide gostermek
+ * "hangi faz" bilgisini gorselden siler.
  */
-export function hotPathOf(geo: StripGeometry, dx = 0, dy = 0): string {
+export function hotPathOf(geo: StripGeometry, dy = 0): string {
   if (!geo.span) return "";
   const inner = geo.wire.filter((p) => p.pos > geo.span!.a && p.pos < geo.span!.b);
-  const kaydir = (pt: { x: number; y: number }) => ({ x: pt.x + dx, y: pt.y + dy });
+  const kaydir = (pt: { x: number; y: number }) => ({ x: pt.x, y: pt.y + dy });
   return toPath([
     kaydir(geo.pointAt(geo.span.a)),
     ...inner.map(kaydir),
     kaydir(geo.pointAt(geo.span.b))
   ]);
+}
+
+// ---------------------------------------------------------------------------
+// COK SATIRLI SAHNE
+// ---------------------------------------------------------------------------
+
+/** Bir cihazda ACIK olan alarmlarin faz kaynaklari. */
+export type StripDeviceAlarms = {
+  /** "master" | "sat01" | "sat02" — alarmi olan kaynaklar. */
+  sources: string[];
+  /** Alarm basliklari (tooltip'te ilki gosterilir). */
+  titles: string[];
+};
+
+/**
+ * Sahnedeki bir HAT SATIRI.
+ *
+ * Ana hat + ariza bolgesine denk gelen her aday kol icin bir tane uretilir.
+ * "Ariza su iki cihaz arasinda" demek, o araliktaki bir dallanma diregine
+ * asili kolun da aday oldugu anlamina gelir — ekip hangi kolu gezecegini
+ * ancak kolu CIZILMIS gorurse bilir.
+ */
+export type FaultRowInput = {
+  /** Satir anahtari — kol satirlari `parentKey` ile buna baglanir. */
+  key: string;
+  kind: "main" | "branch";
+  lineId?: number | null;
+  /** Hat adi — satirin solunda yazar. */
+  title: string;
+  poleSeqs: number[];
+  poles?: StripPole[];
+  segments?: StripSegment[];
+  fromSeq?: number | null;
+  toSeq?: number | null;
+  lastRedDeviceCode?: string | null;
+  firstGreenDeviceCode?: string | null;
+  zoneStartM?: number | null;
+  zoneEndM?: number | null;
+  /** Arizali faz kaynaklari. Bos = bilinmiyor (uc tel de vurgulanir). */
+  faultPhases?: string[];
+  alarmsByDevice?: Record<string, StripDeviceAlarms>;
+  /** Ust satirin anahtari (kol satirlarinda). */
+  parentKey?: string | null;
+  /** Ust satirdaki dallanma diregi (sequence_no). */
+  parentSeq?: number | null;
+  /** Dallanma direginin adi — bag etiketinde gosterilir. */
+  parentPoleName?: string | null;
+  /** Kolun KENDI acik ariza kaydi var mi (dogrulandi) yoksa aday mi? */
+  confirmed?: boolean;
+  /** Satir aktif bir arizaya mi ait (kirmizi) yoksa gecmise mi (gri)? */
+  active?: boolean;
+};
+
+export type FaultRow = FaultRowInput & {
+  index: number;
+  geo: StripGeometry;
+  /** Satirin sahne icindeki sol-ust kosesi. */
+  x0: number;
+  y0: number;
+  /** Ust satirdaki dallanma direginin sahne koordinati (kol satirlarinda). */
+  link: { fromX: number; fromY: number; toX: number; toY: number } | null;
+};
+
+export type FaultScene = {
+  rows: FaultRow[];
+  width: number;
+  height: number;
+};
+
+/**
+ * Sahnede AYRI BIR SATIR olarak cizilecek aday bransman kolu.
+ *
+ * "Aday" olmasinin iki sebebi olabilir: kolun KENDI acik ariza kaydi vardir
+ * (`confirmed`) ya da ana hattaki ariza bolgesi kolun dallanma diregini
+ * kapsiyordur — kol da enerjisiz kalmis olabilir, ekip orayi da gezmeli.
+ */
+export type StripBranchRow = {
+  lineId: number;
+  name: string;
+  /** Hangi satirdan ayriliyor: null/undefined = ana hat, degilse ust kolun id'si. */
+  parentLineId?: number | null;
+  /** Ust satirdaki dallanma diregi (sequence_no). */
+  atSeq: number;
+  /** Dallanma direginin adi — satir alt basliginda gecer. */
+  atPoleName?: string | null;
+  poleSeqs: number[];
+  poles?: StripPole[];
+  segments?: StripSegment[];
+  /** Kolun KENDI ariza kaydindan gelen sinirlar (varsa). */
+  fromSeq?: number | null;
+  toSeq?: number | null;
+  lastRedDeviceCode?: string | null;
+  firstGreenDeviceCode?: string | null;
+  zoneStartM?: number | null;
+  zoneEndM?: number | null;
+  faultPhases?: string[];
+  alarmsByDevice?: Record<string, StripDeviceAlarms>;
+  /** Kolda kendi acik ariza kaydi var mi — bolge KESIN cizilir. */
+  confirmed: boolean;
+};
+
+/**
+ * Satirlari ust uste yerlestirir ve her kolu asili oldugu direge baglar.
+ *
+ * Kol satiri, dallanma direginin TAM ALTINDAN baslar (`x0` buna gore kayar):
+ * bag cizgisi dikey iner ve "bu kol su direkten ciktiyor" iliskisi cizimden
+ * okunur — metin aciklamasina gerek kalmaz.
+ */
+export function buildFaultScene(inputs: FaultRowInput[]): FaultScene {
+  const rows: FaultRow[] = [];
+  let y = 0;
+
+  for (const [index, input] of inputs.entries()) {
+    const geo = buildStripGeometry({
+      poleSeqs: input.poleSeqs,
+      poles: input.poles,
+      segments: input.segments,
+      fromSeq: input.fromSeq,
+      toSeq: input.toSeq,
+      lastRedDeviceCode: input.lastRedDeviceCode,
+      firstGreenDeviceCode: input.firstGreenDeviceCode,
+      // Aday kol: kendi kaydi yoksa bastan sona suphelidir.
+      wholeLineHot: input.kind === "branch" && !input.confirmed
+    });
+
+    let x0 = 0;
+    let link: FaultRow["link"] = null;
+    const parent = input.parentKey ? rows.find((r) => r.key === input.parentKey) : undefined;
+    if (parent && input.parentSeq != null) {
+      const idx = parent.geo.seqs.indexOf(input.parentSeq);
+      if (idx !== -1) {
+        const anchorX = parent.x0 + parent.geo.xOf(idx);
+        // Kolun ILK diregi (yerel x = PAD_X) dallanma direginin altina gelsin.
+        x0 = Math.max(0, anchorX - PAD_X);
+        link = {
+          fromX: anchorX,
+          fromY: parent.y0 + GROUND_Y,
+          toX: x0 + PAD_X,
+          toY: y + PEAK_Y
+        };
+      }
+    }
+
+    rows.push({ ...input, index, geo, x0, y0: y, link });
+    y += ROW_PITCH;
+  }
+
+  const width = rows.reduce((en, r) => Math.max(en, r.x0 + r.geo.width), 360);
+  const height = rows.length > 0 ? rows[rows.length - 1].y0 + ROW_H : ROW_H;
+  return { rows, width, height };
 }

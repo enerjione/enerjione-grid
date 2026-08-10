@@ -7,6 +7,18 @@
  * ve travers uclarindaki IZOLATOR zinciri. Ucu birlikte, sahaya cikan ekibin
  * her gun gordugu siluete karsilik gelir.
  *
+ * UC TRAVERS = UC FAZ
+ * -------------------
+ * Her faz kendi traversine asilir (master ustte, sat01 ortada, sat02 altta),
+ * en ustte de toprak teli. Onceki surumde iki seviye vardi ve iki faz ayni
+ * yukseklikte yan yana duruyordu: sarkma egrileri ust uste binip hat tek
+ * kalin bir bant gibi okunuyordu. Uc seviye ayrimi hem gercek bir direge
+ * benziyor hem de ARIZALI FAZI kendi telinde gostermeyi mumkun kiliyor.
+ *
+ * Izolator zincirleri traversin IKI ucunda da var: bir span sol travers
+ * ucundan sag travers ucuna gerilir, direk uzerinde ise atlama (jumper)
+ * gecer. Tek uctan asmak "tel havada duruyor" hissi veriyordu.
+ *
  * OLCEKLE DETAY: cizim yakinlastirilabildigi icin ince cizgiler (kafes
  * caprazlari) ayri bir katmanda ve daha ince; uzaklasinca gri bir doku gibi
  * okunur, yakinlasinca yapi netlesir.
@@ -14,19 +26,21 @@
 import {
   ARM_HALF,
   GROUND_Y,
-  MAIN_ARM_Y,
+  GW_ARM_HALF,
+  GW_ARM_Y,
+  GW_WIRE_Y,
   PEAK_Y,
-  TOP_ARM_HALF,
-  TOP_ARM_Y,
-  TOP_WIRE_Y,
-  WIRE_Y
+  PHASE_LINES
 } from "./faultStripGeometry";
 
 type Props = {
   x: number;
   /** Ariza bolgesi icinde mi — kirmizi cizilir. */
   hot: boolean;
-  /** `branch` ise traversten cikan dal kolu isaretlenir. */
+  /** Hangi fazlar arizali (PHASE_LINES sirasinda). Direk ariza bolgesindeyse
+   *  yalnizca bu fazlarin izolator zinciri kirmizi olur. */
+  hotPhases?: boolean[];
+  /** `branch` ise govdenin dibinde dallanma dugumu isaretlenir. */
   role?: string | null;
   onEnter: () => void;
   onLeave: () => void;
@@ -34,6 +48,7 @@ type Props = {
 
 const GREY = "#8b98a9";
 const RED = "#dc2626";
+const BRANCH_INK = "#7c3aed";
 
 /** Govde yari genisligi — tepede dar, zeminde genis (asagi acilir). */
 const UST_YARI = 5;
@@ -58,15 +73,18 @@ function Izolator({ x, y1, y2, renk }: { x: number; y1: number; y2: number; renk
   );
 }
 
-export function StripTower({ x, hot, role, onEnter, onLeave }: Props) {
+export function StripTower({ x, hot, hotPhases, role, onEnter, onLeave }: Props) {
   const renk = hot ? RED : GREY;
   const kalinlik = hot ? 1.9 : 1.5;
 
-  // Kafes caprazlari: govde boyunca X dolgular. Adim sayisi sabit; zoom'da
-  // detay artmasin diye geometri olcekten BAGIMSIZ.
+  // Kafes caprazlari: TEPEDEN zemine kadar X dolgular — traverslerin
+  // hizasindan da gecer, gercek bir kafes direkte oyle. Yalnizca alt govdeyi
+  // doldurmak direkleri tepeden bakinca "iki cizgi" gibi bos birakiyordu.
+  // Adim sayisi sabit; zoom'da detay artmasin diye geometri olcekten BAGIMSIZ.
   const capraz: { x1: number; y1: number; x2: number; y2: number }[] = [];
   const adim = 14;
-  for (let y = MAIN_ARM_Y + 6; y < GROUND_Y - adim; y += adim) {
+  const govdeBas = PEAK_Y + 4;
+  for (let y = govdeBas; y < GROUND_Y - adim; y += adim) {
     const w1 = yariGenislik(y);
     const w2 = yariGenislik(y + adim);
     capraz.push({ x1: x - w1, y1: y, x2: x + w2, y2: y + adim });
@@ -74,9 +92,8 @@ export function StripTower({ x, hot, role, onEnter, onLeave }: Props) {
   }
 
   const wAlt = yariGenislik(GROUND_Y);
-  const wArm = yariGenislik(MAIN_ARM_Y);
-  const wTop = yariGenislik(TOP_ARM_Y);
   const wPeak = yariGenislik(PEAK_Y);
+  const wGw = yariGenislik(GW_ARM_Y);
 
   return (
     <g
@@ -110,66 +127,107 @@ export function StripTower({ x, hot, role, onEnter, onLeave }: Props) {
         {/* Asagi acilan iki ana ayak. */}
         <line x1={x - wPeak} y1={PEAK_Y} x2={x - wAlt} y2={GROUND_Y} />
         <line x1={x + wPeak} y1={PEAK_Y} x2={x + wAlt} y2={GROUND_Y} />
-        {/* Yatay kusaklar — kafesin katlari. */}
-        <line x1={x - wTop} y1={TOP_ARM_Y} x2={x + wTop} y2={TOP_ARM_Y} />
-        <line x1={x - wArm} y1={MAIN_ARM_Y} x2={x + wArm} y2={MAIN_ARM_Y} />
-        <line
-          x1={x - yariGenislik(GROUND_Y - 34)}
-          y1={GROUND_Y - 34}
-          x2={x + yariGenislik(GROUND_Y - 34)}
-          y2={GROUND_Y - 34}
-        />
         {/* Ayak tabanlari. */}
         <line x1={x - wAlt - 3} y1={GROUND_Y} x2={x - wAlt + 3} y2={GROUND_Y} />
         <line x1={x + wAlt - 3} y1={GROUND_Y} x2={x + wAlt + 3} y2={GROUND_Y} />
+        {/* Zemine yakin kusak. */}
+        <line
+          x1={x - yariGenislik(GROUND_Y - 30)}
+          y1={GROUND_Y - 30}
+          x2={x + yariGenislik(GROUND_Y - 30)}
+          y2={GROUND_Y - 30}
+        />
 
         {/* TEPE: toprak teli tasiyicisi. */}
         <line x1={x} y1={PEAK_Y - 7} x2={x} y2={PEAK_Y} />
         <line x1={x - wPeak} y1={PEAK_Y} x2={x + wPeak} y2={PEAK_Y} />
+        {/* TOPRAK TELI TRAVERSI — kisa. */}
+        <line x1={x - GW_ARM_HALF} y1={GW_ARM_Y} x2={x + GW_ARM_HALF} y2={GW_ARM_Y} />
+        <line x1={x - GW_ARM_HALF} y1={GW_ARM_Y} x2={x - GW_ARM_HALF} y2={GW_WIRE_Y} />
+        <line x1={x + GW_ARM_HALF} y1={GW_ARM_Y} x2={x + GW_ARM_HALF} y2={GW_WIRE_Y} />
 
-        {/* UST TRAVERS (toprak teli). */}
-        <line x1={x - TOP_ARM_HALF} y1={TOP_ARM_Y} x2={x + TOP_ARM_HALF} y2={TOP_ARM_Y} />
-        {/* ANA TRAVERS (uc faz). Uclarda hafif yukari donus — gercek
-            traverslerdeki takviye. */}
-        <line x1={x - ARM_HALF} y1={MAIN_ARM_Y} x2={x + ARM_HALF} y2={MAIN_ARM_Y} />
-        <line x1={x - ARM_HALF} y1={MAIN_ARM_Y} x2={x - ARM_HALF} y2={MAIN_ARM_Y - 3.5} />
-        <line x1={x + ARM_HALF} y1={MAIN_ARM_Y} x2={x + ARM_HALF} y2={MAIN_ARM_Y - 3.5} />
-        {/* Travers takviye caprazlari. */}
-        <line x1={x - ARM_HALF} y1={MAIN_ARM_Y} x2={x - wArm} y2={MAIN_ARM_Y - 12} />
-        <line x1={x + ARM_HALF} y1={MAIN_ARM_Y} x2={x + wArm} y2={MAIN_ARM_Y - 12} />
+        {/* UC FAZ TRAVERSI — govdeden iki yana. Uclarda hafif yukari donus
+            ve govdeye takviye caprazi: gercek traverslerdeki tasiyici. */}
+        {PHASE_LINES.map((f) => {
+          const wBody = yariGenislik(f.armY);
+          return (
+            <g key={`arm-${f.key}`}>
+              <line x1={x - ARM_HALF} y1={f.armY} x2={x + ARM_HALF} y2={f.armY} />
+              <line x1={x - ARM_HALF} y1={f.armY} x2={x - ARM_HALF} y2={f.armY - 3.2} />
+              <line x1={x + ARM_HALF} y1={f.armY} x2={x + ARM_HALF} y2={f.armY - 3.2} />
+              <line x1={x - ARM_HALF} y1={f.armY} x2={x - wBody} y2={f.armY - 10} />
+              <line x1={x + ARM_HALF} y1={f.armY} x2={x + wBody} y2={f.armY - 10} />
+            </g>
+          );
+        })}
       </g>
 
-      {/* IZOLATOR ZINCIRLERI — DELTA dizilim.
-          L1 ve L3 ana traversin uclarinda, L2 ust traversten asili. Ucunu
-          ayni yukseklige yan yana dizmek travers araliginda telleri
-          birbirine yaklastiriyordu: sarkma egrileri ust uste binip tek
-          kalin bir bant gibi okunuyordu. */}
-      <Izolator x={x - ARM_HALF} y1={MAIN_ARM_Y} y2={WIRE_Y} renk={renk} />
-      <Izolator x={x + ARM_HALF} y1={MAIN_ARM_Y} y2={WIRE_Y} renk={renk} />
-      <Izolator x={x} y1={TOP_ARM_Y} y2={TOP_WIRE_Y} renk={renk} />
+      {/* IZOLATOR ZINCIRLERI — her traversin IKI ucunda.
+          Span sol ucla sag uc arasinda gerilir; direk uzerinde atlama gecer.
+          Arizali faz, direk ariza bolgesindeyse kendi zincirinde kirmizi
+          gorunur — "hangi faz" bilgisi direkte de okunur. */}
+      {PHASE_LINES.map((f, i) => {
+        const fazRenk = hot && (hotPhases?.[i] ?? true) ? RED : GREY;
+        return (
+          <g key={`ins-${f.key}`}>
+            <Izolator x={x - ARM_HALF} y1={f.armY} y2={f.wireY} renk={fazRenk} />
+            <Izolator x={x + ARM_HALF} y1={f.armY} y2={f.wireY} renk={fazRenk} />
+            {/* Atlama (jumper): iki izolator arasini direk uzerinden gecer. */}
+            <line
+              x1={x - ARM_HALF}
+              y1={f.wireY}
+              x2={x + ARM_HALF}
+              y2={f.wireY}
+              stroke={fazRenk}
+              strokeWidth={hot && (hotPhases?.[i] ?? true) ? 1.8 : 1.3}
+              strokeLinecap="round"
+              opacity={0.9}
+            />
+          </g>
+        );
+      })}
 
-      {/* BRANSMAN AYRILMA NOKTASI — topolojik dugum.
-          Dal ana traversten ayrilir; burada gorunen sey o ayrilmanin
-          KAYNAGI: gövdeden sag yana uzanan kisa bir kol ve ucunda dugum.
-          Dalin kendisi (capraz inis + kol direkleri) sahnenin alt katinda
-          cizilir. */}
+      {/* TOPRAK TELI govde uzerinden gecer. */}
+      <line
+        x1={x - GW_ARM_HALF}
+        y1={GW_WIRE_Y}
+        x2={x + GW_ARM_HALF}
+        y2={GW_WIRE_Y}
+        stroke="#cbd5e1"
+        strokeWidth={0.9}
+        strokeLinecap="round"
+      />
+      <line
+        x1={x - wGw}
+        y1={GW_ARM_Y}
+        x2={x + wGw}
+        y2={GW_ARM_Y}
+        stroke={renk}
+        strokeWidth={kalinlik}
+        strokeLinecap="round"
+      />
+
+      {/* BRANSMAN DUGUMU — bu direkten bir kol ayriliyor.
+          Kolun kendisi sahnenin ALT SATIRINDA tam bir hat olarak cizilir;
+          buradaki dugum yalnizca "ayrilma noktasi burasi" der. */}
       {role === "branch" ? (
-        <g fill="none">
+        <g>
           <line
             x1={x}
-            y1={MAIN_ARM_Y + 6}
-            x2={x + ARM_HALF * 0.7}
-            y2={MAIN_ARM_Y + 6}
-            stroke="#7c3aed"
-            strokeWidth={2}
+            y1={GROUND_Y - 30}
+            x2={x}
+            y2={GROUND_Y}
+            stroke={BRANCH_INK}
+            strokeWidth={1.8}
             strokeLinecap="round"
+            opacity={0.75}
           />
           <circle
-            cx={x + ARM_HALF * 0.7}
-            cy={MAIN_ARM_Y + 6}
-            r={2.6}
+            cx={x}
+            cy={GROUND_Y}
+            r={3}
             fill="#fff"
-            stroke="#7c3aed"
+            stroke={BRANCH_INK}
             strokeWidth={2}
           />
         </g>

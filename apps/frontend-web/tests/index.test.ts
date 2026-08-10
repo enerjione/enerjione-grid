@@ -31,6 +31,14 @@ import "./faultStrip.test";
 // cihazin arasinda olmali. Bir direk kaymasi ekibi yanlis acikliga gonderir.
 import "./faultMapView.test";
 
+// Aday hat kesimleri: ariza bolgesindeki bransman kollari cizime girsin.
+// Gezilmesi gereken bir kolun ekrandan dusmesi sessiz ve agir bir hatadir.
+import "./faultBranchRows.test";
+
+// Tekrar eden ariza sayaci: olmayan tekrari uydurmak da gercegini kacirmak
+// da mudahalenin onceligini yanlis belirler.
+import "./faultRecurrence.test";
+
 // Ana haritada cihaz secilince kamera: hat ekrana sigsin, uzaklasmasin.
 import "./deviceFocus.test";
 

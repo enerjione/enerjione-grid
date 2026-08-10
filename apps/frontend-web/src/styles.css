@@ -23371,6 +23371,28 @@ th.event-col-category {
   font-variant-numeric: tabular-nums;
 }
 
+/* TAZELIK GOSTERGESI — "veri ne kadar guncel".
+   KURALI HIC YOKTU: ikon ile metin arasinda bosluk kalmiyor ("⟳Son
+   guncelleme 22:48"), yazi govde boyutunda geliyor ve sayfanin en ustunde
+   basliktan daha bariz duruyordu. Ikincil bir bilgi ikincil gorunmeli. */
+.fx-freshness {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  margin-bottom: 2px;
+  padding: 3px 10px 3px 8px;
+  border: 1px solid #eef2f7;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.fx-freshness svg { flex-shrink: 0; color: #cbd5e1; }
+
 .fx-spin { animation: fx-spin-rotate 1s linear infinite; }
 @keyframes fx-spin-rotate {
   from { transform: rotate(0deg); }
@@ -23458,6 +23480,60 @@ th.event-col-category {
   flex: 1 1 auto;
   min-height: 0;
 }
+/* ARIZA SECICI — ayni anda birden fazla aktif ariza olabilir.
+   Onceden yalnizca renksiz sekmelerdi ve bir "gecis araci" gibi durmuyordu;
+   operator baska ariza oldugunu fark etmiyordu. Sayac + ileri/geri
+   dugmeleri bunu acikca soyluyor. */
+.fx-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.fx-switch-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+.fx-switch-label svg { color: #ef4444; }
+.fx-switch-label b {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.fx-switch-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+.fx-switch-nav:hover {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
 .fx-fault-tabs {
   display: flex;
   gap: 6px;
@@ -23465,6 +23541,7 @@ th.event-col-category {
   padding-bottom: 2px;
   scrollbar-width: thin;
 }
+.fx-switch > .fx-fault-tabs { flex: 1 1 auto; min-width: 0; padding-bottom: 0; }
 .fx-fault-tab {
   display: flex;
   flex-direction: column;
@@ -23531,9 +23608,12 @@ th.event-col-category {
 .fx-card--closed      { border-left-color: #22c55e; }
 
 /* ---------- 1. UST SERIT ---------- */
+/* Uc sutun: kimlik+durum | olcu/zaman | eylemler.
+   Dorduncu sutun (durum rozetleri) KALDIRILDI — durum artik solda, hat
+   adinin altindaki serit. Rozet butonlarin arasinda kaybolyordu. */
 .fx-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 18px;
   padding: 13px 18px;
@@ -23593,6 +23673,97 @@ th.event-col-category {
   letter-spacing: 0;
 }
 .fx-head-parent svg { color: #cbd5e1; }
+
+/* --- DURUM SERIDI ---
+   Kartin en cok bakilan satiri: ariza acik mi, ne kadardir suruyor, yeri
+   bulundu mu, bu hat kacinci kez arizalaniyor. Hepsi hat adinin ALTINDA tek
+   satirda; onceden uc ayri koseye dagilmisti. */
+.fx-head-state {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 7px;
+}
+.fx-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+.fx-state-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: fx-pulse 1.6s ease-in-out infinite;
+}
+.fx-state--assigned {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #b45309;
+}
+.fx-state--in_progress {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+.fx-state--resolved,
+.fx-state--closed {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+.fx-state--resolved .fx-state-dot,
+.fx-state--closed .fx-state-dot { animation: none; }
+
+.fx-state-time {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+.fx-state-time svg { align-self: center; color: #94a3b8; }
+.fx-state-time strong {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+.fx-state-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+  color: #0f766e;
+  white-space: nowrap;
+}
+.fx-state-tag--warn {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+/* Tekrar eden ariza: gecici bir olay degil, cozulmemis bir kok sebep. */
+.fx-state-tag--repeat {
+  background: #fdf4ff;
+  border-color: #f5d0fe;
+  color: #a21caf;
+}
 
 /* --- ariza araligindaki bransman kollari --- */
 .fx-branch-list {
@@ -23791,6 +23962,19 @@ th.event-col-category {
   color: #b45309;
   font-variant-numeric: tabular-nums;
 }
+/* Ariza birden fazla hat kesiminde olabilir (ana hat + bolgedeki bransman
+   kollari). Sayi basligin yaninda durur: ekip kac yeri gezecegini cizime
+   inmeden once gorur. */
+.fx-zone-candidates {
+  margin-right: auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 10.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
 
 /* CIZIM SAHNESI — kaydirma degil ZOOM/PAN.
    Uzun hatlar tek ekrana sigmiyordu; sabit olcekte yatay kaydirmak yerine
@@ -23863,7 +24047,6 @@ th.event-col-category {
   color: #94a3b8;
   pointer-events: none;
 }
-.fx-strip-branch { cursor: pointer; }
 /* Cihaz isareti: imlec hedefi genis, gecis yumusak. */
 .fx-strip-dev,
 .fx-strip-pole {
@@ -23966,15 +24149,23 @@ th.event-col-category {
 }
 
 /* ---------- 3. KANIT PANELI ---------- */
+/* Bolumler arasinda AYRAC var: dort blok (kunye / alarm / gecmis / kollar)
+   yalnizca bosluklarla ayrildiginda hangi basligin hangi icerige ait oldugu
+   karisiyordu. Panel kendi icinde kayar — uzun icerik cizimi asagi itmesin. */
 .fx-evidence {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 13px 16px 14px;
+  gap: 0;
+  padding: 4px 16px 14px;
   border-left: 1px solid #eef2f7;
   background: #fff;
   min-width: 0;
+  max-height: 620px;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
+.fx-ev-block { padding: 11px 0; }
+.fx-ev-block + .fx-ev-block { border-top: 1px solid #f1f5f9; }
 @media (max-width: 1180px) {
   .fx-evidence {
     border-left: 0;
@@ -24070,45 +24261,94 @@ th.event-col-category {
 .fx-phase--sat01 { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
 .fx-phase--sat02 { background: #fff7ed; border-color: #fed7aa; color: #c2410c; }
 
-/* --- ariza bolgesi sinirlari --- */
-.fx-bound {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 7px 0;
-  min-width: 0;
-}
-.fx-bound + .fx-bound { border-top: 1px dashed #eef2f7; }
-.fx-bound > svg { flex-shrink: 0; margin-top: 2px; }
-.fx-bound--red > svg   { color: #dc2626; }
-.fx-bound--green > svg { color: #059669; }
-.fx-bound > span {
+/* --- ARIZA KUNYESI ---
+   Etiket/deger listesi. Iki sutun degil, KACIS'li tek satirlar: dar panelde
+   iki sutun "Öncesi yük akımı" gibi uzun etiketleri ikiye bolup satirlari
+   birbirine karistiriyordu. Nokta cizgisi gozu degere goturur. */
+.fx-spec {
   display: flex;
   flex-direction: column;
+  gap: 1px;
+  margin: 0;
+}
+.fx-spec-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 0;
   min-width: 0;
 }
-.fx-bound small {
-  font-size: 10px;
+.fx-spec-row + .fx-spec-row { border-top: 1px dashed #f1f5f9; }
+.fx-spec dt {
+  flex: 0 1 auto;
+  font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
   color: #94a3b8;
+  white-space: nowrap;
 }
-.fx-bound strong {
-  font-size: 13px;
+/* Etiketle deger arasini dolduran nokta serisi. */
+.fx-spec-row::after {
+  content: "";
+  order: 1;
+  flex: 1 1 auto;
+  min-width: 8px;
+  height: 1px;
+  align-self: center;
+  border-bottom: 1px dotted #e2e8f0;
+}
+.fx-spec dd {
+  order: 2;
+  margin: 0;
+  flex: 0 1 auto;
+  font-size: 12.5px;
   font-weight: 700;
   color: #0f172a;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.fx-bound em {
-  font-style: normal;
-  font-size: 10.5px;
-  font-weight: 600;
-  color: #b45309;
+.fx-spec-val--red   { color: #b91c1c; }
+.fx-spec-val--green { color: #15803d; }
+
+/* --- TEKRAR EDEN ARIZA --- */
+.fx-repeat {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #f5d0fe;
+  border-left: 3px solid #a21caf;
+  background: #fdf9ff;
+}
+.fx-repeat-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.fx-repeat-head strong {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+  color: #a21caf;
   font-variant-numeric: tabular-nums;
 }
+.fx-repeat-head span {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748b;
+}
+.fx-repeat-list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+.fx-repeat-hit { font-weight: 700; color: #a21caf; }
 
 .fx-btn {
   display: inline-flex;
@@ -39280,12 +39520,6 @@ th.event-col-category {
   border: none;
   background: transparent;
 }
-
-
-/* --- Ariza detayi: harita odak secici ---
-   Tek gorunum yetmiyordu: ariza araligina zoom yapinca "bu hattin neresi?"
-   belirsiz kaliyor, tum hatta bakinca ariza noktasi igne ucu kadar
-   kaliyordu. Ucu de ayni haritada, tek tikla. */
 
 /* =========================================================================
    Ariza Analizi (Muhendislik > Izleme > Ariza Analizi)

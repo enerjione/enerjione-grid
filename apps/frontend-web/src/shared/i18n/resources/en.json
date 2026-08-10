@@ -877,7 +877,17 @@
       "zoomOut": "Zoom out",
       "zoomFit": "Fit",
       "zoomHint": "Scroll to zoom, drag to pan",
-      "branchPoles": "Branch with {{count}} poles"
+      "mainLine": "main line",
+      "phaseShort": {
+        "master": "Master",
+        "sat01": "Sat 01",
+        "sat02": "Sat 02"
+      },
+      "branchAtPole": "branches at pole {{pole}}",
+      "branchConfirmed": "Fault confirmed on this branch",
+      "branchSuspect": "Candidate — must be checked",
+      "wholeLineSuspect": "↔ Entire branch is a candidate",
+      "moreBranches": "+{{count}} branch(es) did not fit the drawing"
     },
     "title": "Line Faults",
     "stats": {
@@ -966,6 +976,7 @@
       "durationFinal": "Total fault duration",
       "openTooltip": "Open detail — {{at}}",
       "uncertainty": "{{span}} section",
+      "candidateSections": "{{count}} candidate line sections",
       "causeTitle": "Triggering Alarm",
       "causeEmpty": "The triggering alarm has cleared.",
       "alarmAcked": "acknowledged",
@@ -976,7 +987,40 @@
       "branchesTitle": "Affected Branches",
       "branchAt": "branches at {{pole}}",
       "branchConfirmed": "fault present",
-      "branchCheck": "check"
+      "branchCheck": "check",
+      "stateElapsed": "open",
+      "locationUnknown": "Location undetermined",
+      "repeatTag": "occurrence #{{count}}",
+      "switchLabel": "Active fault",
+      "switchPrev": "Previous fault",
+      "switchNext": "Next fault",
+      "specTitle": "Fault Summary",
+      "specEmpty": "No analysis data received from the device.",
+      "specKind": "Type",
+      "specPhase": "Affected phase",
+      "specDirection": "Direction",
+      "specFaultCurrent": "Fault current",
+      "specLoadCurrent": "Load current before",
+      "specTemp": "Conductor temperature",
+      "specCause": "Cause",
+      "specCauseAuto": "{{cause}} (suggested)",
+      "specSearchSpan": "Search section",
+      "specMeasuredAt": "Measured at",
+      "kind": {
+        "permanent": "Permanent",
+        "transient": "Transient"
+      },
+      "direction": {
+        "green_a": "Forward (Green / A)",
+        "red_b": "Reverse (Red / B)"
+      },
+      "historyTitle": "History of This Line",
+      "historyNone": "No other fault recorded on this line in the last 90 days.",
+      "historyCount": "more fault(s) in the last {{days}} days",
+      "historySameSection": "{{count}} of them in the SAME section — root cause may persist",
+      "historyLast": "Most recent: {{at}}",
+      "specLastRed": "Last detecting",
+      "specFirstGreen": "First not detecting"
     },
     "empty": {
       "errorTitle": "Could not load faults",

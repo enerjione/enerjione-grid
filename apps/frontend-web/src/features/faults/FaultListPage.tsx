@@ -21,10 +21,19 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, Clock, FileText, RefreshCw, TriangleAlert } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  FileText,
+  RefreshCw,
+  TriangleAlert
+} from "lucide-react";
 
-import type { GridSnapshot } from "../../shared/api";
+import { fetchFaultCauses, type GridSnapshot } from "../../shared/api";
 import type {
+  FaultCauseCatalog,
   AlarmEvent,
   DeviceRow,
   FaultComment,
@@ -33,7 +42,9 @@ import type {
   UserRead
 } from "../../shared/types";
 import { ActiveFaultCard } from "./ActiveFaultCard";
-import type { StripBranch, StripPole } from "./FaultPoleStrip";
+import type { StripPole } from "./FaultPoleStrip";
+import { buildBranchRows } from "./branchRows";
+import { buildFaultRecurrence } from "./faultRecurrence";
 import { FaultHistoryTable } from "./FaultHistoryTable";
 
 type Props = {
@@ -115,10 +126,29 @@ export function FaultListPage({
   const { t, i18n } = useTranslation();
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
   const [tab, setTab] = useState<"active" | "history">("active");
+
+  /** Sebep katalogu — kartta sebep ETIKETINI gostermek icin. Backend tek
+   *  kaynak (`app/data/fault_causes.py`); frontend'e gomulseydi ikisi
+   *  ayrisir ve arayuzde secilen kod backend'de taninmaz olurdu. */
+  const [causeCatalog, setCauseCatalog] = useState<FaultCauseCatalog | null>(null);
+  useEffect(() => {
+    let iptal = false;
+    fetchFaultCauses(accessToken)
+      .then((k) => {
+        if (!iptal) setCauseCatalog(k);
+      })
+      .catch(() => {
+        // Katalog alinamazsa sebep etiketi yerine hicbir sey gosterilmez;
+        // liste calismaya devam eder.
+        if (!iptal) setCauseCatalog(null);
+      });
+    return () => {
+      iptal = true;
+    };
+  }, [accessToken]);
   // Detay artik MODAL degil, kendi sekmesinde bir sayfa (bkz.
-  // FaultDetailPage). Modal sekme sisteminde yer almadigi icin
-  // yenilemede kayboluyor ve iki arizayi yan yana koymayi imkansiz
-  // kiliyordu.
+  // FaultDetailPage). Modal sekme sisteminde yer almadigi icin yenilemede
+  // kayboluyor ve iki arizayi yan yana koymayi imkansiz kiliyordu.
 
   // Canli sure sayaci — kartlardaki "x sa y dk" guncel kalsin. Kart sayisi
   // az, 30sn'lik tick yeterli (ms hassasiyet anlamsiz).
@@ -185,45 +215,19 @@ export function FaultListPage({
     return m;
   }, [gridSnapshot]);
 
-  /** line_id -> o hattan ayrilan bransman kollari (cizimde dal olarak
-   *  gosterilir). Kol AYRI bir Line'dir ve `branched_from_pole_id` ile ana
-   *  hattaki dallanma diregine baglanir. */
-  const branchesByLine = useMemo(() => {
-    const m = new Map<number, StripBranch[]>();
-    // Kolda kendi ariza kaydi varsa cizimde kirmizi gorunmeli: ana hattaki
-    // ariza araligina girmese de kol arizali olabilir.
-    const aktifArizaliHatlar = new Set(
-      faults.filter((f) => ACTIVE_STATUSES.has(f.status)).map((f) => f.line_id)
-    );
-    const poleById = new Map((gridSnapshot?.poles ?? []).map((p) => [p.id, p]));
-    for (const ln of gridSnapshot?.lines ?? []) {
-      if (!ln.branched_from_pole_id) continue;
-      const anchor = poleById.get(ln.branched_from_pole_id);
-      if (!anchor) continue;
-      const kolDirekleri = (gridSnapshot?.poles ?? [])
-        .filter((p) => p.line_id === ln.id)
-        .sort((a, b) => a.sequence_no - b.sequence_no);
-      const kol: StripBranch = {
-        lineId: ln.id,
-        name: ln.name,
-        atSeq: anchor.sequence_no,
-        poleCount: kolDirekleri.length,
-        // Kolun KENDI direkleri — dal kati bunlari cizer, kol tek bir
-        // cizgi ucu degil kendi hattidir.
-        poles: kolDirekleri.map((p) => ({
-          seq: p.sequence_no,
-          name: p.name ?? null,
-          role: p.topology_role ?? null
-        })),
-        // Kolda O AN acik bir ariza var mi — varsa dal kirmizi cizilir.
-        hasFault: aktifArizaliHatlar.has(ln.id)
-      };
-      const arr = m.get(anchor.line_id);
-      if (arr) arr.push(kol);
-      else m.set(anchor.line_id, [kol]);
+  /** line_id -> o hatta ACIK ariza kaydi. Aday kollarin kendi bolgesi
+   *  buradan gelir: kolun kaydi varsa cizimde kesin aralik, yoksa kol
+   *  bastan sona aday olarak cizilir. */
+  const openFaultByLine = useMemo(() => {
+    const m = new Map<number, FaultEvent>();
+    for (const f of faults) {
+      if (!ACTIVE_STATUSES.has(f.status)) continue;
+      // Ayni hatta birden fazla bolge olabilir; ilki (en yeni) yeterli —
+      // liste zaten opened_at'e gore sirali gelir.
+      if (!m.has(f.line_id)) m.set(f.line_id, f);
     }
     return m;
-  }, [gridSnapshot, faults]);
+  }, [faults]);
 
   /** Sekmelerde secili aktif ariza. Kayit listeden dusunce (cozuldu) ilk
    *  siradakine duser — bos ekran gostermek yerine. */
@@ -233,6 +237,55 @@ export function FaultListPage({
       activeFaults.find((f) => f.id === activeFaultId) ?? activeFaults[0] ?? null,
     [activeFaults, activeFaultId]
   );
+
+  /** ADAY HAT KESIMLERI — ariza bolgesindeki dallanma direklerinden cikan
+   *  kollar. Cizimde her biri AYRI SATIR olarak tam hat halinde gosterilir;
+   *  ekip kac yeri gezecegini cizimden okur (bkz. branchRows.ts). */
+  const branchScene = useMemo(() => {
+    if (!shownFault || !gridSnapshot) return { rows: [], hidden: 0 };
+    return buildBranchRows({
+      lines: gridSnapshot.lines,
+      poles: gridSnapshot.poles,
+      segments: gridSnapshot.segments.map((s) => ({
+        line_id: s.line_id,
+        from_pole_seq: s.from_pole_seq ?? null,
+        to_pole_seq: s.to_pole_seq ?? null,
+        device_code: s.device_code ?? null,
+        device_name: s.device_name ?? null,
+        device_position_t: s.device_position_t ?? null
+      })),
+      fault: shownFault,
+      openFaultByLine
+    });
+  }, [shownFault, gridSnapshot, openFaultByLine]);
+
+  /** SEBEP ETIKETI — insanin girdigi kod yoksa cihazin onerisi.
+   *  Kod ("tree_contact") operatore hicbir sey soylemez; katalogdan
+   *  cozulmus etiket ("Agac temasi") gosterilir. */
+  const shownCause = useMemo(() => {
+    if (!shownFault || !causeCatalog) return null;
+    const kod = shownFault.cause_code ?? shownFault.auto_cause_code ?? null;
+    if (!kod) return null;
+    const kayit = causeCatalog.causes.find((c) => c.code === kod);
+    if (!kayit) return null;
+    const etiket = i18n.language?.startsWith("tr") ? kayit.label_tr : kayit.label_en;
+    return { label: etiket, suggested: !shownFault.cause_code };
+  }, [shownFault, causeCatalog, i18n.language]);
+
+  /** BU HAT DAHA ONCE DE ARIZALANDI MI — tekrar eden ariza baska bir istir
+   *  (bkz. faultRecurrence.ts). */
+  const shownHistory = useMemo(
+    () => (shownFault ? buildFaultRecurrence(shownFault, faults) : null),
+    [shownFault, faults]
+  );
+
+  /** Aktif arizalar arasinda ileri/geri gezinme. */
+  const shownIndex = shownFault ? activeFaults.findIndex((f) => f.id === shownFault.id) : -1;
+  const gecis = (adim: number) => {
+    if (activeFaults.length < 2 || shownIndex < 0) return;
+    const i = (shownIndex + adim + activeFaults.length) % activeFaults.length;
+    setActiveFaultId(activeFaults[i].id);
+  };
 
   const avgText =
     backendStats && backendStats.avg_resolution_seconds != null
@@ -315,28 +368,60 @@ export function FaultListPage({
              BIRI gorunmeli. Sekmeler bunu kesin yapar: secilen ariza tam
              alani kaplar, digerleri gorunmez (yarim de olsa). */
           <div className="fx-tabs-wrap">
+            {/* ARIZA SECICI
+                Ayni anda birden fazla aktif ariza olabilir ve kart yalnizca
+                BIRINI gosterir. Secici onceden yalnizca renksiz sekmelerdi;
+                "baska ariza da var mi, hangisine bakiyorum" sorusu ekranda
+                cevapsizdi. Artik sayac (2/3) ve ileri/geri dugmeleriyle
+                acikca bir GECIS aracina benziyor; her sekme kendi durum
+                rengini ve suresini tasiyor. */}
             {activeFaults.length > 1 ? (
-              <div className="fx-fault-tabs" role="tablist">
-                {activeFaults.map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={f.id === shownFault.id}
-                    className={`fx-fault-tab${
-                      f.id === shownFault.id ? " is-active" : ""
-                    } fx-fault-tab--${f.status}`}
-                    onClick={() => setActiveFaultId(f.id)}
-                  >
-                    <span className="fx-fault-tab-line">{f.line_name}</span>
-                    <span className="fx-fault-tab-range">
-                      {t("faults.card.rangeText", {
-                        from: f.from_pole_seq ?? "?",
-                        to: f.to_pole_seq ?? "?"
-                      })}
-                    </span>
-                  </button>
-                ))}
+              <div className="fx-switch">
+                <span className="fx-switch-label">
+                  <TriangleAlert size={13} strokeWidth={2.3} />
+                  {t("faults.card.switchLabel")}
+                  <b>
+                    {shownIndex + 1}/{activeFaults.length}
+                  </b>
+                </span>
+                <button
+                  type="button"
+                  className="fx-switch-nav"
+                  onClick={() => gecis(-1)}
+                  aria-label={t("faults.card.switchPrev")}
+                >
+                  <ChevronLeft size={15} strokeWidth={2.4} />
+                </button>
+                <div className="fx-fault-tabs" role="tablist">
+                  {activeFaults.map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={f.id === shownFault.id}
+                      className={`fx-fault-tab${
+                        f.id === shownFault.id ? " is-active" : ""
+                      } fx-fault-tab--${f.status}`}
+                      onClick={() => setActiveFaultId(f.id)}
+                    >
+                      <span className="fx-fault-tab-line">{f.line_name}</span>
+                      <span className="fx-fault-tab-range">
+                        {t("faults.card.rangeText", {
+                          from: f.from_pole_seq ?? "?",
+                          to: f.to_pole_seq ?? "?"
+                        })}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="fx-switch-nav"
+                  onClick={() => gecis(1)}
+                  aria-label={t("faults.card.switchNext")}
+                >
+                  <ChevronRight size={15} strokeWidth={2.4} />
+                </button>
               </div>
             ) : null}
             <ActiveFaultCard
@@ -344,14 +429,16 @@ export function FaultListPage({
               fault={shownFault}
               poleSeqs={poleSeqsByLine.get(shownFault.line_id) ?? []}
               poles={polesByLine.get(shownFault.line_id) ?? []}
-              branches={branchesByLine.get(shownFault.line_id) ?? []}
+              branchRows={branchScene.rows}
+              hiddenBranchCount={branchScene.hidden}
               segments={segmentsByLine.get(shownFault.line_id) ?? []}
               localeTag={localeTag}
               now={now}
               canAssign={canAssign}
+              cause={shownCause}
+              history={shownHistory}
               onOpenDetail={() => onOpenFault(shownFault.id)}
               onAssignClick={() => onOpenFault(shownFault.id)}
-              onShowOnMap={() => onOpenFault(shownFault.id)}
             />
           </div>
         )
