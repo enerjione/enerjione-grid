@@ -12,8 +12,40 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ## [Yayınlanmamış]
 
+---
+
+## [2.55.0] — 2026-08-10
+
+> ### ⚠️ Yükseltmeden önce: SCADA'sı Modbus'tan besleniyorsa okuyun
+>
+> Akım ve açı sinyallerinin **Modbus ölçek katsayısı değişti** (`0.001 → 0.1`).
+> Bu bir düzeltme: eski katsayıyla int16 tavanı **32.767 A** idi, yani bir
+> dağıtım fiderinin normal yükü bile tavana kilitleniyor ve SCADA sonsuza dek
+> aynı sayıyı okuyordu (arıza akımları her zaman 32767).
+>
+> **Yapılması gereken:** Dış Sistemler → Modbus hedefi → *Adres Planı*'nı açın.
+> `⤴` işaretli satırlar ölçeği değişen sinyallerdir; SCADA tarafındaki
+> katsayıyı tablodaki (veya CSV'deki) yeni değerle güncelleyin. Tam çözünürlük
+> istiyorsanız hedefi `float32` formatına alın — o modda ölçek yoktur,
+> mühendislik birimi doğrudan okunur.
+>
+> Etkilenmeyen kurulumlar: Modbus hedefi tanımlı olmayanlar ve zaten `float32`
+> kullananlar.
+
 ### Düzeltildi
 
+- **DNP3 Master Adres'i boş gönderilen cihazlarda haberleşme kesiliyordu.**
+  Gateway yapılandırması ham `dnp3_extended` sözlüğünü okuyordu; v2.54.1
+  penceresinde diske `null` yazılmış cihazlarda alan boş gidiyor, gateway
+  kendi varsayılanına (`DNP3_LOCAL_ADDRESS=1`) düşüyor ve cihaz 100
+  beklediği için çerçeveleri sessizce atıyordu. Artık eksik/`null` kayıtlar
+  varsayılana (100) iyileşiyor.
+- **Cihaz silinemiyordu.** Silme tek transaction içinde o cihaza ait tüm
+  `telemetry_history` satırlarını temizliyordu — 90 günlük pencerede cihaz
+  başına ~4M satır. İstek dakikalarca açık kalıyor, arayüz zaman aşımına
+  uğruyordu. Silme iki faza ayrıldı: senkron kısım (ilişkili küçük kayıtlar +
+  cihaz satırı) milisaniyeler içinde biter ve cihaz arayüzden hemen kaybolur;
+  arşiv temizliği arka plan kuyruğunda yapılır.
 - **Hat arızası bildirimi hiçbir kanaldan gitmiyordu.** Arıza açıldı, e-posta
   ve WhatsApp grubu açıktı, hiçbiri gelmedi. Tek bir hata değil, zincir
   kopukluğu: (1) arıza motoru gönderim yapmaz — satır içi gönderim
