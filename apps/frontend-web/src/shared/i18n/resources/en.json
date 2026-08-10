@@ -2388,7 +2388,10 @@
         "lastData": "Last data:"
       },
       "deviceImageAltPmk": "Horstmann Pole Master Kit device image",
-      "deviceImageAltPmkSet": "Pole Master Kit satellite device image"
+      "deviceImageAltPmkSet": "Pole Master Kit satellite device image",
+      "collapseSets": "Hide sets ({{count}})",
+      "expandSets": "Show sets ({{count}})",
+      "hiddenSets": "{{count}} set(s) hidden — click to show"
     },
     "devices": {
       "title": "Device Management",
@@ -4404,6 +4407,12 @@
     "voltage_loss_all_units": "Voltage Loss All Units"
   },
   "faultAnalytics": {
+    "alarmHeatmap": "Alarm Density by Device and Time",
+    "alarmHeatmapHint": "Rows are devices, columns are time. Several devices darkening in the same column points to a shared event that day, not to the devices.",
+    "alarmHeatmapTruncated": "Showing the {{shown}} noisiest devices; {{total}} devices raised alarms in this window.",
+    "noAlarmHeatmap": "No device raised an alarm in this window.",
+    "heatOnlyNetwork": "No faults in this window — showing the network only",
+    "heatNetworkKey": "Network line",
     "tabFaults": "Faults",
     "tabMap": "Map & Flow",
     "tabSystem": "System Health",

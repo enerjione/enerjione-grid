@@ -296,6 +296,22 @@ export function DeviceDetailPage({
   };
   const sidebarFirmware =
     fwStr ?? (fwNum != null && Number.isFinite(fwNum) ? fmtFirmware(fwNum) : undefined);
+  /** Bu cihazda OLCUM YAPAN uniteler.
+   *
+   *  SN 2.0'da ucuncu unite `master`dir; Pole Master Kit setinde ucu de
+   *  uydudur (sat01/sat02/sat03) ve o kayitta `master.*` telemetrisi HIC
+   *  yoktur. Sabit uclu kullanmak, sette bos bir "Master" kanali gosterip
+   *  gercek ucuncu uniteyi (Satellite 03) tamamen gizliyordu — pil rozeti,
+   *  seri no ve "Tumu" karti dahil.
+   */
+  const measuringSources = useMemo<SignalSource[]>(
+    () =>
+      (device?.parentDeviceId ?? null) !== null
+        ? ["sat01", "sat02", "sat03"]
+        : ["master", "sat01", "sat02"],
+    [device]
+  );
+
   const serialOf = (src: SignalSource): string | undefined => {
     const n = numVal(`${src}.serial_number`);
     if (n != null && Number.isFinite(n) && n > 0) return String(Math.round(n));
@@ -303,15 +319,13 @@ export function DeviceDetailPage({
   };
   const channelSerials = useMemo<Partial<Record<SignalSource, string>>>(() => {
     const out: Partial<Record<SignalSource, string>> = {};
-    const m = serialOf("master");
-    const s1 = serialOf("sat01");
-    const s2 = serialOf("sat02");
-    if (m) out.master = m;
-    if (s1) out.sat01 = s1;
-    if (s2) out.sat02 = s2;
+    for (const src of measuringSources) {
+      const seri = serialOf(src);
+      if (seri) out[src] = seri;
+    }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [valueByKey]);
+  }, [valueByKey, measuringSources]);
 
   // Kanal pil yuzdeleri. Master: device.batteryPercent (hesaplanmis). Satellite:
   // battery_voltage_satellite voltajindan basit Li-ion oran (3.2V=%0, 4.2V=%100).
@@ -323,14 +337,20 @@ export function DeviceDetailPage({
   };
   const channelBattery = useMemo<Partial<Record<SignalSource, number>>>(() => {
     const out: Partial<Record<SignalSource, number>> = {};
-    if (device && Number.isFinite(device.batteryPercent)) out.master = device.batteryPercent;
-    const s1 = voltToPct(numVal("sat01.battery_voltage_satellite"));
-    const s2 = voltToPct(numVal("sat02.battery_voltage_satellite"));
-    if (s1 != null) out.sat01 = s1;
-    if (s2 != null) out.sat02 = s2;
+    for (const src of measuringSources) {
+      // `master` kanalinin pili cihaz kaydindan gelir (hesaplanmis yuzde);
+      // uydularinki kendi batarya gerilimlerinden turetilir. Kit setinde
+      // `master` bir olcum unitesi DEGIL, o yuzden listede de yok.
+      if (src === "master") {
+        if (device && Number.isFinite(device.batteryPercent)) out.master = device.batteryPercent;
+        continue;
+      }
+      const pct = voltToPct(numVal(`${src}.battery_voltage_satellite`));
+      if (pct != null) out[src] = pct;
+    }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [valueByKey, device]);
+  }, [valueByKey, device, measuringSources]);
 
   const sourceCounts = useMemo<Record<SignalSource, number>>(() => {
     const c = Object.fromEntries(
@@ -473,7 +493,13 @@ export function DeviceDetailPage({
         ) : null}
 
         {activeTab === "all" ? (
-          <DeviceAllSignalsTab device={device} values={values} gwOnline={gwOnline} sourceCounts={sourceCounts} />
+          <DeviceAllSignalsTab
+            device={device}
+            values={values}
+            gwOnline={gwOnline}
+            sourceCounts={sourceCounts}
+            sources={measuringSources}
+          />
         ) : null}
 
         {activeTab === "poleMaster" && parentDevice ? (

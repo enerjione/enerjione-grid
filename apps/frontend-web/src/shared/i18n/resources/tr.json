@@ -2385,7 +2385,10 @@
         "lastData": "Son veri:"
       },
       "deviceImageAltPmk": "Horstmann Pole Master Kit cihaz görseli",
-      "deviceImageAltPmkSet": "Pole Master Kit uydusu cihaz görseli"
+      "deviceImageAltPmkSet": "Pole Master Kit uydusu cihaz görseli",
+      "collapseSets": "Setleri gizle ({{count}})",
+      "expandSets": "Setleri göster ({{count}})",
+      "hiddenSets": "{{count}} set gizli — göstermek için tıklayın"
     },
     "devices": {
       "title": "Cihaz Yönetimi",
@@ -4401,6 +4404,12 @@
     "voltage_loss_all_units": "Gerilim Kaybı (Tüm Birimler)"
   },
   "faultAnalytics": {
+    "alarmHeatmap": "Cihaz × Zaman Alarm Yoğunluğu",
+    "alarmHeatmapHint": "Satır cihaz, sütun zaman. Aynı sütunda birden çok cihaz koyulaşıyorsa sorun cihazlarda değil o gün yaşanan ortak olaydadır.",
+    "alarmHeatmapTruncated": "En çok alarm üreten {{shown}} cihaz gösteriliyor; pencerede toplam {{total}} cihaz alarm üretti.",
+    "noAlarmHeatmap": "Bu pencerede hiçbir cihaz alarm üretmedi.",
+    "heatOnlyNetwork": "Bu pencerede arıza kaydı yok — yalnızca şebeke gösteriliyor",
+    "heatNetworkKey": "Şebeke hattı",
     "tabFaults": "Arızalar",
     "tabMap": "Harita & Akış",
     "tabSystem": "Sistem Sağlığı",

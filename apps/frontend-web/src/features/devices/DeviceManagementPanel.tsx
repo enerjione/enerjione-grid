@@ -405,6 +405,9 @@ export function DeviceManagementPanel({
   // Setin uydu atamasi — unite sirasiyla uc fiziksel uydu numarasi (1..9).
   // Varsayilan 1-2-3 / 4-5-6 / 7-8-9 ama sahada baska baglanmis olabilir.
   const [satellites, setSatellites] = useState<number[]>([1, 2, 3]);
+  // Daraltilmis kit kayitlari (cihaz kodu). Varsayilan ACIK: kullanici
+  // setleri gormeden once kitin kac seti oldugunu bilmiyor.
+  const [collapsedKits, setCollapsedKits] = useState<Set<string>>(() => new Set());
   // Unite -> faz eslemesi. Bos = "Proje Ayarlari'ndaki konvansiyonu kullan".
   // VARSAYILAN L1/L2/L3: master ilk faza, uydular sirayla digerlerine
   // kelepcelenir — sahadaki standart kurulum sirasi budur. Eskiden ucu de
@@ -1332,13 +1335,60 @@ export function DeviceManagementPanel({
                 const setler = devices
                   .filter((d) => d.parentDeviceId === device.id)
                   .sort((a, b) => (a.subunitIndex ?? 0) - (b.subunitIndex ?? 0));
+                const kapali = collapsedKits.has(device.code);
                 return (
                   <div className="device-group-block" key={device.id}>
-                    {renderDeviceItem(device, false)}
-                    {setler.length > 0 ? (
+                    <div className="device-group-head">
+                      {setler.length > 0 ? (
+                        <button
+                          type="button"
+                          className="device-collapse-btn"
+                          aria-expanded={!kapali}
+                          aria-label={
+                            kapali
+                              ? t("engineering.devicesPanel.expandSets", { count: setler.length })
+                              : t("engineering.devicesPanel.collapseSets", { count: setler.length })
+                          }
+                          title={
+                            kapali
+                              ? t("engineering.devicesPanel.expandSets", { count: setler.length })
+                              : t("engineering.devicesPanel.collapseSets", { count: setler.length })
+                          }
+                          onClick={() =>
+                            setCollapsedKits((onceki) => {
+                              const yeni = new Set(onceki);
+                              if (yeni.has(device.code)) yeni.delete(device.code);
+                              else yeni.add(device.code);
+                              return yeni;
+                            })
+                          }
+                        >
+                          <span className="material-symbols-outlined" aria-hidden="true">
+                            {kapali ? "chevron_right" : "expand_more"}
+                          </span>
+                        </button>
+                      ) : null}
+                      <div className="device-group-head-item">{renderDeviceItem(device, false)}</div>
+                    </div>
+                    {setler.length > 0 && !kapali ? (
                       <div className="device-subunit-list">
                         {setler.map((s) => renderDeviceItem(s, true))}
                       </div>
+                    ) : null}
+                    {setler.length > 0 && kapali ? (
+                      <button
+                        type="button"
+                        className="device-subunit-collapsed"
+                        onClick={() =>
+                          setCollapsedKits((onceki) => {
+                            const yeni = new Set(onceki);
+                            yeni.delete(device.code);
+                            return yeni;
+                          })
+                        }
+                      >
+                        {t("engineering.devicesPanel.hiddenSets", { count: setler.length })}
+                      </button>
                     ) : null}
                   </div>
                 );

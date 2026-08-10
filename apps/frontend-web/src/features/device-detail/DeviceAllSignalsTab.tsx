@@ -11,6 +11,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 import { signalTrust } from "../../shared/signalQuality";
+import { sourceLabel, sourceTone } from "../signals/signalCatalogConstants";
 import type { DeviceRow, SignalLiveRow, SignalSource } from "../../shared/types";
 
 type Props = {
@@ -19,13 +20,23 @@ type Props = {
   gwOnline: boolean;
   /** Her kaynaktaki sinyal sayisi — 0 ise cihaz bagli degil (soluk kart). */
   sourceCounts: Record<SignalSource, number>;
+  /** Bu cihazda OLCUM YAPAN uniteler (modele gore).
+   *
+   *  SN 2.0'da `master` + iki uydu; Pole Master Kit setinde UC UYDU. Sabit
+   *  uclu kullanildiginda sette bos bir "Master" karti ciziliyor, gercek
+   *  ucuncu unite (Satellite 03) ise hic gorunmuyordu. */
+  sources: SignalSource[];
 };
 
-const SOURCES: { key: SignalSource; label: string; tone: string; icon: string }[] = [
-  { key: "master", label: "Master", tone: "master", icon: "dns" },
-  { key: "sat01", label: "Satellite 01", tone: "green", icon: "settings_input_antenna" },
-  { key: "sat02", label: "Satellite 02", tone: "blue", icon: "settings_input_antenna" },
-];
+/** Kaynak -> kart gorseli. Master ana unite (RTU) ikonu, uydular anten. */
+function sourceCard(key: SignalSource): { key: SignalSource; label: string; tone: string; icon: string } {
+  return {
+    key,
+    label: sourceLabel(key),
+    tone: sourceTone(key),
+    icon: key === "master" ? "dns" : "settings_input_antenna"
+  };
+}
 
 const NUMBER_FORMATTER = new Intl.NumberFormat("tr-TR", {
   minimumFractionDigits: 0,
@@ -75,13 +86,21 @@ function batteryClass(pct: number): string {
   return "ok";
 }
 
-export function DeviceAllSignalsTab({ device, values, gwOnline, sourceCounts }: Props) {
+export function DeviceAllSignalsTab({
+  device,
+  values,
+  gwOnline,
+  sourceCounts,
+  sources
+}: Props) {
   const { t } = useTranslation();
+
+  const kartlar = useMemo(() => sources.map(sourceCard), [sources]);
 
   // kaynak -> (suffix -> row). Bu cihazin tum satirlari.
   const bySource = useMemo(() => {
     const m = new Map<SignalSource, Map<string, SignalLiveRow>>();
-    for (const src of SOURCES) m.set(src.key, new Map());
+    for (const src of kartlar) m.set(src.key, new Map());
     for (const r of values) {
       if (r.device_id !== device.id) continue;
       const inner = m.get(r.source as SignalSource);
@@ -90,11 +109,11 @@ export function DeviceAllSignalsTab({ device, values, gwOnline, sourceCounts }: 
       inner.set(i >= 0 ? r.signal_key.slice(i + 1) : r.signal_key, r);
     }
     return m;
-  }, [values, device.id]);
+  }, [values, device.id, kartlar]);
 
   return (
     <div className="device-set">
-      {SOURCES.map((src) => {
+      {kartlar.map((src) => {
         const rows = bySource.get(src.key) ?? new Map();
         const get = (suffix: string): SignalLiveRow | undefined => rows.get(suffix);
         const numOf = (suffix: string): number | undefined => {

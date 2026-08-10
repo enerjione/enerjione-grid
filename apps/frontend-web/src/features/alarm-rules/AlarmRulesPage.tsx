@@ -4,7 +4,9 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
 import { ActiveSwitch } from "../../components/ActiveSwitch";
+import { SOURCES } from "../signals/signalCatalogConstants";
 import type {
+  SignalSource,
   AlarmAggFn,
   AlarmComparator,
   AlarmCompositeExpression,
@@ -171,7 +173,9 @@ export function AlarmRulesPage({
   const [ruleLevelFilter, setRuleLevelFilter] = useState<"all" | AlarmLevel>("all");
 
   // Yeni kural sinyal seçici filtreleri
-  const [pickerSource, setPickerSource] = useState<"master" | "sat01" | "sat02">("master");
+  // Kaynak kumesi MODELE gore degisir (kit setinde `sat03`, fiziksel kitte
+  // `sat09`a kadar); dar bir birlesim tipi yeni modelleri disarida birakirdi.
+  const [pickerSource, setPickerSource] = useState<SignalSource>("master");
   const [pickerSearch, setPickerSearch] = useState("");
   const [pickerSelectedKey, setPickerSelectedKey] = useState<string>("");
 
@@ -212,6 +216,30 @@ export function AlarmRulesPage({
       );
     });
   }, [signals, pickerSource, pickerSearch, form.device_model_filter]);
+
+  /** Model kodu -> insanca okunur ad. Bilinmeyen kod KENDI KODUYLA gosterilir
+   *  — uydurma bir etiket uretmiyoruz. */
+  /** Sinyal secicideki kaynak sekmeleri — SECILI MODELDEN turer.
+   *
+   *  Sabit `master/sat01/sat02` listesi, Pole Master Kit secildiginde
+   *  uydularin cogunu gizliyordu; kit setinde ise olmayan bir "Master"
+   *  sekmesi gosterip bos liste veriyordu. */
+  const pickerSources = useMemo(() => {
+    const secilen = form.device_model_filter?.toString().trim() || "";
+    const kume = new Set(
+      signals.filter((s) => !secilen || s.model === secilen).map((s) => s.source)
+    );
+    return SOURCES.filter((s) => kume.has(s));
+  }, [signals, form.device_model_filter]);
+
+  useEffect(() => {
+    if (pickerSources.length > 0 && !pickerSources.some((s) => s === pickerSource)) {
+      setPickerSource(pickerSources[0]);
+    }
+  }, [pickerSources, pickerSource]);
+
+  const modelLabel = (kod: string): string =>
+    deviceModels.find((m) => m.code === kod)?.label ?? kod;
 
   const selectedRule = useMemo(
     () => rules.find((r) => r.id === selectedRuleId) ?? null,
@@ -584,8 +612,32 @@ export function AlarmRulesPage({
                 </h4>
                 {mode === "create" ? (
                   <>
+                    {/* CIHAZ TURU ONCE SECILIR: sinyaller modeller arasinda
+                        ORTAK DEGIL (kitte `solar_power` var, SN 2.0'da yok;
+                        SN 2.0'da `nominal_voltage` var, kitte yok). Model
+                        secilmeden sinyal secmek, o modelde hic tetiklenmeyecek
+                        bir kural yazmaya acik kapi birakirdi. */}
+                    <label className="rules-v3-picker-model">
+                      {t("engineering.alarmRules.deviceModelScope")}
+                      <select
+                        value={form.device_model_filter ?? ""}
+                        onChange={(event) =>
+                          setForm({ ...form, device_model_filter: event.target.value })
+                        }
+                        disabled={!canEdit}
+                      >
+                        <option value="">
+                          {t("engineering.alarmRules.deviceModelScopeAll")}
+                        </option>
+                        {deviceModels.map((opt) => (
+                          <option key={opt.code} value={opt.code}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <div className="rules-v2-signals-tabs">
-                      {(["master", "sat01", "sat02"] as const).map((src) => (
+                      {pickerSources.map((src) => (
                         <button
                           key={src}
                           type="button"
@@ -1189,6 +1241,24 @@ export function AlarmRulesPage({
                       <span className={`rule-level-badge level-${rule.level}`}>
                         {LEVEL_LABEL[rule.level]}
                       </span>
+                    </td>
+                    <td>
+                      {/* CIHAZ TURU: kural hangi modelde degerlendiriliyor.
+                          Sinyaller modeller arasinda ORTAK DEGIL; kapsami bos
+                          birakilmis bir kural tum modellerde calisir ve bunun
+                          listede acikca gorunmesi gerekir. */}
+                      {rule.device_model_filter ? (
+                        <span
+                          className="badge badge-model"
+                          title={t("engineering.alarmRules.deviceModelScope")}
+                        >
+                          {modelLabel(rule.device_model_filter)}
+                        </span>
+                      ) : (
+                        <span className="rules-v3-muted">
+                          {t("engineering.alarmRules.deviceModelScopeAll")}
+                        </span>
+                      )}
                     </td>
                     <td>
                       {sig ? (
