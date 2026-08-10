@@ -372,6 +372,9 @@ def tum_analiz(
             db, days=days, visible_line_ids=visible_line_ids
         ),
         "monthly_trend": aylik_egilim(db, days=days, visible_line_ids=visible_line_ids),
+        # Bolge -> Hat -> Faz akisi. Uc ayri cubuk grafiginin gostermedigi
+        # sey: arizalarin NEREDE toplandigi.
+        "sankey": sankey_akisi(db, days=days, visible_line_ids=visible_line_ids),
     }
 
 
@@ -533,4 +536,61 @@ def sistem_sagligi(
         "flapping_devices": haberlesme_kararsizligi(
             db, days=days, visible_device_ids=visible_device_ids
         ),
+    }
+
+
+def sankey_akisi(
+    db: Session, *, days: int, visible_line_ids: set[int] | None
+) -> dict:
+    """Bolge -> Hat -> Faz akisi (Sankey diyagrami icin).
+
+    NEDEN UC KADEME: "hangi hatta cok ariza var" tek basina bir sayidir;
+    Sankey'in kattigi sey AKISIN NEREYE GITTIGI. Bolgeden hatta, hattan faza
+    inen kalinliklar "su bolgedeki arizalarin cogu tek bir hatta ve o hattin
+    da A fazinda toplaniyor" gibi bir deseni tek bakista gosterir — uc ayri
+    cubuk grafigi bunu gostermez.
+
+    FAZI OLMAYAN kayitlar akisa GIRMEZ. "Bilinmiyor" diye bir dugum eklemek,
+    olcum eksikligini akisin bir kolu gibi gosterirdi; Sankey'de kalinlik
+    "gercekten oraya giden miktar" demektir.
+
+    Dugum adlari benzersiz olmali (echarts dugumleri ADA gore eslestirir);
+    bu yuzden kademe oneki tasirlar: "B:Merkez", "H:ANA HAT", "F:A".
+    """
+    base = _temel_sorgu(days, visible_line_ids).subquery()
+    f = base.c
+    rows = db.execute(
+        select(
+            Region.name.label("bolge"),
+            Line.name.label("hat"),
+            f.phase,
+            func.count().label("adet"),
+        )
+        .select_from(base)
+        .join(Line, Line.id == f.line_id)
+        .join(Region, Region.id == f.region_id)
+        .where(f.phase.is_not(None))
+        .group_by(Region.name, Line.name, f.phase)
+    ).all()
+
+    dugumler: dict[str, str] = {}   # ad -> kademe
+    baglar: dict[tuple[str, str], int] = {}
+
+    def ekle(kaynak: str, hedef: str, adet: int) -> None:
+        baglar[(kaynak, hedef)] = baglar.get((kaynak, hedef), 0) + adet
+
+    for bolge, hat, faz, adet in rows:
+        b, h, fz = f"B:{bolge}", f"H:{hat}", f"F:{str(faz).upper()}"
+        dugumler[b] = "region"
+        dugumler[h] = "line"
+        dugumler[fz] = "phase"
+        ekle(b, h, int(adet))
+        ekle(h, fz, int(adet))
+
+    return {
+        "nodes": [{"name": ad, "tier": kademe} for ad, kademe in dugumler.items()],
+        "links": [
+            {"source": k, "target": h, "value": v}
+            for (k, h), v in sorted(baglar.items(), key=lambda x: -x[1])
+        ],
     }

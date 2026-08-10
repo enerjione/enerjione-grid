@@ -432,3 +432,70 @@ def test_bos_veride_sistem_sagligi_COKMEZ(db):
     assert sonuc["alarm_summary"]["total"] == 0
     assert sonuc["top_rules"] == []
     assert sonuc["flapping_devices"] == []
+
+
+# ---- Sankey: Bolge -> Hat -> Faz akisi -------------------------------------
+
+def test_sankey_UC_KADEME_akis_uretir(db):
+    s = Saha(db)
+    s.ariza("HAT-A", faz="a")
+    s.ariza("HAT-A", faz="a")
+    s.ariza("HAT-B", faz="c")
+
+    akis = analiz.sankey_akisi(db, days=365, visible_line_ids=None)
+    adlar = {n["name"] for n in akis["nodes"]}
+
+    assert "B:Merkez" in adlar and "H:HAT-A" in adlar and "F:A" in adlar
+    baglar = {(l["source"], l["target"]): l["value"] for l in akis["links"]}
+    assert baglar[("B:Merkez", "H:HAT-A")] == 2
+    assert baglar[("H:HAT-A", "F:A")] == 2
+    assert baglar[("H:HAT-B", "F:C")] == 1
+
+
+def test_sankey_bolge_bagi_hatlari_TOPLAR(db):
+    """Bir bolgeden cikan akis, altindaki hatlarin toplamina esit olmali."""
+    s = Saha(db)
+    s.ariza("HAT-A", faz="a")
+    s.ariza("HAT-B", faz="b")
+
+    akis = analiz.sankey_akisi(db, days=365, visible_line_ids=None)
+    bolgeden = sum(l["value"] for l in akis["links"] if l["source"] == "B:Merkez")
+    faza = sum(l["value"] for l in akis["links"] if l["target"].startswith("F:"))
+
+    assert bolgeden == faza == 2
+
+
+def test_sankey_FAZSIZ_kayit_akisa_girmez(db):
+    """'Bilinmiyor' dugumu eklemek, olcum eksikligini akisin bir kolu gibi
+    gosterirdi; Sankey'de kalinlik 'gercekten oraya giden miktar' demektir."""
+    s = Saha(db)
+    s.ariza("HAT-A", faz="a")
+    s.ariza("HAT-A")  # faz yok
+
+    akis = analiz.sankey_akisi(db, days=365, visible_line_ids=None)
+
+    assert sum(l["value"] for l in akis["links"] if l["target"].startswith("F:")) == 1
+    assert not any("bilinmiyor" in n["name"].lower() for n in akis["nodes"])
+
+
+def test_sankey_dugum_adlari_BENZERSIZ(db):
+    """echarts dugumleri ADA gore eslestirir; ayni ad iki kademede olursa
+    akis yanlis dugume baglanir."""
+    s = Saha(db)
+    s.ariza("HAT-A", faz="a")
+    akis = analiz.sankey_akisi(db, days=365, visible_line_ids=None)
+    adlar = [n["name"] for n in akis["nodes"]]
+    assert len(adlar) == len(set(adlar))
+
+
+def test_sankey_kapsam_disini_gostermez(db):
+    s = Saha(db)
+    s.ariza("HAT-A", faz="a")
+    s.ariza("HAT-B", faz="b")
+    akis = analiz.sankey_akisi(db, days=365, visible_line_ids={s.hat("HAT-A").id})
+    assert not any("HAT-B" in n["name"] for n in akis["nodes"])
+
+
+def test_bos_veride_sankey_COKMEZ(db):
+    akis = analiz.sankey_akisi(db, days=365, visible_line_ids=None)
+    assert akis == {"nodes": [], "links": []}

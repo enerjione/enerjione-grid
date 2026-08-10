@@ -47,6 +47,32 @@ from app.services.scope_service import get_visible_line_ids
 router = APIRouter(prefix="/faults", tags=["faults"])
 
 
+def _device_scope_from_lines(db: Session, line_scope) -> set[int] | None:  # noqa: ANN001
+    """Hat kapsamini CIHAZ kapsamina cevirir.
+
+    Alarm ve olcum verisi CIHAZA baglidir, hatta degil; baglanti
+    `line_segments` uzerinden kurulur (cihaz bir segmentin uzerinde oturur).
+    Bu cevrimi atlayip hat filtresi uygulamak, sorguyu hic filtrelememek
+    anlamina gelirdi.
+
+    None = sinir yok (engineer/installer). Bos kume = hicbir cihaz.
+    """
+    from app.models.grid_topology import LineSegment
+
+    if line_scope is None:
+        return None
+    if not line_scope:
+        return set()
+    return {
+        row[0]
+        for row in db.execute(
+            select(LineSegment.device_id)
+            .where(LineSegment.line_id.in_(line_scope))
+            .where(LineSegment.device_id.is_not(None))
+        ).all()
+    }
+
+
 class _FaultRefs:
     """Bir ariza listesini serialize etmek icin gereken TUM yan veriler.
 
@@ -505,28 +531,56 @@ def fault_system_health(
     KAPSAM: operator yalnizca gorunur hatlarindaki CIHAZLARIN alarmlarini
     sayar (ariza analiziyle ayni kural, cihaz duzeyinde).
     """
-    from app.models.grid_topology import LineSegment
     from app.services import fault_analytics_service as analiz
 
     line_scope = get_visible_line_ids(db, current_user)
-    device_scope: set[int] | None = None
-    if line_scope is not None:
-        # Hat kapsami CIHAZ kapsamina cevrilir: alarm cihaza baglidir, hatta
-        # degil. Cihaz -> hat baglantisi `line_segments` uzerinden kurulur
-        # (cihaz bir segmentin uzerinde oturur). Bu cevrimi atlamak, alarm
-        # sorgusunu hic filtrelememek anlamina gelirdi.
-        if not line_scope:
-            device_scope = set()
-        else:
-            device_scope = {
-                row[0]
-                for row in db.execute(
-                    select(LineSegment.device_id)
-                    .where(LineSegment.line_id.in_(line_scope))
-                    .where(LineSegment.device_id.is_not(None))
-                ).all()
-            }
+    device_scope = _device_scope_from_lines(db, line_scope)
     return analiz.sistem_sagligi(db, days=days, visible_device_ids=device_scope)
+
+
+@router.get("/device-health")
+def fault_device_health(
+    days: int = Query(default=90, ge=1, le=1095),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Cihaz sagligi: batarya tukenmesi, sinyal kalitesi, ariza yogunlugu.
+
+    Olcum zaman serisinden (`telemetry_history_1h`, 2 yil) turetilir. Ozet
+    tablo yoksa (Timescale'siz dev kurulumu) ilgili bolumler BOS doner;
+    arayuz "veri yok" gosterir, ekran patlamaz.
+
+    Varsayilan pencere 90 gun: batarya egilimi ve sinyal deseni icin yeterli,
+    365 gunluk tarama ise saatlik kovada gereksiz agir.
+    """
+    from app.models.project_settings import ProjectSettings
+    from app.services import device_health_analytics as saglik
+
+    line_scope = get_visible_line_ids(db, current_user)
+    device_scope = _device_scope_from_lines(db, line_scope)
+
+    # Batarya esigi kuruluma gore degisir (Proje Ayarlari); sabit varsaymak
+    # "kac gun kaldi" tahminini yanlis kalibre ederdi.
+    proj = db.get(ProjectSettings, 1)
+    esik = getattr(proj, "battery_voltage_low", None) if proj else None
+
+    return {
+        "window_days": days,
+        "battery_drain": saglik.batarya_tukenme(
+            db, days=days, visible_device_ids=device_scope, battery_low=esik
+        ),
+        "weak_signal": saglik.sinyal_kalitesi(
+            db, days=days, visible_device_ids=device_scope
+        ),
+        "signal_by_hour": saglik.sinyal_saat_profili(
+            db, days=days, visible_device_ids=device_scope
+        ),
+        "fault_heatmap": saglik.ariza_yogunlugu(
+            db,
+            days=days,
+            visible_line_ids=set(line_scope) if line_scope is not None else None,
+        ),
+    }
 
 
 @router.get("/causes")
