@@ -28,9 +28,10 @@ from app.models.alarm import AlarmEvent
 from app.models.device import Device
 from app.models.enums import UserRole
 from app.models.fault import FaultComment, FaultEvent
-from app.models.grid_topology import Line, Region
+from app.models.grid_topology import Line, Pole, Region
 from app.models.user import User
 from app.schemas.fault import (
+    FaultBranchRef,
     FaultCommentCreate,
     FaultCommentRead,
     FaultEventAssignUpdate,
@@ -58,7 +59,17 @@ class _FaultRefs:
     cekiliyor, yorum sayilari tek GROUP BY ile geliyor.
     """
 
-    __slots__ = ("lines", "regions", "devices", "users", "comment_counts", "alarms")
+    __slots__ = (
+        "lines",
+        "regions",
+        "devices",
+        "users",
+        "comment_counts",
+        "alarms",
+        "branch_lines",
+        "poles",
+        "lines_with_open_fault",
+    )
 
     def __init__(self) -> None:
         self.lines: dict[int, Line] = {}
@@ -68,6 +79,12 @@ class _FaultRefs:
         self.comment_counts: dict[int, int] = {}
         #: device_id -> o cihazin ACIK alarmlari (en yeni once).
         self.alarms: dict[int, list[AlarmEvent]] = {}
+        #: dallanma diregi id -> o direkten cikan bransman kollari.
+        self.branch_lines: dict[int, list[Line]] = {}
+        #: Ariza araligindaki dallanma direklerini bulmak icin: pole.id -> Pole
+        self.poles: dict[int, Pole] = {}
+        #: Kolda kendi ariza kaydi var mi (arayuz "dogrulandi" der).
+        self.lines_with_open_fault: set[int] = set()
 
 
 def _load_fault_refs(db: Session, faults: list[FaultEvent]) -> _FaultRefs:
@@ -127,6 +144,51 @@ def _load_fault_refs(db: Session, faults: list[FaultEvent]) -> _FaultRefs:
             .order_by(AlarmEvent.created_at.desc())
         ).all():
             refs.alarms.setdefault(row.device_id, []).append(row)
+
+    # --- BRANSMAN KOLLARI -------------------------------------------------
+    # Hat tek bir zincir degil: dallanma direklerine bagli kollar var ve her
+    # kol AYRI bir Line. Ariza araligi bir dallanma diregini kapsiyorsa o kol
+    # da enerjisiz kalir — ekip sahaya ciktiginda kolu da kontrol etmelidir.
+    # Bu bilgi hicbir yerde gorunmuyordu.
+    #
+    # Uc sorgu, liste basina SABIT (satir basina degil): kollar, ilgili
+    # hatlarin direkleri ve kollarin kendi acik ariza kayitlari.
+    branch_rows = list(
+        db.scalars(select(Line).where(Line.branched_from_pole_id.isnot(None))).all()
+    )
+    for row in branch_rows:
+        refs.branch_lines.setdefault(row.branched_from_pole_id, []).append(row)
+        # Kolun adi basligta gerekiyor; lines sozlugune de girsin.
+        refs.lines.setdefault(row.id, row)
+    if branch_rows:
+        # Kolun basliginda ANA HAT adi da gerekiyor ("ANA HAT > BR-1 kolu").
+        # Dallanma diregi -> onun hatti = ana hat.
+        branch_parent_poles = list(
+            db.scalars(
+                select(Pole).where(
+                    Pole.id.in_({r.branched_from_pole_id for r in branch_rows})
+                )
+            ).all()
+        )
+        for p in branch_parent_poles:
+            refs.poles[p.id] = p
+        parent_line_ids = {p.line_id for p in branch_parent_poles}
+        if parent_line_ids:
+            for row in db.scalars(select(Line).where(Line.id.in_(parent_line_ids))).all():
+                refs.lines.setdefault(row.id, row)
+
+    # Ariza araligindaki dallanma direklerini bulabilmek icin ilgili
+    # hatlarin TUM direkleri (sequence_no karsilastirmasi yapilacak).
+    if line_ids:
+        for row in db.scalars(select(Pole).where(Pole.line_id.in_(line_ids))).all():
+            refs.poles[row.id] = row
+
+    refs.lines_with_open_fault = {
+        lid
+        for (lid,) in db.execute(
+            select(FaultEvent.line_id).where(FaultEvent.status != "closed").distinct()
+        ).all()
+    }
     return refs
 
 
@@ -173,6 +235,41 @@ def _serialize_fault(db: Session, f: FaultEvent, refs: _FaultRefs | None = None)
         )
         for a in refs.alarms.get(f.last_red_device_id, [])
     ]
+
+    # --- Ariza araliginin ICINDE kalan bransman kollari -------------------
+    # Aralik direk sira numarasiyla ifade edilir; aradaki her direk icin
+    # "bu direkten cikan kol var mi" diye bakariz.
+    affected: list[FaultBranchRef] = []
+    if f.from_pole_seq is not None and f.to_pole_seq is not None and refs.branch_lines:
+        alt, ust = sorted((f.from_pole_seq, f.to_pole_seq))
+        for pole in refs.poles.values():
+            if pole.line_id != f.line_id:
+                continue
+            if not (alt <= pole.sequence_no <= ust):
+                continue
+            for kol in refs.branch_lines.get(pole.id, []):
+                affected.append(
+                    FaultBranchRef(
+                        line_id=kol.id,
+                        line_name=kol.name,
+                        branch_pole_seq=pole.sequence_no,
+                        branch_pole_name=pole.name,
+                        has_own_fault=kol.id in refs.lines_with_open_fault,
+                    )
+                )
+        affected.sort(key=lambda b: (b.branch_pole_seq or 0, b.line_name))
+
+    # --- Bu kaydin KENDISI bir kolda mi? ---------------------------------
+    is_branch = line is not None and line.branched_from_pole_id is not None
+    parent_line_id: int | None = None
+    parent_line_name: str | None = None
+    if is_branch and line is not None:
+        parent_pole = refs.poles.get(line.branched_from_pole_id)
+        if parent_pole is not None:
+            parent_line_id = parent_pole.line_id
+            parent = refs.lines.get(parent_pole.line_id)
+            parent_line_name = parent.name if parent else None
+
     return FaultEventRead(
         id=f.id,
         line_id=f.line_id,
@@ -202,6 +299,10 @@ def _serialize_fault(db: Session, f: FaultEvent, refs: _FaultRefs | None = None)
         assigned_to_full_name=assigned_user.full_name if assigned_user else None,
         comment_count=int(comment_count),
         trigger_alarms=triggers,
+        affected_branches=affected,
+        is_branch_line=bool(is_branch),
+        parent_line_id=parent_line_id,
+        parent_line_name=parent_line_name,
         # ---- Analiz alanlari ----
         cause_code=f.cause_code,
         cause_detail=f.cause_detail,
@@ -399,7 +500,7 @@ def assign_fault(
     # Aynı kisiye yeniden atama bildirim spam'i olusturmasin.
     if target_username and target_username != previous_assignee:
         # Ariza bilgisini topla — bildirim metnini guzellestirir.
-        from app.models.grid_topology import Line, Region
+        from app.models.grid_topology import Line, Pole, Region
         from app.services.notification_service import create_notification
         line_row = db.get(Line, f.line_id) if f.line_id else None
         region_row = db.get(Region, f.region_id) if f.region_id else None
@@ -483,6 +584,33 @@ def assign_fault(
     db.commit()
     db.refresh(f)
     return _serialize_fault(db, f)
+
+
+@router.get("/analytics")
+def fault_analytics(
+    days: int = Query(default=365, ge=1, le=3650),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Ariza analizi — hangi hat, hangi bolge, hangi sebep, ne kadar surede.
+
+    TEK UC: ekran alti ayri istek atsaydi hepsi ayni pencereyi ve ayni
+    kapsami tekrar tekrar hesaplardi; ustelik biri hata verince ekranin bir
+    parcasi sessizce bos kalirdi.
+
+    KAPSAM: operator yalnizca sorumluluk alanindaki hatlarin arizalarini
+    sayar. Analiz ekrani "tum sahanin ozeti" gibi durdugu icin kapsami
+    unutmak, gormemesi gereken hatlari toplam sayilar icinde gizlenmis
+    halde sizdirmak olurdu.
+    """
+    from app.services import fault_analytics_service as analiz
+
+    line_scope = get_visible_line_ids(db, current_user)
+    return analiz.tum_analiz(
+        db,
+        days=days,
+        visible_line_ids=set(line_scope) if line_scope is not None else None,
+    )
 
 
 @router.get("/causes")
@@ -706,7 +834,7 @@ def create_fault_comment(
     )
     # Atanan kullanici varsa ve yorum sahibi degilse: web bildirim + email.
     if f.assigned_to_username and f.assigned_to_username != current_user.username:
-        from app.models.grid_topology import Line, Region
+        from app.models.grid_topology import Line, Pole, Region
         from app.services.notification_service import create_notification
         line_row = db.get(Line, f.line_id) if f.line_id else None
         region_row = db.get(Region, f.region_id) if f.region_id else None

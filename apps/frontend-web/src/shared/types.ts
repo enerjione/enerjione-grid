@@ -275,6 +275,13 @@ export type FaultEvent = {
   comment_count: number;
   /** Arızayı açan alarmlar (son "gördüm" diyen cihazdan), en yeni önce. */
   trigger_alarms?: FaultTriggerAlarm[];
+  /** Arıza aralığının içinde kalan branşman kolları — sahada ayrıca
+      kontrol edilmesi gereken hatlar. */
+  affected_branches?: FaultBranchRef[];
+  /** Bu kaydın kendisi bir branşman kolunda mı? */
+  is_branch_line?: boolean;
+  parent_line_id?: number | null;
+  parent_line_name?: string | null;
 
   // ---- Analiz alanları ----
   /** Sahanın girdiği sebep (katalogdan). NULL = henüz doldurulmadı. */
@@ -309,6 +316,44 @@ export type FaultCause = {
   group: string;
 };
 
+/** Arıza analizi — `/faults/analytics` yanıtı. */
+export type FaultAnalytics = {
+  window_days: number;
+  summary: {
+    total: number;
+    resolved: number;
+    open: number;
+    /** Yalnızca KAPANMIŞ arızalardan; devam eden "0 sürdü" sayılmaz. */
+    mttr_hours: number | null;
+    labeled: number;
+    /** Sebep dağılımını yorumlamadan ÖNCE bakılması gereken oran. */
+    labeled_ratio: number;
+    auto_suggested: number;
+  };
+  top_lines: { line_id: number; name: string; code: string; count: number }[];
+  top_regions: { region_id: number; name: string; count: number }[];
+  repeat_spans: {
+    from_pole_id: number;
+    to_pole_id: number;
+    line_id: number;
+    line_name: string;
+    from_pole_seq: number | null;
+    to_pole_seq: number | null;
+    count: number;
+    last_opened_at: string | null;
+  }[];
+  cause_distribution: { cause_code: string; count: number }[];
+  rule_accuracy: {
+    comparable: number;
+    agreed: number;
+    /** null = karşılaştırılabilir kayıt yok (0'dan "%0 isabet" üretilmez). */
+    accuracy: number | null;
+    top_mismatches: { suggested: string; actual: string; count: number }[];
+  };
+  phase_distribution: { phase: string; count: number }[];
+  monthly_trend: { month: string; count: number }[];
+};
+
 export type FaultCauseCatalog = {
   causes: FaultCause[];
   groups: string[];
@@ -319,6 +364,19 @@ export type FaultCauseCatalog = {
 /** Arızayı doğuran alarm — "bu arıza NEDEN açıldı" sorusunun cevabı.
     `signal_source` kritik: bir SN2 gövdesindeki üç sensör (master/sat01/sat02)
     hattın ayrı fazlarına takılır, yani arızanın hangi fazda olduğunu söyler. */
+/** Arıza aralığının içinde kalan branşman kolu.
+    Hat tek bir zincir değil: dallanma direğine bağlı kol AYRI bir hattır.
+    Ana hattaki arıza o direği kapsıyorsa kol da enerjisiz kalır ya da arıza
+    doğrudan kolda olabilir — ekip sahaya çıkınca kolu da kontrol etmeli. */
+export type FaultBranchRef = {
+  line_id: number;
+  line_name: string;
+  branch_pole_seq?: number | null;
+  branch_pole_name?: string | null;
+  /** Kolda kendi arıza kaydı da açılmış mı (arıza kolda doğrulandı). */
+  has_own_fault: boolean;
+};
+
 export type FaultTriggerAlarm = {
   id: number;
   title: string;

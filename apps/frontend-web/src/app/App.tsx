@@ -165,6 +165,7 @@ const NetworkSettingsPage = lazy(() => import("../features/network/NetworkSettin
 const OfflineMapPage = lazy(() => import("../features/map/OfflineMapPage").then((m) => ({ default: m.OfflineMapPage })));
 const NotificationSettingsPanel = lazy(() => import("../features/settings/NotificationSettingsPanel").then((m) => ({ default: m.NotificationSettingsPanel })));
 const OutboundTargetsPanel = lazy(() => import("../features/outbound/OutboundTargetsPanel").then((m) => ({ default: m.OutboundTargetsPanel })));
+const FaultAnalyticsPage = lazy(() => import("../features/fault-analytics/FaultAnalyticsPage").then((m) => ({ default: m.FaultAnalyticsPage })));
 const ProfilePage = lazy(() => import("../features/profile/ProfilePage").then((m) => ({ default: m.ProfilePage })));
 const ProjectSettingsPanel = lazy(() => import("../features/settings/ProjectSettingsPanel").then((m) => ({ default: m.ProjectSettingsPanel })));
 const RemoteAccessPage = lazy(() => import("../features/remote-access/RemoteAccessPage").then((m) => ({ default: m.RemoteAccessPage })));
@@ -2896,6 +2897,14 @@ export function App() {
                 notifPrefsSaving={notifPrefsSaving}
                 onToggleNotifPref={handleToggleNotifPref}
               />
+            ) : null}
+            {/* Ariza analizi — sorumlu yonetici dahil. Backend sorguyu
+                gorunur hatlarla (kapsam) zaten sinirliyor. */}
+            {engineeringPage === "fault-analytics" &&
+            (session.role === "installer" ||
+              session.role === "engineer" ||
+              session.role === "ops_manager") ? (
+              <FaultAnalyticsPage accessToken={session.accessToken} />
             ) : null}
             {engineeringPage === "backups" &&
             (session.role === "engineer" || session.role === "installer") ? (

@@ -10,6 +10,7 @@
  */
 import {
   Activity,
+  ChartColumn,
   BadgeCheck,
   Bell,
   BellRing,
@@ -68,6 +69,7 @@ export const ENGINEERING_PAGE_ICON: Record<EngineeringPage, LucideIcon> = {
   "field-tools": Wrench,
   // Kendi profili — menude gorunmez, kullanici menusunden acilir.
   profile: UserCog,
+  "fault-analytics": ChartColumn,
 };
 
 const PAGE_ICON: Record<Exclude<PageMode, "engineering">, LucideIcon> = {

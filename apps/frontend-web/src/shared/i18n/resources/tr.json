@@ -964,7 +964,11 @@
       "alarmMore": "+{{count}} alarm daha",
       "boundsTitle": "Arıza Bölgesi Sınırları",
       "rangeTextNamed": "{{from}} — {{to}}",
-      "deckHint": "{{count}} arıza — yana kaydırarak geçin"
+      "deckHint": "{{count}} arıza — yana kaydırarak geçin",
+      "branchesTitle": "Etkilenen Branşman Kolları",
+      "branchAt": "{{pole}} direğinden ayrılıyor",
+      "branchConfirmed": "arıza var",
+      "branchCheck": "kontrol edin"
     },
     "empty": {
       "errorTitle": "Arıza listesi alınamadı",
@@ -1038,7 +1042,12 @@
       "causeSuggested": "Cihaz verisine göre öneri: {{cause}}",
       "causeUseSuggestion": "Öneriyi kullan",
       "causeDetailPlaceholder": "Ayrıntı (örn. 3. direkteki mesnet izolatörü çatlak)",
-      "saveCause": "Sebebi Kaydet"
+      "saveCause": "Sebebi Kaydet",
+      "focus": {
+        "zone": "Arıza bölgesi",
+        "line": "Tüm hat",
+        "grid": "Tüm şebeke"
+      }
     },
     "phase": {
       "master": "Master",
@@ -1833,7 +1842,8 @@
       "offlineMap": "İnternet olmayan sahalar için harita alanı indir; indirilmiş alanları gör ve yönet.",
       "remoteAccess": "Teknik destek ekibine süreli uzaktan erişim izni ver; istediğin an kapat.",
       "firewall": "Sistemin güvenlik duvarını yönet: portları aç/kapat, kural ve yönlendirme tanımla.",
-      "fieldTools": "Saha cihazlarına erişimi test et; IP adresine ping at."
+      "fieldTools": "Saha cihazlarına erişimi test et; IP adresine ping at.",
+      "faultAnalytics": "Hangi hat en çok arıza çıkarıyor, neden ve ne kadar sürede çözülüyor."
     },
     "nav": {
       "devices": "Cihazlar",
@@ -1857,7 +1867,8 @@
       "offlineMap": "Çevrimdışı Harita",
       "remoteAccess": "Uzaktan Bakım",
       "firewall": "Güvenlik Duvarı",
-      "fieldTools": "Saha Araçları"
+      "fieldTools": "Saha Araçları",
+      "faultAnalytics": "Arıza Analizi"
     },
     "users": {
       "title": "Kullanıcılar",
@@ -4357,5 +4368,34 @@
     "upload_debug_file": "Tanılama Dosyasını Yükle",
     "voltage_loss": "Gerilim Kaybı",
     "voltage_loss_all_units": "Gerilim Kaybı (Tüm Birimler)"
+  },
+  "faultAnalytics": {
+    "window": "Dönem",
+    "windowDays": "Son {{days}} gün",
+    "totalFaults": "Toplam arıza",
+    "stillOpen": "{{count}} açık",
+    "mttr": "Ortalama çözüm",
+    "mttrClosedOnly": "yalnızca kapanmışlar",
+    "hours": "{{value}} sa",
+    "labeled": "Sebebi girilmiş",
+    "topLines": "En Çok Arıza Çıkaran Hatlar",
+    "repeatSpans": "Tekrarlayan Açıklıklar",
+    "repeatSpansHint": "Aynı iki direk arası birden fazla arıza — bakım önceliği",
+    "spanRange": "Direk #{{from}} — #{{to}}",
+    "causeDistribution": "Sebep Dağılımı",
+    "ofLabeled": "{{count}} etiketli kayıttan",
+    "ruleAccuracy": "Kural İsabeti",
+    "ruleAccuracyHint": "Cihaz verisinden türetilen öneri, sahanın girdiğiyle ne kadar örtüşüyor",
+    "accuracyOf": "{{total}} karşılaştırılabilir kayıttan {{agreed}}'ı örtüşüyor",
+    "phaseDistribution": "Faz Dağılımı",
+    "phaseHint": "Tek faz çoğunlukla dış etken, üç faz ekipman ya da aşırı yük",
+    "monthlyTrend": "Aylık Eğilim",
+    "monthlyHint": "Mevsimsellik: fırtına, buzlanma",
+    "noData": "Veri yok",
+    "noCauses": "Henüz sebep girilmiş arıza yok",
+    "noRepeats": "Tekrarlayan açıklık yok",
+    "noComparable": "Karşılaştırılabilir kayıt yok — hem kural önerisi hem saha etiketi taşıyan arıza birikmesi gerekiyor.",
+    "emptyWindow": "Bu dönemde arıza kaydı yok. Analiz, arızalar biriktikçe anlam kazanır.",
+    "lowLabelWarning": "Arızaların yalnızca {{percent}}'i için sebep girilmiş. Aşağıdaki sebep dağılımı bu küçük altkümeyi yansıtır — genel bir sonuç çıkarmadan önce saha ekibinin sebep girmesini bekleyin."
   }
 }

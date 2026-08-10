@@ -967,7 +967,11 @@
       "alarmMore": "+{{count}} more alarms",
       "boundsTitle": "Fault Zone Bounds",
       "rangeTextNamed": "{{from}} — {{to}}",
-      "deckHint": "{{count}} faults — swipe to browse"
+      "deckHint": "{{count}} faults — swipe to browse",
+      "branchesTitle": "Affected Branches",
+      "branchAt": "branches at {{pole}}",
+      "branchConfirmed": "fault present",
+      "branchCheck": "check"
     },
     "empty": {
       "errorTitle": "Could not load faults",
@@ -1041,7 +1045,12 @@
       "causeSuggested": "Suggested from device data: {{cause}}",
       "causeUseSuggestion": "Use suggestion",
       "causeDetailPlaceholder": "Detail (e.g. cracked pin insulator on pole 3)",
-      "saveCause": "Save Cause"
+      "saveCause": "Save Cause",
+      "focus": {
+        "zone": "Fault zone",
+        "line": "Whole line",
+        "grid": "Whole grid"
+      }
     },
     "phase": {
       "master": "Master",
@@ -1836,7 +1845,8 @@
       "offlineMap": "Download map areas for sites without internet; view and manage downloaded areas.",
       "fieldTools": "Test connectivity to field devices; ping an IP address.",
       "remoteAccess": "Grant the support team time-limited remote access; close it whenever you want.",
-      "firewall": "Manage the system firewall: open/close ports, define rules and forwards."
+      "firewall": "Manage the system firewall: open/close ports, define rules and forwards.",
+      "faultAnalytics": "Which line faults most, why, and how long repairs take."
     },
     "nav": {
       "devices": "Devices",
@@ -1860,7 +1870,8 @@
       "offlineMap": "Offline Map",
       "remoteAccess": "Remote Maintenance",
       "firewall": "Firewall",
-      "fieldTools": "Field Tools"
+      "fieldTools": "Field Tools",
+      "faultAnalytics": "Fault Analytics"
     },
     "users": {
       "title": "Users",
@@ -4360,5 +4371,34 @@
     "upload_debug_file": "Upload Debug File",
     "voltage_loss": "Voltage Loss",
     "voltage_loss_all_units": "Voltage Loss All Units"
+  },
+  "faultAnalytics": {
+    "window": "Period",
+    "windowDays": "Last {{days}} days",
+    "totalFaults": "Total faults",
+    "stillOpen": "{{count}} open",
+    "mttr": "Mean time to repair",
+    "mttrClosedOnly": "closed only",
+    "hours": "{{value}} h",
+    "labeled": "Cause recorded",
+    "topLines": "Most Fault-Prone Lines",
+    "repeatSpans": "Repeating Spans",
+    "repeatSpansHint": "More than one fault between the same two poles — maintenance priority",
+    "spanRange": "Pole #{{from}} — #{{to}}",
+    "causeDistribution": "Cause Distribution",
+    "ofLabeled": "of {{count}} labelled records",
+    "ruleAccuracy": "Rule Accuracy",
+    "ruleAccuracyHint": "How often the device-derived suggestion matches what the field recorded",
+    "accuracyOf": "{{agreed}} of {{total}} comparable records agree",
+    "phaseDistribution": "Phase Distribution",
+    "phaseHint": "Single phase usually external, three phase equipment or overload",
+    "monthlyTrend": "Monthly Trend",
+    "monthlyHint": "Seasonality: storms, icing",
+    "noData": "No data",
+    "noCauses": "No fault has a recorded cause yet",
+    "noRepeats": "No repeating spans",
+    "noComparable": "No comparable records — faults carrying both a rule suggestion and a field label need to accumulate.",
+    "emptyWindow": "No faults in this period. The analysis becomes meaningful as faults accumulate.",
+    "lowLabelWarning": "Only {{percent}} of faults have a recorded cause. The distribution below reflects that small subset — wait for the field team to record causes before drawing a general conclusion."
   }
 }

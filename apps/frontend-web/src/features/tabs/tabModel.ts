@@ -43,6 +43,7 @@ export type EngineeringPage =
   | "offline-map"
   | "active-sessions"
   | "field-tools"
+  | "fault-analytics"
   // Kullanicinin kendi profili. Muhendislik menusunde GORUNMEZ (bkz.
   // ENGINEERING_NAV_GROUPS) — ust sagdaki kullanici menusunden acilir.
   // Yine de bir sekme rotasi: eskiden modaldi ve modal sekme sisteminde
@@ -127,6 +128,7 @@ export function tabLabel(
         "offline-map": "engineering.nav.offlineMap",
         "active-sessions": "engineering.nav.activeSessions",
         "field-tools": "engineering.nav.fieldTools",
+        "fault-analytics": "engineering.nav.faultAnalytics",
         profile: "userSettings.title",
       };
       return t(map[route.page]);
@@ -177,6 +179,9 @@ const OPS_MANAGER_ENG: EngineeringPage[] = [
   // DEGISTIRME yetkisi backend'de engineer/installer — sayfa `can_manage`
   // ile kendini kisitlar (bkz. backend api/firewall.py).
   "firewall",
+  // Ariza analizi: bakim planlama isi; sorumlu yonetici gormeli. Backend
+  // sorguyu kapsamla (gorunur hatlar) zaten sinirliyor.
+  "fault-analytics",
 ];
 const ENGINEER_ENG: EngineeringPage[] = [
   "devices",
@@ -198,6 +203,7 @@ const ENGINEER_ENG: EngineeringPage[] = [
   "firewall",
   // Saha araclari (ping testi): backend /field-tools installer+engineer.
   "field-tools",
+  "fault-analytics",
 ];
 // installer: tum engineering sayfalari.
 

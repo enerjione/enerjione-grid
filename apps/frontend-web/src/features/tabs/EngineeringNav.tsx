@@ -111,6 +111,15 @@ export const ENGINEERING_NAV_GROUPS: NavGroup[] = [
         canSee: isInstallerOrEngineer,
       },
       {
+        // Ariza analizi: "hangi hat en cok ariza cikariyor, neden, ne kadar
+        // surede". Bakim planlama isi oldugu icin sorumlu yonetici de gorur;
+        // backend sorguyu gorunur hatlarla zaten sinirliyor.
+        page: "fault-analytics",
+        labelKey: "engineering.nav.faultAnalytics",
+        descKey: "engineering.navDesc.faultAnalytics",
+        canSee: isTeamManager,
+      },
+      {
         // Sistem durumu servis/baglanti sagligini IZLEME isidir.
         page: "system-status",
         labelKey: "header.systemStatus",

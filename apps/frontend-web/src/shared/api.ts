@@ -963,6 +963,20 @@ export async function updateFaultNote(
   return (await response.json()) as import("./types").FaultEvent;
 }
 
+/** Arıza analizi. TEK çağrı: ekran altı ayrı istek atsaydı hepsi aynı
+ *  pencereyi ve aynı kapsamı tekrar hesaplardı, üstelik biri hata verince
+ *  ekranın bir parçası sessizce boş kalırdı. */
+export async function fetchFaultAnalytics(
+  token: string,
+  days: number
+): Promise<import("./types").FaultAnalytics> {
+  const response = await apiFetch(`${API_BASE_URL}/faults/analytics?days=${days}`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Arıza analizi alınamadı.");
+  return (await response.json()) as import("./types").FaultAnalytics;
+}
+
 /** Arıza sebep kataloğu. Tek kaynak backend'dedir (`app/data/fault_causes.py`). */
 /** Ünite → faz eşlemesi (kimlik doğrulamalı; public ayarlardan AYRI). */
 export async function fetchPhaseMap(token: string): Promise<import("./types").PhaseMap> {
