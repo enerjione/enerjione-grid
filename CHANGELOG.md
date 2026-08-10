@@ -14,6 +14,64 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.63.0] — 2026-08-10
+
+**2.62.0'daki kritik bir gerilemeyi giderir.** Ayrıca Pole Master Kit setleri
+gerçek birer sanal cihaz gibi yönetiliyor ve alarm kuralları cihaz türüne göre
+kurgulanabiliyor.
+
+### Düzeltildi
+
+- **Sinyal kataloğu uçları 500 dönüyordu; sonuçta hiçbir cihaz için alarm
+  üretilmiyordu.** `SignalCatalogRead.source` alanı `master/sat01/sat02` ile
+  sınırlıydı; Pole Master Kit'in `sat03`–`sat09` satırları yanıt doğrulamasını
+  düşürdü. Sinyal seed'i açılışta koşulsuz çalıştığı için ortada hiç kit cihazı
+  olmayan kurulumlar da etkilendi. Zincir:
+  `/signals` + `/internal/signals` 500 → alarm-service kural önbelleğini hiç
+  dolduramıyor (**alarm yok**) → tag-engine kataloğu boş kalıyor (her sinyal
+  öncelikli hatta) → arayüzde Sinyaller sayfası, canlı değer sayaçları ve alarm
+  kuralı sinyal seçici aynı anda boşalıyor. Telemetri yazımı etkilenmedi.
+- **Alt cihazın herhangi bir ayarını güncellemek 409 veriyordu** — uç nokta
+  çakışma kontrolü seti kendi kitiyle karşılaştırıyordu (muafiyet oluşturmada
+  vardı, güncellemede yoktu).
+- **`sat04`–`sat09` etiketleri ham görünüyordu** (alarm kuralları, cihaz özeti,
+  harita ipucu, bildirim çanı). Etiket beş ayrı dosyada elle yazılmış sözlüklerden
+  geliyordu; `Record<string, …>` oldukları için derleyici eksikliği yakalamıyordu.
+  Artık tek kaynaktan, desenden üretiliyor.
+- **Cihazı olan gateway hiç silinemiyordu** (silme özetinde "bilinmiyor" değeri
+  toplanmaya çalışılıyor, istek 500 dönüyordu).
+- Arıza şematiğinde: arızalı parça hiçbir iletkenin geçmediği merkez çizgiye ve
+  faz çizgisinden daha kalın çiziliyordu; branşman girişindeki cihaz çizimden
+  düşüp **aktif arıza kartı arızasız bir hat gösteriyordu**; branşman kolları
+  çizim alanından taşıyordu; tekerlekle yakınlaşırken sayfa da kayıyordu.
+- Alarm e-postaları Ölçüm, Eşik, Kaynak, Hat ve Bölge alanlarını sessizce
+  kaybediyordu; alarm fırtınasında araya giren tek bir alarm eşleşmeyi bozuyordu.
+
+### Eklendi
+
+- **Alarm kurallarına cihaz türü kapsamı.** Listede "Cihaz Türü" sütunu; yeni
+  kural akışında model seçimi sinyal seçiminden **önce** geliyor ve sinyal
+  listesi o modele daralıyor. Sinyaller modeller arasında ortak değildir —
+  kapsam olmadan, o modelde hiç tetiklenmeyecek kurallar yazılabiliyordu.
+- **Setlerin uydu ataması düzenlenebilir.** Varsayılan 1‑2‑3 / 4‑5‑6 / 7‑8‑9 ama
+  uyduları kelepçeyi takan kişi bağlar ve sıra kite göre değil direğe göre
+  oluşur; her ünite için 1–9 seçilebilir. Aynı uydu iki sete atanamaz — atama
+  bire bir olmazsa ikinci setin o ünitesi hiç veri almaz ve arayüzde set
+  sağlıklı görünürdü.
+
+### Değişti
+
+- **Kit setleri cihaz listesinde kitin altında, daraltılabilir bir grup.**
+  Haberleşme noktası ve IP gösterilmiyor (setin öyle bir ayarı yok); yerine
+  uydu ataması yazıyor. Haberleşme sekmesi alt cihazda gizli.
+- **Setlerin haberleşme durumu kitten devralınıyor.** Tek fiziksel bağlantı
+  koptuğunda yalnızca telemetriyi en son alan set offline görünüyor, diğerleri
+  saatlerce "online" kalıyordu.
+- Cihaz detayında ünite listesi modele göre: kit setinde üç uydu (Satellite 03
+  dahil), SN 2.0'da master + iki uydu. Önceden sette boş bir "Master" kartı
+  çiziliyor, gerçek üçüncü ünite hiç görünmüyordu (pil rozeti ve seri no dahil).
+- Alt cihaz görseli uydu fotoğrafı.
+
 ## [2.62.0] — 2026-08-10
 
 Yeni cihaz modeli **Horstmann Pole Master Kit**, bileşen tabanlı e-posta
