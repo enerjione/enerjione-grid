@@ -447,6 +447,138 @@ def alarm_sikligi(
     ]
 
 
+#: Isi haritasinda gosterilecek EN COK alarm ureten cihaz sayisi.
+#: 600 cihazli bir sahada her cihaza bir satir vermek okunmaz bir duvar
+#: uretir; ustelik satirlarin cogu bos olur. Kesilen kisim sessizce
+#: atilmaz — yanit `truncated` ve `device_total` ile bunu SOYLER.
+HEATMAP_TOP_DEVICES = 25
+
+#: Sutun tavani. Gunluk kovada 3 yillik pencere 1095 sutun demek; ekranda
+#: her sutun bir piksel altina duser ve grafik anlamsizlasir.
+HEATMAP_MAX_COLS = 120
+
+
+def _kova_ifadesi(db: Session, damga, gunluk: bool):  # noqa: ANN001
+    """Zaman kovasi etiketi — lehceye gore. Gunluk `YYYY-MM-DD`, saatlik
+    `YYYY-MM-DD HH`."""
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        return func.to_char(damga, "YYYY-MM-DD" if gunluk else "YYYY-MM-DD HH24")
+    return func.strftime("%Y-%m-%d" if gunluk else "%Y-%m-%d %H", damga)
+
+
+def alarm_isi_haritasi(
+    db: Session,
+    *,
+    days: int,
+    visible_device_ids: set[int] | None,
+    limit: int = HEATMAP_TOP_DEVICES,
+) -> dict:
+    """Cihaz x zaman alarm yogunlugu — TUM cihazlar tek ekranda karsilastirilir.
+
+    NEDEN LISTE YETMIYOR
+    --------------------
+    "En cok alarm ureten cihazlar" listesi tek bir sayi verir ve ZAMANI
+    duzler. Oysa operatorun ayirt etmesi gereken iki durum bu sayida
+    ayni gorunur:
+
+      * Bir cihaz uc ay boyunca her gun 2 alarm uretiyor  -> kronik, esik
+        yanlis kurulmus ya da montaj sorunlu.
+      * Ayni cihaz tek bir gunde 180 alarm uretmis        -> o gun sahada
+        bir olay olmus; cihazin kendisiyle ilgisi olmayabilir.
+
+    Ikisi de "180 alarm" der. Isi haritasi bunlari BAKISTA ayirir; ustelik
+    ayni gun sutununda birden cok cihaz kararmissa sorun cihazlarda degil
+    o gun yasanan ortak olaydadir (besleme, sebeke, gateway).
+
+    KOVA COZUNURLUGU pencereye gore: 2 gune kadar saatlik, ustu gunluk.
+    Kisa pencerede gunluk kova tek sutuna duser; uzun pencerede saatlik kova
+    binlerce sutun uretir.
+
+    KESILEN VERI SOYLENIR. Yalnizca en cok alarm ureten `limit` cihaz
+    cizilir ve yanit bunu `truncated` / `device_total` ile bildirir —
+    "listede yok" ile "alarm uretmemis" karistirilmasin.
+    """
+    base = _alarm_temel(days, visible_device_ids).subquery()
+    a = base.c
+
+    # 1) Satirlar: en cok alarm ureten cihazlar. Hic alarm uretmemis cihaz
+    #    ZATEN gelmez — bos bir satir cizmenin bilgi degeri yok.
+    sayimlar = (
+        select(a.device_id, func.count().label("adet"))
+        .select_from(base)
+        .where(a.device_id.is_not(None))
+        .group_by(a.device_id)
+        .subquery()
+    )
+    toplam_cihaz = db.scalar(select(func.count()).select_from(sayimlar)) or 0
+
+    satirlar = db.execute(
+        select(sayimlar.c.device_id, sayimlar.c.adet, Device.code, Device.name)
+        .join(Device, Device.id == sayimlar.c.device_id)
+        .order_by(sayimlar.c.adet.desc(), Device.code)
+        .limit(limit)
+    ).all()
+    if not satirlar:
+        return {
+            # `window_days` UST duzeyde (`sistem_sagligi`) veriliyor; burada
+            # tekrar etmek ayrisabilen ikinci bir kaynak yaratirdi.
+            "bucket": "day",
+            "buckets": [],
+            "devices": [],
+            "cells": [],
+            "max": 0,
+            "device_total": 0,
+            "truncated": False,
+        }
+
+    gunluk = days > 2
+    kova = _kova_ifadesi(db, a.created_at, gunluk)
+    id_sira = {int(r[0]): i for i, r in enumerate(satirlar)}
+
+    hucreler_ham = db.execute(
+        select(a.device_id, kova.label("kova"), func.count().label("adet"))
+        .select_from(base)
+        .where(a.device_id.in_(list(id_sira)))
+        .group_by(a.device_id, kova)
+    ).all()
+
+    # 2) Sutunlar: veride GORULEN kovalar, kronolojik. Bos gunler icin sutun
+    #    acilmaz — 365 gunluk pencerede sahanin sessiz gecen aylari grafigi
+    #    okunmaz genislige tasirdi.
+    kovalar = sorted({str(r[1]) for r in hucreler_ham})
+    if len(kovalar) > HEATMAP_MAX_COLS:
+        kovalar = kovalar[-HEATMAP_MAX_COLS:]
+    kova_sira = {k: i for i, k in enumerate(kovalar)}
+
+    hucreler: list[list[int]] = []
+    en_cok = 0
+    for dev_id, k, adet in hucreler_ham:
+        sutun = kova_sira.get(str(k))
+        if sutun is None:
+            continue  # tavan disinda kalan eski kova
+        adet = int(adet)
+        en_cok = max(en_cok, adet)
+        hucreler.append([sutun, id_sira[int(dev_id)], adet])
+
+    return {
+        "bucket": "day" if gunluk else "hour",
+        "buckets": kovalar,
+        "devices": [
+            {
+                "device_id": int(r[0]),
+                "code": r[2],
+                "name": r[3],
+                "total": int(r[1]),
+            }
+            for r in satirlar
+        ],
+        "cells": hucreler,
+        "max": en_cok,
+        "device_total": int(toplam_cihaz),
+        "truncated": toplam_cihaz > len(satirlar),
+    }
+
+
 def haberlesme_kararsizligi(
     db: Session, *, days: int, visible_device_ids: set[int] | None, limit: int = TOP_N
 ) -> list[dict]:
@@ -528,12 +660,18 @@ def alarm_ozeti(
 def sistem_sagligi(
     db: Session, *, days: int = DEFAULT_WINDOW_DAYS, visible_device_ids: set[int] | None
 ) -> dict:
-    """Alarm sikligi + haberlesme kararliligi — tek cagrida."""
+    """Alarm sikligi + haberlesme kararliligi + cihaz x zaman yogunlugu."""
     return {
         "window_days": days,
         "alarm_summary": alarm_ozeti(db, days=days, visible_device_ids=visible_device_ids),
         "top_rules": alarm_sikligi(db, days=days, visible_device_ids=visible_device_ids),
         "flapping_devices": haberlesme_kararsizligi(
+            db, days=days, visible_device_ids=visible_device_ids
+        ),
+        # Ayni uctan doner: ucu de AYNI pencere ve AYNI kapsam uzerinde
+        # hesaplaniyor; ayri istek olsaydi ekranin bir parcasi digerinden
+        # farkli bir donemi gosterebilirdi.
+        "alarm_heatmap": alarm_isi_haritasi(
             db, days=days, visible_device_ids=visible_device_ids
         ),
     }

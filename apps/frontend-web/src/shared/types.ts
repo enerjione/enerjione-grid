@@ -436,6 +436,23 @@ export type SystemHealth = {
     outages: number;
     last_at: string | null;
   }[];
+  /** Cihaz × zaman alarm yoğunluğu. "Kronik mi, tek günlük olay mı"
+   *  sorusunu bir listenin cevaplayamadığı biçimde ayırır. */
+  alarm_heatmap: {
+    /** "day" | "hour" — pencereye göre seçilir. */
+    bucket: string;
+    /** Kronolojik kova etiketleri (sütunlar). */
+    buckets: string[];
+    /** Satırlar — en çok alarm üretenden aza. */
+    devices: { device_id: number; code: string; name: string; total: number }[];
+    /** `[sütun, satır, adet]` üçlüsü. Boş kovalar HİÇ gönderilmez. */
+    cells: number[][];
+    max: number;
+    /** Pencerede alarm üretmiş TOPLAM cihaz sayısı. */
+    device_total: number;
+    /** true ise `devices` kesildi — "listede yok" ≠ "alarm üretmemiş". */
+    truncated: boolean;
+  };
 };
 
 /** Cihaz sağlığı — `/faults/device-health`. */

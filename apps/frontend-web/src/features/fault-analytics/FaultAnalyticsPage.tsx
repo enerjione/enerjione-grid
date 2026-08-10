@@ -36,29 +36,38 @@ import {
   AlertTriangle,
   BatteryLow,
   BellRing,
+  CalendarRange,
   Gauge,
+  GitBranch,
+  Grid3x3,
+  Loader,
   Map as MapIcon,
   MapPin,
   Radio,
   Repeat,
   Share2,
   SignalLow,
+  Tags,
   TrendingUp,
-  Unplug
+  Unplug,
+  Zap
 } from "lucide-react";
 
 import {
+  AlarmIsiHaritasi,
   EgilimGrafigi,
   FazGrafigi,
   SaatProfiliGrafigi,
   SankeyGrafigi,
   SiralamaGrafigi
 } from "./FaultCharts";
+import { sebekeCizgileri } from "./heatField";
 
 import {
   fetchDeviceHealth,
   fetchFaultAnalytics,
   fetchFaultCauses,
+  fetchGridSnapshot,
   fetchSystemHealth
 } from "../../shared/api";
 import type {
@@ -189,14 +198,14 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
 
   return (
     <section className="tab-panel fa-page">
-      {/* ---- Ust serit: pencere secimi + ozet ---- */}
-      <div className="net-access-bar fa-bar-top">
-        <div className="net-access-item">
-          <span className="net-access-icon">
-            <TrendingUp size={16} />
+      {/* ---- Ust serit: pencere secimi + dort ozet olcu ---- */}
+      <div className="fa-kpis">
+        <div className="fa-kpi">
+          <span className="fa-kpi-icon">
+            <CalendarRange size={17} />
           </span>
-          <span className="net-access-body">
-            <span className="net-access-label">{t("faultAnalytics.window")}</span>
+          <span className="fa-kpi-body">
+            <span className="fa-kpi-label">{t("faultAnalytics.window")}</span>
             <select
               className="fa-window-select"
               value={days}
@@ -211,58 +220,35 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
           </span>
         </div>
 
-        <span className="net-access-sep" aria-hidden="true" />
+        <Kpi
+          Icon={AlertTriangle}
+          label={t("faultAnalytics.totalFaults")}
+          value={ozet?.total ?? "—"}
+          note={
+            ozet && ozet.open > 0
+              ? t("faultAnalytics.stillOpen", { count: ozet.open })
+              : undefined
+          }
+        />
 
-        <div className="net-access-item">
-          <span className="net-access-icon">
-            <AlertTriangle size={16} />
-          </span>
-          <span className="net-access-body">
-            <span className="net-access-label">{t("faultAnalytics.totalFaults")}</span>
-            <strong className="net-access-value">
-              {ozet?.total ?? "—"}
-              {ozet && ozet.open > 0 ? (
-                <em className="net-access-sub">
-                  {t("faultAnalytics.stillOpen", { count: ozet.open })}
-                </em>
-              ) : null}
-            </strong>
-          </span>
-        </div>
+        <Kpi
+          Icon={Gauge}
+          label={t("faultAnalytics.mttr")}
+          value={
+            ozet?.mttr_hours != null
+              ? t("faultAnalytics.hours", { value: ozet.mttr_hours })
+              : "—"
+          }
+          note={t("faultAnalytics.mttrClosedOnly")}
+        />
 
-        <span className="net-access-sep" aria-hidden="true" />
-
-        <div className="net-access-item">
-          <span className="net-access-icon">
-            <Gauge size={16} />
-          </span>
-          <span className="net-access-body">
-            <span className="net-access-label">{t("faultAnalytics.mttr")}</span>
-            <strong className="net-access-value">
-              {ozet?.mttr_hours != null
-                ? t("faultAnalytics.hours", { value: ozet.mttr_hours })
-                : "—"}
-              <em className="net-access-sub">{t("faultAnalytics.mttrClosedOnly")}</em>
-            </strong>
-          </span>
-        </div>
-
-        <span className="net-access-sep" aria-hidden="true" />
-
-        <div className={`net-access-item ${dusukEtiket ? "is-warn" : ""}`}>
-          <span className="net-access-icon">
-            <MapPin size={16} />
-          </span>
-          <span className="net-access-body">
-            <span className="net-access-label">{t("faultAnalytics.labeled")}</span>
-            <strong className="net-access-value">
-              {ozet ? `${ozet.labeled} / ${ozet.total}` : "—"}
-              {ozet ? (
-                <em className="net-access-sub">{yuzde(ozet.labeled_ratio)}</em>
-              ) : null}
-            </strong>
-          </span>
-        </div>
+        <Kpi
+          Icon={MapPin}
+          label={t("faultAnalytics.labeled")}
+          value={ozet ? `${ozet.labeled} / ${ozet.total}` : "—"}
+          note={ozet ? yuzde(ozet.labeled_ratio) : undefined}
+          uyari={dusukEtiket}
+        />
       </div>
 
       {/* ---- Sekmeler ---- */}
@@ -308,27 +294,38 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
           {/* ---- Aylik egilim — EN USTTE ve tam genislikte.
                Once zaman baglami: "artiyor mu, azaliyor mu, mevsimsel mi".
                Alttaki siralama kartlari o baglamin icinde okunur. ---- */}
-          <section className="rad-card fa-card fa-card--wide">
-            <header className="rad-card-head">
+          <section className="fa-card fa-card--wide">
+            <header className="fa-card-head">
               <h3>
                 <TrendingUp size={16} />
                 {t("faultAnalytics.monthlyTrend")}
               </h3>
               <small>{t("faultAnalytics.monthlyHint")}</small>
             </header>
-            {data?.monthly_trend.length ? (
+            {/* TEK NOKTA EGILIM DEGILDIR. Bir onceki surumde bu, genis ve
+                bos bir alanin ortasinda asili duran tek bir noktaydi:
+                grafik "bozuk" gorunuyordu, oysa veri yetersizdi. Neyin
+                eksik oldugunu SOYLEMEK, cizmekten dogru. */}
+            {(data?.monthly_trend.length ?? 0) >= 2 ? (
               <EgilimGrafigi
-                points={data.monthly_trend}
+                points={data!.monthly_trend}
                 labelToplam={t("faultAnalytics.faultUnit")}
               />
             ) : (
-              <p className="net-empty">{t("faultAnalytics.noData")}</p>
+              <Bos Icon={TrendingUp}>
+                {data?.monthly_trend.length
+                  ? t("faultAnalytics.trendNeedsTwoMonths", {
+                      month: data.monthly_trend[0].month,
+                      count: data.monthly_trend[0].count
+                    })
+                  : t("faultAnalytics.noData")}
+              </Bos>
             )}
           </section>
 
           {/* ---- En cok ariza cikaran hatlar ---- */}
-          <section className="rad-card fa-card">
-            <header className="rad-card-head">
+          <section className="fa-card">
+            <header className="fa-card-head">
               <h3>{t("faultAnalytics.topLines")}</h3>
               <small>{t("faultAnalytics.topLinesHint")}</small>
             </header>
@@ -338,7 +335,7 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
                 birim={t("faultAnalytics.faultUnit")}
               />
             ) : (
-              <p className="net-empty">{t("faultAnalytics.noData")}</p>
+              <Bos Icon={GitBranch}>{t("faultAnalytics.noData")}</Bos>
             )}
           </section>
 
@@ -346,8 +343,8 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
                Backend bunu zaten uretiyordu ama ekran GOSTERMIYORDU. Hat
                siralamasi "hangi hat" der; bolge siralamasi "hangi ekibin
                sahasi" der — bakim planlamasinda ikisi ayri sorudur. ---- */}
-          <section className="rad-card fa-card">
-            <header className="rad-card-head">
+          <section className="fa-card">
+            <header className="fa-card-head">
               <h3>
                 <MapIcon size={16} />
                 {t("faultAnalytics.topRegions")}
@@ -360,13 +357,13 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
                 birim={t("faultAnalytics.faultUnit")}
               />
             ) : (
-              <p className="net-empty">{t("faultAnalytics.noData")}</p>
+              <Bos Icon={MapIcon}>{t("faultAnalytics.noData")}</Bos>
             )}
           </section>
 
           {/* ---- Sebep dagilimi ---- */}
-          <section className="rad-card fa-card">
-            <header className="rad-card-head">
+          <section className="fa-card fa-card--third">
+            <header className="fa-card-head">
               <h3>{t("faultAnalytics.causeDistribution")}</h3>
               {ozet ? (
                 <small>{t("faultAnalytics.ofLabeled", { count: ozet.labeled })}</small>
@@ -393,13 +390,13 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
                 />
               </>
             ) : (
-              <p className="net-empty">{t("faultAnalytics.noCauses")}</p>
+              <Bos Icon={Tags}>{t("faultAnalytics.noCauses")}</Bos>
             )}
           </section>
 
           {/* ---- Faz dagilimi ---- */}
-          <section className="rad-card fa-card">
-            <header className="rad-card-head">
+          <section className="fa-card fa-card--third">
+            <header className="fa-card-head">
               <h3>{t("faultAnalytics.phaseDistribution")}</h3>
               <small>{t("faultAnalytics.phaseHint")}</small>
             </header>
@@ -413,15 +410,15 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
                 birim={t("faultAnalytics.faultUnit")}
               />
             ) : (
-              <p className="net-empty">{t("faultAnalytics.noData")}</p>
+              <Bos Icon={Zap}>{t("faultAnalytics.noData")}</Bos>
             )}
           </section>
 
           {/* ---- Tekrarlayan aciklikar — bakim onceliklendirmesinin
                en dogrudan girdisi. Grafik DEGIL liste: burada aranan sey
                "hangi aciklik" ve "kac kez", ikisi de metin. ---- */}
-          <section className="rad-card fa-card">
-            <header className="rad-card-head">
+          <section className="fa-card">
+            <header className="fa-card-head">
               <h3>
                 <Repeat size={16} />
                 {t("faultAnalytics.repeatSpans")}
@@ -429,7 +426,7 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
               <small>{t("faultAnalytics.repeatSpansHint")}</small>
             </header>
             {data?.repeat_spans.length ? (
-              <ul className="fa-list fa-list--spans">
+              <ul className="fa-list">
                 {data.repeat_spans.map((s) => (
                   <li key={`${s.from_pole_id}-${s.to_pole_id}`}>
                     <span className="fa-list-label">
@@ -446,14 +443,14 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
                 ))}
               </ul>
             ) : (
-              <p className="net-empty">{t("faultAnalytics.noRepeats")}</p>
+              <Bos Icon={Repeat}>{t("faultAnalytics.noRepeats")}</Bos>
             )}
           </section>
 
           {/* ---- Kural isabeti — cikarim katmanina guvenmeden ONCE
                bakilmasi gereken sayi ---- */}
-          <section className="rad-card fa-card">
-            <header className="rad-card-head">
+          <section className="fa-card fa-card--third">
+            <header className="fa-card-head">
               <h3>
                 <Gauge size={16} />
                 {t("faultAnalytics.ruleAccuracy")}
@@ -485,7 +482,7 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
                 ) : null}
               </>
             ) : (
-              <p className="net-empty">{t("faultAnalytics.noComparable")}</p>
+              <Bos Icon={Gauge}>{t("faultAnalytics.noComparable")}</Bos>
             )}
           </section>
         </div>
@@ -527,6 +524,24 @@ function HaritaVeAkis({
     useCallback(() => fetchDeviceHealth(accessToken, days), [accessToken, days])
   );
 
+  /**
+   * Sebeke topolojisi — isi haritasinin ZEMINI.
+   *
+   * Bos bir zemin uzerindeki sicak nokta operatore koordinat kadar sey
+   * anlatir; hat cizilince "su fiderin ortasinda" olur. Ayri bir istek
+   * cunku topoloji ariza penceresinden BAGIMSIZ (30 gun de secilse hat
+   * aynidir) ve degismiyorsa bosuna yeniden hesaplanmasin.
+   */
+  const topoloji = useBolumVerisi(
+    useCallback(() => fetchGridSnapshot(accessToken), [accessToken])
+  );
+
+  const cizgiler = useMemo(
+    () =>
+      topoloji.veri ? sebekeCizgileri(topoloji.veri.poles, topoloji.veri.segments) : [],
+    [topoloji.veri]
+  );
+
   /** Sankey dugum adi -> ekran metni. Faz dugumleri sayfanin geri kalaniyla
    *  ayni dili konussun: faz dagilimi grafigi "L1" diyorsa akis da "L1"
    *  demeli, "A" degil. */
@@ -541,32 +556,38 @@ function HaritaVeAkis({
 
   const noktalar = veri?.fault_heatmap ?? [];
   const sankey = analytics?.sankey;
+  // Topoloji istegi hala ucuyorsa haritayi ciz-sil yapmayalim: cizgisiz
+  // acilip bir saniye sonra cizgi eklenmesi "harita atladi" gibi gorunur.
+  const haritaHazir = !yukleniyor && !topoloji.yukleniyor;
+  // Ariza yoksa bile sebeke varsa harita GOSTERILIR: "arama alani bu,
+  // burada ariza olmamis" bilgisi bos bir kutudan degerlidir.
+  const haritaGosterilir = noktalar.length > 0 || cizgiler.length > 0;
 
   return (
     <div className="fa-grid">
-      <section className="rad-card fa-card fa-card--wide">
-        <header className="rad-card-head">
+      <section className="fa-card fa-card--wide">
+        <header className="fa-card-head">
           <h3>
             <MapIcon size={16} />
             {t("faultAnalytics.heatmap")}
           </h3>
           <small>{t("faultAnalytics.heatmapHint")}</small>
         </header>
-        {yukleniyor ? (
-          <p className="net-empty">{t("faultAnalytics.loading")}</p>
+        {!haritaHazir ? (
+          <Bos Icon={Loader}>{t("faultAnalytics.loading")}</Bos>
         ) : hata ? (
           <p className="net-banner net-banner--bad">{hata}</p>
-        ) : noktalar.length ? (
-          <Suspense fallback={<p className="net-empty">{t("faultAnalytics.loading")}</p>}>
-            <FaultHeatMap points={noktalar} />
+        ) : haritaGosterilir ? (
+          <Suspense fallback={<Bos Icon={Loader}>{t("faultAnalytics.loading")}</Bos>}>
+            <FaultHeatMap points={noktalar} lines={cizgiler} />
           </Suspense>
         ) : (
-          <p className="net-empty">{t("faultAnalytics.noHeat")}</p>
+          <Bos Icon={MapPin}>{t("faultAnalytics.noHeat")}</Bos>
         )}
       </section>
 
-      <section className="rad-card fa-card fa-card--wide">
-        <header className="rad-card-head">
+      <section className="fa-card fa-card--wide">
+        <header className="fa-card-head">
           <h3>
             <Share2 size={16} />
             {t("faultAnalytics.sankey")}
@@ -581,7 +602,7 @@ function HaritaVeAkis({
             birim={t("faultAnalytics.faultUnit")}
           />
         ) : (
-          <p className="net-empty">{t("faultAnalytics.noSankey")}</p>
+          <Bos Icon={Share2}>{t("faultAnalytics.noSankey")}</Bos>
         )}
       </section>
     </div>
@@ -598,31 +619,29 @@ function SistemSagligi({ accessToken, days }: { accessToken: string; days: numbe
     useCallback(() => fetchSystemHealth(accessToken, days), [accessToken, days])
   );
 
-  if (yukleniyor) return <p className="net-empty">{t("faultAnalytics.loading")}</p>;
+  if (yukleniyor) return <Bos Icon={Loader}>{t("faultAnalytics.loading")}</Bos>;
   if (hata) return <p className="net-banner net-banner--bad">{hata}</p>;
   if (!veri) return null;
 
   const a = veri.alarm_summary;
+  const isi = veri.alarm_heatmap;
 
   return (
     <>
-      <div className="net-access-bar fa-bar-sub">
-        <KpiKutu Icon={BellRing} label={t("faultAnalytics.alarmTotal")} value={a.total} />
-        <span className="net-access-sep" aria-hidden="true" />
-        <KpiKutu
+      <div className="fa-kpis">
+        <Kpi Icon={BellRing} label={t("faultAnalytics.alarmTotal")} value={a.total} />
+        <Kpi
           Icon={Gauge}
           label={t("faultAnalytics.alarmAck")}
           value={a.acknowledged}
-          alt={a.total > 0 ? yuzde(a.ack_ratio) : undefined}
+          note={a.total > 0 ? yuzde(a.ack_ratio) : undefined}
         />
-        <span className="net-access-sep" aria-hidden="true" />
-        <KpiKutu Icon={Unplug} label={t("faultAnalytics.commOutages")} value={a.comm_outages} />
+        <Kpi Icon={Unplug} label={t("faultAnalytics.commOutages")} value={a.comm_outages} />
         {/* Siniflandirilmamis kayitlar HABERLESME sayisini eksik gosterir.
             Sifirsa gosterilmez; sifir degilse SUSULMAZ. */}
         {a.unclassified > 0 ? (
           <>
-            <span className="net-access-sep" aria-hidden="true" />
-            <KpiKutu
+                <Kpi
               Icon={AlertTriangle}
               label={t("faultAnalytics.unclassified")}
               value={a.unclassified}
@@ -640,8 +659,8 @@ function SistemSagligi({ accessToken, days }: { accessToken: string; days: numbe
       ) : null}
 
       <div className="fa-grid">
-        <section className="rad-card fa-card">
-          <header className="rad-card-head">
+        <section className="fa-card">
+          <header className="fa-card-head">
             <h3>
               <BellRing size={16} />
               {t("faultAnalytics.topRules")}
@@ -649,7 +668,7 @@ function SistemSagligi({ accessToken, days }: { accessToken: string; days: numbe
             <small>{t("faultAnalytics.topRulesHint")}</small>
           </header>
           {veri.top_rules.length ? (
-            <ul className="fa-list fa-list--pairs">
+            <ul className="fa-list">
               {veri.top_rules.map((r) => (
                 <li key={`${r.rule_name}-${r.level}`}>
                   <span className="fa-list-label">
@@ -675,12 +694,12 @@ function SistemSagligi({ accessToken, days }: { accessToken: string; days: numbe
               ))}
             </ul>
           ) : (
-            <p className="net-empty">{t("faultAnalytics.noRules")}</p>
+            <Bos Icon={BellRing}>{t("faultAnalytics.noRules")}</Bos>
           )}
         </section>
 
-        <section className="rad-card fa-card">
-          <header className="rad-card-head">
+        <section className="fa-card">
+          <header className="fa-card-head">
             <h3>
               <Unplug size={16} />
               {t("faultAnalytics.flapping")}
@@ -688,7 +707,7 @@ function SistemSagligi({ accessToken, days }: { accessToken: string; days: numbe
             <small>{t("faultAnalytics.flappingHint")}</small>
           </header>
           {veri.flapping_devices.length ? (
-            <ul className="fa-list fa-list--pairs">
+            <ul className="fa-list">
               {veri.flapping_devices.map((d) => (
                 <li key={d.device_id}>
                   <span className="fa-list-label">
@@ -708,7 +727,46 @@ function SistemSagligi({ accessToken, days }: { accessToken: string; days: numbe
               ))}
             </ul>
           ) : (
-            <p className="net-empty">{t("faultAnalytics.noFlapping")}</p>
+            <Bos Icon={Unplug}>{t("faultAnalytics.noFlapping")}</Bos>
+          )}
+        </section>
+
+        {/* ---- Cihaz x zaman alarm yogunlugu ----
+             Ustteki iki liste "kim" der; bu matris "NE ZAMAN" der. Ikisi
+             ayri sorudur: uc ay her gun 2 alarm ile tek gunde 180 alarm
+             listede AYNI sayiya duser, burada bakista ayrilir. ---- */}
+        <section className="fa-card fa-card--wide">
+          <header className="fa-card-head">
+            <h3>
+              <Grid3x3 size={16} />
+              {t("faultAnalytics.alarmHeatmap")}
+            </h3>
+            <small>{t("faultAnalytics.alarmHeatmapHint")}</small>
+          </header>
+          {isi.cells.length ? (
+            <>
+              {/* Kesilen satirlar SESSIZCE atilmaz: "listede yok" ile
+                  "alarm uretmemis" karistirilmasin. */}
+              {isi.truncated ? (
+                <p className="fa-inline-warn">
+                  <AlertTriangle size={13} />
+                  {t("faultAnalytics.alarmHeatmapTruncated", {
+                    shown: isi.devices.length,
+                    total: isi.device_total
+                  })}
+                </p>
+              ) : null}
+              <AlarmIsiHaritasi
+                buckets={isi.buckets}
+                devices={isi.devices}
+                cells={isi.cells}
+                max={isi.max}
+                bucket={isi.bucket}
+                birim={t("faultAnalytics.alarmUnit")}
+              />
+            </>
+          ) : (
+            <Bos Icon={Grid3x3}>{t("faultAnalytics.noAlarmHeatmap")}</Bos>
           )}
         </section>
       </div>
@@ -727,14 +785,14 @@ function CihazSagligi({ accessToken, days }: { accessToken: string; days: number
     useCallback(() => fetchDeviceHealth(accessToken, days), [accessToken, days])
   );
 
-  if (yukleniyor) return <p className="net-empty">{t("faultAnalytics.loading")}</p>;
+  if (yukleniyor) return <Bos Icon={Loader}>{t("faultAnalytics.loading")}</Bos>;
   if (hata) return <p className="net-banner net-banner--bad">{hata}</p>;
   if (!veri) return null;
 
   return (
     <div className="fa-grid">
-      <section className="rad-card fa-card">
-        <header className="rad-card-head">
+      <section className="fa-card">
+        <header className="fa-card-head">
           <h3>
             <BatteryLow size={16} />
             {t("faultAnalytics.battery")}
@@ -742,7 +800,7 @@ function CihazSagligi({ accessToken, days }: { accessToken: string; days: number
           <small>{t("faultAnalytics.batteryHint")}</small>
         </header>
         {veri.battery_drain.length ? (
-          <ul className="fa-list fa-list--pairs">
+          <ul className="fa-list">
             {veri.battery_drain.map((b) => (
               <li key={b.device_id}>
                 <span className="fa-list-label">
@@ -769,12 +827,12 @@ function CihazSagligi({ accessToken, days }: { accessToken: string; days: number
             ))}
           </ul>
         ) : (
-          <p className="net-empty">{t("faultAnalytics.noBattery")}</p>
+          <Bos Icon={BatteryLow}>{t("faultAnalytics.noBattery")}</Bos>
         )}
       </section>
 
-      <section className="rad-card fa-card">
-        <header className="rad-card-head">
+      <section className="fa-card">
+        <header className="fa-card-head">
           <h3>
             <SignalLow size={16} />
             {t("faultAnalytics.weakSignal")}
@@ -782,7 +840,7 @@ function CihazSagligi({ accessToken, days }: { accessToken: string; days: number
           <small>{t("faultAnalytics.weakSignalHint")}</small>
         </header>
         {veri.weak_signal.length ? (
-          <ul className="fa-list fa-list--pairs">
+          <ul className="fa-list">
             {veri.weak_signal.map((s) => (
               <li key={s.device_id}>
                 <span className="fa-list-label">
@@ -799,12 +857,12 @@ function CihazSagligi({ accessToken, days }: { accessToken: string; days: number
             ))}
           </ul>
         ) : (
-          <p className="net-empty">{t("faultAnalytics.noWeakSignal")}</p>
+          <Bos Icon={SignalLow}>{t("faultAnalytics.noWeakSignal")}</Bos>
         )}
       </section>
 
-      <section className="rad-card fa-card fa-card--wide">
-        <header className="rad-card-head">
+      <section className="fa-card fa-card--wide">
+        <header className="fa-card-head">
           <h3>
             <Activity size={16} />
             {t("faultAnalytics.hourProfile")}
@@ -814,7 +872,7 @@ function CihazSagligi({ accessToken, days }: { accessToken: string; days: number
         {veri.signal_by_hour.length ? (
           <SaatProfiliGrafigi points={veri.signal_by_hour} utcOffsetHours={kayma} />
         ) : (
-          <p className="net-empty">{t("faultAnalytics.noHourProfile")}</p>
+          <Bos Icon={Activity}>{t("faultAnalytics.noHourProfile")}</Bos>
         )}
       </section>
     </div>
@@ -825,32 +883,46 @@ function CihazSagligi({ accessToken, days }: { accessToken: string; days: number
 // Ortak parcalar
 // ---------------------------------------------------------------------------
 
-function KpiKutu({
+/** Tek olcu kutusu. Sayi buyuk ve tabular, etiket kucuk ve sessiz — bakis
+ *  once olcuye gitsin; serh (`note`) ondan gorsel olarak ayri dursun. */
+function Kpi({
   Icon,
   label,
   value,
-  alt,
+  note,
   uyari
 }: {
   Icon: typeof TrendingUp;
   label: string;
-  value: number;
-  alt?: string;
+  value: number | string;
+  note?: string;
   uyari?: boolean;
 }) {
   return (
-    <div className={`net-access-item ${uyari ? "is-warn" : ""}`}>
-      <span className="net-access-icon">
-        <Icon size={16} />
+    <div className={`fa-kpi ${uyari ? "fa-kpi--warn" : ""}`}>
+      <span className="fa-kpi-icon">
+        <Icon size={17} />
       </span>
-      <span className="net-access-body">
-        <span className="net-access-label">{label}</span>
-        <strong className="net-access-value">
-          {value}
-          {alt ? <em className="net-access-sub">{alt}</em> : null}
-        </strong>
+      <span className="fa-kpi-body">
+        <span className="fa-kpi-label">{label}</span>
+        <strong className="fa-kpi-value">{value}</strong>
+        {note ? <em className="fa-kpi-note">{note}</em> : null}
       </span>
     </div>
+  );
+}
+
+/**
+ * Bos durum. Bos bir grafik "ariza yok" gibi okunur; dogru mesaj "henuz veri
+ * birikmedi"dir. Ikon + metin ve en az bir yukseklik: kartlar ayni satirda
+ * hizali kalsin diye.
+ */
+function Bos({ Icon, children }: { Icon: typeof TrendingUp; children: React.ReactNode }) {
+  return (
+    <p className="fa-empty">
+      <Icon size={22} strokeWidth={1.5} />
+      {children}
+    </p>
   );
 }
 

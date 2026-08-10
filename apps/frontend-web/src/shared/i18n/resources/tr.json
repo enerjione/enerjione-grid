@@ -4404,6 +4404,7 @@
     "voltage_loss_all_units": "Gerilim Kaybı (Tüm Birimler)"
   },
   "faultAnalytics": {
+    "trendNeedsTwoMonths": "Eğilim çizmek için en az iki ay gerekiyor — şu ana kadar yalnızca {{month}} ayında {{count}} arıza var.",
     "alarmHeatmap": "Cihaz × Zaman Alarm Yoğunluğu",
     "alarmHeatmapHint": "Satır cihaz, sütun zaman. Aynı sütunda birden çok cihaz koyulaşıyorsa sorun cihazlarda değil o gün yaşanan ortak olaydadır.",
     "alarmHeatmapTruncated": "En çok alarm üreten {{shown}} cihaz gösteriliyor; pencerede toplam {{total}} cihaz alarm üretti.",

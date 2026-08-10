@@ -225,6 +225,13 @@ def test_sistem_sagligi_yaniti_TS_TIPIYLE_ayni_alanlari_tasir(db):
         gelen["alarm_summary"],
         _alt_blok_alanlari(govde, "alarm_summary"),
     )
+    # Isi matrisi bos veride de TAM bicimde doner; arayuz `cells.length`
+    # kontrolunden once `buckets`/`truncated` okuyor.
+    _esitle(
+        "SystemHealth.alarm_heatmap",
+        gelen["alarm_heatmap"],
+        _alt_blok_alanlari(govde, "alarm_heatmap"),
+    )
 
 
 def test_sistem_sagligi_liste_ogeleri_TS_ile_ayni(db):

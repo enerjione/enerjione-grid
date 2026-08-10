@@ -17,7 +17,8 @@ import {
   HEAT_FLOOR,
   heatColor,
   heatIntensities,
-  heatRadius
+  heatRadius,
+  sebekeCizgileri
 } from "../src/features/fault-analytics/heatField";
 
 const N = (lat: number, lon: number, w: number) => ({
@@ -140,4 +141,70 @@ test("yaricap zoom ile BUYUR — uzaklasinca direkler tek lekeye kaynamasin", ()
 test("bozuk zoom degeri yaricapi kirmaz", () => {
   const r = heatRadius(Number.NaN);
   assert.ok(Number.isFinite(r) && r > 0, `gecersiz yaricap: ${r}`);
+});
+
+// ---------------------------------------------------------------------------
+// Sebeke cizgileri — isi lekesinin ZEMINI
+// ---------------------------------------------------------------------------
+// Bos bir zemin uzerindeki sicak nokta operatore koordinat kadar sey anlatir;
+// hat cizilince "su fiderin ortasinda" olur. Sahaya ekip gonderme karari bu
+// ikinci cumleyle verilir.
+
+const D = (id: number, lat: number, lon: number) => ({ id, latitude: lat, longitude: lon });
+
+test("her segment AYRI parca — zincir kurulmaz", () => {
+  // Topoloji tek bir zincir degil: dallanma diregindan cikan kol AYRI bir
+  // hattir. Noktalari ucuca eklemek olmayan bir teli cizerdi.
+  const parcalar = sebekeCizgileri(
+    [D(1, 39, 35), D(2, 39.1, 35.1), D(3, 39.2, 35.0)],
+    [
+      { from_pole_id: 1, to_pole_id: 2 },
+      { from_pole_id: 2, to_pole_id: 3 }
+    ]
+  );
+  assert.equal(parcalar.length, 2);
+  parcalar.forEach((p) => assert.equal(p.length, 2, "parca iki noktali olmali"));
+});
+
+test("kordinatlar [lat, lon] sirasinda", () => {
+  // Ters cevrilirse Leaflet cizgiyi denizin ortasina koyar ve kimse
+  // koordinati okuyup fark etmez.
+  const [parca] = sebekeCizgileri([D(1, 39, 35), D(2, 40, 36)], [
+    { from_pole_id: 1, to_pole_id: 2 }
+  ]);
+  assert.deepEqual(parca, [
+    [39, 35],
+    [40, 36]
+  ]);
+});
+
+test("direksiz segment ATLANIR", () => {
+  // Direk silinmis ama segment kalmis olabilir; `undefined.latitude`
+  // tum haritayi patlatirdi.
+  const parcalar = sebekeCizgileri([D(1, 39, 35)], [
+    { from_pole_id: 1, to_pole_id: 999 },
+    { from_pole_id: 404, to_pole_id: 1 }
+  ]);
+  assert.deepEqual(parcalar, []);
+});
+
+test("BOZUK koordinat cizgiyi sizdirmaz", () => {
+  // Tek bir NaN, Leaflet'in TUM katmanini sessizce cizilmez yapar —
+  // sadece o parca degil, hepsi kaybolur.
+  const parcalar = sebekeCizgileri(
+    [D(1, Number.NaN, 35), D(2, 39.1, 35.1), D(3, 39.2, 35.2)],
+    [
+      { from_pole_id: 1, to_pole_id: 2 },
+      { from_pole_id: 2, to_pole_id: 3 }
+    ]
+  );
+  assert.equal(parcalar.length, 1, "bozuk parca disarida kalmali");
+  parcalar.flat().forEach(([lat, lon]) => {
+    assert.ok(Number.isFinite(lat) && Number.isFinite(lon));
+  });
+});
+
+test("segment yoksa bos dizi — patlamaz", () => {
+  assert.deepEqual(sebekeCizgileri([], []), []);
+  assert.deepEqual(sebekeCizgileri([D(1, 39, 35)], []), []);
 });

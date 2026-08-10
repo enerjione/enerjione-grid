@@ -4407,6 +4407,7 @@
     "voltage_loss_all_units": "Voltage Loss All Units"
   },
   "faultAnalytics": {
+    "trendNeedsTwoMonths": "A trend needs at least two months — so far only {{month}} has data ({{count}} faults).",
     "alarmHeatmap": "Alarm Density by Device and Time",
     "alarmHeatmapHint": "Rows are devices, columns are time. Several devices darkening in the same column points to a shared event that day, not to the devices.",
     "alarmHeatmapTruncated": "Showing the {{shown}} noisiest devices; {{total}} devices raised alarms in this window.",

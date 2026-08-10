@@ -137,6 +137,48 @@ function karistir(a: string, b: string, t: number): string {
 }
 
 /**
+ * Sebeke cizgileri: direk cifti -> cizilebilir parca.
+ *
+ * NEDEN HARITADA CIZGI VAR
+ * ------------------------
+ * Bulanik bir leke "buralarda bir sorun var" der ama NEREDE oldugunu
+ * soylemez. Bos bir zemin uzerindeki sicak nokta, operatore ancak koordinat
+ * kadar sey anlatir; hat cizildiginde ise "su fiderin ortasinda, dallanmanin
+ * hemen oncesinde" olur. Sahaya ekip gonderme karari bu ikinci cumleyle
+ * verilir.
+ *
+ * Her segment AYRI bir parca olarak doner (zincir kurulmaz): topoloji tek
+ * bir zincir degil — dallanma direginden cikan kol ayri bir hattir ve
+ * noktalari ucuca eklemek olmayan bir teli cizerdi.
+ */
+export type GeoNokta = { latitude: number; longitude: number };
+
+export function sebekeCizgileri(
+  poles: readonly (GeoNokta & { id: number })[],
+  segments: readonly { from_pole_id: number; to_pole_id: number }[]
+): [number, number][][] {
+  const direk = new Map(poles.map((p) => [p.id, p]));
+  const parcalar: [number, number][][] = [];
+  for (const s of segments) {
+    const a = direk.get(s.from_pole_id);
+    const b = direk.get(s.to_pole_id);
+    // Direksiz segment ya da bozuk koordinat: tek bir NaN, Leaflet'in tum
+    // katmanini sessizce cizilmez yapar.
+    if (!a || !b) continue;
+    if (!kordinatGecerli(a) || !kordinatGecerli(b)) continue;
+    parcalar.push([
+      [a.latitude, a.longitude],
+      [b.latitude, b.longitude]
+    ]);
+  }
+  return parcalar;
+}
+
+function kordinatGecerli(p: GeoNokta): boolean {
+  return Number.isFinite(p.latitude) && Number.isFinite(p.longitude);
+}
+
+/**
  * Nokta yaricapi (piksel) — zoom'a gore.
  *
  * Yaricap SABIT piksel olamaz: uzaklasinca komsu direkler tek bir dev

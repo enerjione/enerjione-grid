@@ -39440,78 +39440,305 @@ th.event-col-category {
 /* =========================================================================
    Ariza Analizi (Muhendislik > Izleme > Ariza Analizi)
 
-   NOT: "grafik kutuphanesi YOK" gerekcesi ARTIK GECERSIZ. Cizim echarts'a
-   tasindi (zaten bagimliliktir, cihaz detay grafikleri kullaniyor) ve sayfa
-   lazy yukleniyor. Buradaki CSS kartlarin/listelerin duzenini tasir; seri
-   renkleri faultChartTheme.ts icinde.
+   TASARIM NOTU — NEDEN YENIDEN DUZENLENDI
+   ---------------------------------------
+   Izgara `repeat(auto-fit, minmax(330px, 1fr))` idi. Genis ekranda (ya da
+   tarayici uzaklastirilmisken) bu ALTI sutun uretiyordu ve her kart 320
+   piksele siparak grafikleri okunmaz hale getiriyordu: yatay siralama
+   cubugunun etiketi kirpiliyor, aylik egilim tek noktaya donusuyordu.
+   "Sigdigi kadar sutun" bir olcu degil; kartin ICINDEKI grafigin ne kadar
+   yere ihtiyaci oldugu olcudur. Bu yuzden sutunlar acikca veriliyor:
+   tam genislik (12), yarim (6), ucte bir (4).
+
+   Renk/olcu belirteci `--fa-*` altinda toplandi; seri renkleri
+   faultChartTheme.ts icinde (grafikler canvas'a ciziyor, CSS'ten
+   okuyamazlar) — iki yer de AYNI paleti tasir.
    ========================================================================= */
 .fa-page {
+  --fa-ink: #0f172a;
+  --fa-muted: #64748b;
+  --fa-faint: #94a3b8;
+  --fa-line: #e6ebf2;
+  --fa-surface: #ffffff;
+  --fa-sunken: #f6f8fb;
+  --fa-brand: #2563eb;
+  --fa-hot: #be123c;
+  --fa-warn: #b45309;
+  --fa-radius: 14px;
+
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  padding-bottom: 8px;
 }
 
-.fa-bar-top {
+/* ---- Ust serit: pencere secimi + dort ozet olcu ----
+   `net-access-bar`dan ayrildi. O serit ag ayarlari ekraninin bilesenidir;
+   burada tasidigi sey OLCUM. Sayilar tabular-nums ve buyuk punto ile,
+   etiketler kucuk ve sessiz — bakis once sayiya gitsin. */
+.fa-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 1px;
   flex-shrink: 0;
+  background: var(--fa-line);
+  border: 1px solid var(--fa-line);
+  border-radius: var(--fa-radius);
+  overflow: hidden;
+}
+
+.fa-kpi {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--fa-surface);
+}
+
+.fa-kpi-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: #eff4ff;
+  color: var(--fa-brand);
+}
+
+.fa-kpi--warn .fa-kpi-icon {
+  background: #fef3c7;
+  color: var(--fa-warn);
+}
+
+.fa-kpi-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.fa-kpi-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  color: var(--fa-faint);
+}
+
+.fa-kpi-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--fa-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sayinin yanindaki baglam ("yalnizca kapanmislar", "%0"). Sayidan gorsel
+   olarak AYRI durur; ikisi ayni agirlikta olsa olcu ile serh karisirdi. */
+.fa-kpi-note {
+  font-size: 11px;
+  font-weight: 500;
+  font-style: normal;
+  color: var(--fa-faint);
+}
+
+.fa-kpi--warn .fa-kpi-note {
+  color: var(--fa-warn);
 }
 
 .fa-window-select {
   border: none;
   background: transparent;
-  font-size: 13px;
+  font-size: 1.05rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--fa-ink);
   padding: 0;
+  margin-left: -2px;
   cursor: pointer;
 }
 
+.fa-window-select:focus-visible {
+  outline: 2px solid var(--fa-brand);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ---- Sekmeler ----
+   Sayfa dort bolume ayrildi. Sekme yalnizca duzen degil PERFORMANS karari:
+   harita ve akis sadece kendi sekmesi acilinca monte edilir. */
+.fa-tabs {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--fa-sunken);
+  border: 1px solid var(--fa-line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.fa-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.fa-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 15px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fa-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.fa-tab:hover {
+  color: var(--fa-ink);
+}
+
+.fa-tab.is-active {
+  background: var(--fa-surface);
+  color: var(--fa-ink);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.fa-tab svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.fa-tab.is-active svg {
+  color: var(--fa-brand);
+  opacity: 1;
+}
+
+/* ---- Kart izgarasi ----
+   12 sutun. Kart genisligi ICERIGE gore secilir, "sigdigi kadar"a gore
+   degil (bkz. bolum basi notu). */
 .fa-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 14px;
   align-items: start;
 }
 
 .fa-card {
-  gap: 12px;
+  grid-column: span 6;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px;
+  background: var(--fa-surface);
+  border: 1px solid var(--fa-line);
+  border-radius: var(--fa-radius);
 }
 
 .fa-card--wide {
-  grid-column: 1 / -1;
+  grid-column: span 12;
 }
 
-/* Grafikli kartlar esit yukseklikte olsun: yan yana iki siralama kartinin
-   biri kisa digeri uzun oldugunda izgara "kirik" gorunuyordu. */
-.fa-card {
+.fa-card--third {
+  grid-column: span 4;
+}
+
+/* Dar ekranda sutun bolmenin anlami kalmaz: grafik yine sikisir. */
+@media (max-width: 1180px) {
+  .fa-card,
+  .fa-card--third {
+    grid-column: span 12;
+  }
+}
+
+/* ---- Kart basligi ----
+   Baslik ve ipucu ALT ALTA. Yan yanayken (eski `rad-card-head`, `flex` +
+   `space-between`) ipucu basligi sikistirip ikisini de yariya kirpiyordu;
+   ekran goruntusunde "En Cok Ariza Cikaran Hatlar" uc satira boluniyordu. */
+.fa-card-head {
   display: flex;
   flex-direction: column;
+  gap: 3px;
 }
-.fa-card .rad-card-head h3 {
-  display: inline-flex;
+
+.fa-card-head h3 {
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  color: var(--fa-ink);
 }
+
+.fa-card-head h3 svg {
+  flex-shrink: 0;
+  color: var(--fa-faint);
+}
+
+.fa-card-head small {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--fa-faint);
+}
+
+/* ---- Bos durum ----
+   Bos kart "ariza yok" gibi okunmasin diye METIN tasir; ustelik kartlar
+   ayni satirda hizali kalsin diye en az bir yukseklik kaplar. Aksi halde
+   veri az olan bir sahada izgara kirik gorunuyordu. */
+.fa-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1;
+  min-height: 132px;
+  margin: 0;
+  padding: 16px;
+  border: 1px dashed var(--fa-line);
+  border-radius: 10px;
+  background: var(--fa-sunken);
+  color: var(--fa-faint);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.fa-empty svg {
+  color: #cbd5e1;
+}
+
 /* Grafigin ustunde duran veri-kalitesi uyarisi. Banner degil satir ici:
    uyari kartin DISINDA dursaydi kart tek basina kopyalanip yanlis
    okunabilirdi. */
 .fa-inline-warn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin: 0 0 6px;
-  padding: 6px 9px;
-  border-radius: 7px;
+  gap: 7px;
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
   border-left: 3px solid #f59e0b;
   background: #fffbeb;
   color: #92400e;
   font-size: 11px;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.4;
 }
-.fa-inline-warn svg { flex-shrink: 0; }
+
+.fa-inline-warn svg {
+  flex-shrink: 0;
+}
 
 /* ---- Siralamali listeler ---- */
 .fa-list {
@@ -39520,18 +39747,24 @@ th.event-col-category {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 
 .fa-list li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 90px 42px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid #f1f5f9;
 }
 
-.fa-list--spans li {
-  grid-template-columns: minmax(0, 1fr) 42px;
+.fa-list li:first-child {
+  padding-top: 0;
+}
+
+.fa-list li:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .fa-list-label {
@@ -39548,39 +39781,35 @@ th.event-col-category {
   font-style: normal;
   font-size: 11px;
   font-weight: 500;
-  color: #94a3b8;
+  color: var(--fa-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .fa-list-count {
   font-size: 13px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--fa-ink);
   text-align: right;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-/* Tekrarlayan aciklik sayisi vurgulu: bakim onceliginin ta kendisi. */
+/* Sayinin altindaki ikincil satir ("~40 gun sonra esigin altinda").
+   Tahmini olcuden gorsel olarak ayirir. */
+.fa-list-count em {
+  display: block;
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--fa-faint);
+  white-space: nowrap;
+}
+
+/* Tekrarlayan aciklik / kopan cihaz sayisi vurgulu: bakim onceliginin ta
+   kendisi. */
 .fa-list-count--hot {
-  color: #b91c1c;
-}
-
-.fa-bar {
-  display: block;
-  height: 7px;
-  border-radius: 999px;
-  background: #f1f5f9;
-  overflow: hidden;
-}
-
-.fa-bar-fill {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: #3b82f6;
-}
-
-.fa-bar-fill--cause {
-  background: #8b5cf6;
+  color: var(--fa-hot);
 }
 
 /* ---- Kural isabeti ---- */
@@ -39591,15 +39820,16 @@ th.event-col-category {
 }
 
 .fa-accuracy strong {
-  font-size: 1.9rem;
-  font-weight: 800;
-  color: #0f172a;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--fa-ink);
   line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .fa-accuracy span {
   font-size: 12px;
-  color: #64748b;
+  color: var(--fa-muted);
   line-height: 1.45;
 }
 
@@ -39607,24 +39837,23 @@ th.event-col-category {
 .fa-mismatch {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 10px 0 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  border-top: 1px solid #f1f5f9;
-  padding-top: 10px;
+  gap: 7px;
+  border-top: 1px solid var(--fa-line);
 }
 
 .fa-mismatch li {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 14px minmax(0, 1fr) 32px;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   font-size: 11.5px;
 }
 
 .fa-mismatch-from {
-  color: #b45309;
+  color: var(--fa-warn);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -39639,139 +39868,8 @@ th.event-col-category {
 
 .fa-mismatch strong {
   text-align: right;
-  color: #0f172a;
+  color: var(--fa-ink);
   font-variant-numeric: tabular-nums;
-}
-
-/* ---- Faz cipleri ---- */
-.fa-chips {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.fa-chips li {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  border-radius: 999px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-}
-
-.fa-chip-phase {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  color: #475569;
-}
-
-.fa-chips strong {
-  font-size: 13px;
-  color: #0f172a;
-  font-variant-numeric: tabular-nums;
-}
-
-/* ---- Aylik egilim ---- */
-.fa-trend {
-  display: flex;
-  align-items: flex-end;
-  gap: 5px;
-  height: 130px;
-  padding-top: 6px;
-}
-
-.fa-trend-col {
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  height: 100%;
-  gap: 4px;
-}
-
-.fa-trend-fill {
-  width: 100%;
-  max-width: 34px;
-  border-radius: 4px 4px 0 0;
-  background: linear-gradient(180deg, #60a5fa, #3b82f6);
-}
-
-.fa-trend-col small {
-  font-size: 10px;
-  color: #94a3b8;
-  font-variant-numeric: tabular-nums;
-}
-
-/* ---- Sekmeler ----
-   Sayfa dort bolume ayrildi. Sekme yalnizca duzen degil PERFORMANS karari:
-   harita ve akis sadece kendi sekmesi acilinca monte edilir. */
-.fa-tabs {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-  padding: 4px;
-  border-radius: 10px;
-  background: #f1f5f9;
-  overflow-x: auto;
-}
-
-.fa-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border: none;
-  border-radius: 7px;
-  background: transparent;
-  color: #64748b;
-  font-size: 12.5px;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-
-.fa-tab:hover {
-  color: #334155;
-}
-
-.fa-tab.is-active {
-  background: #ffffff;
-  color: #0f172a;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.09);
-}
-
-.fa-tab svg {
-  flex-shrink: 0;
-}
-
-.fa-bar-sub {
-  flex-shrink: 0;
-}
-
-/* Etiket + sayi ikilisi. Varsayilan `.fa-list li` uc sutunludur (orta sutun
-   cubuk icin); iki cocuklu listelerde sayi ORTA sutuna dusup sagda bosluk
-   birakiyordu. */
-.fa-list--pairs li {
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-/* Sayinin altindaki ikincil satir ("~40 gun sonra esigin altinda"). Tahmini
-   olcuden gorsel olarak ayirir. */
-.fa-list-count em {
-  display: block;
-  font-style: normal;
-  font-size: 10.5px;
-  font-weight: 500;
-  color: #94a3b8;
-  white-space: nowrap;
 }
 
 /* ---- Ariza yogunluk haritasi ---- */
@@ -39779,20 +39877,22 @@ th.event-col-category {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .fa-heat-map {
-  height: 420px;
+  height: 460px;
   width: 100%;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
+  border-radius: 11px;
+  border: 1px solid var(--fa-line);
   overflow: hidden;
+  background: var(--fa-sunken);
   z-index: 0; /* Leaflet panelleri sayfa ustundeki serite tirmanmasin. */
 }
 
-/* Isi katmani karolarin USTUNDE, isaretcilerin ALTINDA. Isaretciler kesin
-   adedi tasidigi icin lekenin altinda kalmamalari onemli. */
+/* Isi katmani kendi panelinde (z-index 450): cizgilerin USTUNDE, kesin
+   adedi tasiyan isaretcilerin ALTINDA. Siralama DOM ekleme sirasina
+   birakilsaydi isaretciler lekenin altinda kalabilirdi. */
 .fa-heat-canvas {
   position: absolute;
   left: 0;
@@ -39800,20 +39900,32 @@ th.event-col-category {
   transition: opacity 0.12s linear;
 }
 
-/* Lejant olmadan renk bir sey ifade etmez: "kirmizi cok mu, biraz mi?" */
+/* Sebeke cizgisi: lekenin ALTINDA, notr ve ince. Amaci arizayi degil
+   BAGLAMI vermek — "bu sicak nokta hattin neresinde". Baskin bir renk
+   isi olceginin okunmasini bozardi. */
+.fa-heat-line {
+  stroke: #94a3b8;
+  stroke-opacity: 0.85;
+  stroke-width: 2;
+  stroke-linecap: round;
+  fill: none;
+}
+
 .fa-heat-legend {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  flex-wrap: wrap;
   font-size: 11px;
   font-weight: 600;
-  color: #64748b;
+  color: var(--fa-muted);
 }
 
 .fa-heat-ramp {
   flex: 1;
   height: 8px;
-  max-width: 240px;
+  min-width: 120px;
+  max-width: 260px;
   border-radius: 999px;
   /* Duraklar heatField.ts HEAT_STOPS ile AYNI; ikisi birlikte degisir. */
   background: linear-gradient(
@@ -39823,6 +39935,47 @@ th.event-col-category {
     rgba(234, 88, 12, 0.82) 66%,
     rgba(190, 18, 60, 0.92) 100%
   );
+}
+
+/* Lejantin sonundaki "sebeke hatti" anahtari — cizginin ne oldugunu
+   soylemeyen bir harita, cizgiyi gurultu yapar. */
+.fa-heat-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fa-faint);
+  font-weight: 500;
+}
+
+.fa-heat-key i {
+  display: block;
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: #94a3b8;
+}
+
+/* Harita duruyor ama uzerinde gosterilecek ariza yok. Haritayi hic
+   cizmemek yerine sebekeyi gosterip bunu SOYLEMEK dogru: "arama alani bu,
+   burada ariza olmamis". */
+.fa-heat-note {
+  position: absolute;
+  left: 50%;
+  top: 16px;
+  transform: translateX(-50%);
+  z-index: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--fa-line);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  color: var(--fa-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  pointer-events: none;
 }
 
 /* ==========================================================================

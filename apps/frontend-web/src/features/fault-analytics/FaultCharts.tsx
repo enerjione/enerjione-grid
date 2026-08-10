@@ -14,8 +14,8 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import ReactECharts from "echarts-for-react/lib/core";
 import * as echarts from "echarts/core";
-import { BarChart, LineChart, SankeyChart } from "echarts/charts";
-import { GridComponent, TooltipComponent } from "echarts/components";
+import { BarChart, HeatmapChart, LineChart, SankeyChart } from "echarts/charts";
+import { GridComponent, TooltipComponent, VisualMapComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 
 import {
@@ -35,8 +35,12 @@ echarts.use([
   LineChart,
   // Sankey echarts'ta YERLESIK — yeni bir kutuphane gerekmedi.
   SankeyChart,
+  // Cihaz x zaman alarm yogunlugu; cografi isi haritasi (Leaflet canvas)
+  // ile karistirilmasin — bu matris, o cografya.
+  HeatmapChart,
   GridComponent,
   TooltipComponent,
+  VisualMapComponent,
   CanvasRenderer
 ]);
 
@@ -396,6 +400,139 @@ export function SaatProfiliGrafigi({
       echarts={echarts}
       option={option}
       style={{ height: yukseklik, width: "100%" }}
+      opts={{ renderer: "canvas" }}
+      notMerge
+    />
+  );
+}
+
+type AlarmIsiProps = {
+  /** Kronolojik kova etiketleri — sutunlar. */
+  buckets: string[];
+  /** Satirlar; en cok alarm ureten en USTTE gorunecek. */
+  devices: { code: string; name: string; total: number }[];
+  /** `[sutun, satir, adet]`. Bos kovalar listede YOKTUR. */
+  cells: number[][];
+  max: number;
+  /** "day" | "hour" — eksen etiketi bicimini belirler. */
+  bucket: string;
+  birim: string;
+};
+
+/** "2026-08-07" -> "07.08" · "2026-08-07 14" -> "07.08 14:00" */
+function kovaEtiketi(k: string, gunluk: boolean): string {
+  const [tarih, saat] = k.split(" ");
+  const p = tarih.split("-");
+  if (p.length !== 3) return k;
+  const gun = `${p[2]}.${p[1]}`;
+  return gunluk ? gun : `${gun} ${saat ?? "00"}:00`;
+}
+
+/**
+ * Cihaz x zaman alarm yogunlugu.
+ *
+ * NEDEN ISI HARITASI, LISTE DEGIL: "en cok alarm ureten cihazlar" listesi
+ * ZAMANI duzler ve iki bambaska durumu ayni sayiya indirir —
+ *   * uc ay boyunca her gun 2 alarm (kronik: esik yanlis / montaj sorunlu),
+ *   * tek bir gunde 180 alarm (o gun sahada bir olay olmus).
+ * Ikisi de "180". Isi haritasi bunlari bakista ayirir. Ustelik AYNI sutunda
+ * birden cok cihaz kararmissa sorun cihazlarda degil o gun yasanan ortak
+ * olaydadir (besleme, sebeke, gateway).
+ *
+ * BOS HUCRE ILE SIFIR AYNI DEGIL: gonderilmeyen hucre hic cizilmez (zemin
+ * rengi kalir), 0 alarmli bir kova ise zaten gonderilmez. Yani zemin
+ * "alarm yok" demektir — uydurma bir "dusuk yogunluk" tonu degil.
+ */
+export function AlarmIsiHaritasi({
+  buckets,
+  devices,
+  cells,
+  max,
+  bucket,
+  birim
+}: AlarmIsiProps) {
+  const gunluk = bucket !== "hour";
+  const option = useMemo(() => {
+    // echarts kategori eksenini asagidan yukari dizer; en cok alarm ureten
+    // cihaz USTTE olsun diye satirlar ters cevrilir (hucre satir indeksi de).
+    const sonSatir = devices.length - 1;
+    return {
+      grid: { left: 128, right: 16, top: 8, bottom: 46, containLabel: false },
+      tooltip: {
+        ...ipucu,
+        position: "top",
+        formatter: (p: { value: [number, number, number] }) => {
+          const [sutun, satir, adet] = p.value;
+          const d = devices[sonSatir - satir];
+          return `<b>${d?.name ?? ""}</b><br/>${kovaEtiketi(
+            buckets[sutun] ?? "",
+            gunluk
+          )}<br/>${adet} ${birim}`;
+        }
+      },
+      xAxis: {
+        type: "category",
+        data: buckets.map((b) => kovaEtiketi(b, gunluk)),
+        splitArea: { show: false },
+        axisTick: { show: false },
+        axisLine: { lineStyle: { color: "#e2e8f0" } },
+        axisLabel: {
+          color: "#94a3b8",
+          fontSize: 10,
+          // Cok sutunda etiketleri egmek okunurlugu artirmaz; echarts
+          // kendi seyreltmesini yapsin, egim sabit kalsin.
+          rotate: buckets.length > 24 ? 45 : 0,
+          hideOverlap: true
+        }
+      },
+      yAxis: {
+        type: "category",
+        data: [...devices].reverse().map((d) => d.name),
+        axisTick: { show: false },
+        axisLine: { show: false },
+        splitArea: { show: false },
+        axisLabel: {
+          color: "#475569",
+          fontSize: 11,
+          width: 118,
+          overflow: "truncate"
+        }
+      },
+      visualMap: {
+        min: 0,
+        max: Math.max(1, max),
+        calculable: false,
+        orient: "horizontal",
+        left: "center",
+        bottom: 0,
+        itemWidth: 11,
+        itemHeight: 90,
+        text: [String(Math.max(1, max)), "1"],
+        textStyle: { color: "#94a3b8", fontSize: 10 },
+        // ISI HARITASI PALETI heatField.ts HEAT_STOPS ile ayni ailede:
+        // kullanici cografi isi haritasindan buraya gecerken renk kodunu
+        // yeniden ogrenmesin. Yesil YOK — bu projede yesil "sorun yok".
+        inRange: { color: ["#dbeafe", "#93c5fd", "#facc15", "#f97316", "#be123c"] }
+      },
+      series: [
+        {
+          type: "heatmap",
+          data: cells.map(([sutun, satir, adet]) => [sutun, sonSatir - satir, adet]),
+          progressive: 2000,
+          itemStyle: { borderColor: "#fff", borderWidth: 1 },
+          emphasis: { itemStyle: { borderColor: "#0f172a", borderWidth: 1.5 } }
+        }
+      ]
+    };
+  }, [buckets, devices, cells, max, gunluk, birim]);
+
+  return (
+    <ReactECharts
+      echarts={echarts}
+      option={option}
+      // Satir basina sabit yukseklik: 25 cihazda kutucuklar okunabilir
+      // kalsin, 3 cihazda grafik gereksiz uzamasin.
+      style={{ height: Math.min(560, Math.max(180, devices.length * 22 + 84)) }}
       opts={{ renderer: "canvas" }}
       notMerge
     />
