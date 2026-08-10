@@ -1284,3 +1284,100 @@ def test_her_modelin_sinyalleri_AYRI_listelenir(db):
         ).all()
         assert satirlar, f"{model} icin sinyal yok"
         assert {s.source for s in satirlar} == kaynaklar, model
+
+
+# ---------------------------------------------------------------------------
+# 17) SET URETIMI KARDESLERLE CAKISMAZ  (saha: 48 sinyal sessizce dusuyordu)
+# ---------------------------------------------------------------------------
+
+
+def test_atama_degistikten_sonra_set_eklemek_CAKISMA_URETMEZ(
+    db, kurulumcu, gateway, lisans_acik
+):
+    """Konum varsayilani korlemesine yazilinca iki set ayni uyduyu iddia ediyordu.
+
+    YASANAN: Set 1 [7,8,9]'a alinip set sayisi 3'e cikarilinca Set 3 de
+    varsayilanla [7,8,9] yaziliyordu. Bolme haritasinda ILK esleme kazaniyor,
+    gec kalan setin o unitesine ait 48 sinyalin TAMAMI hic gelmiyordu — arayuzde
+    set saglikli gorunuyor, tek iz tag-engine loglarindaki bir ERROR satiri.
+    Ustelik cakisan uydular hicbir sete gitmedigi icin fiziksel kayitta yetim
+    kaliyordu.
+
+    Muhafiz yalnizca PATCH yolunda vardi; URETIM yolu korumasizdi.
+    """
+    kit = _kit_ekle(db, kurulumcu, set_count=1)
+    set1 = _setler(db, kit)[0]
+    devices_api.update_device(
+        device_code=set1.code,
+        payload=DeviceUpdate(subunit_satellites=[7, 8, 9]),
+        current_user=kurulumcu,
+        db=db,
+    )
+
+    devices_api.update_device(
+        device_code=kit.code,
+        payload=DeviceUpdate(satellite_set_count=3),
+        current_user=kurulumcu,
+        db=db,
+    )
+
+    atamalar = [tuple(s.subunit_satellites) for s in _setler(db, kit)]
+    duz = [n for a in atamalar for n in a]
+    assert len(duz) == len(set(duz)), f"ayni uydu birden fazla sette: {atamalar}"
+    assert set(duz) == set(range(1, 10)), f"dokuz uydunun hepsi atanmali: {atamalar}"
+
+
+def test_bolme_haritasinda_HER_uydu_TEK_sete_gider(db, kurulumcu, gateway, lisans_acik):
+    """/internal/device-map bijektif olmali — tag-engine'in tek kaynagi bu."""
+    kit = _kit_ekle(db, kurulumcu, set_count=1)
+    set1 = _setler(db, kit)[0]
+    devices_api.update_device(
+        device_code=set1.code,
+        payload=DeviceUpdate(subunit_satellites=[2, 5, 9]),
+        current_user=kurulumcu,
+        db=db,
+    )
+    devices_api.update_device(
+        device_code=kit.code,
+        payload=DeviceUpdate(satellite_set_count=3),
+        current_user=kurulumcu,
+        db=db,
+    )
+
+    harita = internal_api.device_map_internal(
+        db=db, x_service_token=settings.internal_service_token
+    )
+    kayit = next(d for d in harita["devices"] if d["code"] == kit.code)
+    tum_kaynaklar = [k for alt in kayit["subunits"] for k in alt["sources"]]
+    assert len(tum_kaynaklar) == len(set(tum_kaynaklar)), (
+        f"bolme haritasi bijektif degil: {tum_kaynaklar}"
+    )
+    assert len(tum_kaynaklar) == 9
+
+
+def test_set_azaltip_artirmak_da_cakisma_uretmez(db, kurulumcu, gateway, lisans_acik):
+    """Tetiklemek icin elle atama SART DEGIL: sync_subunits silinen seti
+    yeniden uretirken de ayni yoldan geciyor."""
+    kit = _kit_ekle(db, kurulumcu, set_count=3)
+    setler = _setler(db, kit)
+    devices_api.update_device(
+        device_code=setler[0].code,
+        payload=DeviceUpdate(subunit_satellites=[4, 5, 6]),
+        current_user=kurulumcu,
+        db=db,
+    ) if False else None  # kardes cakismasi zaten 422; dogrudan azalt/artir
+
+    devices_api.update_device(
+        device_code=kit.code,
+        payload=DeviceUpdate(satellite_set_count=1),
+        current_user=kurulumcu,
+        db=db,
+    )
+    devices_api.update_device(
+        device_code=kit.code,
+        payload=DeviceUpdate(satellite_set_count=3),
+        current_user=kurulumcu,
+        db=db,
+    )
+    duz = [n for s in _setler(db, kit) for n in s.subunit_satellites]
+    assert len(duz) == len(set(duz)) == 9

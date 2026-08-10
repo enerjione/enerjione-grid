@@ -209,6 +209,40 @@ def validate_kit_codes(parent_code: str, set_count: int) -> None:
             )
 
 
+def _bos_uydular(index: int, kullanilan: set[int]) -> list[int]:
+    """Yeni set icin uydu atamasi: once KONUM VARSAYILANI, cakisirsa ilk bos.
+
+    NEDEN GEREKLI
+    -------------
+    Varsayilan yerlesim (set 1 -> 1/2/3, set 2 -> 4/5/6, ...) korlemesine
+    yazildiginda, atamasi ELLE DEGISTIRILMIS bir kardesle cakisabiliyordu.
+    Ornek: Set 1 [7,8,9]'a alinip set sayisi 3'e cikarilinca Set 3 de
+    varsayilanla [7,8,9] yaziliyordu.
+
+    Sonuc SESSIZDI ve agirdi: bolme haritasinda ayni fiziksel uydu icin ILK
+    esleme kazanir, gec kalan setin o unitesine ait 48 sinyalin TAMAMI hic
+    gelmez. Arayuzde set saglikli gorunur; tek iz tag-engine konteynerindeki
+    bir ERROR satiridir. Ustelik cakisan uydular hicbir sete gitmedigi icin
+    fiziksel kayitta yetim kalir.
+
+    Bijeksiyon muhafizi (`normalize_satellites`) yalnizca PATCH yolunda
+    kosuyordu; uretim yolu korumasizdi.
+    """
+    varsayilan = list(resolve_subunit_satellites(index))
+    if not kullanilan.intersection(varsayilan):
+        return varsayilan
+    # Cakisma var: bos uydulardan sirayla doldur. Hata firlatmak yerine
+    # DOGRU bir atama uretmek dogru: kurulumcu zaten "bir set daha ekle"
+    # demis, ve hangi uydunun bos oldugu tamamen turetilebilir bir bilgi.
+    bos = [n for n in range(1, SATELLITE_COUNT + 1) if n not in kullanilan]
+    if len(bos) < SATELLITES_PER_SET:
+        raise ValueError(
+            "Yeni set icin yeterli bos uydu yok; once mevcut setlerin uydu "
+            "atamasini duzenleyin."
+        )
+    return bos[:SATELLITES_PER_SET]
+
+
 def create_subunits(
     db: Session, parent: Device, set_count: int, *, mevcut_kodlar: set[str] | None = None
 ) -> list[Device]:
@@ -225,6 +259,12 @@ def create_subunits(
     kullanilan = mevcut_kodlar if mevcut_kodlar is not None else set()
     child_model = subunit_model_for(parent.model)
     uretilen: list[Device] = []
+    # MEVCUT kardeslerin uyduları — yeni setler bunlarla CAKISAMAZ.
+    kullanilan_uydular: set[int] = set()
+    for kardes in varolan.values():
+        kullanilan_uydular.update(
+            resolve_subunit_satellites(kardes.subunit_index, kardes.subunit_satellites)
+        )
 
     for index in range(1, set_count + 1):
         if index in varolan:
@@ -259,8 +299,13 @@ def create_subunits(
             # Varsayilan yerlesim ACIKCA yazilir (turetmeye birakilmaz):
             # kurulumcu ekranda ne gorduyse veritabaninda da o durur ve
             # ileride varsayilan degisirse mevcut setler kaymaz.
-            subunit_satellites=list(resolve_subunit_satellites(index)),
+            #
+            # AMA once KARDESLERE bakilir: konum varsayilanini korlemesine
+            # yazmak, atamasi degistirilmis bir kardesle CAKISMA uretiyordu
+            # (bkz. _bos_uydular).
+            subunit_satellites=_bos_uydular(index, kullanilan_uydular),
         )
+        kullanilan_uydular.update(child.subunit_satellites)
         # Her setin KENDI Common Address'i olur: SCADA uc seti ayri cihaz
         # olarak gorur. Ortak CA verilseydi uc setin ayni IOA'lari birbirini
         # ezerdi ve carpisma hicbir yerde loglanmazdi.
