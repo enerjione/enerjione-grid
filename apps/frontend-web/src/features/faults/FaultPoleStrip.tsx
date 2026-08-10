@@ -44,6 +44,7 @@ import {
   PEAK_Y,
   STRIP_H,
   STRIP_PX_H,
+  TOP_WIRE_Y,
   WIRE_Y,
   buildStripGeometry,
   hotPathOf,
@@ -102,9 +103,12 @@ const PHASES = ["master", "sat01", "sat02"] as const;
  * `kaynak`: alarm faz eslemesi (master/sat01/sat02).
  */
 const ILETKENLER = [
-  { faz: "L1", kaynak: "master", dx: -ARM_HALF, renk: "#2563eb" },
-  { faz: "L2", kaynak: "sat01", dx: 0, renk: "#16a34a" },
-  { faz: "L3", kaynak: "sat02", dx: ARM_HALF, renk: "#c2410c" }
+  { faz: "L1", kaynak: "master", dx: -ARM_HALF, dy: 0, renk: "#2563eb" },
+  // L2 UST traverste: uc fazi ayni yukseklikte yan yana dizmek travers
+  // araliginda telleri birbirine yaklastiriyor, sarkma egrileri ust uste
+  // binip tek kalin bir bant gibi okunuyordu.
+  { faz: "L2", kaynak: "sat01", dx: 0, dy: TOP_WIRE_Y - WIRE_Y, renk: "#16a34a" },
+  { faz: "L3", kaynak: "sat02", dx: ARM_HALF, dy: 0, renk: "#c2410c" }
 ] as const;
 
 type Pt = { x: number; y: number };
@@ -345,6 +349,20 @@ export function FaultPoleStrip({
     for (const b of branches ?? []) {
       const idx = seqs.indexOf(b.atSeq);
       if (idx === -1) continue;
+      // YALNIZCA ARIZAYLA ILGILI KOLLAR.
+      //
+      // Once tum kollar (ilgisizler soluk) ciziliyordu; ekran arizayla
+      // hicbir alakasi olmayan dallarla doluyor, iki kol yan yana gelince
+      // etiketleri de birbirine giriyordu. Bu cizimin isi TEK BIR SORUYU
+      // cevaplamak: ekip nereye gidecek. Arizasiz bir dal o soruya cevap
+      // vermez, dikkat dagitir.
+      //
+      // Ilgili sayilma kosulu: kolun KENDI acik arizasi var ya da ana
+      // hattaki ariza araligi bu dallanma diregini kapsiyor (kol da
+      // enerjisiz kalmis olabilir, ekip orayi da gezmeli).
+      const ilgili =
+        Boolean(b.hasFault) || (active && idx >= hotFrom && idx <= hotTo);
+      if (!ilgili) continue;
       const anchorX = xOf(idx);
       const kolDirekleri = (b.poles ?? []).slice(0, GOSTER);
       // Kol direk kaydi gelmediyse en azindan sayidan yer tutucu uret:
@@ -365,9 +383,7 @@ export function FaultPoleStrip({
         anchorX,
         poles: cizilecek,
         fazla: Math.max(0, b.poleCount - cizilecek.length),
-        // Kol KENDI arizasini tasiyorsa ya da ariza araligi bu dallanma
-        // diregini kapsiyorsa kirmizi.
-        hot: Boolean(b.hasFault) || (active && idx >= hotFrom && idx <= hotTo),
+        hot: true,
         poleCount: b.poleCount,
         endX: cizilecek.length
           ? cizilecek[cizilecek.length - 1].x
@@ -437,21 +453,11 @@ export function FaultPoleStrip({
             >
               <line x1="0" y1="0" x2="0" y2="7" stroke={RED} strokeWidth="1" opacity="0.14" />
             </pattern>
-            {/* Ufka dogru acilan zemin: yakin sarid koyu, uzak soluk. */}
-            <linearGradient id="fx-ground" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#e2e8f0" stopOpacity="0" />
-              <stop offset="100%" stopColor="#cbd5e1" stopOpacity="0.55" />
-            </linearGradient>
           </defs>
 
-          {/* Zemin duzlemi — direklerin ustunde durdugu yuzey. */}
-          <rect
-            x={-8}
-            y={GROUND_Y}
-            width={width + 16}
-            height={STRIP_H - GROUND_Y}
-            fill="url(#fx-ground)"
-          />
+          {/* Zemin: yalnizca ince bir cizgi. Onceki surumdeki gradyanli
+              "zemin duzlemi" cizimin altinda gri bir bant birakiyor ve
+              hicbir sey anlatmiyordu. */}
           <line
             x1={-8}
             y1={GROUND_Y}
@@ -475,7 +481,7 @@ export function FaultPoleStrip({
           {/* Toprak teli — tepe noktalari arasinda, ince gri. */}
           <path
             d={toPath(
-              wire.map((pt) => ({ x: pt.x, y: pt.y - (WIRE_Y - PEAK_Y) + 2 }))
+              wire.map((pt) => ({ x: pt.x, y: pt.y - (WIRE_Y - PEAK_Y) - 4 }))
             )}
             fill="none"
             stroke="#cbd5e1"
@@ -489,7 +495,9 @@ export function FaultPoleStrip({
               uc renkli iletken hem gercek bir havai hatta benziyor hem de
               arizanin HANGI FAZDA oldugunu telin kendisinde gosteriyor. */}
           {ILETKENLER.map((ilt) => {
-            const yol = toPath(wire.map((pt) => ({ x: pt.x + ilt.dx, y: pt.y })));
+            const yol = toPath(
+              wire.map((pt) => ({ x: pt.x + ilt.dx, y: pt.y + ilt.dy }))
+            );
             const arizali = active && arizaliFazlar.has(ilt.kaynak);
             return (
               <g key={ilt.faz}>
@@ -511,7 +519,7 @@ export function FaultPoleStrip({
             ? ILETKENLER.filter(
                 (ilt) => arizaliFazlar.size === 0 || arizaliFazlar.has(ilt.kaynak)
               ).map((ilt) => {
-                const yol = hotPathOf(geo, ilt.dx);
+                const yol = hotPathOf(geo, ilt.dx, ilt.dy);
                 if (!yol) return null;
                 return (
                   <g key={`hot-${ilt.faz}`}>
@@ -519,16 +527,16 @@ export function FaultPoleStrip({
                       d={yol}
                       fill="none"
                       stroke={faultColor}
-                      strokeWidth={6.5}
+                      strokeWidth={5}
                       strokeLinecap="round"
                       filter="url(#fx-wire-glow)"
-                      opacity={active ? 0.4 : 0.16}
+                      opacity={active ? 0.32 : 0.14}
                     />
                     <path
                       d={yol}
                       fill="none"
                       stroke={faultColor}
-                      strokeWidth={2.8}
+                      strokeWidth={2.2}
                       strokeLinecap="round"
                     />
                   </g>
@@ -542,12 +550,10 @@ export function FaultPoleStrip({
                TAM cizilir; digerleri soluk kalir ki kalabalik etmesin. */}
           {branchDraw.map((b) => {
             const renk = b.hot ? RED : BRANCH;
-            const solukluk = b.hot ? 1 : 0.42;
             return (
               <g
                 key={b.key}
                 className="fx-strip-branch"
-                opacity={solukluk}
                 onMouseEnter={() => setHover({ kind: "branch", key: b.key })}
                 onMouseLeave={() => setHover(null)}
               >
@@ -562,12 +568,12 @@ export function FaultPoleStrip({
                     egik bir dogru ile iner. Kesikli degil DUZ cizgi —
                     iletken gercekten oradan gecer. */}
                 <line
-                  x1={b.anchorX}
-                  y1={MAIN_ARM_Y + 2}
+                  x1={b.anchorX + ARM_HALF * 0.7}
+                  y1={MAIN_ARM_Y + 6}
                   x2={b.poles[0]?.x ?? b.anchorX + 40}
                   y2={BRANCH_MAIN_ARM_Y}
                   stroke={renk}
-                  strokeWidth={1.6}
+                  strokeWidth={1.8}
                   strokeLinecap="round"
                 />
                 {/* Kol adi — capraz inisin yaninda, kendi satirinda. */}

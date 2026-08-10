@@ -18,6 +18,7 @@ import {
   PEAK_Y,
   TOP_ARM_HALF,
   TOP_ARM_Y,
+  TOP_WIRE_Y,
   WIRE_Y
 } from "./faultStripGeometry";
 
@@ -138,16 +139,39 @@ export function StripTower({ x, hot, role, onEnter, onLeave }: Props) {
         <line x1={x + ARM_HALF} y1={MAIN_ARM_Y} x2={x + wArm} y2={MAIN_ARM_Y - 12} />
       </g>
 
-      {/* Izolator zincirleri — uc faz ana traversin sol/orta/sag noktasinda. */}
+      {/* IZOLATOR ZINCIRLERI — DELTA dizilim.
+          L1 ve L3 ana traversin uclarinda, L2 ust traversten asili. Ucunu
+          ayni yukseklige yan yana dizmek travers araliginda telleri
+          birbirine yaklastiriyordu: sarkma egrileri ust uste binip tek
+          kalin bir bant gibi okunuyordu. */}
       <Izolator x={x - ARM_HALF} y1={MAIN_ARM_Y} y2={WIRE_Y} renk={renk} />
-      <Izolator x={x} y1={MAIN_ARM_Y} y2={WIRE_Y} renk={renk} />
       <Izolator x={x + ARM_HALF} y1={MAIN_ARM_Y} y2={WIRE_Y} renk={renk} />
+      <Izolator x={x} y1={TOP_ARM_Y} y2={TOP_WIRE_Y} renk={renk} />
 
-      {/* BRANSMAN: traversten ayrilan kol — dal buradan CAPRAZ iner. */}
+      {/* BRANSMAN AYRILMA NOKTASI — topolojik dugum.
+          Dal ana traversten ayrilir; burada gorunen sey o ayrilmanin
+          KAYNAGI: gövdeden sag yana uzanan kisa bir kol ve ucunda dugum.
+          Dalin kendisi (capraz inis + kol direkleri) sahnenin alt katinda
+          cizilir. */}
       {role === "branch" ? (
-        <g stroke="#7c3aed" strokeWidth={2} strokeLinecap="round" fill="none">
-          <line x1={x} y1={MAIN_ARM_Y - 3} x2={x} y2={TOP_ARM_Y + 4} />
-          <circle cx={x} cy={TOP_ARM_Y + 2} r={2.2} fill="#7c3aed" stroke="none" />
+        <g fill="none">
+          <line
+            x1={x}
+            y1={MAIN_ARM_Y + 6}
+            x2={x + ARM_HALF * 0.7}
+            y2={MAIN_ARM_Y + 6}
+            stroke="#7c3aed"
+            strokeWidth={2}
+            strokeLinecap="round"
+          />
+          <circle
+            cx={x + ARM_HALF * 0.7}
+            cy={MAIN_ARM_Y + 6}
+            r={2.6}
+            fill="#fff"
+            stroke="#7c3aed"
+            strokeWidth={2}
+          />
         </g>
       ) : null}
     </g>

@@ -108,8 +108,15 @@ export const PEAK_Y = 52;
 export const TOP_ARM_Y = 64;
 /** ANA travers — uc faz izolatoru buraya oturur. */
 export const MAIN_ARM_Y = 88;
-/** Iletkenlerin izolator altindaki asilma yuksekligi. */
+/** ANA traverse asilan iletkenler (L1 sol, L3 sag). */
 export const WIRE_Y = 100;
+/** UST traverse asilan iletken (L2 orta).
+ *
+ * NEDEN IKI SEVIYE: uc fazi ayni yukseklige yan yana dizmek travers
+ * araliginda telleri birbirine yaklastiriyordu — sarkma egrileri ust uste
+ * binip tek kalin bir bant gibi okunuyordu. Orta fazi ust traverse almak
+ * gercek "delta" dizilimidir ve uc teli de ayri ayri gorunur kilar. */
+export const TOP_WIRE_Y = 74;
 /** Kafes govdenin zemine bastigi yer. */
 export const GROUND_Y = 190;
 /** Direk adlari. */
@@ -280,10 +287,10 @@ export function toPath(pts: { x: number; y: number }[]): string {
  * arizali parca da hangi FAZIN telinde ise oraya cizilir; tek bir orta
  * cizgide gostermek "hangi faz" bilgisini gorselden siler.
  */
-export function hotPathOf(geo: StripGeometry, dx = 0): string {
+export function hotPathOf(geo: StripGeometry, dx = 0, dy = 0): string {
   if (!geo.span) return "";
   const inner = geo.wire.filter((p) => p.pos > geo.span!.a && p.pos < geo.span!.b);
-  const kaydir = (pt: { x: number; y: number }) => ({ x: pt.x + dx, y: pt.y });
+  const kaydir = (pt: { x: number; y: number }) => ({ x: pt.x + dx, y: pt.y + dy });
   return toPath([
     kaydir(geo.pointAt(geo.span.a)),
     ...inner.map(kaydir),
