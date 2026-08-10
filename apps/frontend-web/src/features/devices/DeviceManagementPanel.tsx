@@ -71,6 +71,13 @@ function gatewayStateLabel(state: GatewayLivenessState): string {
   return i18n.t(`engineering.gatewayLive.${state}`);
 }
 
+/** "a / Set 2" -> "Set 2". Ana cihazin adi listede hemen ustte duruyor;
+ *  tekrar etmek satiri uzatmaktan baska bir sey yapmiyor. */
+function setKisaAd(ad: string): string {
+  const i = ad.lastIndexOf(" / ");
+  return i >= 0 ? ad.slice(i + 3) : ad;
+}
+
 function deviceCommDotClass(
   status: DeviceRow["communicationStatus"]
 ): "online" | "offline" | "unknown" {
@@ -626,14 +633,12 @@ export function DeviceManagementPanel({
       >
         <div className="device-title-row">
           <div className="device-name-with-status">
-            {altCihaz ? (
-              <span className="material-symbols-outlined device-subunit-icon" aria-hidden="true">
-                subdirectory_arrow_right
-              </span>
-            ) : (
+            {altCihaz ? null : (
               <span className={`device-status-dot ${deviceCommDotClass(effStatus)}`} />
             )}
-            <strong>{device.name}</strong>
+            {/* Ana cihazin adi hemen ustte duruyor; sette onu tekrar etmek
+                ("a / Set 1") satiri gereksiz uzatiyordu. Yalnizca set adi. */}
+            <strong>{altCihaz ? setKisaAd(device.name) : device.name}</strong>
           </div>
           {altCihaz ? null : (
             <span className="device-status-sr-only">
@@ -646,7 +651,6 @@ export function DeviceManagementPanel({
           )}
         </div>
         <div className="device-meta-row">
-          <span>{device.code}</span>
           {altCihaz ? (
             <span className="device-subunit-sats">
               {(device.subunitSatellites ?? [])
@@ -654,10 +658,13 @@ export function DeviceManagementPanel({
                 .join(" · ")}
             </span>
           ) : (
-            <span className="device-ip-text">
-              {device.ipAddress ?? "-"}
-              {canSeeDnp3 ? `:${device.dnp3OutstationPort ?? 20001}` : ""}
-            </span>
+            <>
+              <span>{device.code}</span>
+              <span className="device-ip-text">
+                {device.ipAddress ?? "-"}
+                {canSeeDnp3 ? `:${device.dnp3OutstationPort ?? 20001}` : ""}
+              </span>
+            </>
           )}
         </div>
       </button>
@@ -1369,27 +1376,20 @@ export function DeviceManagementPanel({
                         </button>
                       ) : null}
                       <div className="device-group-head-item">{renderDeviceItem(device, false)}</div>
+                      {setler.length > 0 ? (
+                        <span className="device-set-count" title={t("engineering.devicesPanel.form.setCount")}>
+                          {setler.length}
+                        </span>
+                      ) : null}
                     </div>
                     {setler.length > 0 && !kapali ? (
                       <div className="device-subunit-list">
                         {setler.map((s) => renderDeviceItem(s, true))}
                       </div>
                     ) : null}
-                    {setler.length > 0 && kapali ? (
-                      <button
-                        type="button"
-                        className="device-subunit-collapsed"
-                        onClick={() =>
-                          setCollapsedKits((onceki) => {
-                            const yeni = new Set(onceki);
-                            yeni.delete(device.code);
-                            return yeni;
-                          })
-                        }
-                      >
-                        {t("engineering.devicesPanel.hiddenSets", { count: setler.length })}
-                      </button>
-                    ) : null}
+                    {/* Kapaliyken ayri bir "N set gizli" satiri vardi; ok
+                        zaten durumu soyluyor ve sayi kit satirinda rozet
+                        olarak duruyor. Fazladan satir gurultuydu. */}
                   </div>
                 );
               })}
@@ -1459,6 +1459,12 @@ export function DeviceManagementPanel({
                           {t("engineering.devicesPanel.form.code")}
                           <input value={selectedDevice.code} disabled readOnly />
                         </label>
+                        {/* SETIN KENDI KIMLIGI YOK: seri numarasi, model ve
+                            montaj tarihi KITE aittir. Model alani ustelik
+                            YANLIS gosteriyordu — sanal set modeli dropdown'da
+                            secilebilir olmadigi icin liste ilk secenege
+                            ("Smart Navigator 2.0") dusuyordu. */}
+                        {isPmkSet ? null : (
                         <label>
                           {t("engineering.devicesPanel.form.serialNumber")}
                           <input
@@ -1468,10 +1474,12 @@ export function DeviceManagementPanel({
                             placeholder={t("engineering.devicesPanel.form.serialPlaceholder")}
                           />
                         </label>
+                        )}
                         <label>
                           {t("engineering.devicesPanel.form.name")}
                           <input value={name} onChange={(event) => setName(event.target.value)} />
                         </label>
+                        {isPmkSet ? null : (
                         <label>
                           {t("engineering.devicesPanel.form.deviceType")}
                           <select value={model} onChange={(event) => setModel(event.target.value)}>
@@ -1486,6 +1494,8 @@ export function DeviceManagementPanel({
                             )}
                           </select>
                         </label>
+                        )}
+                        {isPmkSet ? null : (
                         <label>
                           {t("engineering.devicesPanel.form.installationDate")}
                           <input
@@ -1494,6 +1504,7 @@ export function DeviceManagementPanel({
                             onChange={(event) => setInstallationDate(event.target.value)}
                           />
                         </label>
+                        )}
                       </div>
                       <div className="device-visual-card">
                         <img src={deviceImageSrc(model)} alt={t(deviceImageAltKey(model))} />
@@ -1615,7 +1626,7 @@ export function DeviceManagementPanel({
                       <textarea
                         value={description}
                         onChange={(event) => setDescription(event.target.value)}
-                        rows={3}
+                        rows={2}
                       />
                     </label>
                   </div>

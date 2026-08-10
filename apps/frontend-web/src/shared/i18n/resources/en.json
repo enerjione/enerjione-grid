@@ -2390,8 +2390,7 @@
       "deviceImageAltPmk": "Horstmann Pole Master Kit device image",
       "deviceImageAltPmkSet": "Pole Master Kit satellite device image",
       "collapseSets": "Hide sets ({{count}})",
-      "expandSets": "Show sets ({{count}})",
-      "hiddenSets": "{{count}} set(s) hidden — click to show"
+      "expandSets": "Show sets ({{count}})"
     },
     "devices": {
       "title": "Device Management",

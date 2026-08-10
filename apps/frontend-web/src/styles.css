@@ -40052,3 +40052,76 @@ th.event-col-category {
   text-align: right;
   overflow-wrap: anywhere;
 }
+
+/* ==========================================================================
+   KIT GRUBU — Pole Master Kit ve setleri (Muhendislik > Cihazlar)
+   ==========================================================================
+   Setler kitin ic bolumlemesidir; duz listede kardes gibi durduklarinda
+   hangi kite ait olduklari ancak isimden anlasiliyordu. Girinti bir IKONLA
+   degil, CSS rayiyla ciziliyor: ikon ligaturu cozulmedigi anda ekranda ham
+   "SUBDIRECTORY_ARROW_RIGHT" yazisi cikiyordu. */
+.device-group-block { display: flex; flex-direction: column; }
+
+.device-group-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.device-group-head-item { flex: 1; min-width: 0; }
+
+.device-collapse-btn {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+}
+.device-collapse-btn:hover { background: #f1f5f9; color: #475569; }
+.device-collapse-btn .material-symbols-outlined { font-size: 18px; }
+
+/* Kite bagli set sayisi — kapaliyken de gorunur, ayri bir satira gerek yok. */
+.device-set-count {
+  flex: 0 0 auto;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* Setler: sol rayla girintili. Ray "bunlar o kite ait" demenin en sessiz
+   yolu — ek ikon, ek metin yok. */
+.device-subunit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 2px 11px;
+  padding-left: 12px;
+  border-left: 1px solid #e2e8f0;
+}
+.device-item--subunit { padding-top: 6px; padding-bottom: 6px; }
+.device-item--subunit strong { font-weight: 600; }
+.device-subunit-sats {
+  color: #94a3b8;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/* Aciklama alani: sabit ve KISA. Uzun bir kutu paneli scroll'a sokuyordu;
+   bu alan bir not alani, defter degil. */
+.device-description-field textarea {
+  min-height: 52px;
+  max-height: 52px;
+  resize: none;
+}
