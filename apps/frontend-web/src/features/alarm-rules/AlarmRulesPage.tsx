@@ -4,7 +4,11 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
 import { ActiveSwitch } from "../../components/ActiveSwitch";
-import { SOURCES } from "../signals/signalCatalogConstants";
+import {
+  SOURCES,
+  sourceLabel,
+  sourceShortLabel
+} from "../signals/signalCatalogConstants";
 import type {
   SignalSource,
   AlarmAggFn,
@@ -107,17 +111,17 @@ function isRangeComparator(c: AlarmComparator): boolean {
   return c === "between" || c === "outside";
 }
 
-const SOURCE_LABEL: Record<string, string> = {
-  master: "Master",
-  sat01: "Satellite 01",
-  sat02: "Satellite 02"
-};
+// Etiket TEK KAYNAKTAN; elle yazilan sozluk `sat04`+ icin ham deger
+// donduruyordu ve Record<string,...> oldugu icin derleyici yakalamiyordu.
+const SOURCE_LABEL = new Proxy({} as Record<string, string>, {
+  get: (_t, k: string) => sourceLabel(k)
+});
 
-const SOURCE_SHORT: Record<string, string> = {
-  master: "Master",
-  sat01: "Sat 01",
-  sat02: "Sat 02"
-};
+// Etiket TEK KAYNAKTAN; elle yazilan sozluk `sat04`+ icin ham deger
+// donduruyordu ve Record<string,...> oldugu icin derleyici yakalamiyordu.
+const SOURCE_SHORT = new Proxy({} as Record<string, string>, {
+  get: (_t, k: string) => sourceShortLabel(k)
+});
 
 type Mode = "list" | "edit-existing" | "create";
 type RuleWizardStep = "signal" | "definition" | "condition" | "behavior" | "summary";

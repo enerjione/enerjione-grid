@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { sourceLabel as ortakKaynakEtiketi } from "../features/signals/signalCatalogConstants";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -40,11 +41,11 @@ function timeAgo(
 }
 
 // Sinyal kaynagi (master / sat01 / sat02 / ...) frontend dostu etikete cevir.
-const _SOURCE_LABEL: Record<string, string> = {
-  master: "Master",
-  sat01: "Satellite 01",
-  sat02: "Satellite 02"
-};
+// Etiket TEK KAYNAKTAN uretilir; elle yazilan sozluk `sat04`+ icin ham
+// deger donduruyordu.
+const _SOURCE_LABEL = new Proxy({} as Record<string, string>, {
+  get: (_t, k: string) => ortakKaynakEtiketi(k)
+});
 
 function sourceLabel(src: string | null | undefined): string | null {
   if (!src) return null;

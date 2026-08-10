@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { sourceLabel as ortakKaynakEtiketi } from "../signals/signalCatalogConstants";
 import { useTranslation } from "react-i18next";
 import { LayersControl, MapContainer, Marker, Polyline, Tooltip, useMap } from "react-leaflet";
 import { DEFAULT_MAP_LAYER, MAP_LAYERS } from "../../shared/mapTiles";
@@ -280,13 +281,13 @@ function batteryClass(percent: number | null): string {
   return "device-battery--ok";
 }
 
-type SourceKey = "master" | "sat01" | "sat02";
+// Kaynak kumesi VERIDIR (SN 2.0'da uc unite, Pole Master Kit'te on);
+// dar bir birlesim tipi yeni uydularin etiketini ham birakiyordu.
+type SourceKey = string;
 
-const SOURCE_LABEL: Record<SourceKey, string> = {
-  master: "Master",
-  sat01: "Satellite 01",
-  sat02: "Satellite 02"
-};
+const SOURCE_LABEL = new Proxy({} as Record<string, string>, {
+  get: (_t, k: string) => ortakKaynakEtiketi(k)
+});
 
 function formatRelative(
   iso: string | null | undefined,

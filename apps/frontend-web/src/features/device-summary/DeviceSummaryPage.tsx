@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { sourceLabel as ortakKaynakEtiketi } from "../signals/signalCatalogConstants";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -41,11 +42,12 @@ const DATA_TYPE_KEY: Record<SignalDataType, string> = {
   analog_output: "analogOutput"
 };
 
-const SOURCE_LABEL: Record<string, string> = {
-  master: "Master",
-  sat01: "Satellite 01",
-  sat02: "Satellite 02"
-};
+// Kaynak etiketi TEK KAYNAKTAN. Elle yazilan sozluk `sat04`+ icin ham
+// deger donduruyordu ve `Record<string, ...>` oldugu icin TypeScript bunu
+// YAKALAMIYORDU.
+const SOURCE_LABEL = new Proxy({} as Record<string, string>, {
+  get: (_t, k: string) => ortakKaynakEtiketi(k)
+});
 
 const GATEWAY_LIVE_SEC = 60;
 

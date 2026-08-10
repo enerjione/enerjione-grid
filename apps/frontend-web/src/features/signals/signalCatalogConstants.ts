@@ -91,6 +91,13 @@ export function sourceLabel(source: string): string {
   return m ? `Satellite ${m[1].padStart(2, "0")}` : source;
 }
 
+/** `sat07` → "Sat 07" — dar sütunlar için kısa biçim. */
+export function sourceShortLabel(source: string): string {
+  if (source === "master") return "Master";
+  const m = /^sat(\d{1,2})$/.exec(source);
+  return m ? `Sat ${m[1].padStart(2, "0")}` : source;
+}
+
 export const SOURCE_LABEL: Record<SignalSource, string> = Object.fromEntries(
   SOURCES.map((s) => [s, sourceLabel(s)])
 ) as Record<SignalSource, string>;
