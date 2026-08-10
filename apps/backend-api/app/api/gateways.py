@@ -21,6 +21,7 @@ from app.models.signal_catalog import SignalCatalog
 from app.data.device_models import DEFAULT_MODEL
 from app.models.user import User
 from app.repositories.device_repository import DeviceRepository
+from app.schemas.dnp3_extended import merge_dnp3_extended
 from app.schemas.gateway_agent import (
     GatewayAgentStatus,
     GatewayLogsResponse,
@@ -1202,15 +1203,15 @@ def get_gateway_config(
 
     config_devices = []
     for device in devices:
-        # Frontend'den gelen extended ayarlardaki master_address (DNP3 link layer
-        # local addr) — saha cihazi bu adresi bekler. Yoksa None birakiriz ve
-        # gateway kendi env DNP3_LOCAL_ADDRESS varsayilanini kullanir.
-        ext = device.dnp3_extended or {}
-        master_addr_raw = ext.get("master_address") if isinstance(ext, dict) else None
-        try:
-            master_address = int(master_addr_raw) if master_addr_raw is not None else None
-        except (TypeError, ValueError):
-            master_address = None
+        # master_address (DNP3 link layer local addr) — saha cihazi bu adresi
+        # BEKLER; yanlis/eksik olursa istegi sessizce atar (bkz.
+        # schemas/dnp3_extended.py). Bu yuzden HAM sozluk degil
+        # `merge_dnp3_extended` okunur: eksik ya da diske `null` yazilmis
+        # kayitlar varsayilana (100) iyilesir. Ham sozlugu okumak, v2.54.1
+        # penceresinde null yazilmis cihazi alani bos gondererek gateway'in
+        # DNP3_LOCAL_ADDRESS=1 varsayilanina dusuruyor ve haberlesmeyi KESIYORDU.
+        ext = device.dnp3_extended if isinstance(device.dnp3_extended, dict) else None
+        master_address = merge_dnp3_extended(ext).master_address
         endpoint_type = "listening"
         if isinstance(ext, dict):
             raw_endpoint = str(ext.get("ip_endpoint_type") or "listening").strip().lower()

@@ -122,10 +122,14 @@ class DeviceRepository:
             )
             comments = int(result.rowcount or 0)
         alarm_result = self.db.execute(delete(AlarmEvent).where(AlarmEvent.device_id == device_id))
+        # `telemetry` SENKRON silinir: 30 dakikalik kayan pencere oldugu icin
+        # cihaz basina birkac yuz satir (bkz. telemetry_retention).
         telemetry_result = self.db.execute(delete(Telemetry).where(Telemetry.device_id == device_id))
-        history_result = self.db.execute(
-            delete(TelemetryHistory).where(TelemetryHistory.device_id == device_id)
-        )
+        # `telemetry_history` BURADA SILINMEZ — 90 gunluk arsiv, cihaz basina
+        # ~4M satir ve ~90 hypertable chunk'i. Tek transaction'da silmek
+        # istegi dakikalarca acik tutuyor ve cihaz pratikte silinemiyordu.
+        # Arka plana devredilir (bkz. models/device_purge_job.py); kuyruk
+        # kaydini cagiran katman (device_service.delete_device) yazar.
         command_result = self.db.execute(
             update(DeviceCommand)
             .where(
@@ -138,7 +142,9 @@ class DeviceRepository:
             "alarm_comments": comments,
             "alarm_events": int(alarm_result.rowcount or 0),
             "telemetry": int(telemetry_result.rowcount or 0),
-            "telemetry_history": int(history_result.rowcount or 0),
+            # `telemetry_history` arka planda temizlenir; sayisi burada
+            # BILINMEZ. 0 yazmak "arsiv bostu" demek olurdu — yanlis.
+            "telemetry_history": None,
             "commands_cancelled": int(command_result.rowcount or 0),
             "alarm_rules_updated": self._remove_device_from_rule_filters(device_code),
         }

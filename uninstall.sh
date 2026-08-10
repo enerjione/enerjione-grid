@@ -42,6 +42,7 @@ KEEP_IMAGES=0
 PURGE_DIR=0
 PURGE_ALL=0
 PURGE_TAILSCALE=0
+PURGE_GATEWAYS=0
 for arg in "$@"; do
   case "$arg" in
     --yes|-y)        ASSUME_YES=1 ;;
@@ -50,6 +51,7 @@ for arg in "$@"; do
     # --purge-all dizin silmeyi de KAPSAR; ayrica yazmak gerekmesin.
     --purge-all)     PURGE_ALL=1; PURGE_DIR=1 ;;
     --purge-tailscale) PURGE_TAILSCALE=1 ;;
+    --purge-gateways)  PURGE_GATEWAYS=1 ;;
     --help|-h)
       # `head` boruyu erken kapatirsa onundeki `grep` SIGPIPE alir ve
       # `set -o pipefail` altinda --help CIKIS KODU 2 ile biter. Kirpma
@@ -73,6 +75,7 @@ echo "  ${E1_DIM}Dizin       :${E1_RESET} ${SCRIPT_DIR}"
 echo "  ${E1_DIM}Image'lar   :${E1_RESET} $([[ $KEEP_IMAGES -eq 1 ]] && echo 'KORUNACAK (--keep-images)' || echo 'SILINECEK')"
 echo "  ${E1_DIM}Dizini sil  :${E1_RESET} $([[ $PURGE_DIR -eq 1 ]] && echo 'EVET (--purge-dir)' || echo 'hayir')"
 echo "  ${E1_DIM}Tam temizlik:${E1_RESET} $([[ $PURGE_ALL -eq 1 ]] && echo 'EVET (--purge-all: sirlar + kiosk kullanicisi + mDNS)' || echo 'hayir')"
+echo "  ${E1_DIM}Gateway'ler :${E1_RESET} $([[ $PURGE_GATEWAYS -eq 1 ]] && echo 'SILINECEK (--purge-gateways)' || echo 'KORUNACAK')"
 echo "  ${E1_DIM}Onay        :${E1_RESET} $([[ $ASSUME_YES -eq 1 ]] && echo 'OTOMATIK (--yes)' || echo 'interaktif')"
 echo
 
@@ -198,6 +201,78 @@ if [[ -f docker-compose.yml ]]; then
   e1_ok "Compose stack down + volume'lar silindi."
 else
   e1_warn "docker-compose.yml bulunamadi, atlandi."
+fi
+
+# ---- 1a/5: Artakalan volume'lar ------------------------------------------
+# `compose down -v` YETMEZ: yalnizca docker-compose.yml VARSA calisiyor.
+# Repo bozuk/silinmisse (ya da stack baska bir dizinden ayaga kalktiysa)
+# yukaridaki adim "atlandi" deyip geciyor ve VERITABANI DISKTE KALIYOR.
+# Sonucu sinsi: yeniden kurulumda eski postgres-data tekrar baglaniyor,
+# seed betigi "kullanici zaten var" deyip yeni parola URETMIYOR ve kimse
+# giris yapamiyor. Volume'lari adiyla, compose'dan BAGIMSIZ olarak siliyoruz.
+e1_step "EnerjiOne volume'lari kontrol ediliyor..."
+_E1_VOLS="map-tile-data postgres-data rabbitmq-data nats-data backup-data           license-data ftp-data whatsapp-session-data"
+_silinen=0
+for _v in $_E1_VOLS; do
+  # Compose volume'u proje adiyla oneklenir (or. enerjione-grid_postgres-data);
+  # elle olusturulmus olanlar oneksiz olabilir. Ikisini de yakala.
+  while read -r _tam; do
+    [[ -n "$_tam" ]] || continue
+    if docker volume rm -f "$_tam" >/dev/null 2>&1; then
+      e1_ok "Volume silindi: ${_tam}"
+      _silinen=$((_silinen + 1))
+    else
+      e1_warn "Volume silinemedi (kullanimda olabilir): ${_tam}"
+    fi
+  done < <(docker volume ls -q 2>/dev/null | grep -E "(^|_)${_v}$" || true)
+done
+if [[ $_silinen -eq 0 ]]; then
+  e1_ok "Silinecek EnerjiOne volume'u yok."
+else
+  e1_ok "${_silinen} volume silindi (veritabani dahil)."
+fi
+
+# ---- 1b/5: Gateway compose projeleri -------------------------------------
+# GATEWAY'LER AYRI COMPOSE PROJESIDIR: e1-gwd her gateway'i
+# /opt/enerjione-grid/gateways/<code>/docker-compose.yml altinda ayri bir
+# proje olarak kurar ve ana stack'e bilerek DOKUNMAZ. Bu yuzden yukaridaki
+# `docker compose down` onlari GORMEZ — kaldirma sonrasi `e1-gw-*`
+# container'lari calismaya devam ediyordu.
+GATEWAY_ROOT="${E1_GW_ROOT:-${INSTALL_DIR:-/opt/enerjione-grid}/gateways}"
+if [[ $PURGE_GATEWAYS -eq 1 ]]; then
+  e1_step "Gateway'ler kaldiriliyor..."
+  if [[ -d "$GATEWAY_ROOT" ]]; then
+    _gw_sayi=0
+    for _gw in "$GATEWAY_ROOT"/*/; do
+      [[ -f "${_gw}docker-compose.yml" ]] || continue
+      _gw_ad="$(basename "$_gw")"
+      ( cd "$_gw" && docker compose down -v --remove-orphans 2>/dev/null ) || true
+      e1_ok "Gateway durduruldu: ${_gw_ad}"
+      _gw_sayi=$((_gw_sayi + 1))
+    done
+    rm -rf "$GATEWAY_ROOT" 2>/dev/null || true
+    # Ajanin durum dizini de gitsin; yoksa kaldirilmis gateway'ler
+    # "kurulu" gibi raporlanmaya devam eder.
+    rm -rf /var/lib/e1-grid/gw 2>/dev/null || true
+    if [[ $_gw_sayi -gt 0 ]]; then
+      e1_ok "${_gw_sayi} gateway kaldirildi + dizinler silindi."
+    else
+      e1_ok "Kurulu gateway yok."
+    fi
+  else
+    e1_ok "Gateway dizini yok (${GATEWAY_ROOT})."
+  fi
+  # Artakalan e1-gw-* container'lari (elle kurulmus ya da compose disi).
+  _kalan="$(docker ps -aq --filter 'name=^e1-gw-' 2>/dev/null || true)"
+  if [[ -n "$_kalan" ]]; then
+    echo "$_kalan" | xargs -r docker rm -f >/dev/null 2>&1 || true
+    e1_ok "Artakalan e1-gw-* container'lari silindi."
+  fi
+else
+  if [[ -d "$GATEWAY_ROOT" ]] && compgen -G "$GATEWAY_ROOT/*/docker-compose.yml" >/dev/null; then
+    e1_warn "Kurulu gateway'ler KORUNDU (${GATEWAY_ROOT})."
+    e1_hint "Kaldirmak icin: sudo bash uninstall.sh --yes --purge-gateways"
+  fi
 fi
 
 # ---- 2/5: Image'lar ------------------------------------------------------
