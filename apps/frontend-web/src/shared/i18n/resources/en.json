@@ -872,7 +872,12 @@
         "branch": "Branch point",
         "line_end": "Line end",
         "cable_transition": "Cable transition"
-      }
+      },
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "zoomFit": "Fit",
+      "zoomHint": "Scroll to zoom, drag to pan",
+      "branchPoles": "Branch with {{count}} poles"
     },
     "title": "Line Faults",
     "stats": {

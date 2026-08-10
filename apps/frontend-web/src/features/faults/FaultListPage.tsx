@@ -35,7 +35,7 @@ import type {
   UserRead
 } from "../../shared/types";
 import { ActiveFaultCard } from "./ActiveFaultCard";
-import type { StripPole } from "./FaultPoleStrip";
+import type { StripBranch, StripPole } from "./FaultPoleStrip";
 import { FaultDetailModal } from "./FaultDetailModal";
 import { FaultHistoryTable } from "./FaultHistoryTable";
 
@@ -202,6 +202,38 @@ export function FaultListPage({
     return m;
   }, [gridSnapshot]);
 
+  /** line_id -> o hattan ayrilan bransman kollari (cizimde dal olarak
+   *  gosterilir). Kol AYRI bir Line'dir ve `branched_from_pole_id` ile ana
+   *  hattaki dallanma diregine baglanir. */
+  const branchesByLine = useMemo(() => {
+    const m = new Map<number, StripBranch[]>();
+    const poleById = new Map((gridSnapshot?.poles ?? []).map((p) => [p.id, p]));
+    for (const ln of gridSnapshot?.lines ?? []) {
+      if (!ln.branched_from_pole_id) continue;
+      const anchor = poleById.get(ln.branched_from_pole_id);
+      if (!anchor) continue;
+      const kol: StripBranch = {
+        lineId: ln.id,
+        name: ln.name,
+        atSeq: anchor.sequence_no,
+        poleCount: (gridSnapshot?.poles ?? []).filter((p) => p.line_id === ln.id).length
+      };
+      const arr = m.get(anchor.line_id);
+      if (arr) arr.push(kol);
+      else m.set(anchor.line_id, [kol]);
+    }
+    return m;
+  }, [gridSnapshot]);
+
+  /** Sekmelerde secili aktif ariza. Kayit listeden dusunce (cozuldu) ilk
+   *  siradakine duser — bos ekran gostermek yerine. */
+  const [activeFaultId, setActiveFaultId] = useState<number | null>(null);
+  const shownFault = useMemo(
+    () =>
+      activeFaults.find((f) => f.id === activeFaultId) ?? activeFaults[0] ?? null,
+    [activeFaults, activeFaultId]
+  );
+
   const openFault = useMemo(
     () => (openFaultId !== null ? faults.find((f) => f.id === openFaultId) ?? null : null),
     [faults, openFaultId]
@@ -315,44 +347,58 @@ export function FaultListPage({
             <h4>{t("faults.empty.errorTitle")}</h4>
             <p>{error}</p>
           </div>
-        ) : activeFaults.length === 0 ? (
+        ) : activeFaults.length === 0 || !shownFault ? (
           <div className="fx-empty fx-empty--ok">
             <CheckCircle2 size={48} strokeWidth={1.6} />
             <h4>{t("faults.empty.noActive")}</h4>
             <p>{t("faults.empty.systemClean")}</p>
           </div>
         ) : (
-          /* KAYDIRMALI KART DESTESI
-             Arizalar alt alta diziliyordu; iki ariza varken sayfa uzuyor,
-             ikincisini gormek icin kaydirmak gerekiyordu. Ariza karti
-             sematik cizimiyle birlikte TEK BASINA bir ekran dolusu bilgi —
-             ayni anda birden fazlasini yarim gostermek okumayi bozuyor.
-             Simdi her kart ekrani doldurur, sonrakine YATAY kaydirarak
-             gecilir (scroll-snap; klavye ve dokunmatik dogal calisir). */
-          <div className="fx-deck-wrap">
-            <div className="fx-deck">
-              {activeFaults.map((f) => (
-                <div className="fx-deck-item" key={f.id}>
-                  <ActiveFaultCard
-                    fault={f}
-                    poleSeqs={poleSeqsByLine.get(f.line_id) ?? []}
-                    poles={polesByLine.get(f.line_id) ?? []}
-                    segments={segmentsByLine.get(f.line_id) ?? []}
-                    localeTag={localeTag}
-                    now={now}
-                    canAssign={canAssign}
-                    onOpenDetail={() => setOpenFaultId(f.id)}
-                    onAssignClick={() => setOpenFaultId(f.id)}
-                    onShowOnMap={() => setOpenFaultId(f.id)}
-                  />
-                </div>
-              ))}
-            </div>
+          /* ARIZA SEKMELERI
+             Once yatay kaydirmali bir desteydi; kaydirma sirasinda iki ariza
+             ayni anda yarim gorunuyor ve hangisine baktigin belirsizlesiyordu.
+             Ariza karti tek basina bir ekran dolusu bilgi — ayni anda YALNIZ
+             BIRI gorunmeli. Sekmeler bunu kesin yapar: secilen ariza tam
+             alani kaplar, digerleri gorunmez (yarim de olsa). */
+          <div className="fx-tabs-wrap">
             {activeFaults.length > 1 ? (
-              <div className="fx-deck-hint">
-                {t("faults.card.deckHint", { count: activeFaults.length })}
+              <div className="fx-fault-tabs" role="tablist">
+                {activeFaults.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={f.id === shownFault.id}
+                    className={`fx-fault-tab${
+                      f.id === shownFault.id ? " is-active" : ""
+                    } fx-fault-tab--${f.status}`}
+                    onClick={() => setActiveFaultId(f.id)}
+                  >
+                    <span className="fx-fault-tab-line">{f.line_name}</span>
+                    <span className="fx-fault-tab-range">
+                      {t("faults.card.rangeText", {
+                        from: f.from_pole_seq ?? "?",
+                        to: f.to_pole_seq ?? "?"
+                      })}
+                    </span>
+                  </button>
+                ))}
               </div>
             ) : null}
+            <ActiveFaultCard
+              key={shownFault.id}
+              fault={shownFault}
+              poleSeqs={poleSeqsByLine.get(shownFault.line_id) ?? []}
+              poles={polesByLine.get(shownFault.line_id) ?? []}
+              branches={branchesByLine.get(shownFault.line_id) ?? []}
+              segments={segmentsByLine.get(shownFault.line_id) ?? []}
+              localeTag={localeTag}
+              now={now}
+              canAssign={canAssign}
+              onOpenDetail={() => setOpenFaultId(shownFault.id)}
+              onAssignClick={() => setOpenFaultId(shownFault.id)}
+              onShowOnMap={() => setOpenFaultId(shownFault.id)}
+            />
           </div>
         )
       ) : (

@@ -14,6 +14,16 @@
  * dilim islemine indirgenir.
  */
 
+/** Ana hattan ayrilan bransman kolu — cizimde dal olarak gosterilir. */
+export type StripBranch = {
+  lineId: number;
+  name: string;
+  /** Kolun ayrildigi ANA HAT diregi (sequence_no). */
+  atSeq: number;
+  /** Koldaki direk sayisi — dalin uzunlugunu olcekler. */
+  poleCount: number;
+};
+
 /** Cizimdeki bir direk. `seq` zorunlu; ad/rol varsa etiket ve ipucu zenginlesir. */
 export type StripPole = {
   seq: number;
@@ -94,7 +104,7 @@ const SAMPLES = 16;
  * KARSILASTIRILAMIYORDU. Artik olcek sabit: bir direk araligi her hatta ayni
  * piksel genisligindedir, cizim sigmazsa yatay kaydirilir.
  */
-export const STRIP_PX_H = 188;
+export const STRIP_PX_H = 340;
 
 /** viewBox birimi -> ekran pikseli. */
 export const PX_PER_UNIT = STRIP_PX_H / STRIP_H;

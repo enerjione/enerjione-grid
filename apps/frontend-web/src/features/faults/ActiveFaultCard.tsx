@@ -42,7 +42,12 @@ import {
 import type { FaultEvent, FaultTriggerAlarm } from "../../shared/types";
 import { formatDistanceM } from "../../shared/lineDistance";
 import { FaultPoleStrip } from "./FaultPoleStrip";
-import type { StripDeviceAlarms, StripPole, StripSegment } from "./FaultPoleStrip";
+import type {
+  StripBranch,
+  StripDeviceAlarms,
+  StripPole,
+  StripSegment
+} from "./FaultPoleStrip";
 
 type Props = {
   fault: FaultEvent;
@@ -50,6 +55,8 @@ type Props = {
   poleSeqs: number[];
   /** Direk ad/rol bilgisi — etiketlerde sira numarasi yerine AD gosterilir. */
   poles?: StripPole[];
+  /** Bu hattan ayrilan bransman kollari — cizimde dal olarak gosterilir. */
+  branches?: StripBranch[];
   /** Hattin segmentleri — cihazlari TELIN UZERINDE cizmek icin. */
   segments: StripSegment[];
   localeTag: string;
@@ -97,6 +104,7 @@ export function ActiveFaultCard({
   fault: f,
   poleSeqs,
   poles,
+  branches,
   segments,
   localeTag,
   now,
@@ -244,6 +252,7 @@ export function ActiveFaultCard({
           <FaultPoleStrip
             poleSeqs={poleSeqs}
             poles={poles}
+            branches={branches}
             segments={segments}
             fromSeq={f.from_pole_seq}
             toSeq={f.to_pole_seq}

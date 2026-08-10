@@ -869,7 +869,12 @@
         "branch": "Branşman noktası",
         "line_end": "Hat sonu",
         "cable_transition": "Kablo geçişi"
-      }
+      },
+      "zoomIn": "Yakınlaştır",
+      "zoomOut": "Uzaklaştır",
+      "zoomFit": "Sığdır",
+      "zoomHint": "Tekerlek ile yakınlaştır, sürükleyerek gez",
+      "branchPoles": "{{count}} direkli branşman kolu"
     },
     "title": "Hat Arızaları",
     "stats": {

@@ -14,6 +14,47 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.59.0] — 2026-08-10
+
+Hat Arızaları ekranının şematik görünümü. Arıza artık metinle anlatılmıyor,
+**çiziliyor**: hangi açıklık, kaç metre, hangi faz, hangi branşman kolu.
+
+### Eklendi
+
+- **Arıza sekmeleri.** Birden fazla aktif arıza varken kartlar yatay
+  kaydırılıyordu; kaydırma sırasında iki arıza aynı anda yarım görünüyor,
+  hangisine bakıldığı belirsizleşiyordu. Artık her arıza kendi sekmesinde ve
+  aynı anda yalnızca biri görünüyor. Kart sayfanın dibine kadar uzuyor.
+- **Yakınlaştırılabilir şematik.** Tekerlek ile zoom (imlecin altındaki nokta
+  sabit kalır), sürükleyerek gezinme, çift tık ya da "sığdır" ile sıfırlama.
+  Uzun hatlar tek ekrana sığmıyordu; sabit ölçekte kaydırmak yerine odağı
+  kullanıcı seçiyor.
+- **Branşman kolları çizimde.** Dallanma direğinden inen kesikli dal, ucunda
+  kolun adı. Kol arıza aralığının içindeyse kırmızı yanıyor; üzerine gelince
+  kol adı, rolü ve direk sayısı görünüyor.
+- **Derinlikli çizim.** Zemin düzlemi ufka doğru açılıyor, direklerin yan yüzü
+  ve zemin gölgesi var, arka iletkenler daha soluk.
+
+### Değişti
+
+- **Şematik ölçek sabitlendi.** Çizim kapsayıcıya yayıldığı için ölçek hattın
+  direk sayısına göre değişiyordu: 6 direkli hat devasa, 17 direkli hat
+  minicik görünüyor, iki arıza kartı karşılaştırılamıyordu. Artık bir direk
+  aralığı her hatta aynı genişlikte.
+- **Direk etiketleri** sıra numarası yerine **direk adını** gösteriyor; saha
+  ekibi direkleri adıyla tanıyor.
+- "Arıza akımını GÖRDÜ" → "**Arıza GÖRÜLDÜ**" (FCI bir koruma rölesi değil),
+  "belirsizlik aralığı" → "**Aranacak hat kesimi**".
+
+### Düzeltildi
+
+- **Arıza pini çizimin sol üst köşesine sıçrıyordu.** Pin `transform`
+  attribute'u ile konumlanıyor, CSS animasyonu ise `transform` özelliğini
+  yazıyordu; CSS özelliği presentation attribute'unu ezdiği için işaret her
+  render'da (0,0)'a gidiyordu. Pin kaldırıldı — arızanın yeri kırmızı tel ve
+  ölçü şeridiyle zaten işaretli.
+- **Cihaz ipucu kart kenarından taşıp kırpılıyordu**; artık aşağı açılıyor.
+
 ## [2.58.0] — 2026-08-10
 
 Arıza analiz katmanı. v2.56/2.57'de veri birikmeye başlamıştı; bu sürüm onu

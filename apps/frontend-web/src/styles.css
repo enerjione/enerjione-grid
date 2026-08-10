@@ -23430,6 +23430,7 @@ th.event-col-category {
    doldurur ama icerigin altina asla SIKISMAZ (uzun listede .faults-page
    scroll eder). */
 .fx-active-list,
+.fx-tabs-wrap,
 .fx-history,
 .fx-empty {
   flex: 1 0 auto;
@@ -23440,52 +23441,76 @@ th.event-col-category {
    TASARIM DILI: elektrik tek hat semasi / teknik resim.
    Blueprint zeminli cizim alani, ok uclu olcu seridi, tabular rakamlar.
    Pastel dolgulu yuvarlak kutucuk yok; her renk bir DURUM tasiyor. */
-/* --- KAYDIRMALI KART DESTESI ---
-   Ariza karti sematik cizimiyle birlikte tek basina bir ekran dolusu bilgi;
-   alt alta dizmek ikinci karti yarim gosterip okumayi bozuyordu. Her kart
-   tam genislik kaplar, sonrakine YATAY kaydirarak gecilir. */
+/* --- ARIZA SEKMELERI ---
+   Once yatay kaydirmali bir desteydi; kaydirirken iki ariza ayni anda yarim
+   gorunuyor, hangisine bakildigi belirsizlesiyordu. Ariza karti tek basina
+   bir ekran dolusu bilgi — ayni anda YALNIZ BIRI gorunmeli. */
 .fx-active-list {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
-.fx-deck-wrap {
+.fx-tabs-wrap {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-width: 0;
+  gap: 10px;
+  /* Kart sayfanin DIBINE kadar uzasin: altta bos beyaz alan kalmasin. */
+  flex: 1 1 auto;
+  min-height: 0;
 }
-.fx-deck {
+.fx-fault-tabs {
   display: flex;
-  gap: 16px;
+  gap: 6px;
   overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  /* Kaydirma cubugu kartin govdesine yapismasin. */
-  padding-bottom: 6px;
+  padding-bottom: 2px;
   scrollbar-width: thin;
 }
-.fx-deck-item {
-  flex: 0 0 100%;
-  min-width: 0;
-  scroll-snap-align: center;
+.fx-fault-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  align-items: flex-start;
+  padding: 7px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  border-left: 3px solid #ef4444;
+  background: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
-/* Tek ariza varsa deste gorunumu gereksiz — kaydirma da kapanir. */
-.fx-deck:has(> .fx-deck-item:only-child) {
-  overflow-x: visible;
+.fx-fault-tab--assigned    { border-left-color: #f59e0b; }
+.fx-fault-tab--in_progress { border-left-color: #3b82f6; }
+.fx-fault-tab:hover { background: #f8fafc; }
+.fx-fault-tab.is-active {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.18);
 }
-.fx-deck-hint {
-  align-self: center;
-  font-size: 11.5px;
+.fx-fault-tab-line {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+.fx-fault-tab-range {
+  font-size: 10.5px;
   font-weight: 600;
   color: #94a3b8;
-  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
 }
-.fx-deck::-webkit-scrollbar { height: 8px; }
-.fx-deck::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 999px;
+.fx-fault-tab.is-active .fx-fault-tab-range { color: #2563eb; }
+/* Sekme duzeninde kart kalan tum yuksekligi kaplar. */
+.fx-tabs-wrap > .fx-card {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
-.fx-deck::-webkit-scrollbar-track { background: transparent; }
+.fx-tabs-wrap > .fx-card > .fx-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
 
 .fx-card {
   background: #fff;
@@ -23734,7 +23759,10 @@ th.event-col-category {
 
 .fx-zone {
   min-width: 0;
-  padding: 12px 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 16px 12px;
   /* Blueprint zemini: cok soluk bir kareli izgara. Cizimin "teknik belge"
      oldugunu soyluyor ama okunurlugu bozmuyor. */
   background-color: #fcfdff;
@@ -23764,36 +23792,68 @@ th.event-col-category {
   font-variant-numeric: tabular-nums;
 }
 
-/* SABIT OLCEK + YATAY KAYDIRMA.
-   Cizim eskiden `width:100%` ile esniyordu; olcek hattin direk sayisina gore
-   degistigi icin 6 direkli hat devasa, 17 direkli hat minicik cikiyordu.
-   Artik bir direk araligi her hatta ayni piksel genisligindedir. */
+/* CIZIM SAHNESI — kaydirma degil ZOOM/PAN.
+   Uzun hatlar tek ekrana sigmiyordu; sabit olcekte yatay kaydirmak yerine
+   kullanici kendi odagini seciyor (tekerlek = zoom, surukle = gez). */
 .fx-strip-wrap {
   width: 100%;
-  overflow-x: auto;
-  /* `overflow-x:auto` dikeyi de otomatik olarak kirpar (visible olamaz).
-     Alt bosluk ipucunun ASAGI acilirken sigmasi icin: cihaz ~50px'te,
-     ipucu en fazla 132px — 188+28 = 216px alan yeter. */
-  overflow-y: hidden;
-  padding-bottom: 28px;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
 }
-.fx-strip-inner {
+.fx-strip-stage {
   position: relative;
-  /* Sigan cizim ortalanir, tasan cizim soldan baslar (block margin:auto
-     tasmada 0'a duser — icerigin sol tarafi asla kirpilmaz). */
-  margin: 0 auto;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% 0%, #ffffff 0%, #f8fafc 60%, #f1f5f9 100%);
+  border: 1px solid #eef2f7;
 }
 .fx-strip {
   display: block;
-  overflow: visible;
+  width: 100%;
+  touch-action: none;
+  cursor: grab;
 }
-/* Ince kaydirma cubugu — cizimin altinda kaba bir bant olusturmasin. */
-.fx-strip-wrap::-webkit-scrollbar { height: 7px; }
-.fx-strip-wrap::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 999px;
+.fx-strip.is-zoomed { cursor: grab; }
+.fx-strip:active { cursor: grabbing; }
+
+/* Yakinlastirma denetimleri */
+.fx-strip-zoom {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  z-index: 3;
 }
-.fx-strip-wrap::-webkit-scrollbar-track { background: transparent; }
+.fx-strip-zoom button {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #475569;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.fx-strip-zoom button:hover:not(:disabled) { background: #eff6ff; color: #1d4ed8; }
+.fx-strip-zoom button:disabled { opacity: 0.4; cursor: default; }
+.fx-strip-hint {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  pointer-events: none;
+}
+.fx-strip-branch { cursor: pointer; }
 /* Cihaz isareti: imlec hedefi genis, gecis yumusak. */
 .fx-strip-dev,
 .fx-strip-pole {
