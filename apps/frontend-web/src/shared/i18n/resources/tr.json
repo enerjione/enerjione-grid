@@ -2736,7 +2736,8 @@
       },
       "deviceModelScope": "Cihaz modeli",
       "deviceModelScopeAll": "Tüm modeller",
-      "deviceModelScopeHint": "Bir model seçilirse kural yalnızca o modeldeki cihazlarda değerlendirilir ve sinyal listesi de o modele daralır. Sinyaller modeller arasında ortak değildir."
+      "deviceModelScopeHint": "Bir model seçilirse kural yalnızca o modeldeki cihazlarda değerlendirilir ve sinyal listesi de o modele daralır. Sinyaller modeller arasında ortak değildir.",
+      "signalSourceScope": "Ünite"
     },
     "outbound": {
       "title": "Outbound Hedefleri",

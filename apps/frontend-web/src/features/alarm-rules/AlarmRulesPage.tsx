@@ -156,14 +156,6 @@ export function AlarmRulesPage({
     return map;
   }, [signals]);
 
-  const sourceCounts = useMemo(() => {
-    const c: Record<string, number> = { master: 0, sat01: 0, sat02: 0 };
-    for (const sig of signals) {
-      if (sig.source in c) c[sig.source] += 1;
-    }
-    return c;
-  }, [signals]);
-
   // Mode: list (sol kural listesi + sağ detay), create (sinyal seç + form), edit-existing (kural seç + form)
   const [mode, setMode] = useState<Mode>("list");
   const [selectedRuleId, setSelectedRuleId] = useState<number | null>(null);
@@ -234,6 +226,21 @@ export function AlarmRulesPage({
       signals.filter((s) => !secilen || s.model === secilen).map((s) => s.source)
     );
     return SOURCES.filter((s) => kume.has(s));
+  }, [signals, form.device_model_filter]);
+
+  /** Kaynak basina sinyal sayisi — SECILI MODELE gore.
+   *
+   *  Onceki surum yalnizca `master/sat01/sat02` icin sayac tutuyordu; kitin
+   *  `sat03..sat09` uydulari her zaman 0 gorunuyordu. Ayrica model filtresini
+   *  yok sayiyordu, yani sayac listedeki sinyal sayisini tutmuyordu. */
+  const sourceCounts = useMemo(() => {
+    const secilen = form.device_model_filter?.toString().trim() || "";
+    const c: Record<string, number> = {};
+    for (const sig of signals) {
+      if (secilen && sig.model !== secilen) continue;
+      c[sig.source] = (c[sig.source] ?? 0) + 1;
+    }
+    return c;
   }, [signals, form.device_model_filter]);
 
   useEffect(() => {
@@ -621,39 +628,51 @@ export function AlarmRulesPage({
                         SN 2.0'da `nominal_voltage` var, kitte yok). Model
                         secilmeden sinyal secmek, o modelde hic tetiklenmeyecek
                         bir kural yazmaya acik kapi birakirdi. */}
-                    <label className="rules-v3-picker-model">
-                      {t("engineering.alarmRules.deviceModelScope")}
-                      <select
-                        value={form.device_model_filter ?? ""}
-                        onChange={(event) =>
-                          setForm({ ...form, device_model_filter: event.target.value })
-                        }
-                        disabled={!canEdit}
-                      >
-                        <option value="">
-                          {t("engineering.alarmRules.deviceModelScopeAll")}
-                        </option>
-                        {deviceModels.map((opt) => (
-                          <option key={opt.code} value={opt.code}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <div className="rules-v2-signals-tabs">
-                      {pickerSources.map((src) => (
-                        <button
-                          key={src}
-                          type="button"
-                          className={`signal-picker-tab ${pickerSource === src ? "active" : ""}`}
-                          onClick={() => setPickerSource(src)}
+                    {/* IKI ACILIR LISTE TEK SATIRDA: solda model, sagda unite.
+                        Unite secimi eskiden sekme seridiydi; dokuz uydulu
+                        modelde serit tasip yatay kaydiriliyor ve secicinin
+                        yuksekliginin iyi bir kismini yiyordu. Sag listedeki
+                        secenekler SECILI MODELDEN turer. */}
+                    <div className="rules-v3-picker-filters">
+                      <label className="rules-v3-picker-filter">
+                        <span>{t("engineering.alarmRules.deviceModelScope")}</span>
+                        <select
+                          value={form.device_model_filter ?? ""}
+                          onChange={(event) =>
+                            setForm({ ...form, device_model_filter: event.target.value })
+                          }
+                          disabled={!canEdit}
                         >
-                          <span>{SOURCE_SHORT[src]}</span>
-                          <span className="signal-picker-tab-count">
-                            {sourceCounts[src] ?? 0}
-                          </span>
-                        </button>
-                      ))}
+                          <option value="">
+                            {t("engineering.alarmRules.deviceModelScopeAll")}
+                          </option>
+                          {deviceModels.map((opt) => (
+                            <option key={opt.code} value={opt.code}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="rules-v3-picker-filter">
+                        <span>{t("engineering.alarmRules.signalSourceScope")}</span>
+                        <select
+                          value={pickerSource}
+                          onChange={(event) =>
+                            setPickerSource(event.target.value as SignalSource)
+                          }
+                          disabled={!canEdit || pickerSources.length === 0}
+                        >
+                          {pickerSources.length === 0 ? (
+                            <option value="">—</option>
+                          ) : (
+                            pickerSources.map((src) => (
+                              <option key={src} value={src}>
+                                {`${SOURCE_LABEL[src]} (${sourceCounts[src] ?? 0})`}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      </label>
                     </div>
                     <input
                       type="search"
@@ -1187,6 +1206,10 @@ export function AlarmRulesPage({
                 <th>Durum</th>
                 <th>Seviye</th>
                 <th>Cihaz</th>
+                {/* UNITE SUTUNU: govdede kaynak rozeti (Master / Sat 01) var
+                    ama basligi yoktu — bu yuzden bu sutundan SONRAKI tum
+                    basliklar bir sutun sola kayiyordu. */}
+                <th>{t("engineering.alarmRules.signalSourceScope")}</th>
                 <th>Kural Adı</th>
                 <th>Koşul</th>
                 <th>Hat Arızası</th>

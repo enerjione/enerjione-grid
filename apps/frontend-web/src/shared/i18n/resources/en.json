@@ -2739,7 +2739,8 @@
       },
       "deviceModelScope": "Device model",
       "deviceModelScopeAll": "All models",
-      "deviceModelScopeHint": "Selecting a model limits the rule to devices of that model and narrows the signal list accordingly. Signals are not shared across models."
+      "deviceModelScopeHint": "Selecting a model limits the rule to devices of that model and narrows the signal list accordingly. Signals are not shared across models.",
+      "signalSourceScope": "Unit"
     },
     "outbound": {
       "title": "Outbound Targets",
