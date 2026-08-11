@@ -55,9 +55,6 @@ type Props = {
   canCommand?: boolean;
   canConfig?: boolean;
   onDeviceCommand?: (deviceCode: string, command: string, label: string) => Promise<void>;
-  /** Baska bir cihazin detayini ac — kit setinde "ust cihaz" rozetinden
-   *  kitin kendi sayfasina gecmek icin. */
-  onOpenDevice?: (deviceId: number) => void;
   token?: string;
 };
 
@@ -178,7 +175,6 @@ export function DeviceDetailPage({
   canCommand = false,
   canConfig = false,
   onDeviceCommand,
-  onOpenDevice,
   token,
 }: Props) {
   const { t } = useTranslation();
@@ -243,17 +239,55 @@ export function DeviceDetailPage({
     return isGatewayOnline(gateways.find((g) => g.code === device.gatewayCode));
   }, [gateways, device]);
 
+  /** Bu cihazin MODELINE ait katalog anahtarlari.
+   *
+   *  Ekranda YALNIZCA sinyal listesinde gercekten olan noktalar gorunmeli.
+   *  Pole Master Kit setinin sinyal listesi SN 2.0'inkinden farklidir (48
+   *  uydu noktasi; SN2'nin master kanali ve o kanala ozgu noktalar kitin
+   *  RTU'suna aittir, sete degil) — yabanci modelin satirlarini set
+   *  ekraninda gostermek yaniltir.
+   *
+   *  Canli deger dizisi istemcide BIRIKTIRILEREK tutuluyor: bir cihazin
+   *  modeli degistiginde (kit -> set) eski modelin satirlari tam bir
+   *  tazelemeye kadar dizide kaliyor. Bu suzgec onlari da eler.
+   *
+   *  Katalog HENUZ YUKLENMEMISSE (bos dizi) suzgec uygulanmaz — aksi halde
+   *  sayfa acilisinda ekran bir an tamamen bosalirdi. */
+  const modelSignalKeys = useMemo(() => {
+    const s = new Set<string>();
+    if (!device) return s;
+    for (const sig of signals) if (sig.model === device.model) s.add(sig.key);
+    return s;
+  }, [signals, device]);
+
+  const katalogda = useCallback(
+    (signalKey: string) => modelSignalKeys.size === 0 || modelSignalKeys.has(signalKey),
+    [modelSignalKeys]
+  );
+
+  /** Bu cihazin canli satirlari (tum kaynaklar), model suzgecinden gecmis. */
+  const deviceValues = useMemo(
+    () =>
+      device
+        ? values.filter((r) => r.device_id === device.id && katalogda(r.signal_key))
+        : [],
+    [values, device, katalogda]
+  );
+
   // Secili kaynaga gore satirlar.
   const rows = useMemo<Row[]>(() => {
     if (!device) return [];
     return values
-      .filter((r) => r.device_id === device.id && r.source === activeSource)
+      .filter(
+        (r) =>
+          r.device_id === device.id && r.source === activeSource && katalogda(r.signal_key)
+      )
       .map((r) => ({
         ...r,
         effQuality: gwOnline ? r.quality : "bad",
         effType: (r.data_type as string | undefined) ?? dataTypeByKey.get(r.signal_key),
       }));
-  }, [values, device, activeSource, gwOnline, dataTypeByKey]);
+  }, [values, device, activeSource, gwOnline, dataTypeByKey, katalogda]);
 
   const rowBySuffix = useMemo(() => {
     const m = new Map<string, Row>();
@@ -261,12 +295,17 @@ export function DeviceDetailPage({
     return m;
   }, [rows]);
 
-  // Tum kaynaklardan key->deger (sidebar RSSI + KPI icin).
+  // Tum kaynaklardan key->deger (sidebar RSSI + KPI icin). Model suzgeci
+  // burada da gecerli (bkz. `modelSignalKeys`).
   const valueByKey = useMemo(() => {
     const m = new Map<string, SignalLiveRow>();
-    if (device) for (const r of values) if (r.device_id === device.id) m.set(r.signal_key, r);
+    if (device) {
+      for (const r of values) {
+        if (r.device_id === device.id && katalogda(r.signal_key)) m.set(r.signal_key, r);
+      }
+    }
     return m;
-  }, [values, device]);
+  }, [values, device, katalogda]);
 
   /** RTU (ana govde) degerleri.
    *
@@ -393,13 +432,13 @@ export function DeviceDetailPage({
     ) as Record<SignalSource, number>;
     if (device) {
       for (const r of values) {
-        if (r.device_id === device.id && r.source in c) {
+        if (r.device_id === device.id && r.source in c && katalogda(r.signal_key)) {
           c[r.source as SignalSource] += 1;
         }
       }
     }
     return c;
-  }, [values, device]);
+  }, [values, device, katalogda]);
 
   if (!device) {
     return (
@@ -455,9 +494,6 @@ export function DeviceDetailPage({
       <DeviceSidebar
         device={device}
         parentDevice={parentDevice}
-        onOpenParent={
-          parentDevice && onOpenDevice ? () => onOpenDevice(parentDevice.id) : undefined
-        }
         topologyInfo={topologyInfo}
         rssi={rtuNum("master.modem_rssi")}
         ip={sidebarIp}
@@ -538,7 +574,9 @@ export function DeviceDetailPage({
         {activeTab === "all" ? (
           <DeviceAllSignalsTab
             device={device}
-            values={values}
+            // Model suzgecinden gecmis satirlar: "Tumu" karti da yalnizca bu
+            // cihazin sinyal listesindeki noktalari gostersin.
+            values={deviceValues}
             gwOnline={gwOnline}
             sourceCounts={sourceCounts}
             sources={measuringSources}

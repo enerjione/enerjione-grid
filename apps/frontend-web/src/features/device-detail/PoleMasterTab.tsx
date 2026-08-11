@@ -171,24 +171,15 @@ export function PoleMasterTab({ parent, values, signals }: Props) {
 
   return (
     <div className="pole-master-panel">
+      {/* Ust kisimda ACIKLAMA METNI YOK (kullanici istegi): kitin adi zaten
+          sol paneldeki "Ust cihaz" satirinda, degerlerin kite ait oldugu da
+          sekmenin adinda yaziyor. Kalan tek sey OLCU: kac noktadan kacinin
+          degeri geldi — "bos ekran" ile "veri gelmiyor" ayrimini o soyluyor. */}
       <header className="pole-master-head">
-        <div className="pole-master-id">
-          <span className="material-symbols-outlined">dns</span>
-          <div>
-            <strong>{parent.name}</strong>
-            <small>{parent.code}</small>
-          </div>
-        </div>
-        {/* Kac noktadan kacinin degeri geldi — "bos ekran" ile "veri gelmiyor"
-            arasindaki farki tek bakista soyler. */}
         <span className={`pole-master-fill${doluSayisi === 0 ? " is-empty" : ""}`}>
           {t("deviceDetail.poleMaster.filled", { filled: doluSayisi, total: toplam })}
         </span>
       </header>
-
-      <p className="pole-master-note">
-        {t("deviceDetail.poleMaster.note", { code: parent.code })}
-      </p>
 
       {sirali.length === 0 ? (
         <p className="pole-master-empty">{t("deviceDetail.poleMaster.empty")}</p>

@@ -38,8 +38,6 @@ type Props = {
    *  degerler kitten kopyalanmis ya da hic dolmamis alanlardi ve sahada
    *  "set cevrimici ama kit degil" gibi imkansiz durumlar gosteriyordu. */
   parentDevice?: DeviceRow;
-  /** Ust cihaz rozetinden kitin kendi sayfasina gecis. */
-  onOpenParent?: () => void;
   topologyInfo?: TopologyInfo;
   /** RSSI (master.modem_rssi). */
   rssi?: number;
@@ -103,7 +101,6 @@ function batteryClass(pct: number): string {
 export function DeviceSidebar({
   device,
   parentDevice,
-  onOpenParent,
   topologyInfo,
   rssi,
   ip,
@@ -145,37 +142,6 @@ export function DeviceSidebar({
         </div>
         <div className="device-sidebar-name">{device.code}</div>
 
-        {/* UST CIHAZ (kit) — set tek basina bir sey ifade etmiyor: hangi kitin
-            parcasi oldugu ve o kite nasil gidilecegi burada. */}
-        {parentDevice ? (
-          onOpenParent ? (
-            <button type="button" className="device-sidebar-parent is-link" onClick={onOpenParent}>
-              <span className="material-symbols-outlined">dns</span>
-              <span className="device-sidebar-parent-body">
-                <span className="device-sidebar-parent-kicker">
-                  {t("deviceDetail.sidebar.parentDevice")}
-                </span>
-                <strong>{parentDevice.name}</strong>
-                <small>{parentDevice.code}</small>
-              </span>
-              <span className="material-symbols-outlined device-sidebar-parent-go">
-                chevron_right
-              </span>
-            </button>
-          ) : (
-            <div className="device-sidebar-parent">
-              <span className="material-symbols-outlined">dns</span>
-              <span className="device-sidebar-parent-body">
-                <span className="device-sidebar-parent-kicker">
-                  {t("deviceDetail.sidebar.parentDevice")}
-                </span>
-                <strong>{parentDevice.name}</strong>
-                <small>{parentDevice.code}</small>
-              </span>
-            </div>
-          )
-        ) : null}
-
         {/* Genel alarm durum karti — alarm varsa yanip sonen, yoksa yesil */}
         <div className={`device-sidebar-alarmcard ${hasAlarm ? "is-alarm" : "is-ok"}`}>
           <span className="device-sidebar-alarmcard-icon">
@@ -208,6 +174,17 @@ export function DeviceSidebar({
           ) : null}
         </span>
         <ul className="device-sidebar-info">
+          {/* UST CIHAZ — set tek basina bir sey ifade etmiyor; hangi kitin
+              parcasi oldugu buraya, diger bilgilerle ayni bicimde yazilir.
+              BAGLANTI DEGIL: kitin kendi detay sayfasi yok, kit seviyesindeki
+              her sey zaten "Pole Master" sekmesinde. */}
+          {parentDevice ? (
+            <InfoRow
+              icon="dns"
+              label={t("deviceDetail.sidebar.parentDevice")}
+              value={parentDevice.name}
+            />
+          ) : null}
           <InfoRow
             icon="wifi"
             label={t("deviceDetail.sidebar.deviceStatus")}
