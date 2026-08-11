@@ -14,6 +14,64 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.66.0] — 2026-08-11
+
+Hat arızası detay ekranı baştan tasarlandı, kullanıcılar kendi profillerini
+(fotoğraf, telefon) düzenleyebiliyor ve sahada boşuna gezdiren iki arıza
+işareti düzeltildi.
+
+### Eklendi
+
+- **Kendi Profilim: fotoğraf ve telefon.** Telefon numarası modelde ve admin
+  panelinde vardı ama kullanıcı kendi kaydında değiştiremiyordu; bildirim
+  tercihleri ekranında "SMS: telefon numarası eklenmemiş" uyarısını görüp
+  düzeltmenin yolu yoktu. Profil fotoğrafı kullanıcının satırında gömülü
+  `data:` URI'si olarak durur (istemci 192 piksel JPEG'e küçültür, tipik
+  8–15 KB): ayrı dosya deposu, kalıcı birim, nginx statik yolu ve yedekleme
+  adımı gerekmez — mevcut Postgres yedeğine kendiliğinden girer. Şifre
+  değiştirme formuna güç göstergesi ve kural listesi eklendi.
+- **Arıza detayında cihaz künyesi.** Cihazın arıza anında ölçtüğü değerler
+  (tür, etkilenen faz, yön, arıza akımı, öncesi yük akımı, iletken sıcaklığı,
+  tetikleyen sinyaller) detay ekranında hiç görünmüyordu; operatör aynı bilgi
+  için arıza listesine geri dönüyordu. Ayrıca arızayı açan alarmlar, etkilenen
+  branşman kolları ve **bu hattın geçmişi** (tekrar eden arıza uyarısı) aynı
+  ekranda.
+- **Bağlantı teli aralığı açıkça işaretleniyor** (`is_link_span`).
+
+### Değişti
+
+- **Arıza detay sayfası yeniden tasarlandı.** Harita artık satırın yarısı;
+  atama ile durum ayrı kartlar (durum dört adımlı akış şeridi + zaman
+  çizelgesi); yan yana kartların boyları eşit. Çözüm sebebi açılır liste
+  değil gruplanmış etiket ızgarası — sebep, çözüm ayrıntısı ve saha notu tek
+  "Kaydet" ile gider. **Harita varsayılan olarak uydu görünümünde açılır:**
+  hat arızasında sahada aranan şey ağaç teması, dere yatağı, yol kenarı —
+  sokak çizimi bunların hiçbirini göstermez.
+- Cihaz listesinde bir kitin setleri katlanabiliyor; alt cihaz satırı tek
+  satıra indi.
+
+### Düzeltildi
+
+- **Sağlam branşman kolları "kontrol edin" diye işaretleniyordu.** Arıza
+  bölgesindeki kollar iki ayrı hesaptan çıkıyor ve ikisi aynı cevabı
+  vermiyordu: backend sınır direklerini de kapsıyordu (`<=`), oysa bu iki
+  direk arızanın **sağlam** tarafındadır; şematik çizim ise bölgeyi
+  cihazlardan türetiyordu. Sonuç, haritada yemyeşil duran bir kol için sahaya
+  çıkan ekipti. Artık her iki taraf da tek kaynaktan besleniyor.
+- **Pole Master Kit set formu faz eşlemesini yanlış varsayıyordu.** Set
+  ünitelerinin üçü de uydudur (sat01/02/03 → a/b/c); form b/c/c gösteriyor ve
+  kaydedilince bu yanlış eşleme cihaza yazılıyordu.
+- **WhatsApp ağ geçidi her yeniden başlatmada QR istiyordu.** `restartRequired`
+  dışındaki her kapanmada oturum siliniyordu; oysa ağ dalgalanması, WA sunucu
+  rotasyonu veya VDS açılışında ağın hazır olmaması oturumu geçersiz kılmaz.
+  Artık oturum yalnızca telefondan cihaz kaldırıldığında (`loggedOut`) silinir;
+  yeniden bağlanma üstel beklemeyle yapılır (2→60 sn, 8 deneme).
+
+### Veritabanı
+
+- `0052_user_avatar` — `users.avatar_url` (nullable). Geriye dönük veri
+  etkilenmez: NULL = fotoğraf yok, arayüz baş harf yuvarlağını gösterir.
+
 ## [2.65.0] — 2026-08-11
 
 Arşivleme politikasında modellerin birbirine karışmasını giderir; şematik
