@@ -52,6 +52,7 @@ import {
   updateRegion,
   updateSegment
 } from "../../shared/api";
+import { isKitModel } from "../../shared/types";
 import type { DeviceRow, Line, LineDetail, LineSegment, Pole, Region, TopologyRole } from "../../shared/types";
 import type { GridSnapshot } from "../../shared/api";
 import { useToast } from "../../components/ToastProvider";
@@ -488,8 +489,20 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
     return s;
   }, [detail, gridSnapshot]);
 
+  /**
+   * Segmente baglanabilecek cihazlar.
+   *
+   * POLE MASTER KIT'IN KENDISI LISTEDE YOK. Kit FIZIKSEL kayittir: DNP3
+   * baglantisini, gateway bagini ve seri numarasini tasir. Sahada bir yer
+   * kaplamaz — yer kaplayan, arizasi dusen ve detay sayfasi olan sey onun
+   * SETLERIDIR. Kit bir acikliga baglanirsa uc setin ucu birden tek bir
+   * direk araligina cakilir ve ariza yeri hesabi anlamsizlasir.
+   *
+   * Uc de ayni kurali uyguluyor (`_reddet_kit_cihazi`); burasi yalnizca
+   * kullaniciyi reddedilecek bir secimle karsi karsiya birakmamak icin.
+   */
   const availableDevices = useMemo<DeviceRow[]>(
-    () => devices.filter((d) => !usedDeviceIds.has(d.id)),
+    () => devices.filter((d) => !usedDeviceIds.has(d.id) && !isKitModel(d.model)),
     [devices, usedDeviceIds]
   );
 

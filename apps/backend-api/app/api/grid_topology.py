@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
+from app.data.device_models import POLE_MASTER_KIT_MODEL
 from app.db.session import get_db
 from app.models.device import Device
 from app.models.enums import UserRole
@@ -801,6 +802,30 @@ def _validate_segment_endpoints(db: Session, line_id: int, from_id: int, to_id: 
         )
 
 
+def _reddet_kit_cihazi(device: Device) -> None:
+    """Pole Master Kit'in KENDISI bir acikliga baglanamaz.
+
+    Kit FIZIKSEL kayittir: DNP3 baglantisini, gateway bagini ve seri
+    numarasini tasir. Sahada bir yer kaplamaz — yer kaplayan, arizasi
+    dusen ve detay sayfasi olan sey onun SETLERIDIR (`horstmann_pmk_set`).
+    Kit bir acikliga baglanirsa uc setin ucu birden tek bir direk araligina
+    cakilir ve ariza yeri hesabi anlamsiz hale gelir: uc ayri olcum noktasi
+    tek noktaya duser.
+
+    Kural yalnizca arayuz listesinde gizlenmekle kalmiyor; ucun kendisi de
+    reddediyor. Aksi halde kural "gorunmez" olurdu: API'yi dogrudan kullanan
+    (ya da eski bir arayuz surumu calistiran) biri kiti baglayabilirdi.
+    """
+    if device.model == POLE_MASTER_KIT_MODEL:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Pole Master Kit'in kendisi hatta yerleştirilemez; "
+                "setlerinden birini seçin."
+            ),
+        )
+
+
 @router.post("/segments", response_model=LineSegmentRead, status_code=status.HTTP_201_CREATED)
 def create_segment(
     payload: LineSegmentCreate,
@@ -812,6 +837,7 @@ def create_segment(
         device = db.get(Device, payload.device_id)
         if device is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cihaz bulunamadı.")
+        _reddet_kit_cihazi(device)
         existing = db.scalar(
             select(LineSegment).where(LineSegment.device_id == payload.device_id)
         )
@@ -869,8 +895,10 @@ def update_segment(
         _validate_segment_endpoints(db, row.line_id, new_from, new_to)
     if "device_id" in changes and changes["device_id"] is not None:
         new_device_id = changes["device_id"]
-        if db.get(Device, new_device_id) is None:
+        yeni_cihaz = db.get(Device, new_device_id)
+        if yeni_cihaz is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cihaz bulunamadı.")
+        _reddet_kit_cihazi(yeni_cihaz)
         conflict = db.scalar(
             select(LineSegment).where(
                 LineSegment.device_id == new_device_id,
