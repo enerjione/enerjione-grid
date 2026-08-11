@@ -9,11 +9,16 @@
  *
  * UC TRAVERS = UC FAZ
  * -------------------
- * Her faz kendi traversine asilir (master ustte, sat01 ortada, sat02 altta),
- * en ustte de toprak teli. Onceki surumde iki seviye vardi ve iki faz ayni
- * yukseklikte yan yana duruyordu: sarkma egrileri ust uste binip hat tek
- * kalin bir bant gibi okunuyordu. Uc seviye ayrimi hem gercek bir direge
- * benziyor hem de ARIZALI FAZI kendi telinde gostermeyi mumkun kiliyor.
+ * Her faz kendi traversine asilir (master ustte, sat01 ortada, sat02 altta).
+ * Onceki surumde iki seviye vardi ve iki faz ayni yukseklikte yan yana
+ * duruyordu: sarkma egrileri ust uste binip hat tek kalin bir bant gibi
+ * okunuyordu. Uc seviye ayrimi hem gercek bir direge benziyor hem de ARIZALI
+ * FAZI kendi telinde gostermeyi mumkun kiliyor.
+ *
+ * TOPRAK TELI YOK: en ustte bos giden dorduncu bir tel ve onun traversi
+ * vardi. Uzerinde cihaz yok, arizasi olmuyor, hicbir soruya cevap
+ * vermiyordu; buna karsilik her satirdan yer yiyor ve "kac tel var"
+ * sorusunu bulandiriyordu.
  *
  * Izolator zincirleri traversin IKI ucunda da var: bir span sol travers
  * ucundan sag travers ucuna gerilir, direk uzerinde ise atlama (jumper)
@@ -23,15 +28,7 @@
  * caprazlari) ayri bir katmanda ve daha ince; uzaklasinca gri bir doku gibi
  * okunur, yakinlasinca yapi netlesir.
  */
-import {
-  ARM_HALF,
-  GROUND_Y,
-  GW_ARM_HALF,
-  GW_ARM_Y,
-  GW_WIRE_Y,
-  PEAK_Y,
-  PHASE_LINES
-} from "./faultStripGeometry";
+import { ARM_HALF, GROUND_Y, PEAK_Y, PHASE_LINES } from "./faultStripGeometry";
 
 type Props = {
   x: number;
@@ -93,7 +90,6 @@ export function StripTower({ x, hot, hotPhases, role, onEnter, onLeave }: Props)
 
   const wAlt = yariGenislik(GROUND_Y);
   const wPeak = yariGenislik(PEAK_Y);
-  const wGw = yariGenislik(GW_ARM_Y);
 
   return (
     <g
@@ -138,13 +134,9 @@ export function StripTower({ x, hot, hotPhases, role, onEnter, onLeave }: Props)
           y2={GROUND_Y - 30}
         />
 
-        {/* TEPE: toprak teli tasiyicisi. */}
-        <line x1={x} y1={PEAK_Y - 7} x2={x} y2={PEAK_Y} />
+        {/* TEPE — govdenin ucu. Ustunde artik toprak teli YOK; kisa bir
+            baslik cizgisi direge bitmislik hissi verir. */}
         <line x1={x - wPeak} y1={PEAK_Y} x2={x + wPeak} y2={PEAK_Y} />
-        {/* TOPRAK TELI TRAVERSI — kisa. */}
-        <line x1={x - GW_ARM_HALF} y1={GW_ARM_Y} x2={x + GW_ARM_HALF} y2={GW_ARM_Y} />
-        <line x1={x - GW_ARM_HALF} y1={GW_ARM_Y} x2={x - GW_ARM_HALF} y2={GW_WIRE_Y} />
-        <line x1={x + GW_ARM_HALF} y1={GW_ARM_Y} x2={x + GW_ARM_HALF} y2={GW_WIRE_Y} />
 
         {/* UC FAZ TRAVERSI — govdeden iki yana. Uclarda hafif yukari donus
             ve govdeye takviye caprazi: gercek traverslerdeki tasiyici. */}
@@ -187,49 +179,26 @@ export function StripTower({ x, hot, hotPhases, role, onEnter, onLeave }: Props)
         );
       })}
 
-      {/* TOPRAK TELI govde uzerinden gecer. */}
-      <line
-        x1={x - GW_ARM_HALF}
-        y1={GW_WIRE_Y}
-        x2={x + GW_ARM_HALF}
-        y2={GW_WIRE_Y}
-        stroke="#cbd5e1"
-        strokeWidth={0.9}
-        strokeLinecap="round"
-      />
-      <line
-        x1={x - wGw}
-        y1={GW_ARM_Y}
-        x2={x + wGw}
-        y2={GW_ARM_Y}
-        stroke={renk}
-        strokeWidth={kalinlik}
-        strokeLinecap="round"
-      />
-
       {/* BRANSMAN DUGUMU — bu direkten bir kol ayriliyor.
           Kolun kendisi sahnenin ALT SATIRINDA tam bir hat olarak cizilir;
-          buradaki dugum yalnizca "ayrilma noktasi burasi" der. */}
+          buradaki dugum "ayrilma noktasi burasi" der ve alt satira inen bag
+          tam bu noktadan baslar. Once ince bir cizgi + bos halkaydi ve
+          govdenin kafes caprazlari icinde kayboluyordu; artik dolu bir
+          dugum + beyaz tas halkasi ile kafesten ayrisir. */}
       {role === "branch" ? (
         <g>
           <line
             x1={x}
-            y1={GROUND_Y - 30}
+            y1={GROUND_Y - 26}
             x2={x}
             y2={GROUND_Y}
             stroke={BRANCH_INK}
-            strokeWidth={1.8}
+            strokeWidth={2.2}
             strokeLinecap="round"
-            opacity={0.75}
+            strokeDasharray="3 3"
           />
-          <circle
-            cx={x}
-            cy={GROUND_Y}
-            r={3}
-            fill="#fff"
-            stroke={BRANCH_INK}
-            strokeWidth={2}
-          />
+          <circle cx={x} cy={GROUND_Y} r={5.2} fill="#fff" opacity={0.95} />
+          <circle cx={x} cy={GROUND_Y} r={3.4} fill={BRANCH_INK} />
         </g>
       ) : null}
     </g>

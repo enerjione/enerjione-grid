@@ -113,29 +113,31 @@ export const ROW_TITLE_Y = 13;
 export const DIM_LABEL_Y = 26;
 export const DIM_Y = 38;
 
-/** Direk tepesi (toprak teli tasiyicisi). */
-export const PEAK_Y = 52;
-/** Toprak teli traversi ve teli. */
-export const GW_ARM_Y = 60;
-export const GW_WIRE_Y = 66;
+/** Direk tepesi — govdenin ucu.
+ *
+ * TOPRAK TELI KALDIRILDI: en ustte bos giden dorduncu bir tel vardi. Uzerinde
+ * cihaz yok, arizasi olmuyor, hicbir soruya cevap vermiyordu; buna karsilik
+ * her satirdan yer yiyor ve uc faz telinin ustunde dordunculuk yaparak
+ * "kac tel var" sorusunu bulandiriyordu. Cizim uc fazi anlatir. */
+export const PEAK_Y = 50;
 
 /** UC FAZ TRAVERSI — yukaridan asagiya master / sat01 / sat02. */
-export const ARM_YS = [78, 104, 130] as const;
+export const ARM_YS = [62, 88, 114] as const;
 /** Traverse asilan iletken (izolator zinciri boyu kadar asagida). */
-export const WIRE_YS = [88, 114, 140] as const;
+export const WIRE_YS = [72, 98, 124] as const;
 
 /** Referans iletken — `pointAt` bunun uzerinde calisir (ORTA faz). */
 export const WIRE_Y = WIRE_YS[1];
 
 /** Kafes govdenin zemine bastigi yer. */
-export const GROUND_Y = 206;
+export const GROUND_Y = 190;
 /** Direk adlari. */
-export const LABEL_Y = 222;
+export const LABEL_Y = 206;
 
 /** Bir SATIRIN toplam yuksekligi (baslik dahil). */
-export const ROW_H = 238;
+export const ROW_H = 222;
 /** Iki satir arasindaki dusey adim — arada bag cizgisine yer kalir. */
-export const ROW_PITCH = 250;
+export const ROW_PITCH = 234;
 
 /** Tek satirlik sahnenin yuksekligi (geriye uyum adi). */
 export const STRIP_H = ROW_H;
@@ -145,8 +147,6 @@ export const SAG = 11;
 
 /** Travers yari genisligi — iletken travers UCUNA baglanir. */
 export const ARM_HALF = 22;
-/** Ust (toprak) travers yari genisligi. */
-export const GW_ARM_HALF = 10;
 
 /** Faz anahtarlari — bir SN2 govdesindeki uc sensor, hattin uc fazi. */
 export type PhaseKey = "master" | "sat01" | "sat02";

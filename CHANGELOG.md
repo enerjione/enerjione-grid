@@ -14,6 +14,31 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.65.0] — 2026-08-11
+
+Arşivleme politikasında modellerin birbirine karışmasını giderir; şematik
+çizim ve cihaz listesi görünümünde düzeltmeler.
+
+### Düzeltildi
+
+- **Bir modelin arşiv ayarı diğer modellerin sinyallerini de yönetiyordu.**
+  Politika önbelleği yalnızca sinyal anahtarıyla kuruluyordu; katalog ise
+  `(model, key)` ile tekil. Aynı adlı satırlar birbirini eziyor, 821 satırdan
+  önbelleğe 533 giriş kalıyor ve **288 satır yutuluyordu**. Pole Master Kit
+  setinde bir sinyalin arşivini kapatmak Smart Navigator 2.0 filosunun aynı
+  adlı sinyalini de susturuyordu — hiçbir uyarı yoktu, kayıp ancak "bu
+  sinyalin geçmişi neden yok" diye fark edilirdi. Model bilinemediğinde
+  sinyal arşivlenir: yanlış ayarla arşivi kapatmaktansa fazladan satır yazmak
+  yeğdir, çünkü veri kaybı geri alınamaz.
+- **Cihaz kartları daralmıştı.** Kit grubu için eklenen düzen, seti olmayan
+  sıradan cihazların kartlarını da içerik genişliğine düşürüyordu.
+
+### Değişti
+
+- Kit setleri cihaz listesinde daha belirgin girintili — satırın alt cihaz
+  olduğu ilk bakışta okunuyor.
+- Arıza şematik çiziminde direk ve branşman yerleşimi iyileştirildi.
+
 ## [2.64.0] — 2026-08-10
 
 Pole Master Kit setlerinde **sinyallerin sessizce kaybolmasını** giderir; arıza

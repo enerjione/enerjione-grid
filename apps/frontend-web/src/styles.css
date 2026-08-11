@@ -23577,16 +23577,23 @@ th.event-col-category {
   font-variant-numeric: tabular-nums;
 }
 .fx-fault-tab.is-active .fx-fault-tab-range { color: #2563eb; }
-/* Sekme duzeninde kart kalan tum yuksekligi kaplar. */
+/* Sekme duzeninde kart kalan tum yuksekligi kaplar — AMA icerigin altina
+   sikismaz.
+
+   `min-height: 0` idi ve cok satirli sahnede (ana hat + aday kollar) cizim
+   kartin yuksekligine SIGMIYOR, `.fx-card { overflow: hidden }` alt satiri
+   KIRPIYORDU: dorduncu kol yariya kadar gorunup kesiliyordu. `min-content`
+   ile kart kisalabilecegi son nokta kendi icerigidir; tasan durumda sayfa
+   kayar (`.faults-page { overflow-y: auto }`). */
 .fx-tabs-wrap > .fx-card {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  min-height: min-content;
 }
 .fx-tabs-wrap > .fx-card > .fx-body {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: min-content;
 }
 
 .fx-card {
@@ -23981,8 +23988,7 @@ th.event-col-category {
    kullanici kendi odagini seciyor (tekerlek = zoom, surukle = gez). */
 .fx-strip-wrap {
   width: 100%;
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
   display: flex;
 }
 .fx-strip-stage {
@@ -24038,10 +24044,16 @@ th.event-col-category {
 }
 .fx-strip-zoom button:hover:not(:disabled) { background: #eff6ff; color: #1d4ed8; }
 .fx-strip-zoom button:disabled { opacity: 0.4; cursor: default; }
+/* Ipucu cizimin UZERINDE duruyor: cok satirli sahnede en alt satirin direk
+   adlari tam buraya denk gelip ic ice giriyordu. Yari saydam bir zemin ikisini
+   de okunur birakir (ipucu ikincil oldugu icin soluk kalir). */
 .fx-strip-hint {
   position: absolute;
-  left: 10px;
-  bottom: 8px;
+  left: 8px;
+  bottom: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
   font-size: 10px;
   font-weight: 600;
   color: #94a3b8;

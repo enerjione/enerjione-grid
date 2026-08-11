@@ -370,36 +370,53 @@ export function FaultPoleStrip({
           </defs>
 
           {/* ---- SATIRLAR ARASI BAG ----
-               Kol, ayrildigi DIREKTEN iner. Bag once saga tasar, sonra alt
-               satirin ilk diregine girer: dumduz inseydi ust satirdaki direk
-               adinin uzerinden gecerdi. */}
-          {scene.rows.map((r) =>
-            r.link ? (
+               Kol, ayrildigi DIREKTEN iner ve alt satirin ilk diregine
+               girer. Bag saga tasarak dolasir: dumduz inseydi ust satirdaki
+               direk ADININ uzerinden gecerdi.
+
+               UC KATMAN: genis soluk bir govde (bagin "kalinligi"), uzerinde
+               kesikli ince cizgi (yon), iki ucta dugum. Once tek ince bir
+               kesik cizgiydi ve iki satiri birbirine BAGLADIGI degil
+               tesadufen yanindan gectigi izlenimi veriyordu. */}
+          {scene.rows.map((r) => {
+            if (!r.link) return null;
+            const renk = active ? RED : GREY;
+            const { fromX, fromY, toX, toY } = r.link;
+            const yol =
+              `M${fromX} ${fromY + 5}` +
+              ` C${fromX + 30} ${fromY + 26}, ${toX + 30} ${toY - 42}, ${toX} ${toY - 12}`;
+            return (
               <g key={`lnk-${r.key}`} className="fx-strip-link">
+                {/* Govde: bagin fiziksel kalinligi. */}
                 <path
-                  d={`M${r.link.fromX} ${r.link.fromY} C${r.link.fromX + 30} ${r.link.fromY + 20}, ${r.link.toX + 30} ${r.link.toY - 34}, ${r.link.toX} ${r.link.toY - 8}`}
+                  d={yol}
                   fill="none"
-                  stroke={active ? RED : GREY}
-                  strokeWidth={1.8}
-                  strokeDasharray="7 5"
+                  stroke={renk}
+                  strokeWidth={6}
                   strokeLinecap="round"
-                  opacity={0.85}
+                  opacity={0.12}
                 />
                 <path
-                  d={`M${r.link.toX} ${r.link.toY - 1} l-3.6 -6 h7.2 z`}
-                  fill={active ? RED : GREY}
+                  d={yol}
+                  fill="none"
+                  stroke={renk}
+                  strokeWidth={1.9}
+                  strokeDasharray="6 5"
+                  strokeLinecap="round"
                 />
-                <circle
-                  cx={r.link.fromX}
-                  cy={r.link.fromY}
-                  r={2.6}
-                  fill="#fff"
-                  stroke={active ? RED : GREY}
-                  strokeWidth={1.8}
+                {/* Alt satira giris: kolun ilk direginin tepesine oturur. */}
+                <line
+                  x1={toX}
+                  y1={toY - 12}
+                  x2={toX}
+                  y2={toY}
+                  stroke={renk}
+                  strokeWidth={1.9}
+                  strokeLinecap="round"
                 />
               </g>
-            ) : null
-          )}
+            );
+          })}
 
           {scene.rows.map((r) => (
             <FaultStripRow
@@ -436,6 +453,25 @@ export function FaultPoleStrip({
               onHover={setHover}
             />
           ))}
+
+          {/* ---- BAG DUGUMLERI ----
+               Satirlarin USTUNDE cizilir. Ust uctaki dugum, direkteki mor
+               "bransman noktasi" isaretinin tam uzerine oturur: ayni noktada
+               iki farkli renk (mor dugum + kirmizi bag) tesadufi bir cakisma
+               gibi duruyordu; artik tek bir kirmizi birlesim var. Alt uctaki
+               dugum de direk govdesinin ustune biner, altinda kalmaz. */}
+          {scene.rows.map((r) => {
+            if (!r.link) return null;
+            const renk = active ? RED : GREY;
+            return (
+              <g key={`node-${r.key}`}>
+                <circle cx={r.link.fromX} cy={r.link.fromY} r={5.4} fill="#fff" />
+                <circle cx={r.link.fromX} cy={r.link.fromY} r={3.4} fill={renk} />
+                <circle cx={r.link.toX} cy={r.link.toY} r={5} fill="#fff" />
+                <circle cx={r.link.toX} cy={r.link.toY} r={3.1} fill={renk} />
+              </g>
+            );
+          })}
 
           {/* Sigmadigi icin cizilmeyen kollar SESSIZCE dusmesin: ekip
               "hepsi bu" sanarsa gezmedigi bir kol kalir. */}

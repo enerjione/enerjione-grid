@@ -14,7 +14,6 @@ import {
   DIM_LABEL_Y,
   DIM_Y,
   GROUND_Y,
-  GW_WIRE_Y,
   LABEL_Y,
   PAD_X,
   PHASE_LINES,
@@ -246,15 +245,10 @@ export function FaultStripRow({
         />
       ) : null}
 
-      {/* Toprak teli — tepe noktalari arasinda, ince gri. */}
-      <path
-        d={toPath(wire.map((pt) => ({ x: pt.x, y: GW_WIRE_Y + (pt.y - WIRE_Y) * 0.35 })))}
-        fill="none"
-        stroke="#cbd5e1"
-        strokeWidth={0.9}
-        strokeLinecap="round"
-        opacity={0.7}
-      />
+      {/* TOPRAK TELI CIZILMIYOR: en ustte bos giden dorduncu bir tel vardi;
+          uzerinde cihaz yok, arizasi olmuyor, hicbir soruya cevap vermiyordu
+          ama uc faz telinin ustunde dordunculuk yapip "kac tel var" sorusunu
+          bulandiriyordu. */}
 
       {/* UC FAZ ILETKENI — her biri kendi traversinden, kendi yuksekliginde.
           Renk YALNIZCA DURUM tasir: gri = saglam, kirmizi = arizali. Faz
