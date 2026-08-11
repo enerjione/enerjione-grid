@@ -14,6 +14,25 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.67.5] — 2026-08-11
+
+### Düzeltildi
+
+- **Branşman girişindeki cihaz arızayı görünce ana hat boyanıyordu.** Böyle
+  bir cihaz ana hattın üzerinde değil, dallanma direği ile kolun ilk direği
+  arasındaki telin üzerindedir; "gördüm" demesi arızanın **o kolda** olduğu
+  anlamına gelir. Kod cihazı bölge hesabından dışlıyor ama hemen ardından
+  kaba direk aralığına düşüp ana hattı baştan sona kırmızıya boyuyordu.
+  Harita aynı arızayı kolun üzerinde tek bir kırmızı kesik gösterirken şema
+  600 metrelik bir ana hat parçasını "aranacak kesim" diye işaretliyordu.
+  Artık ana hat bağlam olarak gri kalıyor, arıza kolun üzerinde gösteriliyor.
+- **Bağ teli mesafesi "0 m" yazıyordu.** Mesafe indeksi kolu, asılı olduğu
+  direkten başlatır — kolun ilk direğinin hat-başı mesafesi ile dallanma
+  direğininki aynıdır, yani bağ telinin kendi uzunluğu o modelde hiç yok.
+  Uzunluk artık iki direk arasındaki coğrafi mesafeden hesaplanıyor.
+
+---
+
 ## [2.67.4] — 2026-08-11
 
 ### Düzeltildi
