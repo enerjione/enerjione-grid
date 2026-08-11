@@ -1431,9 +1431,18 @@ export function App() {
         : t("toasts.faultAssignCleared")
     );
   };
-  const handleUpdateFaultStatus = async (faultId: number, newStatus: string) => {
+  const handleUpdateFaultStatus = async (
+    faultId: number,
+    newStatus: string,
+    resolutionNote?: string | null
+  ) => {
     if (!session) return;
-    const updated = await updateFaultStatus(session.accessToken, faultId, newStatus);
+    const updated = await updateFaultStatus(
+      session.accessToken,
+      faultId,
+      newStatus,
+      resolutionNote
+    );
     setFaults((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
     toast.success(t("toasts.faultStatusUpdated"));
   };

@@ -25147,7 +25147,9 @@ th.event-col-category {
 .fd-head {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  /* Kunye/baslik/durum artik TEK SATIR; ust boslugu kisalttik — olculer
+     ekranin ustunde, ilk bakista gorunsun. */
+  gap: 8px;
   flex-shrink: 0;
 }
 
@@ -25155,11 +25157,15 @@ th.event-col-category {
    GERI DUGMESI YOK: sayfa bir sekme; geri donus sekme seridinden yapilir. */
 .fd-head-top {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: baseline;
+  gap: 8px 14px;
   flex-wrap: wrap;
 }
+/* Baslik satirin ORTASINDA: solda kunye, sagda durum rozeti kalir. */
+.fd-head-top > .fd-title { margin-right: auto; }
+.fd-head-top > .fd-status-badge { align-self: center; }
+/* Kunye baslikla ayni satirda oldugu icin kucuk ve ikincil kalmali. */
+.fd-head-top > .fd-breadcrumb { flex: 0 0 auto; }
 
 .fd-status-badge {
   display: inline-flex;
@@ -25178,11 +25184,12 @@ th.event-col-category {
   gap: 10px;
   flex-wrap: wrap;
   margin: 0;
-  font-size: 1.6rem;
+  font-size: 1.35rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  line-height: 1.15;
+  line-height: 1.2;
   color: var(--fd-ink);
+  min-width: 0;
 }
 
 /* Kayit numarasi: telefonda "hangi kayit" diye sorulunca soylenen sey. */
@@ -26487,10 +26494,18 @@ th.event-col-category {
   overflow-wrap: anywhere;
 }
 
+/* Metin alani ile dugme YAN YANA: alt alta dururken dugme kartin dibine
+   itiliyor ve not yazan kisi onu gormek icin kaydiriyordu. */
 .fd-comment-add {
   display: flex;
-  flex-direction: column;
+  align-items: flex-end;
   gap: 8px;
+}
+.fd-comment-add .fd-textarea { flex: 1 1 auto; min-width: 0; }
+.fd-comment-add .fd-save { flex: 0 0 auto; white-space: nowrap; }
+
+@media (max-width: 640px) {
+  .fd-comment-add { flex-direction: column; align-items: stretch; }
 }
 
 /* ---- Bos / hata durumlari ---------------------------------------------- */
@@ -41368,3 +41383,30 @@ th.event-col-category {
     align-items: stretch;
   }
 }
+
+/* ---- ARIZA KAPATMA ----
+   Kapatma yalnizca ariza SAHADA DUZELDIKTEN sonra mumkun; acik arizada
+   burada yalnizca gerekce yazar. Kart icinde ayri bir kutu olmasi,
+   kaydetmeyle karistirilmasini onler. */
+.fd-close-box {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--fd-line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fd-close-locked {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--fd-faint);
+  line-height: 1.5;
+}
+.fd-save--close { align-self: flex-end; }
+
+/* Kunye + atama alt alta, harita ile ayni yukseklikte. */
+.fd-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.fd-col > .fd-card { margin: 0; }

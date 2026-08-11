@@ -1123,7 +1123,12 @@
         "zone": "Arıza bölgesi",
         "line": "Tüm hat",
         "grid": "Tüm şebeke"
-      }
+      },
+      "closeLocked": "Arıza sahada henüz düzelmedi. Cihaz normale döndüğünde kapatabilirsiniz.",
+      "resolutionNote": "Çözüm notu",
+      "resolutionNotePlaceholder": "Ne yapıldı? (ör. izolatör değiştirildi)",
+      "resolutionNoteHint": "Kapatmak için zorunlu. Sonradan silinmez; arızanın kalıcı cevabıdır.",
+      "closeFault": "Arızayı kapat"
     },
     "phase": {
       "master": "Master",

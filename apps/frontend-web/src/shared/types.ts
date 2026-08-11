@@ -321,6 +321,8 @@ export type FaultEvent = {
   resolved_at?: string | null;
   closed_at?: string | null;
   note?: string | null;
+  /** Kapanis gerekcesi — `closed` disinda bos. */
+  resolution_note?: string | null;
   assigned_to_username?: string | null;
   assigned_to_full_name?: string | null;
   assigned_at?: string | null;

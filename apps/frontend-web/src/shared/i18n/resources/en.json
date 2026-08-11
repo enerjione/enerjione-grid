@@ -1126,7 +1126,12 @@
         "zone": "Fault zone",
         "line": "Whole line",
         "grid": "Whole grid"
-      }
+      },
+      "closeLocked": "The fault has not cleared in the field yet. You can close it once the device returns to normal.",
+      "resolutionNote": "Resolution note",
+      "resolutionNotePlaceholder": "What was done? (e.g. insulator replaced)",
+      "resolutionNoteHint": "Required to close. It is never deleted; it is the fault's permanent answer.",
+      "closeFault": "Close fault"
     },
     "phase": {
       "master": "Master",

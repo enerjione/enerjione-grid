@@ -112,6 +112,16 @@ class FaultEvent(Base):
     # icin FaultComment kullanin — bu alan basit ozet).
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
+    #: COZUM NOTU — arizayi kapatan kisinin "ne yapildi" cevabi.
+    #:
+    #: NEDEN `note`DAN AYRI: `note` ariza acikken tutulan serbest calisma
+    #: notudur ve degisir. Bu alan ise KAPANIS kaydidir: bir kez yazilir ve
+    #: arizanin nasil giderildiginin kalici cevabidir. Ayni alana yazsaydik
+    #: kapanis gerekcesi sonraki bir not duzenlemesiyle sessizce silinebilirdi.
+    #:
+    #: Ariza `closed` durumuna gecerken ZORUNLUDUR (bkz. faults API).
+    resolution_note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
     # Ariza bildiriminin (e-posta/SMS/WhatsApp) gonderildigi an. NULL =
     # bildirim BEKLIYOR.
     #

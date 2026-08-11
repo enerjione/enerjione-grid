@@ -82,6 +82,8 @@ class FaultEventRead(BaseModel):
     resolved_at: datetime | None = None
     closed_at: datetime | None = None
     note: str | None = None
+    #: Kapanis gerekcesi (salt okunur; `closed` disinda bos).
+    resolution_note: str | None = None
 
     assigned_to_username: str | None = None
     assigned_at: datetime | None = None
@@ -149,7 +151,11 @@ class FaultEventAssignUpdate(BaseModel):
 
 
 class FaultEventStatusUpdate(BaseModel):
-    status: str  # "in_progress" | "closed" | (manuel olarak)
+    status: str  # "in_progress" | "resolved" | "closed" | ...
+    #: Yalnizca `closed`a gecerken ZORUNLU: arizanin nasil giderildigi.
+    #: Kapanis gerekcesi olmayan bir ariza kaydi, gecmise bakildiginda
+    #: "neden kapandi" sorusunu cevaplamaz.
+    resolution_note: str | None = None
 
 
 class FaultCauseUpdate(BaseModel):

@@ -1040,12 +1040,14 @@ export async function assignFault(
 export async function updateFaultStatus(
   token: string,
   faultId: number,
-  newStatus: string
+  newStatus: string,
+  /** Yalnizca `closed`a gecerken ZORUNLU — backend notsuz kapatmayi reddeder. */
+  resolutionNote?: string | null
 ): Promise<import("./types").FaultEvent> {
   const response = await apiFetch(`${API_BASE_URL}/faults/${faultId}/status`, {
     method: "PATCH",
     headers: authHeaders(token),
-    body: JSON.stringify({ status: newStatus })
+    body: JSON.stringify({ status: newStatus, resolution_note: resolutionNote ?? null })
   });
   if (!response.ok) throw await buildApiError(response, "Arıza durumu güncellenemedi.");
   return (await response.json()) as import("./types").FaultEvent;

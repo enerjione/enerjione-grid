@@ -344,6 +344,7 @@ def _serialize_fault(db: Session, f: FaultEvent, refs: _FaultRefs | None = None)
         resolved_at=f.resolved_at,
         closed_at=f.closed_at,
         note=f.note,
+        resolution_note=f.resolution_note,
         assigned_to_username=f.assigned_to_username,
         assigned_at=f.assigned_at,
         assigned_to_full_name=assigned_user.full_name if assigned_user else None,
@@ -868,6 +869,31 @@ def update_fault_status(
     allowed = {"in_progress", "resolved", "closed", "open", "assigned"}
     if new_status not in allowed:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Gecersiz status.")
+
+    # --- KAPATMA KURALI ---
+    #
+    # Ariza yalnizca SAHADA DUZELDIKTEN sonra kapatilabilir. `resolved`a
+    # gecisi kullanici degil cihaz belirler (alarm kalkinca otomatik yazilir);
+    # kullanicinin isi duzelen arizayi RAPORLAYIP kapatmaktir.
+    #
+    # Onceden her gecis serbestti: acik bir ariza dogrudan `closed`
+    # yapilabiliyordu. Bu, sahada devam eden bir arizanin ekrandan
+    # kaybolmasi demekti — kimse ilgilenmedigi halde kapali gorunurdu.
+    if new_status == "closed":
+        if f.status != "closed" and f.resolved_at is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Ariza sahada duzelmeden kapatilamaz.",
+            )
+        cozum = (payload.resolution_note or "").strip()
+        if not cozum and not (f.resolution_note or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Kapatmak icin cozum notu zorunlu.",
+            )
+        if cozum:
+            f.resolution_note = cozum
+
     f.status = new_status
     if new_status == "resolved" and f.resolved_at is None:
         f.resolved_at = datetime.now(timezone.utc)

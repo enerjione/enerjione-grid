@@ -105,7 +105,12 @@ type Props = {
   devices?: DeviceRow[];
   alarms?: AlarmEvent[];
   onAssign: (faultId: number, username: string | null) => Promise<void>;
-  onUpdateStatus: (faultId: number, status: string) => Promise<void>;
+  /** `closed` icin `resolutionNote` ZORUNLU (backend de dogrular). */
+  onUpdateStatus: (
+    faultId: number,
+    status: string,
+    resolutionNote?: string | null
+  ) => Promise<void>;
   onUpdateNote: (faultId: number, note: string | null) => Promise<void>;
   onUpdateCause: (
     faultId: number,
@@ -249,6 +254,9 @@ export function FaultDetailPage({
   const [comments, setComments] = useState<FaultComment[]>([]);
   const [commentDraft, setCommentDraft] = useState("");
   const [noteDraft, setNoteDraft] = useState("");
+  // Kapanis gerekcesi. `note`dan AYRI: `note` acikken tutulan calisma
+  // notudur ve degisir; bu ise arizanin nasil giderildiginin kalici cevabi.
+  const [resolutionDraft, setResolutionDraft] = useState("");
   const [causeDraft, setCauseDraft] = useState("");
   const [causeDetailDraft, setCauseDetailDraft] = useState("");
   const [saving, setSaving] = useState(false);
@@ -271,6 +279,7 @@ export function FaultDetailPage({
   useEffect(() => {
     if (!fault || taslakYuklendi) return;
     setNoteDraft(fault.note ?? "");
+    setResolutionDraft(fault.resolution_note ?? "");
     setCauseDraft(fault.cause_code ?? "");
     setCauseDetailDraft(fault.cause_detail ?? "");
     setTaslakYuklendi(true);
@@ -549,6 +558,12 @@ export function FaultDetailPage({
               {t("faults.card.rangeText", { from: fault.from_pole_seq, to: fault.to_pole_seq })}
             </strong>
           </nav>
+          {/* Baslik ARTIK AYNI SATIRDA: kunye / baslik / durum uc ayri
+              satirdayken ust bosluk olculerin yerini yiyordu. */}
+          <h1 className="fd-title">
+            {fault.line_name}
+            <span className="fd-record">#{fault.id}</span>
+          </h1>
           <span
             className="fd-status-badge"
             style={{ background: `${statusColor}18`, color: statusColor }}
@@ -557,11 +572,6 @@ export function FaultDetailPage({
             {t(`faults.status.${fault.status}`, { defaultValue: fault.status })}
           </span>
         </div>
-
-        <h1 className="fd-title">
-          {fault.line_name}
-          <span className="fd-record">#{fault.id}</span>
-        </h1>
 
         <div className="fd-metrics">
           <Metric
@@ -594,143 +604,6 @@ export function FaultDetailPage({
       {/* ================= 1) ATAMA | DURUM =================
           Ikisi eskiden tek kartta ("Sorumluluk") idi. Farkli iki soru:
           "kim gidiyor" ve "is nerede". Ayri kartlar. */}
-      <div className="fd-row fd-row--split">
-        <section className="fd-card">
-          <header className="fd-card-head">
-            <h2>
-              <UserRound size={15} />
-              {t("faults.detail.assignTitle")}
-            </h2>
-            <small>{t("faults.detail.ticketsHint")}</small>
-          </header>
-
-          <div className="fd-assignee">
-            <span
-              className={`fd-avatar ${assigneeName ? "" : "fd-avatar--empty"}`}
-              aria-hidden="true"
-            >
-              {assigneeName ? bashafler(assigneeName) : "—"}
-            </span>
-            <div className="fd-assignee-body">
-              <strong>{assigneeName ?? t("faults.detail.assigneeEmpty")}</strong>
-              {/* Alt satir: adi VARSA kullanici adi (telsizde soylenen sey o),
-                  atanmamissa uyari. Atanma zamani asagida kunyede duruyor —
-                  burada tekrar edilmez. */}
-              {fault.assigned_to_full_name && fault.assigned_to_username ? (
-                <small>{fault.assigned_to_username}</small>
-              ) : assigneeName ? null : (
-                <small>{t("faults.detail.assignHint")}</small>
-              )}
-            </div>
-          </div>
-
-          {canAssign ? (
-            <>
-              <label className="fd-label" htmlFor="fd-assignee">
-                {t("faults.detail.changeAssignee")}
-              </label>
-              <div className="fd-assign-row">
-                <select
-                  id="fd-assignee"
-                  className="fd-select"
-                  value={fault.assigned_to_username ?? ""}
-                  onChange={(e) =>
-                    void calistir(
-                      () => onAssign(fault.id, e.target.value || null),
-                      "alarms.errors.assignFailed"
-                    )
-                  }
-                  disabled={saving}
-                >
-                  <option value="">{t("faults.detail.assigneeUnset")}</option>
-                  {userOptions.map((u) => (
-                    <option key={u.id} value={u.username}>
-                      {u.full_name} ({u.username})
-                    </option>
-                  ))}
-                </select>
-                {/* Sahadaki kisi arizayi kendi ustlenebilsin — listede kendi
-                    adini aramak gereksiz bir adim. */}
-                {fault.assigned_to_username !== currentUsername ? (
-                  <button
-                    type="button"
-                    className="fd-ghost-btn"
-                    onClick={() =>
-                      void calistir(
-                        () => onAssign(fault.id, currentUsername),
-                        "alarms.errors.assignFailed"
-                      )
-                    }
-                    disabled={saving}
-                  >
-                    {t("faults.detail.assignToMe")}
-                  </button>
-                ) : null}
-              </div>
-            </>
-          ) : null}
-
-          {fault.assigned_at ? (
-            <dl className="fd-kv">
-              <div>
-                <dt>{t("faults.detail.assignedAtLabel")}</dt>
-                <dd>{fmtDate(fault.assigned_at, localeTag)}</dd>
-              </div>
-            </dl>
-          ) : null}
-        </section>
-
-        <section className="fd-card">
-          <header className="fd-card-head">
-            <h2>
-              <CircleDot size={15} />
-              {t("faults.detail.statusLabel")}
-            </h2>
-            <small>{t("faults.detail.statusHint")}</small>
-          </header>
-
-          {/* ADIM SERIDI: dort durum bir AKIS'tir; 2x2 dugme izgarasi bu
-              sirayi gizliyordu. Gecilmis adimlar dolu, siradaki solgun. */}
-          <div className="fd-steps" role="group" aria-label={t("faults.detail.statusLabel")}>
-            {AKIS.map((s, i) => {
-              const active = fault.status === s;
-              const done = akisIndex >= 0 && i < akisIndex;
-              const color = STATUS_COLOR[s];
-              return (
-                <button
-                  key={s}
-                  type="button"
-                  className={`fd-step ${active ? "is-active" : ""} ${done ? "is-done" : ""}`}
-                  style={{ "--fd-step-c": color } as CSSProperties}
-                  onClick={() =>
-                    void calistir(() => onUpdateStatus(fault.id, s), "common.errorOccurred")
-                  }
-                  disabled={saving || !canEdit}
-                  title={t(`faults.status.${s}`)}
-                >
-                  <span className="fd-step-dot">
-                    {done ? <Check size={12} strokeWidth={3} /> : i + 1}
-                  </span>
-                  <span className="fd-step-label">{t(`faults.status.${s}`)}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* ZAMAN CIZELGESI — "ne zaman ne oldu" sorusu her devir teslimde
-              soruluyordu; kayit zaten var, gosterilmiyordu. */}
-          <span className="fd-label">{t("faults.detail.timelineTitle")}</span>
-          <ol className="fd-timeline">
-            {zamanCizelgesi.map((s) => (
-              <li key={s.key}>
-                <i style={{ background: s.color }} />
-                <span>{s.label}</span>
-                <time>{fmtDate(s.at, localeTag)}</time>
-              </li>
-            ))}
-          </ol>
-        </section>
-      </div>
 
       {/* ================= 2) HARITA | KUNYE ================= */}
       <div className="fd-row fd-row--map">
@@ -904,42 +777,132 @@ export function FaultDetailPage({
           )}
         </section>
 
-        {/* ARIZA KUNYESI — cihazin arizanin KENDISI hakkinda soyledikleri.
-            Bu ekranda hic gorunmuyordu; operator ayni bilgiyi liste
-            kartindan okumak icin geri donuyordu. */}
-        <section className="fd-card">
-          <header className="fd-card-head">
-            <h2>
-              <Activity size={15} />
-              {t("faults.card.specTitle")}
-            </h2>
-            <small>{t("faults.detail.specHint")}</small>
-          </header>
+        <div className="fd-col">
+          {/* ARIZA KUNYESI — cihazin arizanin KENDISI hakkinda soyledikleri.
+              Bu ekranda hic gorunmuyordu; operator ayni bilgiyi liste
+              kartindan okumak icin geri donuyordu. */}
+          <section className="fd-card">
+            <header className="fd-card-head">
+              <h2>
+                <Activity size={15} />
+                {t("faults.card.specTitle")}
+              </h2>
+              <small>{t("faults.detail.specHint")}</small>
+            </header>
 
-          {specRows.length === 0 ? (
-            <p className="fd-empty">{t("faults.card.specEmpty")}</p>
-          ) : (
-            <dl className="fd-spec">
-              {specRows.map((row) => (
-                <div key={row.key}>
-                  <dt>{row.label}</dt>
-                  <dd className={row.tone ? `is-${row.tone}` : undefined}>{row.value}</dd>
-                </div>
-              ))}
-            </dl>
-          )}
-
-          {triggerSignals.length > 0 ? (
-            <>
-              <span className="fd-label">{t("faults.detail.specSignals")}</span>
-              <div className="fd-signals">
-                {triggerSignals.map((s) => (
-                  <code key={s}>{s}</code>
+            {specRows.length === 0 ? (
+              <p className="fd-empty">{t("faults.card.specEmpty")}</p>
+            ) : (
+              <dl className="fd-spec">
+                {specRows.map((row) => (
+                  <div key={row.key}>
+                    <dt>{row.label}</dt>
+                    <dd className={row.tone ? `is-${row.tone}` : undefined}>{row.value}</dd>
+                  </div>
                 ))}
+              </dl>
+            )}
+
+            {triggerSignals.length > 0 ? (
+              <>
+                <span className="fd-label">{t("faults.detail.specSignals")}</span>
+                <div className="fd-signals">
+                  {triggerSignals.map((s) => (
+                    <code key={s}>{s}</code>
+                  ))}
+                </div>
+              </>
+            ) : null}
+          </section>
+
+          {/* ATAMA — kunyenin ALTINDA. "Kim gidiyor" sorusu,
+              arizanin kendi olcumlerinden SONRA okunur. Eskiden
+              sayfanin en ustundeydi ve olculeri asagi itiyordu. */}
+          <section className="fd-card">
+            <header className="fd-card-head">
+              <h2>
+                <UserRound size={15} />
+                {t("faults.detail.assignTitle")}
+              </h2>
+              <small>{t("faults.detail.ticketsHint")}</small>
+            </header>
+
+            <div className="fd-assignee">
+              <span
+                className={`fd-avatar ${assigneeName ? "" : "fd-avatar--empty"}`}
+                aria-hidden="true"
+              >
+                {assigneeName ? bashafler(assigneeName) : "—"}
+              </span>
+              <div className="fd-assignee-body">
+                <strong>{assigneeName ?? t("faults.detail.assigneeEmpty")}</strong>
+                {/* Alt satir: adi VARSA kullanici adi (telsizde soylenen sey o),
+                    atanmamissa uyari. Atanma zamani asagida kunyede duruyor —
+                    burada tekrar edilmez. */}
+                {fault.assigned_to_full_name && fault.assigned_to_username ? (
+                  <small>{fault.assigned_to_username}</small>
+                ) : assigneeName ? null : (
+                  <small>{t("faults.detail.assignHint")}</small>
+                )}
               </div>
-            </>
-          ) : null}
-        </section>
+            </div>
+
+            {canAssign ? (
+              <>
+                <label className="fd-label" htmlFor="fd-assignee">
+                  {t("faults.detail.changeAssignee")}
+                </label>
+                <div className="fd-assign-row">
+                  <select
+                    id="fd-assignee"
+                    className="fd-select"
+                    value={fault.assigned_to_username ?? ""}
+                    onChange={(e) =>
+                      void calistir(
+                        () => onAssign(fault.id, e.target.value || null),
+                        "alarms.errors.assignFailed"
+                      )
+                    }
+                    disabled={saving}
+                  >
+                    <option value="">{t("faults.detail.assigneeUnset")}</option>
+                    {userOptions.map((u) => (
+                      <option key={u.id} value={u.username}>
+                        {u.full_name} ({u.username})
+                      </option>
+                    ))}
+                  </select>
+                  {/* Sahadaki kisi arizayi kendi ustlenebilsin — listede kendi
+                      adini aramak gereksiz bir adim. */}
+                  {fault.assigned_to_username !== currentUsername ? (
+                    <button
+                      type="button"
+                      className="fd-ghost-btn"
+                      onClick={() =>
+                        void calistir(
+                          () => onAssign(fault.id, currentUsername),
+                          "alarms.errors.assignFailed"
+                        )
+                      }
+                      disabled={saving}
+                    >
+                      {t("faults.detail.assignToMe")}
+                    </button>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
+
+            {fault.assigned_at ? (
+              <dl className="fd-kv">
+                <div>
+                  <dt>{t("faults.detail.assignedAtLabel")}</dt>
+                  <dd>{fmtDate(fault.assigned_at, localeTag)}</dd>
+                </div>
+              </dl>
+            ) : null}
+          </section>
+        </div>
       </div>
 
       {/* ================= 3) BOLGE / ALARM / DIREK / KOL / GECMIS ========= */}
@@ -1240,6 +1203,54 @@ export function FaultDetailPage({
                 {t("faults.detail.saveAll")}
               </button>
             </footer>
+          ) : null}
+
+          {/* ---- KAPATMA ----
+              Ariza yalnizca SAHADA DUZELDIKTEN sonra kapatilabilir.
+              `resolved` gecisini cihaz belirler (alarm kalkinca otomatik);
+              kullanicinin isi duzelen arizayi raporlayip kapatmaktir.
+              Acik bir arizada kapatma YOK: aksi halde sahada devam eden is
+              ekrandan duser ve kimse ilgilenmedigi halde kapali gorunur. */}
+          {canEdit && fault.status !== "closed" ? (
+            <div className="fd-close-box">
+              {!fault.resolved_at ? (
+                <p className="fd-close-locked">
+                  <CircleDot size={13} />
+                  {t("faults.detail.closeLocked")}
+                </p>
+              ) : (
+                <>
+                  <label className="fd-field">
+                    <span className="fd-label">{t("faults.detail.resolutionNote")}</span>
+                    <textarea
+                      className="fd-textarea"
+                      rows={2}
+                      value={resolutionDraft}
+                      onChange={(e) => setResolutionDraft(e.target.value)}
+                      disabled={saving}
+                      placeholder={t("faults.detail.resolutionNotePlaceholder")}
+                    />
+                    <small className="fd-field-hint">
+                      {t("faults.detail.resolutionNoteHint")}
+                    </small>
+                  </label>
+                  <button
+                    type="button"
+                    className="fd-save fd-save--close"
+                    disabled={saving || !resolutionDraft.trim()}
+                    onClick={() =>
+                      void calistir(
+                        () => onUpdateStatus(fault.id, "closed", resolutionDraft.trim()),
+                        "common.errorOccurred"
+                      )
+                    }
+                  >
+                    <Check size={14} />
+                    {t("faults.detail.closeFault")}
+                  </button>
+                </>
+              )}
+            </div>
           ) : null}
         </section>
 
