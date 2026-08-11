@@ -42,7 +42,32 @@ export const TOPOLOGY_ROLE_META: TopologyRoleMeta[] = [
   // konum yonetir; celiski (ortadaki direge "bas" gorseli) olusamaz.
   { value: "line_start", cls: "", symbol: "", title: "Hat başlangıcı", labelKey: "engineering.grid.roleTopo.line_start", icon: "flag", selectable: false },
   { value: "transit", cls: "", symbol: "", title: "Geçiş direği", labelKey: "engineering.grid.roleTopo.transit", icon: "location_on", selectable: true },
-  { value: "branch", cls: "is-branchpt", symbol: "⑂", title: "Branşman noktası", labelKey: "engineering.grid.roleTopo.branch", icon: "account_tree", selectable: true },
+  // BRANSMAN SEMBOLU CIZIM (SVG), harf DEGIL.
+  //
+  // Eskiden pin yesil-turkuaz bir DAIRE idi ve icinde "⑂" glifi vardi.
+  // Haritada cihaz marker'i da yesil daire (icinde beyaz simsek) oldugu icin
+  // ikisi uzaktan ayirt edilemiyordu — operator bransman diregini cihaz
+  // saniyordu. Simdi hem RENK hem BICIM hem SEMBOL ayri: indigo, kosesi
+  // yuvarlatilmis kare ve catallanma cizimi (bkz. styles.css `.is-branchpt`).
+  //
+  // Glif yerine SVG: "⑂" (U+2442) yaygin sistem fontlarinin cogunda YOK;
+  // bulunmadigi yerde tarayici yedek font arar ve boyut/hiza pinden pine
+  // kayar. Cizim her yerde ayni gorunur ve ikon subset'ine de bagli degil.
+  {
+    value: "branch",
+    cls: "is-branchpt",
+    symbol:
+      '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">' +
+      '<path fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" ' +
+      'stroke-linejoin="round" d="M12 22v-8.5M12 13.5 6.5 8M12 13.5 17.5 8"/>' +
+      '<circle cx="5.6" cy="6.4" r="2.6" fill="#fff"/>' +
+      '<circle cx="18.4" cy="6.4" r="2.6" fill="#fff"/>' +
+      "</svg>",
+    title: "Branşman noktası",
+    labelKey: "engineering.grid.roleTopo.branch",
+    icon: "account_tree",
+    selectable: true
+  },
   { value: "line_end", cls: "", symbol: "", title: "Hat sonu", labelKey: "engineering.grid.roleTopo.line_end", icon: "location_off", selectable: false },
   { value: "cable_transition", cls: "is-cable", symbol: "▼", title: "Kablo geçişi", labelKey: "engineering.grid.roleTopo.cable_transition", icon: "cable", selectable: true },
 ];
