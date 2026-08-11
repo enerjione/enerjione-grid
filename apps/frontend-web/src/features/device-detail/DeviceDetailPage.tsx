@@ -12,8 +12,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useDeviceModelSettings } from "../../components/DeviceModelSettingsProvider";
+import { voltageToPercent } from "../../shared/battery";
+
 import { fetchAlarmEvents } from "../../shared/api";
-import { SOURCES } from "../signals/signalCatalogConstants";
+import { SOURCES, sourceLabel } from "../signals/signalCatalogConstants";
 import { PoleMasterTab } from "./PoleMasterTab";
 import { signalLabel } from "../../shared/signalLabel";
 import { signalTrust } from "../../shared/signalQuality";
@@ -52,6 +55,9 @@ type Props = {
   canCommand?: boolean;
   canConfig?: boolean;
   onDeviceCommand?: (deviceCode: string, command: string, label: string) => Promise<void>;
+  /** Baska bir cihazin detayini ac — kit setinde "ust cihaz" rozetinden
+   *  kitin kendi sayfasina gecmek icin. */
+  onOpenDevice?: (deviceId: number) => void;
   token?: string;
 };
 
@@ -172,6 +178,7 @@ export function DeviceDetailPage({
   canCommand = false,
   canConfig = false,
   onDeviceCommand,
+  onOpenDevice,
   token,
 }: Props) {
   const { t } = useTranslation();
@@ -261,6 +268,20 @@ export function DeviceDetailPage({
     return m;
   }, [values, device]);
 
+  /** RTU (ana govde) degerleri.
+   *
+   *  Bir Pole Master Kit SETINDE `master.*` telemetrisi HIC YOKTUR: modem,
+   *  IP, firmware, GPS ve besleme kitin ORTAK RTU'sundadir. Sol panel bu
+   *  degerleri setin kendi kaydindan okuduğu icin sette IP, part no,
+   *  firmware ve sebeke sinyali hep bos kaliyordu. Artik set sayfasinda bu
+   *  alanlar KIT kaydindan okunur; sade cihazda (SN 2.0) kaynak degismez. */
+  const rtuValueByKey = useMemo(() => {
+    const kaynak = parentDevice ?? device;
+    const m = new Map<string, SignalLiveRow>();
+    if (kaynak) for (const r of values) if (r.device_id === kaynak.id) m.set(r.signal_key, r);
+    return m;
+  }, [values, parentDevice, device]);
+
   // Katalog birimleri (kullanici Sinyaller sayfasindan degistirebilir).
   const unitByKey = useMemo(() => {
     const m = new Map<string, string>();
@@ -280,16 +301,26 @@ export function DeviceDetailPage({
   const unitOf = (key: string): string | undefined =>
     valueByKey.get(key)?.unit || unitByKey.get(key) || undefined;
 
+  // RTU (kit) tarafindaki bilgi alanlari — sette kitin kaydindan okunur.
+  const rtuNum = (key: string): number | undefined => {
+    const v = rtuValueByKey.get(key)?.value;
+    return v == null ? undefined : v;
+  };
+  const rtuStr = (key: string): string | undefined => {
+    const s = (rtuValueByKey.get(key)?.value_string ?? "").trim();
+    return s.length > 0 ? s : undefined;
+  };
+
   // Sidebar: master IP + kanal (master/sat01/sat02) seri no'lari.
   // IP: G110 string (info_ipv4_address). Serial: analog (group 30) -> sayi,
   //   value_string DEGIL value; string variant (info_serial_number) fallback.
-  const sidebarIp = strVal("master.info_ipv4_address") ?? strVal("master.info_modem_ip_address");
-  const sidebarPartNo = strVal("master.info_part_no");
+  const sidebarIp = rtuStr("master.info_ipv4_address") ?? rtuStr("master.info_modem_ip_address");
+  const sidebarPartNo = rtuStr("master.info_part_no");
   // Firmware: cihaz ham deger olarak 2338 gonderir, gercek surum "2.338".
   // Ham deger >= 1000 ise X.YYY formatina cevir (2338 -> 2.338); string
   // variant (info_fw_version) varsa onu tercih et.
-  const fwStr = strVal("master.info_fw_version");
-  const fwNum = numVal("master.firmware_version");
+  const fwStr = rtuStr("master.info_fw_version");
+  const fwNum = rtuNum("master.firmware_version");
   const fmtFirmware = (n: number): string => {
     if (n >= 1000) return (n / 1000).toFixed(3); // 2338 -> "2.338"
     return String(n);
@@ -327,14 +358,18 @@ export function DeviceDetailPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valueByKey, measuringSources]);
 
-  // Kanal pil yuzdeleri. Master: device.batteryPercent (hesaplanmis). Satellite:
-  // battery_voltage_satellite voltajindan basit Li-ion oran (3.2V=%0, 4.2V=%100).
-  // ponytail: sabit Li-ion araligi; cihaz bazli esik gerekirse settings'e bagla.
-  const voltToPct = (v: number | undefined): number | undefined => {
-    if (v == null || !Number.isFinite(v)) return undefined;
-    const pct = ((v - 3.2) / (4.2 - 3.2)) * 100;
-    return Math.max(0, Math.min(100, Math.round(pct)));
-  };
+  // Kanal pil yuzdeleri. Master: device.batteryPercent (hesaplanmis).
+  // Satellite: kendi batarya geriliminden.
+  //
+  // ESIK ARTIK CIHAZ TURUNDEN GELIYOR. Burada sabit 3.2V=%0 / 4.2V=%100
+  // kullaniliyordu; backend 3.40/3.71 ile hesapliyordu ve ayni cihaz detay
+  // sayfasinda listedekinden farkli yuzde gosteriyordu.
+  const { thresholdsFor } = useDeviceModelSettings();
+  const voltToPct = useCallback(
+    (v: number | undefined): number | undefined =>
+      voltageToPercent(v, thresholdsFor(device?.model)),
+    [thresholdsFor, device?.model]
+  );
   const channelBattery = useMemo<Partial<Record<SignalSource, number>>>(() => {
     const out: Partial<Record<SignalSource, number>> = {};
     for (const src of measuringSources) {
@@ -402,7 +437,11 @@ export function DeviceDetailPage({
     // modem/GPS/besleme olcumleri uc setin ORTAK varligidir; setin kendi
     // sinyalleriyle ayni listede gostermek hangi degerin nereye ait
     // oldugunu karistirirdi.
-    { key: "poleMaster", icon: "solar_power", show: parentDevice != null },
+    // Ikon `dns` (RTU/sunucu govdesi) — "Tumu" sekmesindeki master kartiyla
+    // AYNI ikon. Onceden `solar_power` idi: hem kiti gunes paneli gibi
+    // gosteriyordu hem de ikon subset fontunda olmadigi icin sekme basliginda
+    // duz metin ("solar_") olarak cikiyordu.
+    { key: "poleMaster", icon: "dns", show: parentDevice != null },
     { key: "trends", icon: "show_chart", show: true },
     { key: "events", icon: "history", show: true },
     { key: "commands", icon: "terminal", show: canCommand },
@@ -415,8 +454,12 @@ export function DeviceDetailPage({
     <div className="device-detail-shell">
       <DeviceSidebar
         device={device}
+        parentDevice={parentDevice}
+        onOpenParent={
+          parentDevice && onOpenDevice ? () => onOpenDevice(parentDevice.id) : undefined
+        }
         topologyInfo={topologyInfo}
-        rssi={numVal("master.modem_rssi")}
+        rssi={rtuNum("master.modem_rssi")}
         ip={sidebarIp}
         partNo={sidebarPartNo}
         firmware={sidebarFirmware}
@@ -503,7 +546,7 @@ export function DeviceDetailPage({
         ) : null}
 
         {activeTab === "poleMaster" && parentDevice ? (
-          <PoleMasterTab parent={parentDevice} values={values} />
+          <PoleMasterTab parent={parentDevice} values={values} signals={signals} />
         ) : null}
 
         {activeTab === "trends" && token ? (
@@ -595,7 +638,10 @@ function OverviewTab({
   const voltVal = voltNow ?? lastVolt ?? null;
   const tempVal = tempNow ?? lastTemp ?? null;
   const stale = (live: number | undefined, fb: number | null) => live == null && fb != null;
-  const srcLabel = activeSource === "master" ? "Master" : activeSource === "sat01" ? "Satellite 01" : "Satellite 02";
+  // Ucluk elle yazilmisti ve `sat03` "Satellite 02" gorunuyordu: Pole Master
+  // Kit setinin UCUNCU unitesi hep yanlis adla anilirdi. Tek kaynak:
+  // `sourceLabel` (signalCatalogConstants).
+  const srcLabel = sourceLabel(activeSource);
 
   return (
     <div className="device-overview">
@@ -605,23 +651,23 @@ function OverviewTab({
       </div>
       {/* KPI serit */}
       <div className="device-overview-kpis">
-        <KpiCard icon="bolt" tone="amber" label={t("deviceDetail.kpi.current")} value={fmt(curVal, "analog", curUnit)} stale={stale(curNow, lastCur)}>
+        <KpiCard emptyText={t("deviceDetail.status.noData")} icon="bolt" tone="amber" label={t("deviceDetail.kpi.current")} value={fmt(curVal, "analog", curUnit)} stale={stale(curNow, lastCur)}>
           {token ? (
             <Sparkline token={token} deviceCode={device.code} signalKey={`${activeSource}.actual_current`} color="#f59e0b" onLastValue={setLastCur} />
           ) : null}
         </KpiCard>
-        <KpiCard icon="electric_bolt" tone="blue" label={t("deviceDetail.kpi.voltage")} value={fmt(voltVal, "analog", voltUnit)} stale={stale(voltNow, lastVolt)}>
+        <KpiCard emptyText={t("deviceDetail.status.noData")} icon="electric_bolt" tone="blue" label={t("deviceDetail.kpi.voltage")} value={fmt(voltVal, "analog", voltUnit)} stale={stale(voltNow, lastVolt)}>
           {token ? (
             <Sparkline token={token} deviceCode={device.code} signalKey={`${activeSource}.actual_voltage`} color="#3b82f6" onLastValue={setLastVolt} />
           ) : null}
         </KpiCard>
-        <KpiCard icon="device_thermostat" tone="rose" label={t("deviceDetail.kpi.temperature")} value={fmt(tempVal, "analog", tempUnit)} stale={stale(tempNow, lastTemp)}>
+        <KpiCard emptyText={t("deviceDetail.status.noData")} icon="device_thermostat" tone="rose" label={t("deviceDetail.kpi.temperature")} value={fmt(tempVal, "analog", tempUnit)} stale={stale(tempNow, lastTemp)}>
           {token ? (
             <Sparkline token={token} deviceCode={device.code} signalKey={`${activeSource}.device_temperature`} color="#f43f5e" onLastValue={setLastTemp} />
           ) : null}
         </KpiCard>
-        <KpiCard icon="report" tone="red" label={t("deviceDetail.permanentFaults")} value={fmt(permCount ?? null, "counter")} />
-        <KpiCard icon="flash_on" tone="orange" label={t("deviceDetail.momentaryFaults")} value={fmt(momCount ?? null, "counter")} />
+        <KpiCard emptyText={t("deviceDetail.status.noData")} icon="report" tone="red" label={t("deviceDetail.permanentFaults")} value={fmt(permCount ?? null, "counter")} />
+        <KpiCard emptyText={t("deviceDetail.status.noData")} icon="flash_on" tone="orange" label={t("deviceDetail.momentaryFaults")} value={fmt(momCount ?? null, "counter")} />
       </div>
 
       {/* 2 kolon: sol Mevcut Durum (2 kolonlu), sag Son Olaylar */}
@@ -668,6 +714,7 @@ function KpiCard({
   label,
   value,
   stale,
+  emptyText,
   children,
 }: {
   icon: string;
@@ -675,16 +722,20 @@ function KpiCard({
   label: string;
   value: string;
   stale?: boolean;
+  /** Deger yokken yazilacak metin ("Veri yok"). Tek basina duran koca bir
+   *  tire, kartin bozuk mu yoksa bos mu oldugunu soylemiyordu. */
+  emptyText?: string;
   children?: ReactNode;
 }) {
+  const bos = value === "—";
   return (
-    <div className={`device-kpi tone-${tone}`}>
+    <div className={`device-kpi tone-${tone}${bos ? " is-empty" : ""}`}>
       <div className="device-kpi-head">
         <span className="device-kpi-label">{label}</span>
         <span className="device-kpi-icon material-symbols-outlined">{icon}</span>
       </div>
       <div className={`device-kpi-value${stale ? " is-stale" : ""}`} title={stale ? "son bilinen deger" : undefined}>
-        {value}
+        {bos && emptyText ? <span className="device-kpi-nodata">{emptyText}</span> : value}
       </div>
       {children ? <div className="device-kpi-spark">{children}</div> : null}
     </div>

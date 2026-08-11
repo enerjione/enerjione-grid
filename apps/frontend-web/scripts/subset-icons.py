@@ -24,6 +24,7 @@ kontrol edilir, eksik varsa hata verip cikar (sessizce bozuk font uretmez).
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -36,6 +37,12 @@ SOURCE_FONT = PKG / "material-symbols-outlined.woff2"
 DECL = PKG / "index.d.ts"
 OUT_DIR = SRC / "assets" / "fonts"
 OUT_FONT = OUT_DIR / "material-symbols-outlined-subset.woff2"
+#: Fonta GIREN ikon adlari. Testler (tests/iconSubset.test.ts) kodda kullanilan
+#: her ikonun bu listede oldugunu dogrular: eksik ikon sessizce ikon ADI olarak
+#: (ornegin "solar_power" -> "solar_" + guc simgesi) ekrana basiliyordu ve bu
+#: sahaya bir kez oyle cikti. woff2'yi Node tarafinda cozmek yerine liste
+#: yaniboyunca burada tutuluyor.
+OUT_MANIFEST = OUT_DIR / "material-symbols-subset.icons.json"
 
 # Ligature girdisi olan karakterler -- ikon adlari bu alfabeden olusur.
 # Bunlar olmadan liga kurallari calismaz.
@@ -128,6 +135,12 @@ def main() -> None:
     subprocess.run(cmd, check=True)
 
     verify(icons)
+
+    # Manifest: testin okudugu tek kaynak (bkz. OUT_MANIFEST).
+    OUT_MANIFEST.write_text(
+        json.dumps(icons, indent=0, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
+    )
+    print(f"Manifest yazildi     : {OUT_MANIFEST.name} ({len(icons)} ikon)")
 
     before = SOURCE_FONT.stat().st_size
     after = OUT_FONT.stat().st_size

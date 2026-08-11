@@ -30,6 +30,16 @@ type TopologyInfo =
 
 type Props = {
   device: DeviceRow;
+  /** FIZIKSEL kit kaydi — cihaz bir Pole Master Kit SETI ise dolu.
+   *
+   *  Setin kendi haberlesmesi, modemi ve RTU pili YOKTUR: uc set tek bir
+   *  DNP3 outstation'in (kitin) arkasindadir. Bu yuzden durum/son iletisim/
+   *  pil/sebeke sinyali KIT kaydindan okunur; setin kendi kaydindaki
+   *  degerler kitten kopyalanmis ya da hic dolmamis alanlardi ve sahada
+   *  "set cevrimici ama kit degil" gibi imkansiz durumlar gosteriyordu. */
+  parentDevice?: DeviceRow;
+  /** Ust cihaz rozetinden kitin kendi sayfasina gecis. */
+  onOpenParent?: () => void;
   topologyInfo?: TopologyInfo;
   /** RSSI (master.modem_rssi). */
   rssi?: number;
@@ -92,6 +102,8 @@ function batteryClass(pct: number): string {
 
 export function DeviceSidebar({
   device,
+  parentDevice,
+  onOpenParent,
   topologyInfo,
   rssi,
   ip,
@@ -105,7 +117,9 @@ export function DeviceSidebar({
   sourceCounts,
 }: Props) {
   const { t } = useTranslation();
-  const online = device.communicationStatus === "online";
+  // Haberlesme/pil/sinyal SAHIBI cihaz: sette kit, sade cihazda kendisi.
+  const health = parentDevice ?? device;
+  const online = health.communicationStatus === "online";
   const quality = rssiQuality(rssi);
   // Konum: cihazin kendi lat/lon'u yoksa topoloji (hat/segment) konumu.
   const validSelf =
@@ -131,6 +145,37 @@ export function DeviceSidebar({
         </div>
         <div className="device-sidebar-name">{device.code}</div>
 
+        {/* UST CIHAZ (kit) — set tek basina bir sey ifade etmiyor: hangi kitin
+            parcasi oldugu ve o kite nasil gidilecegi burada. */}
+        {parentDevice ? (
+          onOpenParent ? (
+            <button type="button" className="device-sidebar-parent is-link" onClick={onOpenParent}>
+              <span className="material-symbols-outlined">dns</span>
+              <span className="device-sidebar-parent-body">
+                <span className="device-sidebar-parent-kicker">
+                  {t("deviceDetail.sidebar.parentDevice")}
+                </span>
+                <strong>{parentDevice.name}</strong>
+                <small>{parentDevice.code}</small>
+              </span>
+              <span className="material-symbols-outlined device-sidebar-parent-go">
+                chevron_right
+              </span>
+            </button>
+          ) : (
+            <div className="device-sidebar-parent">
+              <span className="material-symbols-outlined">dns</span>
+              <span className="device-sidebar-parent-body">
+                <span className="device-sidebar-parent-kicker">
+                  {t("deviceDetail.sidebar.parentDevice")}
+                </span>
+                <strong>{parentDevice.name}</strong>
+                <small>{parentDevice.code}</small>
+              </span>
+            </div>
+          )
+        ) : null}
+
         {/* Genel alarm durum karti — alarm varsa yanip sonen, yoksa yesil */}
         <div className={`device-sidebar-alarmcard ${hasAlarm ? "is-alarm" : "is-ok"}`}>
           <span className="device-sidebar-alarmcard-icon">
@@ -152,7 +197,16 @@ export function DeviceSidebar({
 
       {/* ---- Birlesik BILGILER (durum ozeti + bilgiler tek yerde) ---- */}
       <section className="device-sidebar-section">
-        <span className="device-sidebar-kicker">{t("deviceDetail.sidebar.info")}</span>
+        <span className="device-sidebar-kicker">
+          {t("deviceDetail.sidebar.info")}
+          {/* Degerlerin KIME ait oldugu yazmazsa "set cevrimici" sanilir;
+              oysa haberlesen taraf kitin RTU'sudur. */}
+          {parentDevice ? (
+            <span className="device-sidebar-kicker-tag">
+              {t("deviceDetail.sidebar.fromKit", { name: parentDevice.name })}
+            </span>
+          ) : null}
+        </span>
         <ul className="device-sidebar-info">
           <InfoRow
             icon="wifi"
@@ -163,7 +217,7 @@ export function DeviceSidebar({
           <InfoRow
             icon="schedule"
             label={t("deviceDetail.sidebar.lastCommShort")}
-            value={device.lastUpdateAt ? formatRelative(device.lastUpdateAt) : "—"}
+            value={health.lastUpdateAt ? formatRelative(health.lastUpdateAt) : "—"}
           />
           {topologyInfo?.regionName ? (
             <InfoRow icon="map" label={t("deviceDetail.meta.region")} value={topologyInfo.regionName} />
@@ -179,14 +233,14 @@ export function DeviceSidebar({
           <li className="device-sidebar-info-row">
             <span className="material-symbols-outlined">battery_full</span>
             <span className="device-sidebar-info-label">{t("deviceDetail.meta.battery")}</span>
-            <span className={`device-sidebar-battery ${batteryClass(device.batteryPercent)}`}>
+            <span className={`device-sidebar-battery ${batteryClass(health.batteryPercent)}`}>
               <span className="device-battery-icon" aria-hidden="true">
                 <span
                   className="device-battery-fill"
-                  style={{ width: `${Math.max(0, Math.min(100, device.batteryPercent))}%` }}
+                  style={{ width: `${Math.max(0, Math.min(100, health.batteryPercent))}%` }}
                 />
               </span>
-              <span className="device-sidebar-battery-text">%{Math.round(device.batteryPercent)}</span>
+              <span className="device-sidebar-battery-text">%{Math.round(health.batteryPercent)}</span>
             </span>
           </li>
 

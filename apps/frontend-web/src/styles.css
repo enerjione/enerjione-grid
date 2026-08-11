@@ -32212,10 +32212,92 @@ th.event-col-category {
 .device-sidebar-logo { height: 30px; width: auto; object-fit: contain; }
 .device-sidebar-section { display: flex; flex-direction: column; gap: 8px; }
 .device-sidebar-kicker {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   color: #94a3b8;
+}
+
+/* Degerlerin KIME ait oldugunu soyleyen kucuk etiket. Sette haberlesen taraf
+   setin kendisi degil kitin RTU'sudur; yazmazsak "set cevrimici" sanilir. */
+.device-sidebar-kicker-tag {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+/* ---- Ust cihaz (kit) rozeti — set sayfasinda hangi kitin parcasi ---- */
+.device-sidebar-parent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px 11px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  text-align: left;
+  min-width: 0;
+}
+button.device-sidebar-parent {
+  cursor: pointer;
+  transition: background 0.14s, border-color 0.14s;
+  font: inherit;
+}
+button.device-sidebar-parent:hover {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+.device-sidebar-parent > .material-symbols-outlined {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: #e0f2fe;
+  color: #0284c7;
+  font-size: 18px;
+}
+.device-sidebar-parent-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.device-sidebar-parent-kicker {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+.device-sidebar-parent-body strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.device-sidebar-parent-body small {
+  font-size: 11px;
+  color: #94a3b8;
+}
+.device-sidebar-parent-go {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 18px;
+  color: #cbd5e1;
 }
 .device-sidebar-code {
   margin: 0;
@@ -32567,6 +32649,18 @@ th.event-col-category {
 .device-overview-kpis .device-kpi.tone-orange .device-kpi-icon { background: #ffedd5; color: #ea580c; }
 .device-overview-kpis .device-kpi.tone-orange .device-kpi-value { color: #c2410c; }
 .device-kpi-value { color: #0369a1; }
+
+/* DEGER YOK — tek basina duran koca bir tire, kartin bozuk mu yoksa yalnizca
+   bos mu oldugunu soylemiyordu. Kart soluklasir, deger yerine "Veri yok". */
+.device-overview-kpis .device-kpi.is-empty { background: #fcfdfe; }
+.device-overview-kpis .device-kpi.is-empty::before { opacity: 0.35; }
+.device-overview-kpis .device-kpi.is-empty .device-kpi-icon { filter: grayscale(0.55); opacity: 0.7; }
+.device-kpi-nodata {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #cbd5e1;
+}
 .device-kpi-spark {
   height: 38px;
   margin: 6px -18px -14px;
@@ -40866,6 +40960,78 @@ th.event-col-category {
   padding: 18px;
   overflow-y: auto;
 }
+
+/* Kit kimligi + doluluk — "bos ekran" ile "veri gelmiyor" ayrimini tek
+   bakista veren serit. */
+.pole-master-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.pole-master-id {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.pole-master-id .material-symbols-outlined {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: #e0f2fe;
+  color: #0284c7;
+  font-size: 20px;
+}
+.pole-master-id strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.pole-master-id small {
+  display: block;
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+.pole-master-fill {
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pole-master-fill.is-empty {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #94a3b8;
+}
+.pole-master-count {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+/* Degeri gelmemis nokta: satir GIZLENMEZ (kitin ne gonderdigi gorunmeli)
+   ama okuyan goz dolu satirlara gitsin. */
+.pole-master-row dd.is-nodata {
+  color: #cbd5e1;
+  font-weight: 600;
+  font-size: 11.5px;
+}
 .pole-master-note {
   margin: 0 0 16px;
   padding: 10px 14px;
@@ -40883,11 +41049,19 @@ th.event-col-category {
   color: #94a3b8;
   font-size: 13px;
 }
+/* Grup sayisi degisken (kit firmware'i yeni bir nokta gonderirse "Diger"
+   acilir). Grid'de alt satira tek basina dusen kart bir sutun genisliginde
+   kalip yaninda kocaman bir bosluk birakiyordu; flex'te satirin tamamina
+   yayilir. AYRICA satirdaki kartlar ayni boyda (stretch) — eskiden
+   `align-items: start` ile biri alcak biri yuksek duruyordu. */
 .pole-master-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 14px;
-  align-items: start;
+}
+.pole-master-grid > .pole-master-card {
+  flex: 1 1 320px;
+  min-width: 0;
 }
 .pole-master-card .device-card-title {
   display: flex;

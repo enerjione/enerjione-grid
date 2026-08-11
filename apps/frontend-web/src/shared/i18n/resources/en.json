@@ -4230,6 +4230,8 @@
       "serial": "Serial",
       "noLocation": "No location set",
       "networkSignal": "Network Signal",
+      "parentDevice": "Parent device",
+      "fromKit": "from kit {{name}}",
       "partNo": "Part No",
       "firmware": "Firmware",
       "alarmActive": "ACTIVE ALARM",
@@ -4332,6 +4334,7 @@
     "poleMaster": {
       "note": "The values below belong to the WHOLE {{code}} kit and are identical across every set on it. Use the other tabs for the set's own measurements.",
       "empty": "No kit-level data received yet.",
+      "filled": "{{filled}}/{{total}} points reporting",
       "groups": {
         "power": "Power",
         "comm": "Communication",

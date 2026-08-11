@@ -4227,6 +4227,8 @@
       "serial": "Seri No",
       "noLocation": "Konum belirtilmemiş",
       "networkSignal": "Şebeke Sinyali",
+      "parentDevice": "Üst cihaz",
+      "fromKit": "{{name}} kitinden",
       "partNo": "Part No",
       "firmware": "Firmware",
       "alarmActive": "AKTİF ALARM",
@@ -4329,6 +4331,7 @@
     "poleMaster": {
       "note": "Aşağıdaki değerler {{code}} kitinin TAMAMINA aittir ve kite bağlı tüm setlerde aynıdır. Setin kendi ölçümleri için diğer sekmeleri kullanın.",
       "empty": "Kit seviyesinde henüz veri gelmedi.",
+      "filled": "{{filled}}/{{total}} nokta dolu",
       "groups": {
         "power": "Besleme",
         "comm": "Haberleşme",

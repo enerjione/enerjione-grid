@@ -2725,6 +2725,7 @@ export function App() {
               canCommand={session.role === "engineer" || session.role === "installer"}
               canConfig={session.role === "installer"}
               onDeviceCommand={handleDeviceCommand}
+              onOpenDevice={openDeviceDetail}
               token={session.accessToken}
             />
           </main>

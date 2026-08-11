@@ -22,19 +22,32 @@
  * (consumer, message_id) tekil kisitini ihlal eder ve mesajin sonsuza kadar
  * yeniden teslim edilmesine yol acardi. Bu yuzden veri tek yerde durur ve
  * burada OKUMA TARAFINDA devralinir.
+ *
+ * LISTE KATALOGDAN, DEGER TELEMETRIDEN
+ * ------------------------------------
+ * Once yalnizca CANLI SATIRLAR listeleniyordu; kit henuz hicbir deger
+ * gondermediyse (yeni kurulum, haberlesme kopuk) sekme tek satirlik bir
+ * "veri gelmedi" notundan ibaretti. Operator o ekrana bakip kitin hangi
+ * bilgileri gonderdigini bile ogrenemiyordu.
+ *
+ * Artik satirlarin ISKELETI sinyal katalogundan gelir (kitin MODELINE ait,
+ * aktif `master.*` sinyalleri); canli deger varsa yazilir, yoksa "Veri yok"
+ * rozeti durur. Ekranin geri kalaniyla ayni davranis (bkz. Mevcut Durum).
  */
 
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 import { signalLabel } from "../../shared/signalLabel";
-import type { DeviceRow, SignalLiveRow } from "../../shared/types";
+import type { DeviceRow, SignalCatalogRow, SignalLiveRow } from "../../shared/types";
 
 type Props = {
   /** Fiziksel kit kaydi. Yoksa sekme hic gosterilmez. */
   parent: DeviceRow;
   /** Tum canli degerler — bu bilesen kendi filtresini uygular. */
   values: SignalLiveRow[];
+  /** Sinyal katalogu — satir iskeleti buradan (deger gelmese de gorunur). */
+  signals: SignalCatalogRow[];
 };
 
 /** Kit seviyesindeki sinyalleri okunabilir gruplara ayirir.
@@ -95,36 +108,84 @@ function displayValue(row: SignalLiveRow): string {
   return row.unit ? `${num} ${row.unit}` : num;
 }
 
-export function PoleMasterTab({ parent, values }: Props) {
+/** Ekranda tek bir satir: etiket + (varsa) canli deger. */
+type Satir = { key: string; label: string; row?: SignalLiveRow };
+
+export function PoleMasterTab({ parent, values, signals }: Props) {
   const { t } = useTranslation();
+
+  /** Kitin CANLI master satirlari (anahtar -> satir). */
+  const canli = useMemo(() => {
+    const m = new Map<string, SignalLiveRow>();
+    for (const r of values) {
+      if (r.device_id !== parent.id || r.source !== "master") continue;
+      m.set(r.signal_key, r);
+    }
+    return m;
+  }, [values, parent.id]);
 
   const gruplar = useMemo(() => {
     // KOMUT NOKTALARI HARIC: `binary_output` bir olcum degil, bir dugmedir;
     // yeri Komutlar sekmesi. Deger olarak gostermek "Firmware Update = 0"
     // gibi anlamsiz satirlar uretirdi.
-    const rows = values.filter(
-      (r) =>
-        r.device_id === parent.id &&
-        r.source === "master" &&
-        r.data_type !== "binary_output"
-    );
-    const out = new Map<string, SignalLiveRow[]>();
-    for (const r of rows) {
-      const key = groupOf(suffixOf(r.signal_key));
-      const list = out.get(key);
-      if (list) list.push(r);
-      else out.set(key, [r]);
+    const satirlar = new Map<string, Satir>();
+
+    // 1) Iskelet: kitin MODELINE ait aktif master sinyalleri.
+    for (const s of signals) {
+      if (s.model !== parent.model || s.source !== "master") continue;
+      if (!s.is_active || s.data_type === "binary_output") continue;
+      satirlar.set(s.key, { key: s.key, label: signalLabel(s.key, s.label) });
+    }
+
+    // 2) Canli deger: katalogda olmayan bir nokta gelirse (firmware yeni bir
+    //    sey gonderiyor) satiri yine de acilir — gizlemek, gelen veriyi
+    //    gorunmez kilardi.
+    for (const [key, row] of canli) {
+      if (row.data_type === "binary_output") continue;
+      const mevcut = satirlar.get(key);
+      if (mevcut) mevcut.row = row;
+      else satirlar.set(key, { key, label: signalLabel(key, row.signal_label), row });
+    }
+
+    const out = new Map<string, Satir[]>();
+    for (const satir of satirlar.values()) {
+      const grup = groupOf(suffixOf(satir.key));
+      const list = out.get(grup);
+      if (list) list.push(satir);
+      else out.set(grup, [satir]);
     }
     for (const list of out.values()) {
-      list.sort((a, b) => a.signal_label.localeCompare(b.signal_label, "tr"));
+      // Degeri OLAN satirlar once: kit yeni kurulmussa dolu olan birkac satir
+      // yuzlerce "Veri yok"un arasinda kaybolmasin.
+      list.sort((a, b) => {
+        if (!!a.row !== !!b.row) return a.row ? -1 : 1;
+        return a.label.localeCompare(b.label, "tr");
+      });
     }
     return out;
-  }, [values, parent.id]);
+  }, [signals, canli, parent.model]);
 
   const sirali = [...GROUPS.map((g) => g.key), "other"].filter((k) => gruplar.has(k));
+  const doluSayisi = canli.size;
+  const toplam = sirali.reduce((n, k) => n + (gruplar.get(k)?.length ?? 0), 0);
 
   return (
     <div className="pole-master-panel">
+      <header className="pole-master-head">
+        <div className="pole-master-id">
+          <span className="material-symbols-outlined">dns</span>
+          <div>
+            <strong>{parent.name}</strong>
+            <small>{parent.code}</small>
+          </div>
+        </div>
+        {/* Kac noktadan kacinin degeri geldi — "bos ekran" ile "veri gelmiyor"
+            arasindaki farki tek bakista soyler. */}
+        <span className={`pole-master-fill${doluSayisi === 0 ? " is-empty" : ""}`}>
+          {t("deviceDetail.poleMaster.filled", { filled: doluSayisi, total: toplam })}
+        </span>
+      </header>
+
       <p className="pole-master-note">
         {t("deviceDetail.poleMaster.note", { code: parent.code })}
       </p>
@@ -135,6 +196,8 @@ export function PoleMasterTab({ parent, values }: Props) {
         <div className="pole-master-grid">
           {sirali.map((key) => {
             const meta = GROUPS.find((g) => g.key === key);
+            const liste = gruplar.get(key) ?? [];
+            const dolu = liste.filter((s) => s.row).length;
             return (
               <section className="device-card pole-master-card" key={key}>
                 <h3 className="device-card-title">
@@ -142,12 +205,19 @@ export function PoleMasterTab({ parent, values }: Props) {
                     {meta?.icon ?? "more_horiz"}
                   </span>
                   {t(`deviceDetail.poleMaster.groups.${key}`)}
+                  <span className="pole-master-count">
+                    {dolu}/{liste.length}
+                  </span>
                 </h3>
                 <dl className="pole-master-list">
-                  {(gruplar.get(key) ?? []).map((row) => (
-                    <div className="pole-master-row" key={row.signal_key}>
-                      <dt>{signalLabel(row.signal_key, row.signal_label)}</dt>
-                      <dd>{displayValue(row)}</dd>
+                  {liste.map((satir) => (
+                    <div className="pole-master-row" key={satir.key}>
+                      <dt>{satir.label}</dt>
+                      {satir.row ? (
+                        <dd>{displayValue(satir.row)}</dd>
+                      ) : (
+                        <dd className="is-nodata">{t("deviceDetail.status.noData")}</dd>
+                      )}
                     </div>
                   ))}
                 </dl>

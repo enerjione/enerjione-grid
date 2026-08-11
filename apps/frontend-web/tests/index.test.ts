@@ -43,6 +43,11 @@ import "./nearestDeviceRed.test";
 // Gezilmesi gereken bir kolun ekrandan dusmesi sessiz ve agir bir hatadir.
 import "./faultBranchRows.test";
 
+// Ikon subset'i: kodda kullanilan ikon fonta girmediyse ekranda ikon yerine
+// ADI cikiyor ("solar_power" -> "solar_" + guc simgesi). Derleme de tip
+// kontrolu de bunu gormez.
+import "./iconSubset.test";
+
 // Tekrar eden ariza sayaci: olmayan tekrari uydurmak da gercegini kacirmak
 // da mudahalenin onceligini yanlis belirler.
 import "./faultRecurrence.test";
