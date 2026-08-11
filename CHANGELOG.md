@@ -14,6 +14,24 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.67.1] — 2026-08-11
+
+### Düzeltildi
+
+- **Aday branşman kolunda "arızayı görmedim" diyen cihaz yok sayılıyordu.**
+  Kolun ayrı bir arıza kaydı olmaması "kol hakkında hiçbir şey bilmiyoruz"
+  demek değil: kolun üzerindeki cihazın o an alarm verip vermediği zaten
+  elimizdeydi. Kod bunu okumuyor, kolu baştan sona kırmızı çiziyordu.
+  Sahada sonuç şuydu: kolun ilk direğindeki cihaz "arıza görmedim" diyor —
+  yani fault akımı ondan geçmemiş, arızanın ondan aşağıda olması fiziksel
+  olarak mümkün değil — ama çizim kolun tamamını aday gösteriyor, ekip
+  kesinlikle sağlam olan bir hat parçasını gezmeye gidiyordu. Kural artık
+  ana hattaki (ve haritadaki) ile aynı: son "gördüm" diyen cihazdan ilk
+  "görmedim" diyene kadar. Cihazı olmayan kol baştan sona aday kalır —
+  bilgi yoksa daraltma da olmaz.
+
+---
+
 ## [2.67.0] — 2026-08-11
 
 Hat arızası çizimi sahada kullanılabilir hale geldi: aynı direk aralığındaki
