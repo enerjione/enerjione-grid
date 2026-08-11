@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, Integer, String
+from sqlalchemy import Boolean, DateTime, Enum, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -15,6 +15,15 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     phone_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
     full_name: Mapped[str] = mapped_column(String(255))
+    # Profil fotografi — `data:image/...;base64,...` gomulu veri URI'si.
+    #
+    # NEDEN DOSYA DEGIL: ayri bir dosya deposu kalici bir birim (volume),
+    # nginx'te statik bir yol, yedekleme/geri yukleme adimi ve silinmis
+    # kullanicilarda artik dosya temizligi demek. Sistem on-prem ve kullanici
+    # sayisi onlarla olculuyor; kucuk bir gomulu goruntu (istemci 192px'e
+    # kuculteir, sunucu ~150 KB uzerini reddeder) yedege kendiliginden girer
+    # ve hicbir ek altyapi gerektirmez.
+    avatar_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     # NULL = davet edilmis ama henuz sifre belirlememis kullanici. Davet
     # token'i ile setup-password sayfasinda ilk sifresini belirleyince burasi
     # dolar. Login flow null hashed_password gorurse 401 doner (token sahibi

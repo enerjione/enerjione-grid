@@ -3774,6 +3774,31 @@
       "repeatMismatch": "Yeni şifre ile tekrarı aynı değil.",
       "sameAsOld": "Yeni şifre mevcut şifreyle aynı olamaz.",
       "passwordSave": "Şifre değiştirilemedi."
+    },
+    "profileHint": "Ad, iletişim ve arayüz dili",
+    "phoneHint": "SMS ve WhatsApp bildirimleri bu numaraya gider. Boş bırakırsanız numara silinir.",
+    "phoneMissing": "Telefon numarası eklenmemiş",
+    "showPassword": "Şifreyi göster",
+    "hidePassword": "Şifreyi gizle",
+    "avatar": {
+      "change": "Fotoğraf Seç",
+      "remove": "Kaldır",
+      "tooBig": "Dosya çok büyük. 12 MB altında bir görsel seçin.",
+      "notImage": "Yalnızca görsel dosyası seçilebilir (PNG, JPEG, WEBP).",
+      "failed": "Görsel okunamadı. Başka bir dosya deneyin."
+    },
+    "strength": {
+      "weak": "Zayıf",
+      "fair": "Orta",
+      "good": "İyi",
+      "strong": "Güçlü",
+      "empty": ""
+    },
+    "rules": {
+      "length": "En az {{min}} karakter",
+      "letter": "Harf",
+      "digit": "Rakam",
+      "symbol": "Sembol"
     }
   },
   "globalLoading": {

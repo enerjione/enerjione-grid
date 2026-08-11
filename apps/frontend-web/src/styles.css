@@ -23177,6 +23177,236 @@ th.event-col-category {
   gap: 14px;
 }
 
+/* ---------- KIMLIK SERIDI ----------
+   Sayfada kullanicinin KENDISI hicbir yerde gorunmuyordu: iki form kutusu
+   vardi, o kadar. Fotograf + ad + rol tek bir seritte toplandi. */
+.pf-hero {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background:
+    radial-gradient(120% 160% at 0% 0%, #f8fafc 0%, #ffffff 55%);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.pf-hero-avatar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.pf-avatar {
+  position: relative;
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  outline: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  overflow: hidden;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: 0 6px 18px rgba(234, 88, 12, 0.22);
+}
+.pf-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.pf-avatar-initials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fff;
+}
+/* Fotografin uzerine gelince "degistir" katmani — yuvarlagin tiklanabilir
+   oldugu baska turlu anlasilmiyordu. */
+.pf-avatar-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.55);
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.pf-avatar:hover .pf-avatar-overlay,
+.pf-avatar:focus-visible .pf-avatar-overlay { opacity: 1; }
+
+.pf-avatar-actions {
+  display: flex;
+  gap: 6px;
+}
+.pf-mini-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #fff;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+.pf-mini-btn:hover { background: #f1f5f9; color: #0f172a; }
+.pf-mini-btn--danger:hover { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+
+.pf-hero-id { min-width: 0; }
+.pf-hero-id h2 {
+  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+}
+.pf-hero-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.pf-chip--role {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.pf-hero-user {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: #94a3b8;
+}
+.pf-hero-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: #475569;
+}
+.pf-hero-item svg { color: #94a3b8; }
+/* Eksik iletisim bilgisi SESSIZ kalmasin: SMS/WhatsApp bildirimi bu yuzden
+   calismiyor olabilir. */
+.pf-hero-item.is-missing { color: #b45309; font-weight: 600; }
+.pf-hero-item.is-missing svg { color: #f59e0b; }
+
+@media (max-width: 640px) {
+  .pf-hero { flex-direction: column; align-items: flex-start; }
+}
+
+/* ---------- SIFRE ALANI ---------- */
+.pf-secret { position: relative; display: flex; }
+.pf-secret input { width: 100%; padding-right: 38px; }
+/* Yazilan sifre gorulemedigi icin yanlis yazim ancak "mevcut sifre yanlis"
+   hatasindan sonra anlasiliyordu. */
+.pf-secret-eye {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.pf-secret-eye:hover { background: #f1f5f9; color: #334155; }
+
+/* ---------- SIFRE GUCU ----------
+   Kurallar YAZARKEN isaretlenir; once yalnizca gonderdikten sonra hata
+   gorunuyordu. Bu bir guvenlik olcusu degil, okunur bir geri bildirim. */
+.pf-strength {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: -4px;
+}
+.pf-strength-bar {
+  display: flex;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+.pf-strength-bar span {
+  width: 26px;
+  height: 5px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  transition: background 0.18s ease;
+}
+.pf-strength-label {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.pf-strength--weak   .pf-strength-bar span.is-on { background: #ef4444; }
+.pf-strength--fair   .pf-strength-bar span.is-on { background: #f59e0b; }
+.pf-strength--good   .pf-strength-bar span.is-on { background: #3b82f6; }
+.pf-strength--strong .pf-strength-bar span.is-on { background: #16a34a; }
+.pf-strength--weak   .pf-strength-label { color: #b91c1c; }
+.pf-strength--fair   .pf-strength-label { color: #b45309; }
+.pf-strength--good   .pf-strength-label { color: #1d4ed8; }
+.pf-strength--strong .pf-strength-label { color: #15803d; }
+
+.pf-rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  width: 100%;
+}
+.pf-rules li {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+.pf-rules li svg { color: #cbd5e1; }
+.pf-rules li.is-ok { color: #15803d; }
+.pf-rules li.is-ok svg { color: #16a34a; }
+
+.pf-inline-warn {
+  margin: -6px 0 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #b45309;
+}
+
+.rad-field-hint {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.35;
+}
+
 /* Kartlarin dugmesi saga yaslanir — Ag Ayarlari'ndaki form kartlariyla ayni. */
 .profile-card-actions {
   display: flex;
@@ -23218,6 +23448,12 @@ th.event-col-category {
 .notif-prefs-row-label span {
   font-size: 11.5px;
   color: #64748b;
+}
+/* Acik kanal bir bakista ayrisir: dort anahtarin hangisinin acik oldugunu
+   yalnizca kucuk bir toggle'dan okumak zordu. */
+.notif-prefs-row.is-on {
+  border-color: #fed7aa;
+  background: linear-gradient(180deg, #fffdf9, #fff);
 }
 .notif-prefs-toggle {
   position: relative;

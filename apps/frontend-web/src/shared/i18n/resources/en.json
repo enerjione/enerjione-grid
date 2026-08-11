@@ -3777,6 +3777,31 @@
       "repeatMismatch": "New password and confirmation do not match.",
       "sameAsOld": "New password cannot be the same as the current one.",
       "passwordSave": "Password could not be changed."
+    },
+    "profileHint": "Name, contact and interface language",
+    "phoneHint": "SMS and WhatsApp notifications go to this number. Leave empty to remove it.",
+    "phoneMissing": "No phone number set",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "avatar": {
+      "change": "Choose Photo",
+      "remove": "Remove",
+      "tooBig": "File is too large. Choose an image under 12 MB.",
+      "notImage": "Only image files are allowed (PNG, JPEG, WEBP).",
+      "failed": "Could not read the image. Try another file."
+    },
+    "strength": {
+      "weak": "Weak",
+      "fair": "Fair",
+      "good": "Good",
+      "strong": "Strong",
+      "empty": ""
+    },
+    "rules": {
+      "length": "At least {{min}} characters",
+      "letter": "Letter",
+      "digit": "Digit",
+      "symbol": "Symbol"
     }
   },
   "globalLoading": {

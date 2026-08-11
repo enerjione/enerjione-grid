@@ -261,6 +261,9 @@ export type UserRead = {
   full_name: string;
   role: UserRole;
   language?: string | null;
+  /** Profil fotoğrafı — gömülü `data:image/...;base64,...` URI'si.
+   *  NULL = fotoğraf yok; arayüz baş harflerden oluşan yuvarlağı gösterir. */
+  avatar_url?: string | null;
   /** true = davet edildi ama henuz sifre belirlemedi (hashed_password=NULL).
    *  UI'da "Davet bekliyor" rozeti + "Daveti yeniden gonder" butonu gosterir. */
   pending_invitation?: boolean;

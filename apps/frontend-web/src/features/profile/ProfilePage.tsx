@@ -5,34 +5,54 @@
  * once `PATCH /auth/me` (ad + e-posta), sonra `POST /auth/me/change-password`.
  * Bu duzenin uc somut arizasi vardi:
  *
- *   1. PROFIL HATASI SIFREYI ENGELLIYORDU. Ilk cagri patlarsa (or. e-posta
- *      alani bos/gecersiz -> 422, ya da baskasinda kayitli -> 409) ikinci
- *      cagri HIC yapilmiyordu. Yalnizca sifresini degistirmek isteyen
- *      kullanici "Profil guncellenemedi" hatasi aliyor ve sifresinin neden
- *      degismedigini anlamiyordu.
- *   2. EKSIK ALAN SESSIZCE GECIYORDU. Kosul `mevcut && yeni` idi; kullanici
- *      yalnizca "yeni sifre"yi doldurursa hicbir cagri yapilmiyor, modal
- *      "kaydedildi" gibi kapaniyordu. Kullanici sifresini degistirdigini
- *      SANIYOR, bir sonraki giriste eski sifre calisiyordu.
- *   3. GERCEK HATA GIZLENIYORDU. API yardimcilari sabit metin firlatiyordu
- *      ("Sifre degistirilemedi."); backend'in soyledigi sebep ("Mevcut sifre
- *      yanlis", "Yeni sifre eskisiyle ayni olamaz", 429 hiz siniri) ekrana
- *      hic ulasmiyordu.
+ *   1. PROFIL HATASI SIFREYI ENGELLIYORDU. Ilk cagri patlarsa ikinci cagri
+ *      HIC yapilmiyordu; yalnizca sifresini degistirmek isteyen kullanici
+ *      "Profil guncellenemedi" hatasi aliyordu.
+ *   2. EKSIK ALAN SESSIZCE GECIYORDU. Kullanici yalnizca "yeni sifre"yi
+ *      doldurursa hicbir cagri yapilmiyor, modal "kaydedildi" gibi kapaniyor,
+ *      kullanici sifresini degistirdigini SANIYORDU.
+ *   3. GERCEK HATA GIZLENIYORDU. Backend'in sebebi ("Mevcut sifre yanlis",
+ *      hiz siniri) ekrana hic ulasmiyordu.
  *
- * Bu yuzden sayfa UC BAGIMSIZ KART: her birinin kendi kaydet dugmesi ve kendi
+ * Bu yuzden sayfa BAGIMSIZ KARTLAR: her birinin kendi kaydet dugmesi ve kendi
  * geri bildirimi var. Bir bolumun hatasi digerini bloklamaz.
  *
- * Gorsel dil: diger muhendislik sekmeleriyle ayni (`rad-card`, `net-banner`).
+ * BU SURUMDE EKLENENLER
+ * ---------------------
+ * - TELEFON NUMARASI. Modelde ve admin panelinde vardi ama kullanici kendi
+ *   kaydinda degistiremiyordu; bildirim tercihleri "SMS: telefon numarasi
+ *   eklenmemis" yazip numarayi girebilecegi hicbir yer sunmuyordu.
+ * - PROFIL FOTOGRAFI. Tarayicida 192 piksele kucultulup gomulur (bkz.
+ *   avatarImage.ts) — sunucuda dosya deposu gerektirmez.
+ * - SIFREYI GOSTER. Yazilan sifre gorulemedigi icin yanlis yazim ancak
+ *   "mevcut sifre yanlis" hatasindan sonra anlasiliyordu. Ayrica kurallar
+ *   YAZARKEN isaretleniyor (bkz. passwordStrength.ts).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { KeyRound, Mail, ShieldCheck, UserCog } from "lucide-react";
+import {
+  BellRing,
+  Camera,
+  Check,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Mail,
+  Phone,
+  ShieldCheck,
+  Trash2,
+  UserCog,
+  X
+} from "lucide-react";
 
 import { useToast } from "../../components/ToastProvider";
 import { changeMyPassword, updateMyProfile } from "../../shared/api";
 import type { SupportedLanguage } from "../../shared/i18n";
 import { LANGUAGE_LABELS, SUPPORTED_LANGUAGES, isSupportedLanguage } from "../../shared/i18n";
 import type { UserNotificationPreferences, UserRead } from "../../shared/types";
+import { AVATAR_ACCEPT, AvatarError, fileToAvatarDataUrl, initialsOf } from "./avatarImage";
+import { MIN_PASSWORD_LENGTH, passwordStrength } from "./passwordStrength";
+import type { PasswordRuleKey } from "./passwordStrength";
 
 /** Bu sayfada anahtari olan kanallar. Tipi YERELDE tanimlamak yerine
  *  `UserNotificationPreferences`ten turetiyoruz: alan adlari orada
@@ -51,11 +71,48 @@ type Props = {
   onToggleNotifPref: (key: NotifChannel) => void | Promise<void>;
 };
 
-/** Asgari sifre uzunlugu — backend `SelfPasswordChangeRequest` bir sinir
- *  dayatmiyor; bu istemci tarafi bir NEZAKET kontrolu, guvenlik siniri degil.
- *  Amaci sunucuya bos/tek karakterlik istek gondermemek ve kullaniciyi
- *  gonderdikten SONRA degil, yazarken uyarmak. */
-const MIN_PASSWORD_LENGTH = 8;
+const PASSWORD_RULES: PasswordRuleKey[] = ["length", "letter", "digit", "symbol"];
+
+/** Gozu acilip kapanan sifre alani. */
+function PasswordField({
+  label,
+  value,
+  onChange,
+  autoComplete,
+  showLabel,
+  hideLabel
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  autoComplete: string;
+  showLabel: string;
+  hideLabel: string;
+}) {
+  const [gorunur, setGorunur] = useState(false);
+  return (
+    <div className="rad-field">
+      <span className="rad-field-label">{label}</span>
+      <div className="pf-secret">
+        <input
+          type={gorunur ? "text" : "password"}
+          autoComplete={autoComplete}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <button
+          type="button"
+          className="pf-secret-eye"
+          onClick={() => setGorunur((v) => !v)}
+          aria-label={gorunur ? hideLabel : showLabel}
+          title={gorunur ? hideLabel : showLabel}
+        >
+          {gorunur ? <EyeOff size={15} strokeWidth={2.1} /> : <Eye size={15} strokeWidth={2.1} />}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function ProfilePage({
   accessToken,
@@ -73,8 +130,11 @@ export function ProfilePage({
   // ---- Kart 1: kimlik bilgileri ----
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [avatar, setAvatar] = useState<string | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState("");
+  const fileRef = useRef<HTMLInputElement | null>(null);
 
   // ---- Kart 2: sifre ----
   const [currentPassword, setCurrentPassword] = useState("");
@@ -87,11 +147,39 @@ export function ProfilePage({
     if (!currentUser) return;
     setFullName(currentUser.full_name ?? "");
     setEmail(currentUser.email ?? "");
+    setPhone(currentUser.phone_number ?? "");
+    setAvatar(currentUser.avatar_url ?? null);
   }, [currentUser]);
 
   const profileDirty =
     currentUser !== null &&
-    (fullName !== (currentUser.full_name ?? "") || email !== (currentUser.email ?? ""));
+    (fullName !== (currentUser.full_name ?? "") ||
+      email !== (currentUser.email ?? "") ||
+      phone !== (currentUser.phone_number ?? "") ||
+      (avatar ?? null) !== (currentUser.avatar_url ?? null));
+
+  const strength = useMemo(() => passwordStrength(newPassword), [newPassword]);
+
+  const handlePickAvatar = async (file: File | undefined) => {
+    if (!file) return;
+    setProfileError("");
+    try {
+      setAvatar(
+        await fileToAvatarDataUrl(file, {
+          tooBig: t("userSettings.avatar.tooBig"),
+          notImage: t("userSettings.avatar.notImage"),
+          failed: t("userSettings.avatar.failed")
+        })
+      );
+    } catch (err) {
+      setProfileError(
+        err instanceof AvatarError ? err.message : t("userSettings.avatar.failed")
+      );
+    } finally {
+      // Ayni dosya tekrar secilebilsin (change olayi degismeyen degerde atmaz).
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
 
   const handleSaveProfile = async () => {
     setProfileError("");
@@ -107,7 +195,11 @@ export function ProfilePage({
     try {
       const updated = await updateMyProfile(accessToken, {
         full_name: fullName.trim(),
-        email: email.trim()
+        email: email.trim(),
+        // Bos metin backend'de "temizle" demek; ikisi de her kaydetmede
+        // gonderilir (bkz. updateMyProfile).
+        phone_number: phone.trim() || null,
+        avatar_url: avatar
       });
       onUserUpdated(updated);
       toast.success(t("userSettings.profileSaved"));
@@ -186,8 +278,77 @@ export function ProfilePage({
     }
   ];
 
+  const rolLabel = currentUser
+    ? t(`roles.${currentUser.role}`, { defaultValue: currentUser.role })
+    : "—";
+
   return (
     <section className="tab-panel profile-page">
+      {/* ---- KIMLIK SERIDI ----
+          Fotograf, ad ve rol tek bir seritte: sayfanin "bu benim hesabim"
+          diyen kismi. Onceden hicbir yerde kullanicinin kendisi gorunmuyor,
+          sayfa iki form kutusundan ibaretti. */}
+      <header className="pf-hero">
+        <div className="pf-hero-avatar">
+          <button
+            type="button"
+            className="pf-avatar"
+            onClick={() => fileRef.current?.click()}
+            title={t("userSettings.avatar.change")}
+          >
+            {avatar ? (
+              <img src={avatar} alt="" />
+            ) : (
+              <span className="pf-avatar-initials">{initialsOf(fullName, "?")}</span>
+            )}
+            <span className="pf-avatar-overlay">
+              <Camera size={18} strokeWidth={2.2} />
+            </span>
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept={AVATAR_ACCEPT}
+            hidden
+            onChange={(e) => void handlePickAvatar(e.target.files?.[0])}
+          />
+          <div className="pf-avatar-actions">
+            <button type="button" className="pf-mini-btn" onClick={() => fileRef.current?.click()}>
+              <Camera size={13} strokeWidth={2.2} />
+              {t("userSettings.avatar.change")}
+            </button>
+            {avatar ? (
+              <button
+                type="button"
+                className="pf-mini-btn pf-mini-btn--danger"
+                onClick={() => setAvatar(null)}
+              >
+                <Trash2 size={13} strokeWidth={2.2} />
+                {t("userSettings.avatar.remove")}
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="pf-hero-id">
+          <h2>{fullName || currentUser?.username || "—"}</h2>
+          <div className="pf-hero-meta">
+            <span className="pf-chip pf-chip--role">{rolLabel}</span>
+            <span className="pf-hero-user">@{currentUser?.username ?? "—"}</span>
+            {currentUser?.email ? (
+              <span className="pf-hero-item">
+                <Mail size={13} strokeWidth={2.2} />
+                {currentUser.email}
+              </span>
+            ) : null}
+            <span className={`pf-hero-item${currentUser?.phone_number ? "" : " is-missing"}`}>
+              <Phone size={13} strokeWidth={2.2} />
+              {currentUser?.phone_number || t("userSettings.phoneMissing")}
+            </span>
+          </div>
+        </div>
+      </header>
+
       <div className="profile-page-columns">
         {/* ---- Kimlik bilgileri ---- */}
         <section className="rad-card profile-card">
@@ -196,7 +357,7 @@ export function ProfilePage({
               <UserCog size={17} />
               {t("userSettings.profile")}
             </h3>
-            <small>{currentUser?.username ?? "—"}</small>
+            <small>{t("userSettings.profileHint")}</small>
           </header>
 
           <label className="rad-field">
@@ -212,6 +373,19 @@ export function ProfilePage({
               onChange={(event) => setEmail(event.target.value)}
               placeholder="ad.soyad@firma.com"
             />
+          </label>
+
+          {/* TELEFON: SMS ve WhatsApp bildirimlerinin tek kaynagi. Alan
+              olmadigi icin kullanici bu iki kanali hic acamiyordu. */}
+          <label className="rad-field">
+            <span className="rad-field-label">{t("common.phone")}</span>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="+90 555 123 45 67"
+            />
+            <small className="rad-field-hint">{t("userSettings.phoneHint")}</small>
           </label>
 
           <label className="rad-field">
@@ -259,35 +433,62 @@ export function ProfilePage({
             <small>{t("userSettings.passwordHint", { min: MIN_PASSWORD_LENGTH })}</small>
           </header>
 
-          <label className="rad-field">
-            <span className="rad-field-label">{t("userSettings.currentPassword")}</span>
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(event) => setCurrentPassword(event.target.value)}
-            />
-          </label>
+          <PasswordField
+            label={t("userSettings.currentPassword")}
+            value={currentPassword}
+            onChange={setCurrentPassword}
+            autoComplete="current-password"
+            showLabel={t("userSettings.showPassword")}
+            hideLabel={t("userSettings.hidePassword")}
+          />
 
-          <label className="rad-field">
-            <span className="rad-field-label">{t("userSettings.newPassword")}</span>
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={newPassword}
-              onChange={(event) => setNewPassword(event.target.value)}
-            />
-          </label>
+          <PasswordField
+            label={t("userSettings.newPassword")}
+            value={newPassword}
+            onChange={setNewPassword}
+            autoComplete="new-password"
+            showLabel={t("userSettings.showPassword")}
+            hideLabel={t("userSettings.hidePassword")}
+          />
 
-          <label className="rad-field">
-            <span className="rad-field-label">{t("userSettings.confirmPassword")}</span>
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={repeatPassword}
-              onChange={(event) => setRepeatPassword(event.target.value)}
-            />
-          </label>
+          {/* GUC GOSTERGESI: kurallar YAZARKEN isaretlenir. Once yalnizca
+              gonderdikten sonra hata gorunuyordu. */}
+          {newPassword ? (
+            <div className={`pf-strength pf-strength--${strength.level}`}>
+              <div className="pf-strength-bar" aria-hidden="true">
+                {[0, 1, 2, 3].map((i) => (
+                  <span key={i} className={i < strength.score ? "is-on" : ""} />
+                ))}
+              </div>
+              <span className="pf-strength-label">
+                {t(`userSettings.strength.${strength.level}`)}
+              </span>
+              <ul className="pf-rules">
+                {PASSWORD_RULES.map((key) => (
+                  <li key={key} className={strength.rules[key] ? "is-ok" : ""}>
+                    {strength.rules[key] ? (
+                      <Check size={11} strokeWidth={3} />
+                    ) : (
+                      <X size={11} strokeWidth={3} />
+                    )}
+                    {t(`userSettings.rules.${key}`, { min: MIN_PASSWORD_LENGTH })}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <PasswordField
+            label={t("userSettings.confirmPassword")}
+            value={repeatPassword}
+            onChange={setRepeatPassword}
+            autoComplete="new-password"
+            showLabel={t("userSettings.showPassword")}
+            hideLabel={t("userSettings.hidePassword")}
+          />
+          {repeatPassword && newPassword !== repeatPassword ? (
+            <p className="pf-inline-warn">{t("userSettings.errors.repeatMismatch")}</p>
+          ) : null}
 
           {passwordError ? (
             <p className="net-banner net-banner--bad">
@@ -316,7 +517,7 @@ export function ProfilePage({
         <section className="rad-card profile-card profile-card--wide">
           <header className="rad-card-head">
             <h3>
-              <Mail size={17} />
+              <BellRing size={17} />
               {t("userSettings.notifPrefs.title")}
             </h3>
             <small>{t("userSettings.notifPrefs.autoSaveHint")}</small>
@@ -324,7 +525,10 @@ export function ProfilePage({
 
           <div className="profile-notif-grid">
             {notifRows.map((row) => (
-              <div className="notif-prefs-row" key={row.key}>
+              <div
+                className={`notif-prefs-row${notifPrefs[row.key] ? " is-on" : ""}`}
+                key={row.key}
+              >
                 <div className="notif-prefs-row-label">
                   <strong>{row.label}</strong>
                   <span>

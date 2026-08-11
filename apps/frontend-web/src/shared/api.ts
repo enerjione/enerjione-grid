@@ -685,7 +685,15 @@ export async function fetchMe(token: string): Promise<UserRead> {
 
 export async function updateMyProfile(
   token: string,
-  payload: { full_name: string; email: string }
+  /** `phone_number` / `avatar_url`: `null` "dokunma" DEĞİL "temizle" demektir —
+   *  backend her iki alanı da gövdeden aynen yazar. Bu yüzden çağıran taraf
+   *  değiştirmediği alanları da mevcut değeriyle göndermelidir. */
+  payload: {
+    full_name: string;
+    email: string;
+    phone_number?: string | null;
+    avatar_url?: string | null;
+  }
 ): Promise<UserRead> {
   const response = await apiFetch(`${API_BASE_URL}/auth/me`, {
     method: "PATCH",

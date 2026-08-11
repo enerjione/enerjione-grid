@@ -390,6 +390,11 @@ def update_me(
 ):
     current_user.full_name = payload.full_name
     current_user.email = payload.email
+    # Telefon ve fotograf: `None` "dokunma" degil "TEMIZLE" demektir. Arayuz
+    # her kaydetmede iki alani da mevcut degerleriyle birlikte gonderir;
+    # boylece "numarayi sil" gibi bir istek ayri bir uc nokta gerektirmez.
+    current_user.phone_number = payload.phone_number
+    current_user.avatar_url = payload.avatar_url
     db.commit()
     db.refresh(current_user)
     return current_user
