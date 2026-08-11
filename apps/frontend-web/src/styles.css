@@ -40404,57 +40404,22 @@ th.event-col-category {
    "SUBDIRECTORY_ARROW_RIGHT" yazisi cikiyordu. */
 .device-group-block { display: flex; flex-direction: column; }
 
-.device-group-head {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-/* Kart SUTUN GENISLIGINI doldurmali.
-   `display:flex` yapinca cocuk buton icerik genisligine dusuyordu: setleri
-   olmayan cihazlarin (SN2) kartlari da daraliyordu — yani kit ozelligi
-   ILGISIZ cihazlarin gorunumunu bozuyordu. */
-.device-group-head-item {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-}
-.device-group-head-item > * { flex: 1 1 auto; min-width: 0; }
-
-.device-collapse-btn {
+/* KIT GRUBU
+   Ok KART ICINDE (`.device-collapse-chevron`) — disarida ayri bir dugme
+   olarak durunca kartin parcasi gibi okunmuyordu. Set sayisini gosteren
+   rozet kaldirildi: setler zaten hemen altta listeleniyor. */
+.device-collapse-chevron {
   flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
+  margin-right: 2px;
+  font-size: 18px;
+  line-height: 1;
   color: #94a3b8;
   cursor: pointer;
+  border-radius: 4px;
 }
-.device-collapse-btn:hover { background: #f1f5f9; color: #475569; }
-.device-collapse-btn .material-symbols-outlined { font-size: 18px; }
+.device-collapse-chevron:hover { color: #475569; background: #f1f5f9; }
+.device-collapse-chevron:focus-visible { outline: 2px solid #f59e0b; outline-offset: 1px; }
 
-/* Kite bagli set sayisi — kapaliyken de gorunur, ayri bir satira gerek yok. */
-.device-set-count {
-  flex: 0 0 auto;
-  min-width: 18px;
-  padding: 1px 5px;
-  border-radius: 999px;
-  background: #f1f5f9;
-  color: #64748b;
-  font-size: 10px;
-  font-weight: 700;
-  text-align: center;
-}
-
-/* Setler: sol rayla girintili. Ray "bunlar o kite ait" demenin en sessiz
-   yolu — ek ikon, ek metin yok. */
-/* Setler belirgin sekilde ICERIDE: girinti "bunlar o kite ait" demenin
-   en sessiz yolu. Onceki 11+12px zayif kaliyordu, alt cihaz oldugu
-   yeterince okunmuyordu. */
 .device-subunit-list {
   display: flex;
   flex-direction: column;
@@ -40479,3 +40444,22 @@ th.event-col-category {
   max-height: 52px;
   resize: none;
 }
+
+/* SET SATIRI TEK SATIR: ad ile uydu atamasi yan yana. Iki satirlik duzen
+   (ad ustte, uydular altta) listeyi gereksiz uzatiyordu — set satirinda
+   gosterilecek yalnizca iki bilgi var. */
+.device-item--subunit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  min-height: 0;
+}
+.device-item--subunit strong { font-size: 12px; flex: 0 0 auto; }
+.device-item--subunit .device-subunit-sats { margin: 0; }
+
+/* KIMLIK ALANLARI yan yana: tek sutunda alt alta dururken kart gereksiz
+   uzuyor ve saginda bos alan kaliyordu. */
+.device-info-card { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; align-content: start; }
+.device-info-card > label { min-width: 0; }
+.device-info-card input { min-height: 0; padding: 6px 10px; }

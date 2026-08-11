@@ -572,9 +572,15 @@ export function DeviceManagementPanel({
     );
     // Faz eslemesi MODELE gore: SN2'de olcum yapan ucuncu unite `master`,
     // Pole Master Kit setinde ise ucu de uydudur (sat01/02/03).
+    // SN2'de olcum yapan uc unite master/sat01/sat02 -> a/b/c; kit setinde
+    // ise ucu de uydudur, sat01/sat02/sat03 -> a/b/c. Varsayilanlar tek
+    // listeden geliyordu ve set formu sat01/02/03'u b/c/c gosteriyordu;
+    // kaydedilince bu YANLIS esleme cihaza yaziliyordu (backend'in
+    // `SOURCE_PHASE_BY_MODEL` varsayilani zaten a/b/c).
+    const setKaydi = device.model === PMK_SET_MODEL;
     setPhaseMaster(device.phaseMaster ?? "a");
-    setPhaseSat01(device.phaseSat01 ?? "b");
-    setPhaseSat02(device.phaseSat02 ?? "c");
+    setPhaseSat01(device.phaseSat01 ?? (setKaydi ? "a" : "b"));
+    setPhaseSat02(device.phaseSat02 ?? (setKaydi ? "b" : "c"));
     setPhaseSat03(device.phaseSat03 ?? "c");
     setInstallationDate(device.installationDate ?? "");
     setIpAddress(device.ipAddress ?? "");
@@ -619,9 +625,40 @@ export function DeviceManagementPanel({
    *  `altCihaz` true ise (kit seti) haberlesme bilgisi GOSTERILMEZ: setin
    *  kendi DNP3 oturumu yoktur, durum noktasi ve IP kitten kopyalanmis
    *  bilgidir. Gostermek, setin oyle bir ayari varmis izlenimi verirdi. */
-  const renderDeviceItem = (device: DeviceRow, altCihaz: boolean) => {
+  const renderDeviceItem = (device: DeviceRow, altCihaz: boolean, setSayisi = 0) => {
     const effStatus = effectiveCommStatus(device, gatewayStates);
     const secili = selectedDeviceCode === device.code;
+    const kapali = collapsedKits.has(device.code);
+    const acKapa = (e: React.MouseEvent | React.KeyboardEvent) => {
+      // Kartin kendisi cihaz secme dugmesi; ok yalnizca gruba ait.
+      e.stopPropagation();
+      setCollapsedKits((onceki) => {
+        const yeni = new Set(onceki);
+        if (yeni.has(device.code)) yeni.delete(device.code);
+        else yeni.add(device.code);
+        return yeni;
+      });
+    };
+    // ALT CIHAZ TEK SATIR: ad ile uydu atamasi yan yana. Iki satirlik
+    // duzen (ad ustte, uydular altta) listeyi gereksiz uzatiyordu; set
+    // satirinda gosterilecek yalnizca iki bilgi var.
+    if (altCihaz) {
+      return (
+        <button
+          key={device.id}
+          className={`device-group-item device-item device-item--subunit${secili ? " active" : ""}`}
+          onClick={() => handleDeviceSelect(device)}
+        >
+          <strong>{setKisaAd(device.name)}</strong>
+          <span className="device-subunit-sats">
+            {(device.subunitSatellites ?? [])
+              .map((n) => `S${String(n).padStart(2, "0")}`)
+              .join(" · ")}
+          </span>
+        </button>
+      );
+    }
+
     return (
       <button
         key={device.id}
@@ -633,14 +670,34 @@ export function DeviceManagementPanel({
       >
         <div className="device-title-row">
           <div className="device-name-with-status">
-            {altCihaz ? null : (
-              <span className={`device-status-dot ${deviceCommDotClass(effStatus)}`} />
-            )}
+            {setSayisi > 0 ? (
+              /* Ok KART ICINDE. Disarida ayri bir dugme olarak durunca
+                 kartin bir parcasi gibi okunmuyordu. `button` icinde
+                 `button` gecersiz HTML oldugu icin span + stopPropagation. */
+              <span
+                className="device-collapse-chevron material-symbols-outlined"
+                role="button"
+                tabIndex={0}
+                aria-expanded={!kapali}
+                aria-label={
+                  kapali
+                    ? t("engineering.devicesPanel.expandSets", { count: setSayisi })
+                    : t("engineering.devicesPanel.collapseSets", { count: setSayisi })
+                }
+                onClick={acKapa}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") acKapa(e);
+                }}
+              >
+                {kapali ? "chevron_right" : "expand_more"}
+              </span>
+            ) : null}
+            <span className={`device-status-dot ${deviceCommDotClass(effStatus)}`} />
             {/* Ana cihazin adi hemen ustte duruyor; sette onu tekrar etmek
                 ("a / Set 1") satiri gereksiz uzatiyordu. Yalnizca set adi. */}
-            <strong>{altCihaz ? setKisaAd(device.name) : device.name}</strong>
+            <strong>{device.name}</strong>
           </div>
-          {altCihaz ? null : (
+          {(
             <span className="device-status-sr-only">
               {effStatus === "online"
                 ? t("engineering.devicesPanel.commOnline")
@@ -651,21 +708,11 @@ export function DeviceManagementPanel({
           )}
         </div>
         <div className="device-meta-row">
-          {altCihaz ? (
-            <span className="device-subunit-sats">
-              {(device.subunitSatellites ?? [])
-                .map((n) => `S${String(n).padStart(2, "0")}`)
-                .join(" · ")}
-            </span>
-          ) : (
-            <>
-              <span>{device.code}</span>
-              <span className="device-ip-text">
-                {device.ipAddress ?? "-"}
-                {canSeeDnp3 ? `:${device.dnp3OutstationPort ?? 20001}` : ""}
-              </span>
-            </>
-          )}
+          <span>{device.code}</span>
+          <span className="device-ip-text">
+            {device.ipAddress ?? "-"}
+            {canSeeDnp3 ? `:${device.dnp3OutstationPort ?? 20001}` : ""}
+          </span>
         </div>
       </button>
     );
@@ -1345,43 +1392,7 @@ export function DeviceManagementPanel({
                 const kapali = collapsedKits.has(device.code);
                 return (
                   <div className="device-group-block" key={device.id}>
-                    <div className="device-group-head">
-                      {setler.length > 0 ? (
-                        <button
-                          type="button"
-                          className="device-collapse-btn"
-                          aria-expanded={!kapali}
-                          aria-label={
-                            kapali
-                              ? t("engineering.devicesPanel.expandSets", { count: setler.length })
-                              : t("engineering.devicesPanel.collapseSets", { count: setler.length })
-                          }
-                          title={
-                            kapali
-                              ? t("engineering.devicesPanel.expandSets", { count: setler.length })
-                              : t("engineering.devicesPanel.collapseSets", { count: setler.length })
-                          }
-                          onClick={() =>
-                            setCollapsedKits((onceki) => {
-                              const yeni = new Set(onceki);
-                              if (yeni.has(device.code)) yeni.delete(device.code);
-                              else yeni.add(device.code);
-                              return yeni;
-                            })
-                          }
-                        >
-                          <span className="material-symbols-outlined" aria-hidden="true">
-                            {kapali ? "chevron_right" : "expand_more"}
-                          </span>
-                        </button>
-                      ) : null}
-                      <div className="device-group-head-item">{renderDeviceItem(device, false)}</div>
-                      {setler.length > 0 ? (
-                        <span className="device-set-count" title={t("engineering.devicesPanel.form.setCount")}>
-                          {setler.length}
-                        </span>
-                      ) : null}
-                    </div>
+                    {renderDeviceItem(device, false, setler.length)}
                     {setler.length > 0 && !kapali ? (
                       <div className="device-subunit-list">
                         {setler.map((s) => renderDeviceItem(s, true))}
@@ -1495,7 +1506,9 @@ export function DeviceManagementPanel({
                           </select>
                         </label>
                         )}
-                        {isPmkSet ? null : (
+                        {/* Montaj tarihi sette de girilebilir: her set
+                            ayri bir direge, ayri bir gunde kelepcelenir. */}
+                        {(
                         <label>
                           {t("engineering.devicesPanel.form.installationDate")}
                           <input
