@@ -14,6 +14,19 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.69.0] — 2026-08-11
+
+### Eklendi
+
+- **Global arama direk ve hatları da buluyor.** Üst çubuktaki arama yalnızca
+  cihaz ve bölge buluyordu; artık direk (ad veya sıra no) ve hat da aranıyor,
+  seçilince ana sayfada ilgili kayıt filtreleniyor.
+
+### Düzeltildi
+
+- **Kısayol etiketi platforma göre.** Sabit "⌘K" yazıyordu; Windows
+  kullanıcısına çalışmayan bir tuş gösteriyordu. Artık mac dışında "Ctrl+K".
+
 ## [2.68.0] — 2026-08-11
 
 Arıza kayıtları artık kendiliğinden kapanmıyor: düzelen arıza ekranda kalıyor
