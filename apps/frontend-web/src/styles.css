@@ -41476,3 +41476,21 @@ th.event-col-category {
 
   @page { size: A4 portrait; margin: 12mm; }
 }
+
+/* ---- GECMIS LISTESI: KAYIT NO ----
+   Satirin kendisi yorumlari acar; kayit no DETAY sekmesine goturur.
+   Onceden kaydin kendisine gitmenin yolu yoktu. */
+.fx-col-no { width: 1%; white-space: nowrap; }
+.fx-fault-no {
+  padding: 3px 9px;
+  border: 1px solid var(--fd-line, #e2e8f0);
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.fx-fault-no:hover { background: #fff7ed; border-color: #f59e0b; color: #b45309; }
+.fx-fault-no:focus-visible { outline: 2px solid #f59e0b; outline-offset: 1px; }

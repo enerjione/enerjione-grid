@@ -228,7 +228,6 @@
     "searchRegionTag": "Region",
     "searchLineTag": "Line",
     "searchPoleTag": "Pole",
-    "searchPoleFallback": "Pole {{no}}",
     "searchAlarmTag": "Active alarm",
     "searchEmpty": "No results found"
   },
@@ -954,7 +953,9 @@
       "editNote": "Edit Resolution",
       "emptyHeading": "No past fault records",
       "emptyNone": "Faults that return to normal are moved here automatically.",
-      "emptyNoMatch": "No record matches your search or filters."
+      "emptyNoMatch": "No record matches your search or filters.",
+      "colNo": "Fault no",
+      "openDetail": "Open fault detail"
     },
     "card": {
       "rangeTag": "Fault Range",

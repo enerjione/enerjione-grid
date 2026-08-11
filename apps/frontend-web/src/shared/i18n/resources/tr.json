@@ -225,7 +225,6 @@
     "searchRegionTag": "Bölge",
     "searchLineTag": "Hat",
     "searchPoleTag": "Direk",
-    "searchPoleFallback": "{{no}}. direk",
     "searchAlarmTag": "Aktif alarm",
     "searchEmpty": "Sonuç bulunamadı"
   },
@@ -951,7 +950,9 @@
       "editNote": "Çözümü Düzenle",
       "emptyHeading": "Geçmiş arıza kaydı yok",
       "emptyNone": "Normale dönen arızalar otomatik olarak buraya taşınır.",
-      "emptyNoMatch": "Arama veya filtre kriterlerine uyan kayıt yok."
+      "emptyNoMatch": "Arama veya filtre kriterlerine uyan kayıt yok.",
+      "colNo": "Arıza No",
+      "openDetail": "Arıza detayını aç"
     },
     "card": {
       "rangeTag": "Arıza Aralığı",
