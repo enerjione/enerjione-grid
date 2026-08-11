@@ -18,7 +18,38 @@ const state = {
   status: "disconnected",
   qrDataUrl: null,
   phoneNumber: null,
+  // Ust uste kac denemedir bir kez bile "open" goremedik. "open"da sifirlanir.
+  failCount: 0,
+  reconnectTimer: null,
 };
+
+//: Bu kadar denemede bir kez bile baglanamazsak credentials GERCEKTEN olu
+//: sayilir ve QR akisina donulur. Gecici kopmalar (WA soketi kapatir, ag
+//: gider gelir, VDS yeniden baslar) bu sayiya asla ulasmaz; 8 deneme
+//: ~4 dakikalik kesintiye dayanir.
+const RECONNECT_MAX_TRY = 8;
+
+function backoffMs(tryNo) {
+  // 2sn, 4, 8, 16, 32, 60, 60... — WA'yi doverek rate-limit yemenin
+  // (403/forbidden) onune gecer.
+  return Math.min(60000, 2000 * Math.pow(2, Math.max(0, tryNo - 1)));
+}
+
+/**
+ * Kapanma kodu YENIDEN ESLESME (QR) gerektiriyor mu?
+ *
+ * Yalnizca `loggedOut` (401) gerektirir: kullanici telefondan "Bagli
+ * cihazlar"dan bu oturumu silmistir, elimizdeki credentials artik hicbir
+ * sekilde calismaz.
+ *
+ * DIGER HER KOD GECICIDIR — connectionClosed (428), connectionLost (408),
+ * timedOut (408), restartRequired (515), connectionReplaced (440),
+ * unavailableService (503), forbidden (403) — ve AYNI credentials ile
+ * yeniden baglanilir.
+ */
+function needsRepair(statusCode) {
+  return statusCode === DisconnectReason.loggedOut;
+}
 
 function clearSession() {
   // Dizinin kendisini degil, icindeki dosyalari siliyoruz — VDS'te session
@@ -52,6 +83,41 @@ function toJid(rawPhone) {
   return `${digits}@s.whatsapp.net`;
 }
 
+/** Gecici hatayi isler: sayaci artirir, gerekirse session'i bir kez sifirlar. */
+function noteFailure(sebep) {
+  state.failCount += 1;
+  if (state.failCount >= RECONNECT_MAX_TRY) {
+    // Bu kadar denemede bir kez bile "open" goremedik. Buraya kadar geldiyse
+    // credentials gercekten kullanilamaz durumda; sifirlayip QR uretiyoruz.
+    // Bu esik olmasa bozuk bir session'da sonsuza kadar sessizce donerdik.
+    console.error(
+      `[whatsapp-web-gateway] ${state.failCount} denemede baglanilamadi (${sebep}); ` +
+      "session sifirlaniyor, QR gerekecek."
+    );
+    clearSession();
+    state.failCount = 0;
+    scheduleReconnect(0);
+    return;
+  }
+  const bekleme = backoffMs(state.failCount);
+  console.warn(
+    `[whatsapp-web-gateway] ${sebep}; ${Math.round(bekleme / 1000)}sn sonra ` +
+    `yeniden denenecek (${state.failCount}/${RECONNECT_MAX_TRY}).`
+  );
+  scheduleReconnect(bekleme);
+}
+
+/** Tek bir bekleyen yeniden baglanma tutar — ust uste timer birikmesin. */
+function scheduleReconnect(delayMs) {
+  if (state.reconnectTimer) clearTimeout(state.reconnectTimer);
+  state.reconnectTimer = setTimeout(() => {
+    state.reconnectTimer = null;
+    // connect() KENDISI de patlayabilir (acilista ag yok gibi). Onceden
+    // burada yalnizca log vardi ve zincir olurdu; simdi tekrar deniyoruz.
+    connect().catch((err) => noteFailure(`yeniden baglanma hatasi: ${err.message}`));
+  }, delayMs);
+}
+
 async function connect() {
   // Onceki socket hala aciksa event listener'lari birakma — gec gelen bir
   // event (eski sock'tan) yeni sock'un state'ini ezebilir (stale closure).
@@ -67,10 +133,22 @@ async function connect() {
 
   fs.mkdirSync(SESSION_DIR, { recursive: true });
   const { state: authState, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
-  const { version } = await fetchLatestBaileysVersion();
+  // Bu ag cagrisidir. Sistem yeni acilirken DNS/ag hazir olmayabilir ve
+  // burada atilan hata TUM baglanti zincirini oldururdu: reconnect yok,
+  // QR yok, status sonsuza kadar "disconnected". Paketle gelen surum
+  // fazlasiyla yeterli — bu cagri yalnizca bir iyilestirmedir.
+  let version;
+  try {
+    ({ version } = await fetchLatestBaileysVersion());
+  } catch (err) {
+    console.warn(
+      "[whatsapp-web-gateway] surum bilgisi alinamadi, paketteki surumle devam:",
+      err.message
+    );
+  }
 
   const sock = makeWASocket({
-    version,
+    ...(version ? { version } : {}),
     auth: authState,
     printQRInTerminal: false,
     syncFullHistory: false,
@@ -90,6 +168,7 @@ async function connect() {
     }
 
     if (connection === "open") {
+      state.failCount = 0;
       state.status = "connected";
       state.qrDataUrl = null;
       state.phoneNumber = sock.user && sock.user.id ? sock.user.id.split(":")[0].split("@")[0] : null;
@@ -99,23 +178,32 @@ async function connect() {
       const statusCode = lastDisconnect && lastDisconnect.error && lastDisconnect.error.output
         ? lastDisconnect.error.output.statusCode
         : null;
-      // restartRequired (515) ilk QR taramasindan hemen sonra normal —
-      // Baileys ayni session ile tek seferlik yeniden baglanma ister.
-      // Bunun disindaki her kapanma (badSession, loggedOut, connectionLost,
-      // WA'nin cihazi reddetmesi vb.) bozuk/geçersiz session anlamina gelir;
-      // session silinmezse ayni credentials ile sonsuz retry doner ve QR
-      // hicbir zaman uretilmez. Bu yuzden restartRequired disinda session'i
-      // sifirlayip taze QR akisina donuyoruz.
-      const restartOnly = statusCode === DisconnectReason.restartRequired;
       state.status = "disconnected";
       state.qrDataUrl = null;
       state.phoneNumber = null;
-      if (restartOnly) {
-        connect().catch((err) => console.error("[whatsapp-web-gateway] reconnect basarisiz:", err));
-      } else {
+
+      // ONCEDEN: `restartRequired` DISINDAKI HER kapanmada session
+      // siliniyordu. Ama WA soketi rutin olarak kapanir (ag dalgalanmasi,
+      // WA sunucu rotasyonu, VDS yeniden baslarken ag henuz hazir degil) ve
+      // bunlarin hicbiri credentials'i gecersiz kilmaz. Sonuc: sistem her
+      // yeniden basladiginda oturum siliniyor ve QR yeniden isteniyordu.
+      // Artik yalnizca telefondan cihaz kaldirildiginda (loggedOut) siliyoruz.
+      if (needsRepair(statusCode)) {
+        console.warn("[whatsapp-web-gateway] oturum telefondan kaldirilmis; QR gerekiyor.");
         clearSession();
-        connect().catch((err) => console.error("[whatsapp-web-gateway] reconnect basarisiz:", err));
+        state.failCount = 0;
+        scheduleReconnect(0);
+        return;
       }
+
+      // Ilk QR taramasinin hemen ardindan gelen 515 eslesmenin normal bir
+      // parcasi; beklemeden ve sayaci artirmadan devam.
+      if (statusCode === DisconnectReason.restartRequired) {
+        scheduleReconnect(0);
+        return;
+      }
+
+      noteFailure(`baglanti kapandi (kod: ${statusCode})`);
     }
   });
 }
@@ -164,7 +252,14 @@ async function logout() {
   state.status = "disconnected";
   state.qrDataUrl = null;
   state.phoneNumber = null;
-  connect().catch((err) => console.error("[whatsapp-web-gateway] yeniden baglanma basarisiz:", err));
+  // Elle cikista sayac ve bekleyen timer sifirlanir: kullanici QR'i HEMEN
+  // gormeli, onceki hatalarin backoff'unu beklememeli.
+  state.failCount = 0;
+  if (state.reconnectTimer) {
+    clearTimeout(state.reconnectTimer);
+    state.reconnectTimer = null;
+  }
+  scheduleReconnect(0);
 }
 
 function getStatus() {
