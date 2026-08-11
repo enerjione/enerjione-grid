@@ -153,65 +153,22 @@ def quality_blocks_alarm(quality: str | None) -> bool:
     return normalize_quality(str(quality)) in ALARM_BLOCKING_QUALITIES
 
 
-# Lithium pil voltaj-yüzde haritası (default; proje ayarlarindan override edilebilir).
-DEFAULT_BATTERY_VOLTAGE_FULL = 3.71
-DEFAULT_BATTERY_VOLTAGE_LOW = 3.40
+# Batarya esikleri ve yuzde hesabi MODEL BAZLI cozulur; tek gercek kaynak
+# `device_profile_service`. Burada yalnizca yeniden export ediliyor —
+# eskiden bu dosyada duran proje-geneli tek esik, birden fazla cihaz modeli
+# olan kurulumlarda sessizce yanlis yuzde uretiyordu.
+from app.services.device_profile_service import (  # noqa: E402
+    DEFAULT_BATTERY_VOLTAGE_FULL,
+    DEFAULT_BATTERY_VOLTAGE_LOW,
+    battery_percent_for_device,
+    battery_thresholds as _battery_thresholds,
+)
 
-# ProjectSettings DB query cache: her telemetry mesajinda DB'ye gitmeyelim.
-# 600 cihazda saniyede ~10 battery sinyali olur, hepsi ayni satiri okur.
-# 60 saniyelik cache yeterli (kullanici ayar degistirmesinden sonra max 1 dk).
-_BATTERY_THRESHOLDS_CACHE: tuple[float, float, float] | None = None  # (low, full, cached_at_epoch)
-_BATTERY_THRESHOLDS_TTL_SEC = 60.0
-
-
-def _battery_thresholds(db: Session | None) -> tuple[float, float]:
-    """Proje ayarlarindan (low, full) cek; yoksa default. 60sn TTL ile cache."""
-    global _BATTERY_THRESHOLDS_CACHE
-    import time as _time
-    now = _time.monotonic()
-    cached = _BATTERY_THRESHOLDS_CACHE
-    if cached is not None and (now - cached[2]) < _BATTERY_THRESHOLDS_TTL_SEC:
-        return cached[0], cached[1]
-    if db is None:
-        return DEFAULT_BATTERY_VOLTAGE_LOW, DEFAULT_BATTERY_VOLTAGE_FULL
-    low = DEFAULT_BATTERY_VOLTAGE_LOW
-    full = DEFAULT_BATTERY_VOLTAGE_FULL
-    try:
-        from app.models.project_settings import ProjectSettings
-        row = db.get(ProjectSettings, 1)
-        if row is not None:
-            low = row.battery_voltage_low if row.battery_voltage_low is not None else DEFAULT_BATTERY_VOLTAGE_LOW
-            full = row.battery_voltage_full if row.battery_voltage_full is not None else DEFAULT_BATTERY_VOLTAGE_FULL
-            if full <= low:
-                low, full = DEFAULT_BATTERY_VOLTAGE_LOW, DEFAULT_BATTERY_VOLTAGE_FULL
-    except Exception:  # noqa: BLE001
-        pass
-    _BATTERY_THRESHOLDS_CACHE = (float(low), float(full), now)
-    return float(low), float(full)
-
-
-def _battery_percent_from_signal(
-    signal_key: str, value: float, db: Session | None = None
-) -> float | None:
-    """Master `battery_voltage_satellite` sinyalinden yuzde turet.
-
-    Eşikler proje ayarlarindan okunur (`battery_voltage_low/full`); ayar yoksa
-    fallback 3.40 / 3.71 V kullanilir. value <= low → 0, value >= full → 100,
-    arasi lineer."""
-    if not signal_key:
-        return None
-    key = signal_key.lower()
-    if key != "master.battery_voltage_satellite":
-        return None
-    low, full = _battery_thresholds(db)
-    if value <= low:
-        return 0.0
-    if value >= full:
-        return 100.0
-    span = full - low
-    if span <= 0:
-        return None
-    return round((value - low) / span * 100.0, 1)
+__all_battery__ = (
+    "DEFAULT_BATTERY_VOLTAGE_FULL",
+    "DEFAULT_BATTERY_VOLTAGE_LOW",
+    "battery_percent_for_device",
+)
 
 
 def _auto_clear_quality_alarms(db: Session, device: Device) -> None:
@@ -296,8 +253,14 @@ def process_telemetry_reading(
         # deger korunur.
         if reading.value is not None:
             try:
-                derived = _battery_percent_from_signal(
-                    reading.signal_key, float(reading.value), db=db
+                # Modelin kendi esikleri kullanilir. Pole Master Kit setinde
+                # uc ayri batarya vardir; yuzde EN DUSUK olanindan cikar.
+                derived = battery_percent_for_device(
+                    db,
+                    device.id,
+                    device.model,
+                    (reading.signal_key or "").lower(),
+                    float(reading.value),
                 )
             except (TypeError, ValueError):
                 derived = None

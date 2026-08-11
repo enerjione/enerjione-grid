@@ -429,6 +429,51 @@ export async function fetchDeviceModels(token: string): Promise<DeviceModelOptio
   return (await response.json()) as DeviceModelOption[];
 }
 
+/** Model bazli cihaz profili ayari (batarya esikleri).
+ *
+ * `battery_voltage_*` = bu model icin ACIKCA girilmis deger (null = girilmemis).
+ * `resolved_*`        = zincir (model -> proje -> kod) sonrasi GERCEKTEN
+ *                       kullanilan deger. Arayuz ikisini birden gosterir ki
+ *                       kullanici kendi girdigi degerle mirasi ayirt edebilsin.
+ */
+export type DeviceModelSettingsRow = {
+  model: string;
+  label: string | null;
+  battery_voltage_low: number | null;
+  battery_voltage_full: number | null;
+  resolved_battery_voltage_low: number;
+  resolved_battery_voltage_full: number;
+  battery_units: string[];
+  updated_at: string | null;
+};
+
+export async function fetchDeviceModelSettings(
+  token: string
+): Promise<DeviceModelSettingsRow[]> {
+  const response = await apiFetch(`${API_BASE_URL}/device-models/settings`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Cihaz profili ayarlari alinamadi.");
+  return (await response.json()) as DeviceModelSettingsRow[];
+}
+
+export async function saveDeviceModelSettings(
+  token: string,
+  model: string,
+  payload: { battery_voltage_low: number | null; battery_voltage_full: number | null }
+): Promise<DeviceModelSettingsRow> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/device-models/${encodeURIComponent(model)}/settings`,
+    {
+      method: "PUT",
+      headers: { ...authHeaders(token), "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }
+  );
+  if (!response.ok) throw await buildApiError(response, "Cihaz profili ayari kaydedilemedi.");
+  return (await response.json()) as DeviceModelSettingsRow;
+}
+
 // Backend PingResult (snake_case) — saha araclari ping testi.
 type ApiPingResult = {
   host: string;

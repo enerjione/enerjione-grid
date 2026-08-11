@@ -22,7 +22,7 @@
  * Ikonografi: lucide-react (material-symbols DEGIL) — sematik direk seridi
  * cizgisel oldugu icin ayni gorsel dil.
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Activity,
@@ -71,6 +71,12 @@ type Props = {
   cause?: { label: string; suggested: boolean } | null;
   /** AYNI HATTA gecmis arizalar — tekrar eden ariza baska bir istir. */
   history?: FaultRecurrence | null;
+  /** Sebep katalogu — kartta SEBEP SECILEBILSIN diye. */
+  causeOptions?: { code: string; label: string; group: string }[];
+  /** Sebep secildiginde kaydet. Verilmezse alan salt okunur kalir. */
+  onSaveCause?: (code: string | null) => void | Promise<void>;
+  /** Cizimdeki cihaza tiklaninca cihaz sayfasini ac. */
+  onOpenDevice?: (code: string) => void;
   onOpenDetail: () => void;
   onAssignClick: () => void;
 };
@@ -119,6 +125,9 @@ export function ActiveFaultCard({
   canAssign,
   cause,
   history,
+  causeOptions,
+  onSaveCause,
+  onOpenDevice,
   onOpenDetail,
   onAssignClick
 }: Props) {
@@ -224,13 +233,6 @@ export function ActiveFaultCard({
     if (f.conductor_temp_c != null) {
       ekle("temp", t("faults.card.specTemp"), `${f.conductor_temp_c.toFixed(0)} °C`);
     }
-    if (cause) {
-      ekle(
-        "cause",
-        t("faults.card.specCause"),
-        cause.suggested ? t("faults.card.specCauseAuto", { cause: cause.label }) : cause.label
-      );
-    }
     // Bolgeyi ceviren iki cihaz: cizimde kirmizi/yesil olarak duruyor ama
     // ADI yalnizca burada yaziyor — telsizle "hangi cihaz" diye sorulur.
     ekle(
@@ -253,6 +255,17 @@ export function ActiveFaultCard({
     }
     return rows;
   }, [f, cause, t, localeTag]);
+
+  const [causeSaving, setCauseSaving] = useState(false);
+  const handleCause = async (code: string) => {
+    if (!onSaveCause) return;
+    setCauseSaving(true);
+    try {
+      await onSaveCause(code || null);
+    } finally {
+      setCauseSaving(false);
+    }
+  };
 
   return (
     <article className={`fx-card fx-card--${f.status}`}>
@@ -387,6 +400,7 @@ export function ActiveFaultCard({
             zoneEndM={f.zone_end_m}
             alarmsByDevice={alarmsByDevice}
             faultPhases={faultPhases}
+            onOpenDevice={onOpenDevice}
             active
           />
         </section>
@@ -417,6 +431,51 @@ export function ActiveFaultCard({
                 ))}
               </dl>
             )}
+
+            {/* SEBEP — SALT OKUNUR DEGIL.
+                Kart, cihaz verisinden turetilen oneriyi ("Agac / dal temasi")
+                gosteriyor ama degistirilemiyordu; sahada gercek sebebi goren
+                kisi onu girmek icin detay ekranini acmak zorundaydi. Sebep
+                analiz katmanina giren TEK insan etiketi oldugu icin girisi
+                zorlastirmak dogrudan veri kaybi demek. */}
+            <div className="fx-cause">
+              <span className="fx-cause-label">{t("faults.card.specCause")}</span>
+              {causeOptions && causeOptions.length > 0 && onSaveCause ? (
+                <select
+                  className="fx-cause-select"
+                  value={f.cause_code ?? ""}
+                  disabled={causeSaving}
+                  onChange={(e) => void handleCause(e.target.value)}
+                >
+                  <option value="">{t("faults.card.causeNotSet")}</option>
+                  {Array.from(new Set(causeOptions.map((c) => c.group))).map((grup) => (
+                    <optgroup key={grup} label={t(`faults.causeGroup.${grup}`, { defaultValue: grup })}>
+                      {causeOptions
+                        .filter((c) => c.group === grup)
+                        .map((c) => (
+                          <option key={c.code} value={c.code}>
+                            {c.label}
+                          </option>
+                        ))}
+                    </optgroup>
+                  ))}
+                </select>
+              ) : (
+                <span className="fx-cause-plain">{cause?.label ?? "—"}</span>
+              )}
+              {/* Cihazin onerisi, insan henuz onaylamadiysa. Oneriyi tek
+                  tikla kabul etmek, secim listesini acmaktan hizli. */}
+              {!f.cause_code && cause?.suggested ? (
+                <button
+                  type="button"
+                  className="fx-cause-suggest"
+                  disabled={causeSaving || !onSaveCause}
+                  onClick={() => void handleCause(f.auto_cause_code ?? "")}
+                >
+                  {t("faults.card.causeUseSuggestion", { cause: cause.label })}
+                </button>
+              ) : null}
+            </div>
           </div>
 
           {/* --- 2. arizayi acan alarmlar --- */}

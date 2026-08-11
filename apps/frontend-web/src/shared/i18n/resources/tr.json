@@ -1018,7 +1018,9 @@
       "historySameSection": "{{count}} tanesi AYNI kesimde — kök sebep sürüyor olabilir",
       "historyLast": "En son: {{at}}",
       "specLastRed": "Son algılayan",
-      "specFirstGreen": "İlk algılamayan"
+      "specFirstGreen": "İlk algılamayan",
+      "causeNotSet": "— Sebep seçilmedi —",
+      "causeUseSuggestion": "Öneriyi kullan: {{cause}}"
     },
     "empty": {
       "errorTitle": "Arıza listesi alınamadı",
@@ -2190,6 +2192,16 @@
         "sat01": "Satellite 01",
         "sat02": "Satellite 02"
       }
+    },
+    "deviceProfiles": {
+      "title": "Cihaz profilleri",
+      "hint": "Batarya esikleri modele gore degisir. Bos birakilan alan proje ayarindan devam eder.",
+      "units": "Batarya: {{units}}",
+      "invalidNumber": "Gecerli bir voltaj girin.",
+      "rangeInvalid": "Dolu voltaji bos voltajindan buyuk olmali.",
+      "saved": "{{model}} profili kaydedildi.",
+      "custom": "Bu modele ozel deger kullaniliyor.",
+      "inherited": "Su an {{low}} V / {{full}} V (proje ayarindan)."
     },
     "responsibilityAreas": {
       "title": "Ekipler",

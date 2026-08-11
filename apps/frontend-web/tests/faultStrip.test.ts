@@ -582,3 +582,190 @@ test("kutu olculmeden once sahnenin tamami gosterilir", () => {
     h: 300
   });
 });
+
+/* ---------------------------------------------------------------------------
+ * AYNI ARALIKTA IKI CIHAZ
+ *
+ * Iki cihaz ayni direk araligindaysa ve konumlari verilmemisse ikisi de
+ * varsayilan 0.5'e dusuyordu. Sonuc yalnizca gorsel degildi: "gordum" ile
+ * "gormedim" ayni noktada oldugu icin ariza bolgesi hesaplanamiyor, kod kaba
+ * direk araligina duşup ARALIGIN TAMAMINI kirmiziya boyuyordu. Sahada 34
+ * metrelik bir kesim, iki direk arasinin tamami olarak gosteriliyordu.
+ * ------------------------------------------------------------------------- */
+
+/** 3-4 arasinda IKI cihaz: biri gordu, biri gormedi. Konum verilmemis. */
+function ayniAralikta() {
+  return [
+    { from_pole_seq: 3, to_pole_seq: 4, device_code: "SN2-RED" },
+    { from_pole_seq: 3, to_pole_seq: 4, device_code: "SN2-GREEN" }
+  ];
+}
+
+test("ayni araliktaki iki cihaz UST USTE binmez", () => {
+  const geo = buildStripGeometry({
+    poleSeqs: POLES,
+    segments: ayniAralikta(),
+    fromSeq: 3,
+    toSeq: 4,
+    lastRedDeviceCode: "SN2-RED",
+    firstGreenDeviceCode: "SN2-GREEN"
+  });
+  assert.equal(geo.devices.length, 2, "iki cihaz da cizime girmeli");
+  const [a, b] = geo.devices;
+  assert.ok(b.pos - a.pos > 0.15, `cihazlar cakisiyor: ${a.pos} / ${b.pos}`);
+  // Ikisi de KENDI araliginin icinde kalmali (komsu aralia tasmasin).
+  for (const d of geo.devices) {
+    assert.ok(Math.floor(d.pos) === 2, `${d.code} kendi araliginin disina cikmis`);
+  }
+});
+
+test("ayni araliktaki iki cihaz arasinda ariza bolgesi DOGRU cikar", () => {
+  const geo = buildStripGeometry({
+    poleSeqs: POLES,
+    segments: ayniAralikta(),
+    fromSeq: 3,
+    toSeq: 4,
+    lastRedDeviceCode: "SN2-RED",
+    firstGreenDeviceCode: "SN2-GREEN"
+  });
+  assert.ok(geo.span, "bolge hesaplanamadi");
+  assert.equal(geo.span.byDevice, true, "sinirlar cihazlardan gelmeliydi");
+  const red = geo.devices.find((d) => d.code === "SN2-RED")!;
+  const green = geo.devices.find((d) => d.code === "SN2-GREEN")!;
+  assert.equal(geo.span.a, red.pos);
+  assert.equal(geo.span.b, green.pos);
+  // Bolge ARALIGIN TAMAMI degil, iki cihazin arasi.
+  assert.ok(geo.span.a > 2, "bolge aralik basindan basliyor (eski hata)");
+  assert.ok(geo.span.b < 3, "bolge aralik sonunda bitiyor (eski hata)");
+});
+
+test("GORDUM cihazi GORMEDIM'den once gelir", () => {
+  // Veride hangi segmentin once geldigini soyleyen bir bilgi yok; sira
+  // arizadan okunur. Ters dizmek bolgeyi ters cevirirdi.
+  const tersSira = buildStripGeometry({
+    poleSeqs: POLES,
+    // Yesil cihaz listede ONCE geliyor.
+    segments: [
+      { from_pole_seq: 3, to_pole_seq: 4, device_code: "SN2-GREEN" },
+      { from_pole_seq: 3, to_pole_seq: 4, device_code: "SN2-RED" }
+    ],
+    fromSeq: 3,
+    toSeq: 4,
+    lastRedDeviceCode: "SN2-RED",
+    firstGreenDeviceCode: "SN2-GREEN"
+  });
+  const red = tersSira.devices.find((d) => d.code === "SN2-RED")!;
+  const green = tersSira.devices.find((d) => d.code === "SN2-GREEN")!;
+  assert.ok(red.pos < green.pos, "gordum cihazi gormedimden sonra dizilmis");
+  assert.ok(tersSira.span && tersSira.span.b > tersSira.span.a);
+});
+
+test("konumu VERILMIS cihazlara dokunulmaz", () => {
+  // `device_position_t` sahada olculmus gercek bir konum olabilir.
+  const geo = buildStripGeometry({
+    poleSeqs: POLES,
+    segments: [
+      { from_pole_seq: 3, to_pole_seq: 4, device_code: "A", device_position_t: 0.2 },
+      { from_pole_seq: 3, to_pole_seq: 4, device_code: "B", device_position_t: 0.8 }
+    ],
+    fromSeq: 3,
+    toSeq: 4
+  });
+  assert.equal(geo.devices.find((d) => d.code === "A")!.pos, 2.2);
+  assert.equal(geo.devices.find((d) => d.code === "B")!.pos, 2.8);
+});
+
+test("kalabalik aralik icin direk arasi ACILIR", () => {
+  const tek = buildStripGeometry({
+    poleSeqs: POLES,
+    segments: [{ from_pole_seq: 3, to_pole_seq: 4, device_code: "A" }],
+    fromSeq: 3,
+    toSeq: 4
+  });
+  const cift = buildStripGeometry({
+    poleSeqs: POLES,
+    segments: ayniAralikta(),
+    fromSeq: 3,
+    toSeq: 4
+  });
+  const aralik = (g: ReturnType<typeof buildStripGeometry>) => g.xOf(1) - g.xOf(0);
+  assert.ok(
+    aralik(cift) > aralik(tek) * 1.2,
+    `iki cihazli hatta aralik acilmamis: ${aralik(tek)} -> ${aralik(cift)}`
+  );
+  // Olcek TUM aralikilarda ayni kalmali — hat duzenli bir tarak gibi okunsun.
+  for (let i = 1; i < POLES.length - 1; i += 1) {
+    assert.ok(
+      Math.abs((cift.xOf(i + 1) - cift.xOf(i)) - aralik(cift)) < 1e-9,
+      "aralikilar esit degil"
+    );
+  }
+});
+
+test("BES cihaz ayni aralikta — hepsi ayri ayri gorunur", () => {
+  // "Iki cihaz" bir varsayim degil: aralikta kac segment varsa o kadar cihaz
+  // olabilir. Dagitim eleman sayisina gore yapilir.
+  const kodlar = ["A", "B", "C", "D", "E"];
+  const geo = buildStripGeometry({
+    poleSeqs: POLES,
+    segments: kodlar.map((c) => ({ from_pole_seq: 3, to_pole_seq: 4, device_code: c })),
+    fromSeq: 3,
+    toSeq: 4
+  });
+  assert.equal(geo.devices.length, 5, "cihazlarin bir kismi cizimden dusmus");
+  for (let i = 1; i < geo.devices.length; i += 1) {
+    assert.ok(
+      geo.devices[i].pos > geo.devices[i - 1].pos,
+      `${geo.devices[i].code} onceki cihazla ayni noktada`
+    );
+  }
+  // Hepsi KENDI araliginin icinde kalir.
+  for (const d of geo.devices) {
+    assert.ok(d.pos > 2 && d.pos < 3, `${d.code} aralik disina tasmis`);
+  }
+  // Aralik bes cihaza gore acilir.
+  const tek = buildStripGeometry({ poleSeqs: POLES, fromSeq: 3, toSeq: 4 });
+  assert.ok(geo.xOf(1) - geo.xOf(0) > (tek.xOf(1) - tek.xOf(0)) * 2);
+});
+
+test("cok cihazli aralikta SAGLAM cihaz bolgenin icine tasinmaz", () => {
+  // Uc cihaz: A durumu bilinmiyor, B gordu, C gormedi. Once tonlara gore tam
+  // siralama yapiliyordu ve A (kirmizinin yukarisinda duran saglam cihaz)
+  // ariza bolgesinin ICINE dusuyordu — bilmedigimiz bir seyi iddia etmek.
+  const geo = buildStripGeometry({
+    poleSeqs: POLES,
+    segments: [
+      { from_pole_seq: 3, to_pole_seq: 4, device_code: "A" },
+      { from_pole_seq: 3, to_pole_seq: 4, device_code: "B-RED" },
+      { from_pole_seq: 3, to_pole_seq: 4, device_code: "C-GREEN" }
+    ],
+    fromSeq: 3,
+    toSeq: 4,
+    lastRedDeviceCode: "B-RED",
+    firstGreenDeviceCode: "C-GREEN"
+  });
+  const konum = (c: string) => geo.devices.find((d) => d.code === c)!.pos;
+  assert.ok(konum("A") < konum("B-RED"), "durumu bilinmeyen cihaz kendi sirasindan cikmis");
+  assert.ok(konum("B-RED") < konum("C-GREEN"), "gordum/gormedim sirasi bozuk");
+  assert.ok(geo.span && geo.span.a === konum("B-RED") && geo.span.b === konum("C-GREEN"));
+  assert.ok(konum("A") < geo.span!.a, "saglam cihaz ariza bolgesinin icinde cizilmis");
+});
+
+test("ters gelmis GORDUM/GORMEDIM ciftinde yalnizca O IKISI yer degistirir", () => {
+  const geo = buildStripGeometry({
+    poleSeqs: POLES,
+    segments: [
+      { from_pole_seq: 3, to_pole_seq: 4, device_code: "C-GREEN" },
+      { from_pole_seq: 3, to_pole_seq: 4, device_code: "X" },
+      { from_pole_seq: 3, to_pole_seq: 4, device_code: "B-RED" }
+    ],
+    fromSeq: 3,
+    toSeq: 4,
+    lastRedDeviceCode: "B-RED",
+    firstGreenDeviceCode: "C-GREEN"
+  });
+  const konum = (c: string) => geo.devices.find((d) => d.code === c)!.pos;
+  assert.ok(konum("B-RED") < konum("C-GREEN"), "cift duzeltilmemis");
+  // Ortadaki cihaz kendi yerinde kaldi.
+  assert.ok(konum("X") > konum("B-RED") && konum("X") < konum("C-GREEN"));
+});

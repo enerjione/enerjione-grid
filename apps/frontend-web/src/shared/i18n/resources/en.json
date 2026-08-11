@@ -1021,7 +1021,9 @@
       "historySameSection": "{{count}} of them in the SAME section — root cause may persist",
       "historyLast": "Most recent: {{at}}",
       "specLastRed": "Last detecting",
-      "specFirstGreen": "First not detecting"
+      "specFirstGreen": "First not detecting",
+      "causeNotSet": "— No cause selected —",
+      "causeUseSuggestion": "Use suggestion: {{cause}}"
     },
     "empty": {
       "errorTitle": "Could not load faults",
@@ -2193,6 +2195,16 @@
         "sat01": "Satellite 01",
         "sat02": "Satellite 02"
       }
+    },
+    "deviceProfiles": {
+      "title": "Device profiles",
+      "hint": "Battery thresholds differ per model. Fields left empty fall back to the project setting.",
+      "units": "Battery: {{units}}",
+      "invalidNumber": "Enter a valid voltage.",
+      "rangeInvalid": "Full voltage must be greater than empty voltage.",
+      "saved": "{{model}} profile saved.",
+      "custom": "Using a value specific to this model.",
+      "inherited": "Currently {{low}} V / {{full}} V (from project settings)."
     },
     "responsibilityAreas": {
       "title": "Teams",

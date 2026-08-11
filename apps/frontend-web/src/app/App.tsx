@@ -16,6 +16,7 @@ import { EngineeringNav } from "../features/tabs/EngineeringNav";
 import { routeToPageState, type PageMode, type EngineeringPage } from "../features/tabs/tabModel";
 
 import { GlobalLoading } from "../components/GlobalLoading";
+import { DeviceModelSettingsProvider } from "../components/DeviceModelSettingsProvider";
 import { useProjectSettings } from "../components/ProjectSettingsProvider";
 import {
   isSupportedLanguage,
@@ -2637,11 +2638,15 @@ export function App() {
   );
 
   return (
+    // Batarya esikleri cihaz TURU seviyesinde tanimli; tum ekranlar ayni
+    // kaynagi kullansin diye kimlik dogrulanmis agacin tepesine sariliyor.
+    <DeviceModelSettingsProvider token={session.accessToken}>
     <div className={`layout${licenseGateOpen ? " is-license-locked" : ""}`}>
       {forcePasswordModal}
       {licenseGateModal}
       <Header
         fullName={currentUser?.full_name ?? session.username}
+        avatarUrl={currentUser?.avatar_url ?? null}
         role={session.role}
         accessToken={session.accessToken}
         activePage={
@@ -3058,6 +3063,7 @@ export function App() {
               <FaultListPage
                 faults={faults}
                 onOpenFault={openFaultTab}
+                onOpenDevice={openDeviceDetail}
                 stats={faultStats}
                 users={users}
                 currentUsername={session.username}
@@ -3147,5 +3153,6 @@ export function App() {
         show={loadingData || alarmsLoading || dashboardAreaLoading}
       />
     </div>
+    </DeviceModelSettingsProvider>
   );
 }

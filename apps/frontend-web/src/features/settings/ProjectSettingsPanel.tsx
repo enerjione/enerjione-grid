@@ -7,6 +7,8 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { DeviceProfilesPanel } from "./DeviceProfilesPanel";
+
 import { useProjectSettings } from "../../components/ProjectSettingsProvider";
 import { DEFAULT_TOAST_POSITION, toastPosition, useToast } from "../../components/ToastProvider";
 import type {
@@ -346,6 +348,10 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
             </label>
           </div>
           </div>
+
+        {/* Model bazli ayarlar: ustteki batarya kutusu proje GENELI
+            varsayilanidir, burasi modele ozel istisnadir. */}
+        <DeviceProfilesPanel token={accessToken} canEdit />
 
         <div className="project-settings-toast-box">
           <div className="project-settings-toast-head">

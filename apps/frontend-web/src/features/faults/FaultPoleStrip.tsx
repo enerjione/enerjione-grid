@@ -37,9 +37,6 @@ import { Maximize2, Minus, Plus } from "lucide-react";
 import {
   GROUND_Y,
   PHASE_LINES,
-  PX_PER_UNIT,
-  SCENE_MAX_PX_H,
-  STRIP_PX_H,
   buildFaultScene,
   frameSceneToBox
 } from "./faultStripGeometry";
@@ -76,6 +73,8 @@ type Props = {
   branchRows?: StripBranchRow[];
   /** Sigmadigi icin cizilemeyen kol sayisi. */
   hiddenBranchCount?: number;
+  /** Cizimdeki bir cihaza tiklaninca o cihazin sayfasini ac. */
+  onOpenDevice?: (code: string) => void;
 };
 
 const GREY = "#94a3b8";
@@ -98,7 +97,8 @@ export function FaultPoleStrip({
   alarmsByDevice,
   faultPhases,
   branchRows,
-  hiddenBranchCount = 0
+  hiddenBranchCount = 0,
+  onOpenDevice
 }: Props) {
   const { t } = useTranslation();
   const [hover, setHover] = useState<RowHover>(null);
@@ -298,21 +298,12 @@ export function FaultPoleStrip({
 
   const yakinlasti = v.w < base.w - 0.5;
 
-  // CIZIM ALANININ EN AZ YUKSEKLIGI.
+  // CIZIM ALANI SABIT YUKSEKLIK ALMAZ.
   //
-  // Sahne kac satirsa o kadar yer ISTER; bunun altina inilirse cok satirli bir
-  // sahne kirpilir. Ust sinir kartin ekrandan tasmamasi icin.
-  //
-  // Bu bir ALT SINIRDIR, sabit yukseklik degil: cizim alani karttaki bos
-  // yeri de doldurur (bkz. `.fx-strip-stage { flex: 1 1 auto }`). Bir sure
-  // yukseklik icerige BAGLANMISTI ve tek satirlik kucuk bir sahnede cizim
-  // sayfanin tepesinde minicik kaliyor, altinda kocaman bos bir alan
-  // aciliyordu. Cizim alani her zaman sayfanin dibine kadar iner; sahne
-  // icinde ortalanir.
-  const pxCap = Math.min(
-    SCENE_MAX_PX_H,
-    Math.max(STRIP_PX_H, Math.round(scene.height * PX_PER_UNIT))
-  );
+  // Bir sure "en az sahne kadar yuksek" bir alt sinir vardi; cok satirli bir
+  // sahnede bu kartin ekrandan tasmasina ve SAYFANIN KAYMASINA yol aciyordu.
+  // Artik alan karttaki bos yerin tamamini kaplar, sahne de o kutuya
+  // olceklenir (bkz. frameSceneToBox): kirpilma yok, kayma yok.
 
   // ---- Ipucu ------------------------------------------------------------
   const hoveredRow = hover ? scene.rows.find((r) => r.key === hover.rowKey) ?? null : null;
@@ -354,7 +345,7 @@ export function FaultPoleStrip({
 
   return (
     <div className="fx-strip-wrap">
-      <div className="fx-strip-stage" style={{ minHeight: pxCap }}>
+      <div className="fx-strip-stage">
         <svg
           ref={svgRef}
           className={`fx-strip${yakinlasti ? " is-zoomed" : ""}`}
@@ -474,6 +465,7 @@ export function FaultPoleStrip({
               }}
               hover={hover}
               onHover={setHover}
+              onOpenDevice={onOpenDevice}
             />
           ))}
 

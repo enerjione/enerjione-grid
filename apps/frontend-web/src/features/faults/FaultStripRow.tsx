@@ -52,6 +52,8 @@ type Props = {
   };
   hover: RowHover;
   onHover: (h: RowHover) => void;
+  /** Cihaz isaretine tiklaninca o cihazin sayfasini ac. */
+  onOpenDevice?: (code: string) => void;
 };
 
 export function poleLabel(p: StripPole | { seq: number; name?: string | null }): string {
@@ -76,7 +78,8 @@ function DeviceMark({
   alarmSources,
   dim,
   onEnter,
-  onLeave
+  onLeave,
+  onOpen
 }: {
   d: StripDevice;
   base: { x: number; y: number };
@@ -85,6 +88,8 @@ function DeviceMark({
   dim: boolean;
   onEnter: () => void;
   onLeave: () => void;
+  /** Cihaz sayfasina git. Verilmezse isaret tiklanabilir olmaz. */
+  onOpen?: () => void;
 }) {
   const color = tone === "red" ? RED : tone === "green" ? GREEN : "#64748b";
   const ustY = base.y + PHASE_LINES[0].dy;
@@ -92,11 +97,19 @@ function DeviceMark({
   return (
     <g
       opacity={dim ? 0.45 : 1}
-      className="fx-strip-dev"
+      className={`fx-strip-dev${onOpen ? " is-link" : ""}`}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
       onFocus={onEnter}
       onBlur={onLeave}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (onOpen && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      role={onOpen ? "button" : undefined}
       tabIndex={0}
       data-code={d.code}
     >
@@ -150,6 +163,26 @@ function DeviceMark({
           </g>
         );
       })}
+
+      {/* CIHAZ ADI — kelepcelerin hemen altinda.
+          Ad yalnizca ipucunda yaziyordu; cizime bakan biri hangi cihazin
+          nerede oldugunu ancak tek tek uzerine gelerek ogrenebiliyordu. Ayni
+          aralikta iki cihaz varsa hangisinin hangisi oldugu da buradan
+          okunur. */}
+      <text
+        x={base.x}
+        y={altY + 13}
+        textAnchor="middle"
+        fontSize={8}
+        fontWeight={700}
+        fill={color}
+        stroke="#fcfdff"
+        strokeWidth={2.6}
+        strokeLinejoin="round"
+        paintOrder="stroke"
+      >
+        {d.label}
+      </text>
     </g>
   );
 }
@@ -162,7 +195,8 @@ export function FaultStripRow({
   suspectWholeLine,
   labels,
   hover,
-  onHover
+  onHover,
+  onOpenDevice
 }: Props) {
   const { geo, key: rowKey } = row;
   const { seqs, poles: poleList, width, wire, devices, span, xOf, pointAt } = geo;
@@ -196,38 +230,28 @@ export function FaultStripRow({
   return (
     <g transform={`translate(${row.x0}, ${row.y0})`}>
       {/* ---- SATIR BASLIGI ----
-           Baslik/alt baslik/rozet TEK bir <text> icinde tspan'lerle diziliyor:
-           SVG'de metin genisligi olculemedigi icin ayri elemanlari konumlamak
-           "karakter sayisi x tahmini genislik" gibi kirilgan bir hesap
-           gerektiriyordu; uzun hat adlarinda rozet basligin uzerine biniyor. */}
-      {/* Beyaz hale: satirlar arasi bag cizgisi basligin altindan gecebiliyor;
-          halesiz metin kesikli cizginin uzerinde okunmuyordu. */}
+           YALNIZCA AD. Once "ad + hangi direkten bransman + durum rozeti"
+           yan yana yaziliyordu; uc bilgi birlesince baslik satiri cizimin
+           kendisinden daha genis oluyor ve goz once metni okuyordu. Ayrinti
+           imlec ustune gelince cikar.
+
+           Beyaz hale: satirlar arasi bag cizgisi basligin altindan gecebilir,
+           halesiz metin kesikli cizginin uzerinde okunmuyordu. */}
       <text
         x={2}
         y={ROW_TITLE_Y}
         fontSize={11}
+        fontWeight={800}
+        fill={INK}
         stroke="#fcfdff"
         strokeWidth={3.2}
         strokeLinejoin="round"
         paintOrder="stroke"
+        className={subtitle || badge ? "fx-strip-rowtitle" : undefined}
       >
-        <tspan fontWeight={800} fill={INK}>
-          {row.title}
-        </tspan>
-        {subtitle ? (
-          <tspan dx={7} fontSize={9.5} fontWeight={600} fill={GREY}>
-            {subtitle}
-          </tspan>
-        ) : null}
-        {badge ? (
-          <tspan
-            dx={9}
-            fontSize={9.5}
-            fontWeight={800}
-            fill={row.confirmed ? "#b91c1c" : "#b45309"}
-          >
-            {`• ${badge}`}
-          </tspan>
+        {row.title}
+        {subtitle || badge ? (
+          <title>{[row.title, subtitle, badge].filter(Boolean).join(" — ")}</title>
         ) : null}
       </text>
 
@@ -340,6 +364,7 @@ export function FaultStripRow({
           dim={hover?.kind === "device" && hover.rowKey === rowKey && hover.key !== d.code}
           onEnter={() => onHover({ kind: "device", rowKey, key: d.code })}
           onLeave={() => onHover(null)}
+          onOpen={onOpenDevice ? () => onOpenDevice(d.code) : undefined}
         />
       ))}
 

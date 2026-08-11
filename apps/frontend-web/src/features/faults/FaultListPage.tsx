@@ -51,6 +51,8 @@ type Props = {
   faults: FaultEvent[];
   /** Arizayi kendi SEKMESINDE ac. Detay artik modal degil sayfa. */
   onOpenFault: (faultId: number) => void;
+  /** Cizimdeki cihaza tiklaninca cihaz sekmesini ac. */
+  onOpenDevice?: (deviceId: number) => void;
   /** Backend'den gelen ozet istatistikler (avg_resolution_seconds vb).
    * null ise henuz yuklenmedi/erisilmedi — chip'te "—" gosterilir. */
   stats?: FaultStats | null;
@@ -106,6 +108,7 @@ function fmtDurationSeconds(totalSec: number): string {
 export function FaultListPage({
   faults,
   onOpenFault,
+  onOpenDevice,
   stats: backendStats,
   users,
   currentUsername,
@@ -279,6 +282,28 @@ export function FaultListPage({
     [shownFault, faults]
   );
 
+  /** Sebep secenekleri — kartta secim listesi olarak gosterilir. */
+  const causeOptions = useMemo(() => {
+    if (!causeCatalog) return [];
+    const tr = i18n.language?.startsWith("tr");
+    return causeCatalog.causes.map((c) => ({
+      code: c.code,
+      label: tr ? c.label_tr : c.label_en,
+      group: c.group
+    }));
+  }, [causeCatalog, i18n.language]);
+
+  /** Cizimdeki cihaz KODUNDAN cihaz sayfasina gecis. Serit yalnizca kodu
+   *  biliyor; sekme id ile aciliyor. */
+  const openDeviceByCode = useMemo(() => {
+    if (!onOpenDevice) return undefined;
+    const byCode = new Map((devices ?? []).map((d) => [d.code, d.id]));
+    return (code: string) => {
+      const id = byCode.get(code);
+      if (id != null) onOpenDevice(id);
+    };
+  }, [devices, onOpenDevice]);
+
   /** Aktif arizalar arasinda ileri/geri gezinme. */
   const shownIndex = shownFault ? activeFaults.findIndex((f) => f.id === shownFault.id) : -1;
   const gecis = (adim: number) => {
@@ -442,6 +467,11 @@ export function FaultListPage({
               canAssign={canAssign}
               cause={shownCause}
               history={shownHistory}
+              causeOptions={causeOptions}
+              onSaveCause={(code) =>
+                onUpdateCause(shownFault.id, { cause_code: code })
+              }
+              onOpenDevice={openDeviceByCode}
               onOpenDetail={() => onOpenFault(shownFault.id)}
               onAssignClick={() => onOpenFault(shownFault.id)}
             />

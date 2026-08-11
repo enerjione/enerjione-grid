@@ -207,6 +207,28 @@ type Input = {
   wholeLineHot?: boolean;
 };
 
+/** Bir direk araligina dusen EN FAZLA cihaz sayisi (aralik genisligi icin). */
+function enKalabalikAralik(
+  poleSeqs: number[],
+  segments: StripSegment[] | undefined
+): number {
+  if (!segments || segments.length === 0) return 1;
+  const sayac = new Map<string, number>();
+  const gecerli = new Set(poleSeqs);
+  for (const seg of segments) {
+    if (!(seg.device_code ?? "").trim()) continue;
+    const a = seg.from_pole_seq;
+    const b = seg.to_pole_seq;
+    if (a == null || b == null) continue;
+    if (!gecerli.has(a) || !gecerli.has(b)) continue;
+    const anahtar = `${Math.min(a, b)}-${Math.max(a, b)}`;
+    sayac.set(anahtar, (sayac.get(anahtar) ?? 0) + 1);
+  }
+  let enCok = 1;
+  for (const n of sayac.values()) enCok = Math.max(enCok, n);
+  return enCok;
+}
+
 export function buildStripGeometry({
   poleSeqs,
   poles,
@@ -228,8 +250,18 @@ export function buildStripGeometry({
           return a === b ? [a, a + 1] : [Math.min(a, b), Math.max(a, b)];
         })();
 
+  // ARALIK GENISLIGI, EN KALABALIK ARALIGA GORE.
+  //
+  // Bir direk araliginda iki cihaz varsa 132 birimlik standart aralikta ikisi
+  // birbirine yapisik cizilir ve aralarindaki ariza bolgesi (cizimin asil
+  // isi) okunamayacak kadar incelir. Aralik, en kalabalik aralikta cihaz
+  // basina ~%38 genisler; olcek TUM aralikilarda ayni kalir ki hat duzenli
+  // bir tarak gibi okunsun.
+  const enKalabalik = enKalabalikAralik(poleSeqs, segments);
+  const spanW = SPAN_W * (1 + 0.38 * Math.max(0, enKalabalik - 1));
+
   const count = seqs.length;
-  const width = Math.max(360, PAD_X * 2 + (count - 1) * SPAN_W);
+  const width = Math.max(360, PAD_X * 2 + (count - 1) * spanW);
   const step = count > 1 ? (width - PAD_X * 2) / (count - 1) : 0;
   const xOf = (idx: number) => PAD_X + idx * step;
   const idxOf = (seq: number) => seqs.indexOf(seq);
@@ -317,6 +349,56 @@ export function buildStripGeometry({
       tone,
       fromSeq: seqs[iA],
       toSeq: seqs[iB]
+    });
+  }
+  devices.sort((x, y) => x.pos - y.pos);
+
+  // AYNI ARALIKTA BIRDEN FAZLA CIHAZ
+  // --------------------------------
+  // Iki cihaz ayni direk araligindaysa ve konumlari verilmemisse (ikisi de
+  // varsayilan 0.5) TAM UST USTE cizilirlerdi. Sonuc yalnizca gorsel degildi:
+  //
+  //   * Ekranda tek bir cihaz gorunuyor, digeri altinda kayboluyordu.
+  //   * `span` hesabi coküyordu — "gordum" ile "gormedim" AYNI noktada oldugu
+  //     icin `end > red.pos` saglanmiyor, kod kaba direk araligina duşuyor ve
+  //     ARALIGIN TAMAMINI kirmiziya boyuyordu. Oysa ariza tam olarak o iki
+  //     cihazin arasindaydi; cizim 34 metrelik bir kesimi tum aralik olarak
+  //     gosteriyordu.
+  //
+  // Cakisan grup ESIT araliklarla dagitilir. Konumlari birbirinden yeterince
+  // uzak olanlara DOKUNULMAZ: `device_position_t` sahada olculmus gercek bir
+  // konum olabilir, onu "duzeltmek" bilgiyi bozmak olurdu.
+  //
+  // KAC CIHAZ OLURSA OLSUN: grup `n` elemanli dagitilir (2 varsayimi YOK).
+  //
+  // SIRA — EN AZ MUDAHALE. Ayni aralikta birden fazla segment varsa veride
+  // hangisinin once geldigini soyleyen bir bilgi YOKTUR. Elimizdeki tek
+  // fiziksel kisit su: arizayi GOREN cihaz, GORMEYENden once gelir (ariza
+  // ikisinin arasindadir). Ters duruyorlarsa yalnizca O IKISI yer degistirir.
+  //
+  // Durumu bilinmeyen (idle) cihazlar KENDI sirasinda kalir. Once tonlara
+  // gore tam siralama yapiliyordu (kirmizi / idle / yesil); uc ve daha fazla
+  // cihazda bu, kirmizinin YUKARISINDA duran saglam bir cihazi ariza
+  // bolgesinin ICINE tasiyordu — bilmedigimiz bir seyi iddia etmek olurdu.
+  const EN_AZ_ARA = 0.16;
+  const araliktakiler = new Map<number, StripDevice[]>();
+  for (const d of devices) {
+    const s = Math.floor(d.pos);
+    const arr = araliktakiler.get(s);
+    if (arr) arr.push(d);
+    else araliktakiler.set(s, [d]);
+  }
+  for (const [s, grup] of araliktakiler) {
+    if (grup.length < 2) continue;
+    const cakisma = grup.some((d, i) => i > 0 && d.pos - grup[i - 1].pos < EN_AZ_ARA);
+    if (!cakisma) continue;
+    const iRed = grup.findIndex((d) => d.tone === "red");
+    const iGreen = grup.findIndex((d) => d.tone === "green");
+    if (iRed !== -1 && iGreen !== -1 && iGreen < iRed) {
+      [grup[iRed], grup[iGreen]] = [grup[iGreen], grup[iRed]];
+    }
+    grup.forEach((d, i) => {
+      d.pos = s + (i + 1) / (grup.length + 1);
     });
   }
   devices.sort((x, y) => x.pos - y.pos);

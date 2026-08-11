@@ -16,7 +16,7 @@ from app.core import service_role
 from app.core.service_role import leader
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
-from app.models import alarm, alarm_rule, api_key as api_key_model, backup as backup_model, device, fault as fault_model, gateway, gateway_ingest_batch, notification as notification_model, notification_settings as notification_settings_model, outbound_target, outbox_event, processed_message, project_settings as project_settings_model, responsibility_area as responsibility_area_model, signal_catalog, system_event, telemetry as telemetry_model, user, user_notification_preference as user_notif_pref_model  # noqa: F401
+from app.models import alarm, alarm_rule, api_key as api_key_model, backup as backup_model, device, device_model_settings as device_model_settings_model, fault as fault_model, gateway, gateway_ingest_batch, notification as notification_model, notification_settings as notification_settings_model, outbound_target, outbox_event, processed_message, project_settings as project_settings_model, responsibility_area as responsibility_area_model, signal_catalog, system_event, telemetry as telemetry_model, user, user_notification_preference as user_notif_pref_model  # noqa: F401
 from app.services.iec104.bootstrap import deploy_all_active_targets, undeploy_all as iec104_undeploy_all
 from app.services.signal_catalog_seed import seed_default_signals
 from app.services import alarm_reconciliation, backup_scheduler, gateway_staleness_watchdog, gateway_update_notifier, outbox_flush_worker, telemetry_consumer, telemetry_retention

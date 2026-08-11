@@ -1523,6 +1523,16 @@ body {
   place-items: center;
   font-size: 12px;
   font-weight: 700;
+  /* Fotograf yuvarlagin disina tasmasin. */
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .profile-dropdown {
@@ -23208,11 +23218,19 @@ th.event-col-category {
 .profile-page {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   flex: 1;
   min-height: 0;
   /* Kaydirma sayfanin kendisinde: kartlar kisa, ust uste binmesinler. */
   overflow-y: auto;
+  /* Genislik SINIRI: sinir yokken 1900px'lik bir ekranda iki sutun ~940px
+     oluyor ve "Ad Soyad" alani 900px genisliginde bir kutu olarak
+     ciziliyordu. Form alanlari icerdikleri metne gore olculur; bu genislik
+     hem cirkin hem okumasi zor. Ortalanmis 1180px form icin fazlasiyla
+     yeterli. */
+  max-width: 1180px;
+  width: 100%;
+  margin-inline: auto;
 }
 
 /* Kimlik + sifre yan yana; dar ekranda alt alta. Bildirim karti tam
@@ -23220,7 +23238,7 @@ th.event-col-category {
 .profile-page-columns {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 12px;
+  gap: 14px;
   align-items: start;
 }
 
@@ -23878,15 +23896,20 @@ th.event-col-category {
    KIRPIYORDU: dorduncu kol yariya kadar gorunup kesiliyordu. `min-content`
    ile kart kisalabilecegi son nokta kendi icerigidir; tasan durumda sayfa
    kayar (`.faults-page { overflow-y: auto }`). */
+/* Kart EKRANA SIGAR — sayfa kaymaz.
+   Bir ara `min-height: min-content` idi: cok satirli sahnede kart icerigi
+   kadar uzuyor ve sayfayi kaydiriyordu. Artik sahne kutusuna olcekleniyor
+   (bkz. frameSceneToBox), dolayisiyla kart kisalabilir; icerik kirpilmaz,
+   yalnizca cizim kucultulur ve kullanici yakinlastirir. */
 .fx-tabs-wrap > .fx-card {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  min-height: min-content;
+  min-height: 0;
 }
 .fx-tabs-wrap > .fx-card > .fx-body {
   flex: 1 1 auto;
-  min-height: min-content;
+  min-height: 0;
 }
 
 /* SOL RENK SERIDI YOK: kartin durumu basliktaki buyuk rozetten (ACIK /
@@ -24366,6 +24389,11 @@ th.event-col-category {
 .fx-strip-dev:focus-visible rect:nth-of-type(2) {
   stroke-dasharray: 2 2;
 }
+/* Cihaz isareti cihaz sayfasina gider — imlec bunu soylesin. */
+.fx-strip-dev.is-link { cursor: pointer; }
+.fx-strip-dev.is-link:hover { opacity: 0.75; }
+/* Kol basligi: ayrinti ipucunda (SVG <title>). */
+.fx-strip-rowtitle { cursor: help; }
 .fx-strip-dim text { font-variant-numeric: tabular-nums; }
 
 /* --- cihaz tooltip'i --- */
@@ -24469,7 +24497,11 @@ th.event-col-category {
   border-left: 1px solid #eef2f7;
   background: #fff;
   min-width: 0;
-  max-height: 620px;
+  /* Sabit 620px tavan KALKTI: panelin altinda bos yer varken kaydirma cubugu
+     cikiyordu. Artik satirin tamamini kullanir; kaydirma yalnizca gercekten
+     sigmadiginda (kucuk ekran) devreye girer — aksi halde `.fx-card`
+     icerigi kirpardi. */
+  min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -24618,6 +24650,55 @@ th.event-col-category {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* --- SEBEP: kartta duzenlenebilir ---
+   Cihaz verisinden turetilen oneri gorunuyor ama degistirilemiyordu; sahada
+   gercek sebebi goren kisi onu girmek icin detay ekranini acmak zorundaydi.
+   Sebep analiz katmanina giren TEK insan etiketi. */
+.fx-cause {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px dashed #f1f5f9;
+}
+.fx-cause-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+.fx-cause-select {
+  flex: 1 1 120px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fx-cause-select:hover { border-color: #cbd5e1; }
+.fx-cause-select:disabled { opacity: 0.6; cursor: progress; }
+.fx-cause-plain { font-size: 12.5px; font-weight: 700; color: #0f172a; }
+.fx-cause-suggest {
+  width: 100%;
+  padding: 4px 9px;
+  border: 1px dashed #bfdbfe;
+  border-radius: 7px;
+  background: #f8fbff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.fx-cause-suggest:hover:not(:disabled) { background: #eff6ff; }
+.fx-cause-suggest:disabled { opacity: 0.5; cursor: default; }
+
 .fx-spec-val--red   { color: #b91c1c; }
 .fx-spec-val--green { color: #15803d; }
 
@@ -36937,6 +37018,51 @@ button.device-sidebar-parent:hover {
   color: #b91c1c;
 }
 
+/* `.rad-field` icinde YALNIZCA textarea stillenmisti; input ve select
+   tarayici varsayilaniyla ciziliyordu (sert kenarlik, dolgusuz, tam en) —
+   bu yuzden profil sayfasi ham HTML gibi gorunuyordu. Ayni gorsel dil
+   textarea'dan aynen tasindi. */
+.rad-field input,
+.rad-field select {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--rad-ink);
+  background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.rad-field select {
+  appearance: none;
+  /* Yerel ok yerine tek renkli chevron — koyu/acik temada tutarli kalir. */
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2364748b' stroke-width='1.6'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+  padding-right: 30px;
+  cursor: pointer;
+}
+
+.rad-field input:focus,
+.rad-field select:focus {
+  outline: none;
+  border-color: var(--rad-accent);
+  box-shadow: 0 0 0 3px rgba(233, 120, 0, 0.16);
+}
+
+.rad-field input:disabled,
+.rad-field select:disabled {
+  background: #f8fafc;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.rad-field input::placeholder { color: #94a3b8; }
+
 .rad-field textarea {
   padding: 9px 11px;
   border: 1px solid #cbd5e1;
@@ -41220,6 +41346,51 @@ button.device-sidebar-parent:hover {
 
 /* KIMLIK ALANLARI yan yana: tek sutunda alt alta dururken kart gereksiz
    uzuyor ve saginda bos alan kaliyordu. */
-.device-info-card { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; align-content: start; }
-.device-info-card > label { min-width: 0; }
-.device-info-card input { min-height: 0; padding: 6px 10px; }
+/* YALNIZCA Cihaz Ozellikleri panelinde iki sutun. Kapsamsiz yazilinca
+   ayni sinifi kullanan "Yeni Cihaz Ekle" modali da iki sutuna dusuyordu ve
+   oranin duzeni bozuluyordu — modal tek sutun kalmali. */
+.device-props-panel--system .device-info-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  align-content: start;
+}
+.device-props-panel--system .device-info-card > label { min-width: 0; }
+.device-props-panel--system .device-info-card input { min-height: 0; padding: 6px 10px; }
+
+/* CIHAZ PROFILLERI — model bazli ayar listesi. Ustteki proje-geneli batarya
+   kutusuyla ayni gorsel dili kullanir; buradaki her satir bir ISTISNADIR. */
+.device-profiles-box { display: block; }
+.device-profiles-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+}
+.device-profiles-list { display: flex; flex-direction: column; gap: 10px; }
+.device-profile-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto;
+  grid-template-areas: "name fields" "resolved resolved";
+  gap: 6px 14px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+.device-profile-name { grid-area: name; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.device-profile-name strong { font-size: 13px; color: #0f172a; }
+.device-profile-name small { font-size: 11px; color: #94a3b8; }
+.device-profile-fields { grid-area: fields; display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.device-profile-save { align-self: flex-end; white-space: nowrap; }
+.device-profile-resolved { grid-area: resolved; font-size: 11px; color: #94a3b8; }
+.device-profiles-empty { margin: 0; font-size: 12px; color: #94a3b8; }
+
+@media (max-width: 720px) {
+  .device-profile-row {
+    grid-template-columns: 1fr;
+    grid-template-areas: "name" "fields" "resolved";
+    align-items: stretch;
+  }
+}

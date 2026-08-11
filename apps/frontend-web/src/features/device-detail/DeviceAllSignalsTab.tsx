@@ -7,8 +7,11 @@
  * Tum sinyaller degil, set'in genel durumu tek bakista.
  */
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+
+import { useDeviceModelSettings } from "../../components/DeviceModelSettingsProvider";
+import { voltageToPercent } from "../../shared/battery";
 
 import { signalTrust } from "../../shared/signalQuality";
 import { sourceLabel, sourceTone } from "../signals/signalCatalogConstants";
@@ -74,12 +77,6 @@ function fmtNum(v: number | undefined, unit: string | null | undefined): string 
   return unit ? `${txt} ${unit}` : txt;
 }
 
-// Satellite pil: battery_voltage_satellite voltajindan basit Li-ion oran.
-function voltToPct(v: number | undefined): number | undefined {
-  if (v == null || !Number.isFinite(v)) return undefined;
-  return Math.max(0, Math.min(100, Math.round(((v - 3.2) / (4.2 - 3.2)) * 100)));
-}
-
 function batteryClass(pct: number): string {
   if (pct <= 20) return "critical";
   if (pct <= 50) return "low";
@@ -94,6 +91,13 @@ export function DeviceAllSignalsTab({
   sources
 }: Props) {
   const { t } = useTranslation();
+  // Batarya esigi cihaz TURUNDEN gelir; burada sabit 3.2/4.2 vardi ve
+  // backend'in 3.40/3.71'i ile uyusmuyordu.
+  const { thresholdsFor } = useDeviceModelSettings();
+  const voltToPct = useCallback(
+    (v: number | undefined) => voltageToPercent(v, thresholdsFor(device.model)),
+    [thresholdsFor, device.model]
+  );
 
   const kartlar = useMemo(() => sources.map(sourceCard), [sources]);
 

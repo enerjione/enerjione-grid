@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sourceLabel as ortakKaynakEtiketi } from "../signals/signalCatalogConstants";
 import { useTranslation } from "react-i18next";
 import { LayersControl, MapContainer, Marker, Polyline, Tooltip, useMap } from "react-leaflet";
@@ -11,7 +11,8 @@ import type { AlarmEvent, DeviceRow, SignalLiveRow } from "../../shared/types";
 import { energyBadgeHtml, rolesOf, topologyMeta } from "../grid/poleTypeMeta";
 import type { GridSnapshot } from "../../shared/api";
 import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
-import { useProjectSettings } from "../../components/ProjectSettingsProvider";
+import { useDeviceModelSettings } from "../../components/DeviceModelSettingsProvider";
+import { voltageToPercent as voltsToPercent } from "../../shared/battery";
 import { locateDevice } from "../../shared/geoLookup";
 import { planDeviceFocus } from "./deviceFocus";
 import type { FocusPoint } from "./deviceFocus";
@@ -260,21 +261,6 @@ function markerIcon(
   return icon;
 }
 
-// Lithium pil voltaj-yüzde haritası — Proje Ayarları'ndan override edilebilir.
-const DEFAULT_BATTERY_VOLTAGE_FULL = 3.71;
-const DEFAULT_BATTERY_VOLTAGE_LOW = 3.4;
-
-function makeVoltageToPercent(low: number, full: number) {
-  const span = full - low;
-  return (v: number | null | undefined): number | null => {
-    if (v === null || v === undefined || !Number.isFinite(v)) return null;
-    if (v <= low) return 0;
-    if (v >= full) return 100;
-    if (span <= 0) return null;
-    return Math.round(((v - low) / span) * 100);
-  };
-}
-
 function batteryClass(percent: number | null): string {
   if (percent === null) return "device-battery--unknown";
   if (percent <= 20) return "device-battery--critical";
@@ -341,10 +327,12 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       setLineInfo(null);
     }
   }, [selectedDevice?.id]);
-  const { settings } = useProjectSettings();
-  const battLow = typeof settings.battery_voltage_low === "number" ? settings.battery_voltage_low : DEFAULT_BATTERY_VOLTAGE_LOW;
-  const battFull = typeof settings.battery_voltage_full === "number" ? settings.battery_voltage_full : DEFAULT_BATTERY_VOLTAGE_FULL;
-  const voltageToPercent = useMemo(() => makeVoltageToPercent(battLow, battFull), [battLow, battFull]);
+  // Esikler cihaz TURU seviyesinde cozulur (bkz. Cihaz profilleri).
+  const { thresholdsFor } = useDeviceModelSettings();
+  const voltageToPercent = useCallback(
+    (v: number | null) => voltsToPercent(v, thresholdsFor(selectedDevice?.model)) ?? null,
+    [thresholdsFor, selectedDevice?.model]
+  );
 
   // Anasayfa ilk acilista, harita Turkiye merkezinde 5x zoom yerine tum
   /** Secili cihazin bagli oldugu hattin TUM direkleri.
@@ -399,11 +387,16 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       sat01: null,
       sat02: null
     };
-    const targets: { key: SourceKey; signal: string }[] = [
-      { key: "master", signal: "master.battery_voltage_satellite" },
-      { key: "sat01", signal: "sat01.battery_voltage_satellite" },
-      { key: "sat02", signal: "sat02.battery_voltage_satellite" }
-    ];
+    // Hangi unitelerin bataryasi oldugu MODELE baglidir: SN 2.0'da
+    // master/sat01/sat02, Pole Master Kit setinde sat01/sat02/sat03.
+    const targets: { key: SourceKey; signal: string }[] = (
+      selectedDevice.model === "horstmann_pmk_set"
+        ? (["sat01", "sat02", "sat03"] as const)
+        : (["master", "sat01", "sat02"] as const)
+    ).map((key) => ({
+      key: key as SourceKey,
+      signal: `${key}.battery_voltage_satellite`
+    }));
     for (const t of targets) {
       const row = liveValues.find(
         (r) => r.device_id === selectedDevice.id && r.signal_key === t.signal

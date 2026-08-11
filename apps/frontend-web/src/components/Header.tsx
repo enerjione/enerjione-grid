@@ -21,6 +21,7 @@ type DeviceTopology = Map<number, { regionId: number; regionName: string; lineId
 
 type Props = {
   fullName?: string;
+  avatarUrl?: string | null;
   role?: UserRole;
   /** Bildirim merkezi icin oturum token'i; varsa zil header'da gozukur. */
   accessToken?: string;
@@ -63,6 +64,7 @@ const NAV_ITEMS: { page: Exclude<NavPage, "engineering">; key: string; Icon: Luc
 
 export function Header({
   fullName,
+  avatarUrl,
   role,
   accessToken,
   onLogout,
@@ -255,7 +257,12 @@ export function Header({
                 <strong>{fullName ?? t("header.user")}</strong>
                 <small>{roleLabel}</small>
               </div>
-              <div className="profile-avatar">{initials}</div>
+              {/* Avatar HIC okunmuyordu: header her zaman bas harfleri
+                  ciziyordu, bu yuzden profil fotografi kaydedilse bile
+                  burada gorunmuyordu. */}
+              <div className="profile-avatar">
+                {avatarUrl ? <img src={avatarUrl} alt="" /> : initials}
+              </div>
             </button>
 
             {menuOpen ? (
