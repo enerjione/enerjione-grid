@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+
+import { autoGrowHeight, autoGrowScrolls } from "../../shared/autoGrow";
 import { asyncConfirm } from "../../components/ConfirmDialog";
 import { useTranslation } from "react-i18next";
 import i18n from "../../shared/i18n";
@@ -469,6 +471,24 @@ export function DeviceManagementPanel({
   // gostermesin.
   const [editingGatewayCode, setEditingGatewayCode] = useState<string | null>(null);
   const [devicePropsTab, setDevicePropsTab] = useState<DevicePropsTab>("system");
+
+  /**
+   * Aciklama alani icerige gore buyur.
+   *
+   * `description` DISINDA `devicePropsTab` ve secili cihaz da bagimlilik:
+   * gizli bir sekmedeki alanin `scrollHeight`i 0'dir, sekme acilinca
+   * yeniden olculmeli. Cihaz degisince de metin degistigi icin yeniden.
+   */
+  const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    const el = descriptionRef.current;
+    if (!el) return;
+    // Once "auto": aksi halde `scrollHeight` mevcut yuksekligi asla
+    // kucultmez ve alan metin silinince geri toplanmaz.
+    el.style.height = "auto";
+    el.style.height = `${autoGrowHeight(el.scrollHeight)}px`;
+    el.style.overflowY = autoGrowScrolls(el.scrollHeight) ? "auto" : "hidden";
+  }, [description, devicePropsTab, selectedDeviceCode]);
 
   const lastDeviceRef = useRef<DeviceRow | null>(null);
 
@@ -1636,7 +1656,14 @@ export function DeviceManagementPanel({
                     </div>
                     <label className="device-description-field">
                       {t("engineering.devicesPanel.form.description")}
+                      {/* ICERIGE GORE BUYUR. Eskiden `rows={2}` yaziyordu ama
+                          CSS `min-height: 220px` + `flex: 1` dayatiyordu:
+                          aciklama BOSKEN bile 220 piksellik bir kutu duruyor,
+                          panel tasip fazladan bir kaydirma cubugu
+                          uretiyordu. Artik yukseklik metnin kendisinden
+                          geliyor (bkz. `useAutoGrow`). */}
                       <textarea
+                        ref={descriptionRef}
                         value={description}
                         onChange={(event) => setDescription(event.target.value)}
                         rows={2}

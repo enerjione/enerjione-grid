@@ -3460,16 +3460,25 @@ body {
   grid-column: 1 / -1;
 }
 
+/* ACIKLAMA ALANI ARTIK ICERIGE GORE BUYUR.
+   Eskiden `flex: 1` + `min-height: 220px` ile ekranin dortte birini
+   kapliyordu — aciklama BOSKEN bile. Panel tasiyor ve icerideki alanin
+   kendi cubuguyla birlikte FAZLADAN bir kaydirma cubugu cikiyordu;
+   kullanici hangi cubugun neyi kaydirdigini bilemiyordu.
+   Yukseklik JS'ten geliyor (bkz. shared/autoGrow.ts); CSS yalnizca
+   dayatmayi kaldirir. */
 .device-system-layout > .device-description-field {
-  flex: 1;
-  min-height: 0;
+  flex: none;
   display: flex;
   flex-direction: column;
 }
 
 .device-system-layout > .device-description-field textarea {
-  flex: 1;
-  min-height: 220px;
+  flex: none;
+  min-height: 0;
+  /* Yukseklik olculerek yazilir; elle tutamacla cekistirmek olcumu
+     bozardi. */
+  resize: none;
 }
 
 .device-detail-form textarea {
@@ -41352,11 +41361,65 @@ button.device-sidebar-parent:hover {
 .device-props-panel--system .device-info-card {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px 12px;
+  gap: 12px 14px;
   align-content: start;
+  padding: 14px 16px;
 }
-.device-props-panel--system .device-info-card > label { min-width: 0; }
-.device-props-panel--system .device-info-card input { min-height: 0; padding: 6px 10px; }
+
+/* KART ICERIGE GORE BOYUTLANSIN.
+   `align-items: stretch` (izgara varsayilani) karti yanindaki uzun gorsel
+   kartinin boyuna cekiyordu; icerik ustte topluyor, altinda kocaman bos bir
+   cerceve kaliyordu. Ekran goruntusunde "kotu duruyor" denen sey buydu. */
+.device-props-panel--system .device-system-top-row {
+  align-items: start;
+}
+
+/* Gorsel karti da makul bir boya otursun; yoksa bu sefer o, kimlik
+   kartinin iki katina cikip satiri dengesiz birakiyor. */
+.device-props-panel--system .device-visual-card img {
+  max-height: 190px;
+}
+
+/* TEK KALAN ALAN TAM GENISLIK.
+   Bes alan iki sutuna girince sonuncusu ("Montaj Tarihi") yalniz kaliyor ve
+   yaninda bos bir hucre birakiyordu — hata gibi okunuyor. Sanal sette
+   (seri no + tur gizli) alan sayisi uce dustugu icin ayni sey orada da
+   oluyor. Kural ikisini birden cozuyor. */
+.device-props-panel--system .device-info-card > label:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.device-props-panel--system .device-info-card > label {
+  min-width: 0;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.device-props-panel--system .device-info-card input,
+.device-props-panel--system .device-info-card select {
+  min-height: 0;
+  padding: 8px 11px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #0f172a;
+}
+
+/* DEGISTIRILEMEYEN ALAN OYLE GORUNSUN.
+   Cihaz kodu salt okunur ama duzenlenebilir alanlarla ayni beyaz kutuda
+   duruyordu; kullanici tiklayip yazmayi deniyor. */
+.device-props-panel--system .device-info-card input:disabled,
+.device-props-panel--system .device-info-card input[readonly] {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #475569;
+  cursor: default;
+}
 
 /* CIHAZ PROFILLERI — model bazli ayar listesi. Ustteki proje-geneli batarya
    kutusuyla ayni gorsel dili kullanir; buradaki her satir bir ISTISNADIR. */

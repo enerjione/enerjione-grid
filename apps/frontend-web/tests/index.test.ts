@@ -39,6 +39,10 @@ import "./branchConnectors.test";
 // yanlislikla temiz sayip oradaki arizayi EKRANDAN GIZLIYORDU.
 import "./nearestDeviceRed.test";
 
+// Icerige gore buyuyen metin alani: bos aciklama ekranin dortte birini
+// kaplayip panelde FAZLADAN kaydirma cubugu uretiyordu.
+import "./autoGrow.test";
+
 // Aday hat kesimleri: ariza bolgesindeki bransman kollari cizime girsin.
 // Gezilmesi gereken bir kolun ekrandan dusmesi sessiz ve agir bir hatadir.
 import "./faultBranchRows.test";
