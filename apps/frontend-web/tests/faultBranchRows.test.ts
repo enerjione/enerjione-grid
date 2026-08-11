@@ -9,6 +9,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { buildStripGeometry } from "../src/features/faults/faultStripGeometry";
 import {
   buildBranchRows,
   type BranchScanFault,
@@ -49,8 +50,9 @@ const SEGMENTS: BranchScanSegment[] = [
   { line_id: 2, from_pole_seq: 1, to_pole_seq: 2, device_code: "SN2-A1" }
 ];
 
-/** Ana hatta 3-4 direkleri arasinda ariza. */
-const ANA_ARIZA: BranchScanFault = { line_id: 1, from_pole_seq: 3, to_pole_seq: 4 };
+/** Ana hatta 2-4 direkleri arasinda ariza: ICINDE kalan tek direk 3.
+ *  Sinirlar (2 ve 4) arizanin SAGLAM tarafinda kalir. */
+const ANA_ARIZA: BranchScanFault = { line_id: 1, from_pole_seq: 2, to_pole_seq: 4 };
 
 function calistir(
   openFaults: [number, BranchScanFault][] = [],
@@ -138,6 +140,95 @@ test("kendi kaydi OLAN kolun alt kollari yalnizca O ARALIKTA aday olur", () => {
     !rows.some((r) => r.name === "BR-A1"),
     "bolge disindaki alt kol aday sayilmis"
   );
+});
+
+/* ---------------------------------------------------------------------------
+ * ADAY KUMESI CIZIMDEN TURETILIR
+ *
+ * Bolge once dogrudan `from_pole_seq`..`to_pole_seq` araligiydi. Cizim (ve
+ * harita) ise bolgeyi CIHAZLARDAN turetir: son "gordum" diyenden ilk
+ * "gormedim" diyene, gormeyen yoksa hat ucuna kadar. Iki hesap ayrisinca
+ * cihazin YUKARI tarafindaki — haritada yemyesil duran — bir direge asili kol
+ * "kontrol edilmeli" diye isaretleniyor, ekip arizasiz bir kolu gezmeye
+ * gidiyordu.
+ * ------------------------------------------------------------------------- */
+
+/** Ana hatta 3-4 arasinda "gordum" diyen cihaz; "gormedim" diyen YOK. */
+const CIHAZLI_SEGMENTLER: BranchScanSegment[] = [
+  ...SEGMENTS,
+  { line_id: 1, from_pole_seq: 3, to_pole_seq: 4, device_code: "SN2-RED" }
+];
+const CIHAZLI_ARIZA: BranchScanFault = {
+  line_id: 1,
+  from_pole_seq: 3,
+  to_pole_seq: 4,
+  last_red_device_code: "SN2-RED"
+};
+
+function cihazliCalistir(kolDiregiId: number) {
+  return buildBranchRows({
+    lines: [
+      { id: 1, name: "ANA" },
+      { id: 9, name: "BR-X", branched_from_pole_id: kolDiregiId }
+    ],
+    poles: POLES,
+    segments: CIHAZLI_SEGMENTLER,
+    fault: CIHAZLI_ARIZA,
+    openFaultByLine: new Map()
+  });
+}
+
+test("cihazin YUKARI tarafindaki direge asili kol aday DEGILDIR", () => {
+  // Cihaz 3-4 arasinda; 3 nolu direk arizanin saglam tarafinda kalir ve
+  // cizimde GRI cizilir. Oradan cikan kol enerjilidir.
+  assert.equal(cihazliCalistir(103).rows.length, 0, "saglam taraftaki kol aday sayilmis");
+});
+
+test("cihazin ASAGI tarafindaki direge asili kol ADAYDIR", () => {
+  // "Gormedim" diyen cihaz yok: ariza cihazdan hat ucuna kadar herhangi bir
+  // yerde olabilir, aradaki her direk cizimde kirmizi.
+  for (const [poleId, seq] of [[104, 4], [105, 5]] as const) {
+    const { rows } = cihazliCalistir(poleId);
+    assert.equal(rows.length, 1, `seq ${seq} kolu adaylardan dusmus`);
+    assert.equal(rows[0].atSeq, seq);
+  }
+});
+
+test("aday kumesi cizimin KIRMIZI direkleriyle ayni", () => {
+  // Bu testin isi iki hesabin bir daha ayrismamasini saglamak: cizim
+  // `ceil(span.a)..floor(span.b)` araligini kirmizi boyar, aday taramasi da
+  // ayni araligi kullanmali.
+  const geo = buildStripGeometry({
+    poleSeqs: [1, 2, 3, 4, 5],
+    segments: CIHAZLI_SEGMENTLER.filter((s) => s.line_id === 1),
+    fromSeq: 3,
+    toSeq: 4,
+    lastRedDeviceCode: "SN2-RED"
+  });
+  assert.ok(geo.span);
+  const kirmizi = new Set<number>();
+  for (let i = Math.ceil(geo.span.a); i <= Math.floor(geo.span.b); i += 1) {
+    kirmizi.add(geo.seqs[i]);
+  }
+  for (const p of POLES.filter((x) => x.line_id === 1)) {
+    const aday = cihazliCalistir(p.id).rows.length > 0;
+    assert.equal(
+      aday,
+      kirmizi.has(p.sequence_no),
+      `direk ${p.sequence_no}: aday=${aday} ama cizimde kirmizi=${kirmizi.has(p.sequence_no)}`
+    );
+  }
+});
+
+test("hicbir cihaz gormediyse aday kol OLMAZ", () => {
+  const { rows } = buildBranchRows({
+    lines: LINES,
+    poles: POLES,
+    segments: SEGMENTS,
+    fault: { line_id: 1, from_pole_seq: null, to_pole_seq: null },
+    openFaultByLine: new Map()
+  });
+  assert.equal(rows.length, 0, "bolge yokken kol aday sayilmis");
 });
 
 test("cizime sigmayan kollar SESSIZCE dusmez — sayilir", () => {

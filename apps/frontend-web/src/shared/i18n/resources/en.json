@@ -919,7 +919,8 @@
       "avgResolution": "Average Resolution Time",
       "history": "Past Faults",
       "lastUpdate": "Last update",
-      "updatedHint": "The list refreshes automatically every 5 seconds."
+      "updatedHint": "The list refreshes automatically every 5 seconds.",
+      "staleWarning": "Data is not refreshing"
     },
     "tab": {
       "active": "Active Faults",

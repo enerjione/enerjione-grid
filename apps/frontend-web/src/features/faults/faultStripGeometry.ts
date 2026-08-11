@@ -429,6 +429,8 @@ export type FaultRow = FaultRowInput & {
   /** Satirin sahne icindeki sol-ust kosesi. */
   x0: number;
   y0: number;
+  /** Ana hatta gore hangi tarafta: +1 asagi, -1 yukari, 0 ana hat. */
+  side: -1 | 0 | 1;
   /** Ust satirdaki dallanma direginin sahne koordinati (kol satirlarinda). */
   link: { fromX: number; fromY: number; toX: number; toY: number } | null;
 };
@@ -471,16 +473,60 @@ export type StripBranchRow = {
   confirmed: boolean;
 };
 
+/** Ekrandaki cizim kutusu (piksel). */
+export type ScenePx = { w: number; h: number };
+
 /**
- * Satirlari ust uste yerlestirir ve her kolu asili oldugu direge baglar.
+ * SAHNEYI KUTUYA CERCEVELER — taban `viewBox`.
  *
- * Kol satiri, dallanma direginin TAM ALTINDAN baslar (`x0` buna gore kayar):
- * bag cizgisi dikey iner ve "bu kol su direkten ciktiyor" iliskisi cizimden
- * okunur — metin aciklamasina gerek kalmaz.
+ * Iki yanlisin ortasi:
+ *   * viewBox tam sahne olsaydi (`preserveAspectRatio="meet"` ile) cizim
+ *     kutuyu doldurmak icin BUYUTULURDU: uc direkli kisa bir hat ekrani
+ *     kaplayan devasa direkler olarak cizilir, iki ariza karti yan yana
+ *     karsilastirilamaz hale gelirdi.
+ *   * kutu icerige gore kisaltilsaydi kucuk sahnede cizim tepede minicik
+ *     kalir, altinda kocaman bos bir alan acilirdi.
+ *
+ * Cozum: OLCEK dogal olcegi (`PX_PER_UNIT`) ASMAZ. Sahne kutuya sigmiyorsa
+ * kucultulur; sigiyorsa cevresine bosluk eklenip ORTALANIR. Kutu her zaman
+ * dolu, olcek her zaman karsilastirilabilir.
+ */
+export function frameSceneToBox(
+  scene: { width: number; height: number },
+  box: ScenePx | null
+): { x: number; y: number; w: number; h: number } {
+  if (!box || box.w <= 0 || box.h <= 0) {
+    return { x: 0, y: 0, w: scene.width, h: scene.height };
+  }
+  const olcek = Math.min(box.w / scene.width, box.h / scene.height, PX_PER_UNIT);
+  const w = box.w / olcek;
+  const h = box.h / olcek;
+  return { x: (scene.width - w) / 2, y: (scene.height - h) / 2, w, h };
+}
+
+/**
+ * Satirlari yerlestirir ve her kolu asili oldugu direge baglar.
+ *
+ * Kol satiri, dallanma direginin TAM ALTINDAN (ya da USTUNDEN) baslar (`x0`
+ * buna gore kayar): bag cizgisi dikey iner/cikar ve "bu kol su direkten
+ * ciktiyor" iliskisi cizimden okunur — metin aciklamasina gerek kalmaz.
+ *
+ * IKI TARAFLI YERLESIM
+ * --------------------
+ * Tum kollar ana hattin ALTINA diziliyordu. Ayni direkten iki kol ciktiginda
+ * ikisi de ayni x'te, ust uste iki satirda kaliyor; ikinci kolun bagi
+ * birincinin cizimini bastan asagi kesip geciyordu. Artik ana hattin
+ * kardes kollari SIRAYLA alta ve uste dagilir; ic ice kollar ise baglandiklari
+ * kolun yonunu surdurur (yoksa bag ana hattin uzerinden atlardi).
  */
 export function buildFaultScene(inputs: FaultRowInput[]): FaultScene {
   const rows: FaultRow[] = [];
-  let y = 0;
+  // Ana hat 0'da; alt kollar asagi, ust kollar yukari birikir. Yerlestirme
+  // isaretli yapilir, sonunda tumu pozitife kaydirilir.
+  let altY = ROW_PITCH;
+  let ustY = -ROW_PITCH;
+  /** Ana hattan cikan kacinci kardes — tarafi bu belirler. */
+  let anaKardes = 0;
 
   for (const [index, input] of inputs.entries()) {
     const geo = buildStripGeometry({
@@ -495,29 +541,73 @@ export function buildFaultScene(inputs: FaultRowInput[]): FaultScene {
       wholeLineHot: input.kind === "branch" && !input.confirmed
     });
 
+    const parent = input.parentKey ? rows.find((r) => r.key === input.parentKey) : undefined;
+
+    let side: FaultRow["side"] = 0;
+    let y = 0;
+    if (input.kind === "branch") {
+      if (parent && parent.side !== 0) {
+        // Ic ice kol: bagli oldugu kolun yonunu SURDURUR.
+        side = parent.side;
+      } else {
+        // Ana hattin kardesleri: bir alta, bir uste.
+        anaKardes += 1;
+        side = anaKardes % 2 === 1 ? 1 : -1;
+      }
+      if (side === 1) {
+        y = altY;
+        altY += ROW_PITCH;
+      } else {
+        y = ustY;
+        ustY -= ROW_PITCH;
+      }
+    }
+
     let x0 = 0;
     let link: FaultRow["link"] = null;
-    const parent = input.parentKey ? rows.find((r) => r.key === input.parentKey) : undefined;
     if (parent && input.parentSeq != null) {
       const idx = parent.geo.seqs.indexOf(input.parentSeq);
       if (idx !== -1) {
         const anchorX = parent.x0 + parent.geo.xOf(idx);
-        // Kolun ILK diregi (yerel x = PAD_X) dallanma direginin altina gelsin.
+        // Kolun ILK diregi (yerel x = PAD_X) dallanma direginin hizasina gelsin.
         x0 = Math.max(0, anchorX - PAD_X);
-        link = {
-          fromX: anchorX,
-          fromY: parent.y0 + GROUND_Y,
-          toX: x0 + PAD_X,
-          toY: y + PEAK_Y
-        };
+        link =
+          side === 1
+            ? {
+                // Asagi inen kol: direk dibinden cikar, kolun ilk direginin
+                // TEPESINE girer.
+                fromX: anchorX,
+                fromY: parent.y0 + GROUND_Y,
+                toX: x0 + PAD_X,
+                toY: y + PEAK_Y
+              }
+            : {
+                // Yukari cikan kol: direk TEPESINDEN cikar, kolun ilk
+                // direginin DIBINE girer — iki cizim birbirine bakar.
+                fromX: anchorX,
+                fromY: parent.y0 + PEAK_Y,
+                toX: x0 + PAD_X,
+                toY: y + GROUND_Y
+              };
       }
     }
 
-    rows.push({ ...input, index, geo, x0, y0: y, link });
-    y += ROW_PITCH;
+    rows.push({ ...input, index, geo, x0, y0: y, side, link });
+  }
+
+  // Yukari cikan satirlar negatif y'de; tum sahneyi pozitife kaydir.
+  const enUst = rows.reduce((m, r) => Math.min(m, r.y0), 0);
+  if (enUst < 0) {
+    for (const r of rows) {
+      r.y0 -= enUst;
+      if (r.link) {
+        r.link.fromY -= enUst;
+        r.link.toY -= enUst;
+      }
+    }
   }
 
   const width = rows.reduce((en, r) => Math.max(en, r.x0 + r.geo.width), 360);
-  const height = rows.length > 0 ? rows[rows.length - 1].y0 + ROW_H : ROW_H;
+  const height = rows.reduce((en, r) => Math.max(en, r.y0 + ROW_H), ROW_H);
   return { rows, width, height };
 }

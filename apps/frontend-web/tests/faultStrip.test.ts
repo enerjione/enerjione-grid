@@ -11,11 +11,13 @@ import { test } from "node:test";
 
 import {
   PHASE_LINES,
+  PX_PER_UNIT,
   ROW_PITCH,
   SAG,
   WIRE_Y,
   buildFaultScene,
   buildStripGeometry,
+  frameSceneToBox,
   hotPathOf,
   sagAt
 } from "../src/features/faults/faultStripGeometry";
@@ -466,4 +468,117 @@ test("bagi cozulemeyen kol yine de cizilir (sessizce dusmez)", () => {
   ]);
   assert.equal(scene.rows.length, 2);
   assert.equal(scene.rows[1].link, null);
+});
+
+test("AYNI DIREKTEN iki kol: biri asagi, digeri YUKARI cizilir", () => {
+  // Ikisi de asagi cizildiginde ayni x'te ust uste iki satirda kaliyor ve
+  // ikinci kolun bagi birincinin cizimini bastan asagi kesip geciyordu.
+  const scene = buildFaultScene([
+    { key: "main", kind: "main", title: "ANA", poleSeqs: POLES, fromSeq: 2, toSeq: 5 },
+    {
+      key: "b1",
+      kind: "branch",
+      title: "BR-1",
+      poleSeqs: [1, 2],
+      parentKey: "main",
+      parentSeq: 3,
+      confirmed: false
+    },
+    {
+      key: "b2",
+      kind: "branch",
+      title: "BR-2",
+      poleSeqs: [1, 2],
+      parentKey: "main",
+      parentSeq: 3,
+      confirmed: false
+    }
+  ]);
+
+  const [ana, k1, k2] = scene.rows;
+  assert.equal(ana.side, 0);
+  assert.equal(k1.side, 1, "ilk kardes asagi");
+  assert.equal(k2.side, -1, "ikinci kardes yukari");
+  assert.ok(k1.y0 > ana.y0, "asagi kol ana hattin altinda olmali");
+  assert.ok(k2.y0 < ana.y0, "yukari kol ana hattin ustunde olmali");
+  // Hicbir satir negatif y'de kalmamali (viewBox 0'dan basliyor).
+  for (const r of scene.rows) assert.ok(r.y0 >= 0, `${r.key} sahne disinda`);
+  assert.ok(scene.height >= ana.y0 + ROW_PITCH, "sahne yuksekligi iki tarafi da kapsamali");
+});
+
+test("yukari cikan kolun bagi direk TEPESINDEN cikar", () => {
+  const scene = buildFaultScene([
+    { key: "main", kind: "main", title: "ANA", poleSeqs: POLES, fromSeq: 2, toSeq: 5 },
+    { key: "b1", kind: "branch", title: "BR-1", poleSeqs: [1, 2], parentKey: "main", parentSeq: 3 },
+    { key: "b2", kind: "branch", title: "BR-2", poleSeqs: [1, 2], parentKey: "main", parentSeq: 4 }
+  ]);
+  const ana = scene.rows[0];
+  const asagi = scene.rows[1];
+  const yukari = scene.rows[2];
+  // Asagi inen kol direk DIBINDEN cikar, kolun TEPESINE girer.
+  assert.ok(asagi.link!.fromY > ana.y0, "asagi bag direk dibinden cikmali");
+  assert.ok(asagi.link!.toY < asagi.y0 + ROW_PITCH);
+  // Yukari cikan kol direk TEPESINDEN cikar, kolun DIBINE girer.
+  assert.ok(yukari.link!.fromY < asagi.link!.fromY, "yukari bag direk tepesinden cikmali");
+  assert.ok(yukari.link!.toY > yukari.y0, "yukari bag kolun dibine girmeli");
+});
+
+test("ic ice kol, bagli oldugu kolun YONUNU surdurur", () => {
+  // Yukari cizilmis bir kolun alt kolu asagi cizilseydi bag ana hattin
+  // uzerinden atlamak zorunda kalirdi.
+  const scene = buildFaultScene([
+    { key: "main", kind: "main", title: "ANA", poleSeqs: POLES, fromSeq: 2, toSeq: 5 },
+    { key: "b1", kind: "branch", title: "BR-1", poleSeqs: [1, 2], parentKey: "main", parentSeq: 3 },
+    { key: "b2", kind: "branch", title: "BR-2", poleSeqs: [1, 2], parentKey: "main", parentSeq: 4 },
+    { key: "b3", kind: "branch", title: "BR-3", poleSeqs: [1, 2], parentKey: "b2", parentSeq: 1 }
+  ]);
+  const yukari = scene.rows[2];
+  const icIce = scene.rows[3];
+  assert.equal(yukari.side, -1);
+  assert.equal(icIce.side, -1, "alt kol ust kolun yonunu surdurmeli");
+  assert.ok(icIce.y0 < yukari.y0, "alt kol daha yukarida olmali");
+});
+
+/* ---------------------------------------------------------------------------
+ * CIZIM KUTUSU — sabit alan, degismeyen olcek
+ * ------------------------------------------------------------------------- */
+
+test("kucuk sahne kutuyu doldurmak icin BUYUTULMEZ", () => {
+  // viewBox tam sahne olsaydi `meet` cizimi kutuya kadar buyuturdu: uc
+  // direkli kisa bir hat ekrani kaplayan devasa direkler olarak cizilir,
+  // iki ariza karti yan yana karsilastirilamazdi.
+  const scene = { width: 400, height: 222 };
+  const box = { w: 1400, h: 800 };
+  const v = frameSceneToBox(scene, box);
+  const olcek = box.w / v.w;
+  assert.ok(
+    Math.abs(olcek - PX_PER_UNIT) < 1e-9,
+    `olcek dogal olcegi asmis: ${olcek} > ${PX_PER_UNIT}`
+  );
+  // Kutunun TAMAMI kaplanir (viewBox orani kutu orani ile ayni).
+  assert.ok(Math.abs(v.w / v.h - box.w / box.h) < 1e-9, "viewBox orani kutuya uymuyor");
+  // Sahne cercevenin ORTASINDA.
+  assert.ok(Math.abs(v.x + v.w / 2 - scene.width / 2) < 1e-9);
+  assert.ok(Math.abs(v.y + v.h / 2 - scene.height / 2) < 1e-9);
+});
+
+test("kutuya sigmayan sahne KUCULTULUR, kirpilmaz", () => {
+  const scene = { width: 4000, height: 900 };
+  const box = { w: 1000, h: 500 };
+  const v = frameSceneToBox(scene, box);
+  assert.ok(v.w >= scene.width - 1e-9, "sahnenin tamami pencereye girmeli");
+  assert.ok(v.h >= scene.height - 1e-9, "sahnenin tamami pencereye girmeli");
+  assert.ok(v.x <= 0 + 1e-9 && v.y <= 0 + 1e-9, "sahne cercevenin icinde kalmali");
+});
+
+test("kutu olculmeden once sahnenin tamami gosterilir", () => {
+  // Ilk render'da ResizeObserver henuz olcmedi; cizim kaybolmamali.
+  const v = frameSceneToBox({ width: 800, height: 300 }, null);
+  assert.deepEqual(v, { x: 0, y: 0, w: 800, h: 300 });
+  assert.deepEqual(frameSceneToBox({ width: 800, height: 300 }, { w: 0, h: 0 }), {
+    x: 0,
+    y: 0,
+    w: 800,
+    h: 300
+  });
 });

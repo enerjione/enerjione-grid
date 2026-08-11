@@ -23607,27 +23607,27 @@ th.event-col-category {
   font-variant-numeric: tabular-nums;
 }
 
-/* TAZELIK GOSTERGESI — "veri ne kadar guncel".
-   KURALI HIC YOKTU: ikon ile metin arasinda bosluk kalmiyor ("⟳Son
-   guncelleme 22:48"), yazi govde boyutunda geliyor ve sayfanin en ustunde
-   basliktan daha bariz duruyordu. Ikincil bir bilgi ikincil gorunmeli. */
-.fx-freshness {
+/* BAYAT VERI UYARISI — yalnizca cekim BASARISIZ olurken gorunur.
+   Her zaman duran bir "son guncelleme" saati ust seritte yer kapliyor ve
+   normal calismada hicbir sey soylemiyordu. Ama tamamen susmak da olmaz:
+   istek patlarken ekranda eski liste durur ve operator onu guncel sanir. */
+.fx-stale {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  align-self: flex-start;
-  margin-bottom: 2px;
-  padding: 3px 10px 3px 8px;
-  border: 1px solid #eef2f7;
+  flex-shrink: 0;
+  margin-left: auto;
+  margin-bottom: 6px;
+  padding: 3px 10px;
+  border: 1px solid #fde68a;
   border-radius: 999px;
-  background: #f8fafc;
-  color: #94a3b8;
+  background: #fffbeb;
+  color: #b45309;
   font-size: 11px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+  font-weight: 700;
   white-space: nowrap;
 }
-.fx-freshness svg { flex-shrink: 0; color: #cbd5e1; }
+.fx-stale svg { flex-shrink: 0; }
 
 .fx-spin { animation: fx-spin-rotate 1s linear infinite; }
 @keyframes fx-spin-rotate {
@@ -23636,12 +23636,21 @@ th.event-col-category {
 }
 
 /* ---------- Sekmeler ---------- */
+/* UST SERIT: sekmeler + ariza secici + tazelik TEK satirda.
+   Uc parca ayri satirlardaydi; tek aktif ariza varken tazelik gostergesi
+   kendi basina bir satir kapliyor ve o satirda baska hicbir sey olmuyordu. */
+.fx-topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+  border-bottom: 1px solid #e2e8f0;
+}
 .fx-tabs {
   display: flex;
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
-  border-bottom: 1px solid #e2e8f0;
 }
 
 .fx-tab {
@@ -23723,31 +23732,19 @@ th.event-col-category {
 .fx-switch {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 0 6px;
 }
-.fx-switch-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
+.fx-switch-count {
   flex-shrink: 0;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: #94a3b8;
-}
-.fx-switch-label svg { color: #ef4444; }
-.fx-switch-label b {
-  padding: 1px 7px;
+  padding: 1px 8px;
   border-radius: 999px;
   background: #fef2f2;
   color: #b91c1c;
   font-size: 11px;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 .fx-switch-nav {
@@ -23755,8 +23752,8 @@ th.event-col-category {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #fff;
@@ -23777,23 +23774,31 @@ th.event-col-category {
   padding-bottom: 2px;
   scrollbar-width: thin;
 }
-.fx-switch > .fx-fault-tabs { flex: 1 1 auto; min-width: 0; padding-bottom: 0; }
+/* Cipler icerik kadar yer kaplar; ileri oku son cipin HEMEN yaninda kalir.
+   `flex: 1` verilince cip serisi tum bosluga yayilip oku sagda yapayalniz
+   birakiyordu. Cok cip varsa serit kendi icinde kayar. */
+.fx-switch > .fx-fault-tabs { flex: 0 1 auto; min-width: 0; padding-bottom: 0; }
+.fx-switch-nav:disabled { opacity: 0.35; cursor: default; }
+.fx-switch-nav:disabled:hover { background: #fff; border-color: #e2e8f0; color: #475569; }
+.fx-switch .fx-fault-tab { padding: 4px 11px; border-radius: 8px; }
+.fx-switch .fx-fault-tab-line { font-size: 12px; }
+.fx-switch .fx-fault-tab-range { font-size: 10px; }
+/* SOL KIRMIZI CIZGI YOK: her cipte duran kalin kirmizi kenar seridi bir
+   uyari duvarina ceviriyordu — hepsi ariza oldugu icin hicbiri one cikmiyor,
+   yalnizca gurultu yapiyordu. Secili cip zaten mavi zeminle ayrisiyor. */
 .fx-fault-tab {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
   align-items: flex-start;
-  padding: 7px 14px;
+  padding: 5px 13px;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
-  border-left: 3px solid #ef4444;
   background: #fff;
   cursor: pointer;
   white-space: nowrap;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
-.fx-fault-tab--assigned    { border-left-color: #f59e0b; }
-.fx-fault-tab--in_progress { border-left-color: #3b82f6; }
 .fx-fault-tab:hover { background: #f8fafc; }
 .fx-fault-tab.is-active {
   border-color: #bfdbfe;
@@ -23806,13 +23811,14 @@ th.event-col-category {
   color: #0f172a;
   letter-spacing: -0.01em;
 }
-.fx-fault-tab-range {
-  font-size: 10.5px;
-  font-weight: 600;
+.fx-fault-tab-region {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
   color: #94a3b8;
-  font-variant-numeric: tabular-nums;
 }
-.fx-fault-tab.is-active .fx-fault-tab-range { color: #2563eb; }
+.fx-fault-tab.is-active .fx-fault-tab-region { color: #60a5fa; }
 /* Sekme duzeninde kart kalan tum yuksekligi kaplar — AMA icerigin altina
    sikismaz.
 
@@ -23832,10 +23838,12 @@ th.event-col-category {
   min-height: min-content;
 }
 
+/* SOL RENK SERIDI YOK: kartin durumu basliktaki buyuk rozetten (ACIK /
+   ATANDI / DEVAM EDIYOR) okunuyor; kenardaki kalin kirmizi cizgi ayni seyi
+   ikinci kez, daha yuksek sesle soyluyordu. */
 .fx-card {
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-left: 4px solid #ef4444;
   border-radius: 14px;
   overflow: hidden;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
@@ -23845,10 +23853,7 @@ th.event-col-category {
   box-shadow: 0 6px 22px rgba(15, 23, 42, 0.08);
   border-color: #cbd5e1;
 }
-.fx-card--assigned    { border-left-color: #f59e0b; }
-.fx-card--in_progress { border-left-color: #3b82f6; }
-.fx-card--resolved,
-.fx-card--closed      { border-left-color: #22c55e; }
+
 
 /* ---------- 1. UST SERIT ---------- */
 /* Uc sutun: kimlik+durum | olcu/zaman | eylemler.
@@ -24224,17 +24229,22 @@ th.event-col-category {
    kullanici kendi odagini seciyor (tekerlek = zoom, surukle = gez). */
 .fx-strip-wrap {
   width: 100%;
-  flex: 0 0 auto;
+  /* Karttaki bos yeri DOLDURUR. Bir sure `0 0 auto` idi ve cizim alani tam
+     icerik boyundaydi: tek satirlik kucuk bir sahnede cizim sayfanin
+     tepesinde minicik kaliyor, altinda kocaman bos bir alan aciliyordu. */
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
 }
 .fx-strip-stage {
   position: relative;
   width: 100%;
-  /* Yukseklik ICERIGE bagli (SVG sabit yukseklikte cizilir), kapsayiciya
-     degil. Kapsayiciya baglandiginda kart uzadikca gorunum penceresi de
-     uzuyor, cizim yukarida kucucuk kaliyor ve altinda ucu bucagi
-     gorunmeyen bos bir alan aciliyordu. */
-  flex: 0 0 auto;
+  /* SABIT DEGIL, DOLDURAN alan: karttaki bos yerin tamamini kaplar ve en
+     az sahnenin gerektirdigi kadar yuksektir (alt sinir JSX'ten gelen
+     `minHeight`). Cizim `preserveAspectRatio="meet"` ile bu kutunun icinde
+     ortalanir — kucuk bir sahnede kutunun tepesine sikismaz, buyuk bir
+     sahnede kirpilmaz. */
+  flex: 1 1 auto;
   border-radius: 10px;
   overflow: hidden;
   background:

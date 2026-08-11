@@ -302,14 +302,12 @@ export function FaultListPage({
           cizim) asagi itiyordu. Geriye yalnizca tazelik gostergesi kaldi:
           liste 5 sn'de bir yenileniyor ve verinin ne kadar guncel oldugu
           ekranin durustlugu acisindan gerekli. */}
-      <div className="fx-freshness">
-        <RefreshCw size={13} strokeWidth={2.1} className={loading ? "fx-spin" : undefined} />
-        <span title={t("faults.kpi.updatedHint")}>
-          {t("faults.kpi.lastUpdate")} {new Date(now).toLocaleTimeString(localeTag)}
-        </span>
-      </div>
-
-      {/* ---- Sekmeler ---- */}
+      {/* ---- UST SERIT: sekmeler + ariza secici + tazelik ----
+          Uc parca AYRI satirlardaydi ve tazelik gostergesi tek basina bir
+          satir kapliyordu; tek aktif ariza varken o satirda baska hicbir sey
+          yoktu. Ucu tek serit oldu: solda sekmeler, ortada arizalar arasi
+          gecis, sagda "veri ne kadar guncel". */}
+      <div className="fx-topbar">
       <div className="fx-tabs" role="tablist">
         <button
           type="button"
@@ -333,6 +331,69 @@ export function FaultListPage({
           {t("faults.tab.history")}
           <span className="fx-tab-count">{historyFaults.length}</span>
         </button>
+      </div>
+
+        {/* ARIZA SECICI — ust seritte.
+            Kart yalnizca BIR arizayi gosterir; digerlerine buradan gecilir.
+            Sekmelerin yanindaki bu serit olmadan "baska ariza var mi" sorusu
+            ekranda cevapsizdi. */}
+        {tab === "active" && activeFaults.length > 0 && shownFault ? (
+          <div className="fx-switch">
+            <span className="fx-switch-count">
+              {shownIndex + 1}/{activeFaults.length}
+            </span>
+            <button
+              type="button"
+              className="fx-switch-nav"
+              onClick={() => gecis(-1)}
+              disabled={activeFaults.length < 2}
+              aria-label={t("faults.card.switchPrev")}
+            >
+              <ChevronLeft size={15} strokeWidth={2.4} />
+            </button>
+            <div className="fx-fault-tabs" role="tablist">
+              {activeFaults.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={f.id === shownFault.id}
+                  className={`fx-fault-tab${
+                    f.id === shownFault.id ? " is-active" : ""
+                  } fx-fault-tab--${f.status}`}
+                  onClick={() => setActiveFaultId(f.id)}
+                >
+                  {/* BOLGE + HAT. Direk araligi burada YAZMIYOR: ayni
+                      bilgi kartin basliginda ve detayda zaten var, cipte
+                      tekrar edince secici bir tablo gibi kalabaliklasiyordu. */}
+                  <span className="fx-fault-tab-region">{f.region_name}</span>
+                  <span className="fx-fault-tab-line">{f.line_name}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="fx-switch-nav"
+              onClick={() => gecis(1)}
+              disabled={activeFaults.length < 2}
+              aria-label={t("faults.card.switchNext")}
+            >
+              <ChevronRight size={15} strokeWidth={2.4} />
+            </button>
+          </div>
+        ) : null}
+
+        {/* SON GUNCELLEME SAATI KALDIRILDI — her zaman gorunen bir saat
+            ust seritte yer kapliyordu ve normal calismada hicbir sey
+            soylemiyordu. Ama tamamen susmak da olmaz: cekim BASARISIZ olurken
+            ekranda eski liste durur ve operator onu guncel sanir. Bu yuzden
+            uyari yalnizca SORUN VARKEN cikar. */}
+        {error ? (
+          <span className="fx-stale" title={error}>
+            <RefreshCw size={13} strokeWidth={2.2} />
+            {t("faults.kpi.staleWarning")}
+          </span>
+        ) : null}
       </div>
 
       {/* ---- Aktif sekmesi ---- */}
@@ -368,62 +429,6 @@ export function FaultListPage({
              BIRI gorunmeli. Sekmeler bunu kesin yapar: secilen ariza tam
              alani kaplar, digerleri gorunmez (yarim de olsa). */
           <div className="fx-tabs-wrap">
-            {/* ARIZA SECICI
-                Ayni anda birden fazla aktif ariza olabilir ve kart yalnizca
-                BIRINI gosterir. Secici onceden yalnizca renksiz sekmelerdi;
-                "baska ariza da var mi, hangisine bakiyorum" sorusu ekranda
-                cevapsizdi. Artik sayac (2/3) ve ileri/geri dugmeleriyle
-                acikca bir GECIS aracina benziyor; her sekme kendi durum
-                rengini ve suresini tasiyor. */}
-            {activeFaults.length > 1 ? (
-              <div className="fx-switch">
-                <span className="fx-switch-label">
-                  <TriangleAlert size={13} strokeWidth={2.3} />
-                  {t("faults.card.switchLabel")}
-                  <b>
-                    {shownIndex + 1}/{activeFaults.length}
-                  </b>
-                </span>
-                <button
-                  type="button"
-                  className="fx-switch-nav"
-                  onClick={() => gecis(-1)}
-                  aria-label={t("faults.card.switchPrev")}
-                >
-                  <ChevronLeft size={15} strokeWidth={2.4} />
-                </button>
-                <div className="fx-fault-tabs" role="tablist">
-                  {activeFaults.map((f) => (
-                    <button
-                      key={f.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={f.id === shownFault.id}
-                      className={`fx-fault-tab${
-                        f.id === shownFault.id ? " is-active" : ""
-                      } fx-fault-tab--${f.status}`}
-                      onClick={() => setActiveFaultId(f.id)}
-                    >
-                      <span className="fx-fault-tab-line">{f.line_name}</span>
-                      <span className="fx-fault-tab-range">
-                        {t("faults.card.rangeText", {
-                          from: f.from_pole_seq ?? "?",
-                          to: f.to_pole_seq ?? "?"
-                        })}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  className="fx-switch-nav"
-                  onClick={() => gecis(1)}
-                  aria-label={t("faults.card.switchNext")}
-                >
-                  <ChevronRight size={15} strokeWidth={2.4} />
-                </button>
-              </div>
-            ) : null}
             <ActiveFaultCard
               key={shownFault.id}
               fault={shownFault}

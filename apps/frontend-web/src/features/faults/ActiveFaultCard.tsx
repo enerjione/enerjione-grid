@@ -509,25 +509,30 @@ export function ActiveFaultCard({
               Ana hattaki ariza bir dallanma diregini kapsiyorsa o kol da
               enerjisiz kalir; ekip sahaya ciktiginda kolu da kontrol
               etmelidir. Bu bilgi hicbir yerde gorunmuyordu. */}
-          {(f.affected_branches?.length ?? 0) > 0 ? (
+          {/* KAYNAK: cizimin kendi aday listesi (`branchRows`), backend'in
+              `affected_branches` alani DEGIL. Iki liste ayri hesaplardan
+              geliyordu ve ayrisiyorlardi: cizimde olmayan bir kol panelde
+              "kontrol edin" diye duruyordu. Panel ile cizim artik tanim
+              geregi ayni seyi soyler; ic ice kollar da listeye girer. */}
+          {(branchRows?.length ?? 0) > 0 ? (
             <div className="fx-ev-block">
               <h4 className="fx-ev-title">
                 <GitBranch size={13} strokeWidth={2.3} />
                 {t("faults.card.branchesTitle")}
               </h4>
               <ul className="fx-branch-list">
-                {f.affected_branches!.map((b) => (
+                {branchRows!.map((b) => (
                   <li
-                    key={b.line_id}
-                    className={`fx-branch${b.has_own_fault ? " is-confirmed" : ""}`}
+                    key={b.lineId}
+                    className={`fx-branch${b.confirmed ? " is-confirmed" : ""}`}
                   >
-                    <strong>{b.line_name}</strong>
+                    <strong>{b.name}</strong>
                     <small>
                       {t("faults.card.branchAt", {
-                        pole: b.branch_pole_name || `#${b.branch_pole_seq ?? "?"}`
+                        pole: b.atPoleName || `#${b.atSeq}`
                       })}
                     </small>
-                    {b.has_own_fault ? (
+                    {b.confirmed ? (
                       <span className="fx-branch-tag">
                         {t("faults.card.branchConfirmed")}
                       </span>

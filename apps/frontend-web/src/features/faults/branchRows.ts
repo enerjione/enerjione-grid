@@ -17,6 +17,7 @@
  * React'ten AYRI: bu bir topoloji yurumesi ve yanlis yurumek ekibi olmayan
  * bir hatta gonderir; node:test ile dogrulanabilsin diye saf tutuldu.
  */
+import { buildStripGeometry } from "./faultStripGeometry";
 import type { StripBranchRow } from "./faultStripGeometry";
 
 export type BranchScanLine = {
@@ -135,26 +136,57 @@ export function buildBranchRows({
   const segmentleriniAl = (lineId: number) => segmentler.get(lineId) ?? [];
 
   /**
-   * Bir hattin SUPHELI araliginda dallanan kollari bulur.
-   * `lo`/`hi` null ise hat bastan sona supheli demektir.
+   * ARIZA BOLGESINDEKI DIREKLER — cizimin KIRMIZI boyadigi direklerin AYNISI.
+   *
+   * NEDEN CIZIMDEN TURETILIYOR
+   * --------------------------
+   * Once bolge dogrudan `from_pole_seq`..`to_pole_seq` araligiydi. Bu iki
+   * alan ariza bolgesini CEVRELER, icindekileri vermez; ustelik cizim (ve
+   * harita) bolgeyi CIHAZLARDAN turetir: son "gordum" diyen cihazdan ilk
+   * "gormedim" diyene kadar, gormeyen yoksa hat ucuna kadar.
+   *
+   * Iki farkli hesap iki farkli cevap veriyordu ve sonuc sahada goruluyordu:
+   * cihazin YUKARI tarafinda kalan — yani haritada yemyesil duran — bir
+   * direge asili kol, semada "kontrol edilmeli" diye isaretleniyordu. Ekip
+   * arizasiz bir kolu gezmeye gidiyordu.
+   *
+   * Artik tek kaynak var: `buildStripGeometry`. Bir kol, asili oldugu direk
+   * cizimde KIRMIZI ise adaydir. Cizim ile liste tanim geregi ayrisamaz.
    */
-  const araliktakiKollar = (lineId: number, lo: number | null, hi: number | null) => {
+  const bolgeDirekleri = (lineId: number, f: BranchScanFault | null): Set<number> | null => {
+    const direkler = direkleriniAl(lineId);
+    if (direkler.length === 0) return new Set();
+    // Kendi kaydi yok: kol bastan sona supheli (null = sinirsiz).
+    if (!f) return null;
+    const geo = buildStripGeometry({
+      poleSeqs: direkler.map((p) => p.sequence_no),
+      segments: segmentleriniAl(lineId),
+      fromSeq: f.from_pole_seq,
+      toSeq: f.to_pole_seq,
+      lastRedDeviceCode: f.last_red_device_code,
+      firstGreenDeviceCode: f.first_green_device_code
+    });
+    const kume = new Set<number>();
+    if (!geo.span) return kume;
+    // Cizimdeki "sicak direk" araligiyla BIREBIR ayni (bkz. FaultStripRow).
+    const lo = Math.ceil(geo.span.a);
+    const hi = Math.floor(geo.span.b);
+    for (let i = lo; i <= hi; i += 1) {
+      const seq = geo.seqs[i];
+      if (seq != null) kume.add(seq);
+    }
+    return kume;
+  };
+
+  /** Verilen direk kumesinden dallanan kollar. `null` = tum hat. */
+  const araliktakiKollar = (lineId: number, bolge: Set<number> | null) => {
     const cikti: { line: BranchScanLine; pole: BranchScanPole }[] = [];
     for (const p of direkleriniAl(lineId)) {
-      if (lo != null && hi != null && (p.sequence_no < lo || p.sequence_no > hi)) continue;
+      if (bolge && !bolge.has(p.sequence_no)) continue;
       for (const kol of cocukKollar.get(p.id) ?? []) cikti.push({ line: kol, pole: p });
     }
     return cikti;
   };
-
-  const anaLo =
-    fault.from_pole_seq != null && fault.to_pole_seq != null
-      ? Math.min(fault.from_pole_seq, fault.to_pole_seq)
-      : null;
-  const anaHi =
-    fault.from_pole_seq != null && fault.to_pole_seq != null
-      ? Math.max(fault.from_pole_seq, fault.to_pole_seq)
-      : null;
 
   // GENISLIK ONCELIKLI yuruyus: ust satirlar cizimde her zaman alt
   // satirlardan ONCE gelmeli (kol, bagli oldugu satira baglanacak).
@@ -163,11 +195,10 @@ export function buildBranchRows({
     pole: BranchScanPole;
     parentLineId: number | null;
   };
-  const kuyruk: Gorev[] = araliktakiKollar(fault.line_id, anaLo, anaHi).map((k) => ({
-    line: k.line,
-    pole: k.pole,
-    parentLineId: null
-  }));
+  const kuyruk: Gorev[] = araliktakiKollar(
+    fault.line_id,
+    bolgeDirekleri(fault.line_id, fault)
+  ).map((k) => ({ line: k.line, pole: k.pole, parentLineId: null }));
 
   const gorulen = new Set<number>([fault.line_id]);
   const rows: StripBranchRow[] = [];
@@ -213,17 +244,10 @@ export function buildBranchRows({
       confirmed: Boolean(kendiKaydi)
     });
 
-    // ALT KOLLAR: kolun kendi kaydi varsa yalnizca o araliktakiler, yoksa
-    // kolun tamami supheli oldugu icin hepsi.
-    const altLo =
-      kendiKaydi?.from_pole_seq != null && kendiKaydi.to_pole_seq != null
-        ? Math.min(kendiKaydi.from_pole_seq, kendiKaydi.to_pole_seq)
-        : null;
-    const altHi =
-      kendiKaydi?.from_pole_seq != null && kendiKaydi.to_pole_seq != null
-        ? Math.max(kendiKaydi.from_pole_seq, kendiKaydi.to_pole_seq)
-        : null;
-    for (const alt of araliktakiKollar(gorev.line.id, altLo, altHi)) {
+    // ALT KOLLAR: kolun kendi kaydi varsa yalnizca o kaydin bolgesindekiler,
+    // yoksa kolun tamami supheli oldugu icin hepsi.
+    const altBolge = bolgeDirekleri(gorev.line.id, kendiKaydi);
+    for (const alt of araliktakiKollar(gorev.line.id, altBolge)) {
       if (gorulen.has(alt.line.id)) continue;
       kuyruk.push({ line: alt.line, pole: alt.pole, parentLineId: gorev.line.id });
     }

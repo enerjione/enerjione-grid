@@ -265,13 +265,24 @@ def _serialize_fault(db: Session, f: FaultEvent, refs: _FaultRefs | None = None)
     # --- Ariza araliginin ICINDE kalan bransman kollari -------------------
     # Aralik direk sira numarasiyla ifade edilir; aradaki her direk icin
     # "bu direkten cikan kol var mi" diye bakariz.
+    #
+    # SINIR DIREKLERI HARIC (alt < seq < ust).
+    # `from_pole_seq`/`to_pole_seq` bolgeyi CEVRELEYEN direklerdir, icindekiler
+    # degil: alt sinir son "gordum" cihazindan ONCEKI, ust sinir ilk
+    # "gormedim" cihazindan SONRAKI direktir. Ikisi de arizanin saglam
+    # tarafinda kalir — ust sinirdaki direge asili kol, arizayi gormeyen
+    # cihazin otesinden beslenir, yani enerjisi vardir.
+    #
+    # Kapsayici (<=) karsilastirma bu iki direge asili kollari "kontrol edin"
+    # diye listeliyordu: haritada yemyesil duran bir kol icin ekip sahaya
+    # cikiyordu.
     affected: list[FaultBranchRef] = []
     if f.from_pole_seq is not None and f.to_pole_seq is not None and refs.branch_lines:
         alt, ust = sorted((f.from_pole_seq, f.to_pole_seq))
         for pole in refs.poles.values():
             if pole.line_id != f.line_id:
                 continue
-            if not (alt <= pole.sequence_no <= ust):
+            if not (alt < pole.sequence_no < ust):
                 continue
             for kol in refs.branch_lines.get(pole.id, []):
                 affected.append(

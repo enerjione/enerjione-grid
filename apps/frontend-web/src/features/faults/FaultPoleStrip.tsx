@@ -40,7 +40,8 @@ import {
   PX_PER_UNIT,
   SCENE_MAX_PX_H,
   STRIP_PX_H,
-  buildFaultScene
+  buildFaultScene,
+  frameSceneToBox
 } from "./faultStripGeometry";
 import type {
   FaultRowInput,
@@ -183,19 +184,41 @@ export function FaultPoleStrip({
   }, [t]);
 
   // ---- Gorunum penceresi (zoom + pan) ----------------------------------
-  //
-  // TABAN GORUNUM = SAHNENIN TAMAMI. Onceki surumde viewBox yuksekligi
-  // kapsayicinin en-boy oranindan turetiliyordu; kapsayici uzadikca pencere
-  // de uzuyor, icerik yukarida kucucuk kaliyor ve altinda ucu bucagi
-  // gorunmeyen bos bir alan aciliyordu. Artik pencere icerige bagli.
+  const svgRef = useRef<SVGSVGElement | null>(null);
+
+  /** Cizim alaninin GERCEK piksel olcusu. Taban gorunum buna gore kurulur. */
+  const [boxPx, setBoxPx] = useState<{ w: number; h: number } | null>(null);
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([entry]) => {
+      const r = entry.contentRect;
+      if (r.width > 0 && r.height > 0) setBoxPx({ w: r.width, h: r.height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // TABAN GORUNUM = SAHNE, KUTUYA GORE CERCEVELENMIS (bkz. frameSceneToBox).
   const base: View = useMemo(
-    () => ({ x: 0, y: 0, w: scene.width, h: scene.height }),
-    [scene.width, scene.height]
+    () => frameSceneToBox(scene, boxPx),
+    [boxPx, scene]
   );
+
   const [view, setView] = useState<View | null>(null);
   const v = view ?? base;
-  const svgRef = useRef<SVGSVGElement | null>(null);
   const drag = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
+
+  /** Pencereyi taban cercevenin ICINDE tutar — kenarda bosluga bakilmaz. */
+  const sinirla = useCallback(
+    (x: number, y: number, w: number, h: number): View => ({
+      x: Math.max(base.x, Math.min(base.x + Math.max(0, base.w - w), x)),
+      y: Math.max(base.y, Math.min(base.y + Math.max(0, base.h - h), y)),
+      w,
+      h
+    }),
+    [base]
+  );
 
   // Satir sayisi degisince (baska bir arizaya gecildi) yakinlastirma sifirlanir;
   // yoksa yeni sahnenin disinda kalmis bir pencereye bakiliyor.
@@ -222,15 +245,13 @@ export function FaultPoleStrip({
         // Imlecin altindaki nokta SABIT kalsin.
         const odakX = c.x + c.w * oranX;
         const odakY = c.y + c.h * oranY;
-        let x = odakX - yeniW * oranX;
-        let y = odakY - yeniH * oranY;
+        const x = odakX - yeniW * oranX;
+        const y = odakY - yeniH * oranY;
         // Cizim disina tasma: kenarlarda bosluga bakmak kafa karistirir.
-        x = Math.max(0, Math.min(Math.max(0, base.w - yeniW), x));
-        y = Math.max(0, Math.min(Math.max(0, base.h - yeniH), y));
-        return { x, y, w: yeniW, h: yeniH };
+        return sinirla(x, y, yeniW, yeniH);
       });
     },
-    [base]
+    [base, sinirla]
   );
 
   // TEKERLEK: React'in `onWheel` prop'u ile DEGIL, dogrudan DOM uzerinden.
@@ -264,12 +285,7 @@ export function FaultPoleStrip({
     const { sx, sy } = birimBasinaPx();
     const x = d.vx - (e.clientX - d.x) * sx;
     const y = d.vy - (e.clientY - d.y) * sy;
-    setView({
-      x: Math.max(0, Math.min(Math.max(0, base.w - v.w), x)),
-      y: Math.max(0, Math.min(Math.max(0, base.h - v.h), y)),
-      w: v.w,
-      h: v.h
-    });
+    setView(sinirla(x, y, v.w, v.h));
   };
   const onPointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
     drag.current = null;
@@ -282,13 +298,17 @@ export function FaultPoleStrip({
 
   const yakinlasti = v.w < base.w - 0.5;
 
-  // CIZIM ALANI YUKSEKLIGI.
+  // CIZIM ALANININ EN AZ YUKSEKLIGI.
   //
-  // Sabit bir piksel yuksekligi vermek YANLIS: `preserveAspectRatio="meet"`
-  // ile olcek genislikten sinirlandiginda kutunun alt/ust kismi bos kaliyor
-  // ve kartin altinda ne oldugu belirsiz genis bir seride bakiliyordu. Artik
-  // yukseklik SAHNENIN ORANINDAN gelir (`height: auto` + viewBox) — bosluk
-  // yok. Alt sinir tek satirlik cizim, ust sinir kartin ekrandan tasmamasi.
+  // Sahne kac satirsa o kadar yer ISTER; bunun altina inilirse cok satirli bir
+  // sahne kirpilir. Ust sinir kartin ekrandan tasmamasi icin.
+  //
+  // Bu bir ALT SINIRDIR, sabit yukseklik degil: cizim alani karttaki bos
+  // yeri de doldurur (bkz. `.fx-strip-stage { flex: 1 1 auto }`). Bir sure
+  // yukseklik icerige BAGLANMISTI ve tek satirlik kucuk bir sahnede cizim
+  // sayfanin tepesinde minicik kaliyor, altinda kocaman bos bir alan
+  // aciliyordu. Cizim alani her zaman sayfanin dibine kadar iner; sahne
+  // icinde ortalanir.
   const pxCap = Math.min(
     SCENE_MAX_PX_H,
     Math.max(STRIP_PX_H, Math.round(scene.height * PX_PER_UNIT))
@@ -334,13 +354,12 @@ export function FaultPoleStrip({
 
   return (
     <div className="fx-strip-wrap">
-      <div className="fx-strip-stage">
+      <div className="fx-strip-stage" style={{ minHeight: pxCap }}>
         <svg
           ref={svgRef}
           className={`fx-strip${yakinlasti ? " is-zoomed" : ""}`}
           viewBox={`${v.x} ${v.y} ${v.w} ${v.h}`}
           width="100%"
-          style={{ height: "auto", minHeight: STRIP_PX_H * 0.7, maxHeight: pxCap }}
           preserveAspectRatio="xMidYMid meet"
           role="img"
           aria-label={
@@ -382,9 +401,12 @@ export function FaultPoleStrip({
             if (!r.link) return null;
             const renk = active ? RED : GREY;
             const { fromX, fromY, toX, toY } = r.link;
+            // Yon: +1 asagi inen kol, -1 yukari cikan kol. Egri ve giris
+            // parcasi ayni formulle iki tarafa da calisir.
+            const d = r.side === -1 ? -1 : 1;
             const yol =
-              `M${fromX} ${fromY + 5}` +
-              ` C${fromX + 30} ${fromY + 26}, ${toX + 30} ${toY - 42}, ${toX} ${toY - 12}`;
+              `M${fromX} ${fromY + 5 * d}` +
+              ` C${fromX + 30} ${fromY + 26 * d}, ${toX + 30} ${toY - 42 * d}, ${toX} ${toY - 12 * d}`;
             return (
               <g key={`lnk-${r.key}`} className="fx-strip-link">
                 {/* Govde: bagin fiziksel kalinligi. */}
@@ -404,10 +426,11 @@ export function FaultPoleStrip({
                   strokeDasharray="6 5"
                   strokeLinecap="round"
                 />
-                {/* Alt satira giris: kolun ilk direginin tepesine oturur. */}
+                {/* Kol satirina giris: ilk direginin tepesine (asagi inen
+                    kolda) ya da dibine (yukari cikan kolda) oturur. */}
                 <line
                   x1={toX}
-                  y1={toY - 12}
+                  y1={toY - 12 * d}
                   x2={toX}
                   y2={toY}
                   stroke={renk}

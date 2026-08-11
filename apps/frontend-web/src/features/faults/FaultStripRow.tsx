@@ -355,6 +355,13 @@ export function FaultStripRow({
             fontSize={10}
             fontWeight={hot ? 700 : 500}
             fill={hot ? "#b91c1c" : GREY}
+            // Beyaz hale: satirlar arasi bag cizgisi direk adlarinin hizasindan
+            // gecebiliyor (ozellikle YUKARI cikan kollarda, adlar bagin
+            // geldigi tarafta kalir).
+            stroke="#fcfdff"
+            strokeWidth={3}
+            strokeLinejoin="round"
+            paintOrder="stroke"
           >
             {poleLabel(p)}
           </text>

@@ -916,7 +916,8 @@
       "avgResolution": "Ortalama Çözüm Süresi",
       "history": "Geçmiş Arıza",
       "lastUpdate": "Son güncelleme",
-      "updatedHint": "Liste 5 saniyede bir otomatik yenilenir."
+      "updatedHint": "Liste 5 saniyede bir otomatik yenilenir.",
+      "staleWarning": "Veriler güncellenemiyor"
     },
     "tab": {
       "active": "Aktif Arıza",
