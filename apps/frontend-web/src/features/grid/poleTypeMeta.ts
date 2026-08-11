@@ -9,10 +9,13 @@
  *   energy_role    enerji gorevi:  none | generation | consumption
  *                                  | bidirectional
  *
- * Harita: ANA ikon topolojik rolden gelir; enerji rolu ikonun kosesinde
- * kucuk ROZET olarak gosterilir (uretim ↑ yesil, tuketim ↓ mavi, cift yon
- * ⇅ mor). Ariza/enerjili-enerjisiz/haberlesme gibi OPERASYONEL durumlar bu
- * modele KARISMAZ — onlar ayri alanlardan gelir.
+ * Harita: TUM direkler AYNI pin — siyah daire, icinde sira numarasi. Sadece
+ * hat basi/sonu RENKLE ayrilir (bas indigo, son kirmizi); yesil KULLANILMAZ,
+ * cihaz marker'i yesil daire. Topolojik rol (bransman/kablo gecisi) harita
+ * pininde DEGIL, tooltip + kart + liste ikonunda gorunur. Enerji rolu ikonun
+ * kosesinde kucuk ROZET olarak durur (uretim ↑ yesil, tuketim ↓ mavi, cift
+ * yon ⇅ mor). Ariza/enerjili-enerjisiz/haberlesme gibi OPERASYONEL durumlar
+ * bu modele KARISMAZ — onlar ayri alanlardan gelir.
  *
  * Eski ekipman tipleri (transformer/breaker/...) role DONUSTURULUR
  * (rolesOf) — eski backend'e karsi da calisir.
@@ -21,9 +24,11 @@ import type { EnergyRole, Pole, TopologyRole } from "../../shared/types";
 
 export type TopologyRoleMeta = {
   value: TopologyRole;
-  /** Harita pin sinifi (grid-pole-pin is-*). Bos = duz gecis diregi. */
+  /** Harita pin sinifi (grid-pole-pin is-*). SU AN TUMU BOS: haritada butun
+   *  direkler ayni pin. Alan duruyor cunku pin cizimi veriden okunur —
+   *  ileride bir rol yeniden ayrisirsa tek satirla geri gelir. */
   cls: string;
-  /** Pin icine yazilan sembol (duz direkte yok — sira numarasi gorunur). */
+  /** Pin icine yazilan sembol. SU AN TUMU BOS — pinde sira numarasi gorunur. */
   symbol: string;
   title: string;
   labelKey: string;
@@ -42,34 +47,17 @@ export const TOPOLOGY_ROLE_META: TopologyRoleMeta[] = [
   // konum yonetir; celiski (ortadaki direge "bas" gorseli) olusamaz.
   { value: "line_start", cls: "", symbol: "", title: "Hat başlangıcı", labelKey: "engineering.grid.roleTopo.line_start", icon: "flag", selectable: false },
   { value: "transit", cls: "", symbol: "", title: "Geçiş direği", labelKey: "engineering.grid.roleTopo.transit", icon: "location_on", selectable: true },
-  // BRANSMAN SEMBOLU CIZIM (SVG), harf DEGIL.
+  // BRANSMAN / KABLO GECISI: haritada AYRI GORUNMEZ (kullanici istegi).
   //
-  // Eskiden pin yesil-turkuaz bir DAIRE idi ve icinde "⑂" glifi vardi.
-  // Haritada cihaz marker'i da yesil daire (icinde beyaz simsek) oldugu icin
-  // ikisi uzaktan ayirt edilemiyordu — operator bransman diregini cihaz
-  // saniyordu. Simdi hem RENK hem BICIM hem SEMBOL ayri: indigo, kosesi
-  // yuvarlatilmis kare ve catallanma cizimi (bkz. styles.css `.is-branchpt`).
-  //
-  // Glif yerine SVG: "⑂" (U+2442) yaygin sistem fontlarinin cogunda YOK;
-  // bulunmadigi yerde tarayici yedek font arar ve boyut/hiza pinden pine
-  // kayar. Cizim her yerde ayni gorunur ve ikon subset'ine de bagli degil.
-  {
-    value: "branch",
-    cls: "is-branchpt",
-    symbol:
-      '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">' +
-      '<path fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" ' +
-      'stroke-linejoin="round" d="M12 22v-8.5M12 13.5 6.5 8M12 13.5 17.5 8"/>' +
-      '<circle cx="5.6" cy="6.4" r="2.6" fill="#fff"/>' +
-      '<circle cx="18.4" cy="6.4" r="2.6" fill="#fff"/>' +
-      "</svg>",
-    title: "Branşman noktası",
-    labelKey: "engineering.grid.roleTopo.branch",
-    icon: "account_tree",
-    selectable: true
-  },
+  // Once yesil-turkuaz daire + "⑂" glifi, sonra indigo yuvarlak kare +
+  // catallanma cizimi denendi. Ikisi de ayni sorunu yaratti: kalabalik bir
+  // hatta pinler birbirinden farkli bicim/renk/boyutta olunca harita
+  // "sembol karmasasi"na donuyor ve operator direkleri sirayla okuyamiyor.
+  // Karar: TUM direkler ayni siyah daire; rol bilgisi tooltip + sag alt
+  // kartta ve liste gorunumunde (icon alani) durur.
+  { value: "branch", cls: "", symbol: "", title: "Branşman noktası", labelKey: "engineering.grid.roleTopo.branch", icon: "account_tree", selectable: true },
   { value: "line_end", cls: "", symbol: "", title: "Hat sonu", labelKey: "engineering.grid.roleTopo.line_end", icon: "location_off", selectable: false },
-  { value: "cable_transition", cls: "is-cable", symbol: "▼", title: "Kablo geçişi", labelKey: "engineering.grid.roleTopo.cable_transition", icon: "cable", selectable: true },
+  { value: "cable_transition", cls: "", symbol: "", title: "Kablo geçişi", labelKey: "engineering.grid.roleTopo.cable_transition", icon: "cable", selectable: true },
 ];
 
 /** Formda gosterilecek roller (uclar haric — onlar konumdan). */

@@ -10707,7 +10707,10 @@ th.event-col-category {
   border: 2px solid #fff;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
-.grid-pole-pin.is-start { background: #16a34a; }
+/* Hat basi INDIGO, hat sonu KIRMIZI. Bas eskiden yesildi; cihaz marker'i
+   (.device-marker) de yesil daire ve ayni boyutta oldugu icin ikisi uzaktan
+   karisiyordu — direk pininde yesil KULLANILMAZ. */
+.grid-pole-pin.is-start { background: #4338ca; }
 .grid-pole-pin.is-end { background: #dc2626; }
 
 /* "Diğer hatları göster" toggle */
@@ -21259,14 +21262,6 @@ th.event-col-category {
   box-shadow: 0 2px 7px rgba(15, 23, 42, 0.45);
 }
 
-.grid-pole-pin.is-cable, .grid-pole-pin--sm.is-cable {
-  background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
-  width: 34px; height: 34px;
-  border-radius: 50%;
-  border: 2px solid #fff;
-  box-shadow: 0 2px 6px rgba(109, 40, 217, 0.4);
-}
-
 /* Rol modeli: hat baslangici (yesil) / hat sonu (kirmizi) pinleri. */
 .grid-pole-pin.is-role-start, .grid-pole-pin--sm.is-role-start {
   background: linear-gradient(135deg, #22c55e 0%, #15803d 100%);
@@ -21315,38 +21310,20 @@ th.event-col-category {
   color: #4338ca;
 }
 
-/* BRANSMAN NOKTASI — haritadaki tek KOSELI ve indigo isaret.
-   Daire + yesil birakilamaz: cihaz marker'i (.device-marker) yesil DAIRE ve
-   ayni boyutta; ikisi uzaktan ayirt edilemiyordu. Silueti (kare), rengi
-   (indigo — kod tabaninda zaten bransman dili: rozet ve halka ayni ton) ve
-   sembolu (catallanma cizimi) birbirinden bagimsiz uc ayirt edici tasir. */
-.grid-pole-pin.is-branchpt, .grid-pole-pin--sm.is-branchpt {
-  background: linear-gradient(135deg, #818cf8 0%, #4338ca 100%);
-  width: 30px; height: 30px;
-  border-radius: 9px;
-  border: 2px solid #fff;
-  box-shadow: 0 2px 7px rgba(67, 56, 202, 0.45);
-}
-
-/* SVG sembol: satir kutusunun taban cizgisi bosluk birakmasin diye flex. */
-.grid-pole-pin.is-branchpt .grid-pole-symbol,
-.grid-pole-pin--sm.is-branchpt .grid-pole-symbol {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 0;
-}
+/* BRANSMAN NOKTASI ve KABLO GECISI icin ayri pin YOK.
+   Once yesil daire + "⑂", sonra indigo yuvarlak kare + catallanma cizimi
+   denendi; ikisinde de kalabalik hatta pin bicimleri karisip haritanin
+   okunmasini zorlastirdi. Artik tum direkler ayni siyah daire (bkz.
+   .grid-pole-pin) — rol bilgisi tooltip/kart/liste ikonunda. */
 
 .grid-pole-pin.is-disconnector.is-start, .grid-pole-pin.is-fuse.is-start,
-.grid-pole-pin.is-source.is-start, .grid-pole-pin.is-cable.is-start,
-.grid-pole-pin.is-branchpt.is-start {
-  outline: 3px solid #16a34a;
+.grid-pole-pin.is-source.is-start {
+  outline: 3px solid #4338ca;
   outline-offset: 1px;
 }
 
 .grid-pole-pin.is-disconnector.is-end, .grid-pole-pin.is-fuse.is-end,
-.grid-pole-pin.is-source.is-end, .grid-pole-pin.is-cable.is-end,
-.grid-pole-pin.is-branchpt.is-end {
+.grid-pole-pin.is-source.is-end {
   outline: 3px solid #dc2626;
   outline-offset: 1px;
 }
