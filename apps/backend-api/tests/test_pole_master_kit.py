@@ -1381,3 +1381,67 @@ def test_set_azaltip_artirmak_da_cakisma_uretmez(db, kurulumcu, gateway, lisans_
     )
     duz = [n for s in _setler(db, kit) for n in s.subunit_satellites]
     assert len(duz) == len(set(duz)) == 9
+
+
+# ---------------------------------------------------------------------------
+# 18) KIT SILME — setlerin telemetrisi silmeyi ENGELLEMEMELI
+# ---------------------------------------------------------------------------
+
+
+def test_telemetrisi_olan_kit_SILINEBILIR(db, kurulumcu, gateway, lisans_acik):
+    """YASANAN: "Cihaz silinemedi" — sebebi hicbir yerde gorunmuyordu.
+
+    `devices.parent_device_id` CASCADE oldugu icin veritabani setleri kitle
+    birlikte dusuruyor; ama setlerin `telemetry` / `telemetry_history` /
+    `alarm_events` satirlarinin FK'sinde ondelete YOK. Kaskad o satirlara
+    carpiyor ve TUM silme FK ihlaliyle geri aliniyordu. `repository.delete`
+    yalnizca kendisine verilen cihazin telemetrisini temizliyor.
+    """
+    from datetime import datetime, timezone
+
+    from app.models.telemetry import Telemetry
+
+    kit = _kit_ekle(db, kurulumcu, set_count=3)
+    setler = _setler(db, kit)
+    simdi = datetime.now(timezone.utc)
+    # Setlerin HEPSINE veri gelmis olsun (sahadaki durum).
+    for s in setler:
+        db.add(
+            Telemetry(
+                device_id=s.id,
+                signal_key="sat01.actual_current",
+                value=1.0,
+                quality="good",
+                source_timestamp=simdi,
+            )
+        )
+    db.flush()
+
+    devices_api.delete_device(device_code=kit.code, current_user=kurulumcu, db=db)
+
+    assert db.get(Device, kit.id) is None, "kit silinmedi"
+    for s in setler:
+        assert db.get(Device, s.id) is None, f"{s.code} yetim kaldi"
+
+
+def test_kit_silinince_setleri_de_gider(db, kurulumcu, gateway, lisans_acik):
+    """Yetim set kaydi hicbir seyi izlemez ama arayuzde saglikli gorunurdu."""
+    kit = _kit_ekle(db, kurulumcu, set_count=2)
+    devices_api.delete_device(device_code=kit.code, current_user=kurulumcu, db=db)
+    kalan = db.scalars(select(Device).where(Device.parent_device_id.is_not(None))).all()
+    assert not kalan, f"yetim set kaldi: {[d.code for d in kalan]}"
+
+
+def test_kit_EN_AZ_bir_setle_eklenir(db, kurulumcu, gateway, lisans_acik):
+    """Setsiz bir kit telemetriyi hicbir yere yazamaz; 0 set kabul edilmez."""
+    from pydantic import ValidationError
+
+    # 0 semada (`ge=1`) reddedilir -> ValidationError; None servis katmaninda
+    # ("set sayisi zorunlu") -> HTTPException 422. HTTP uzerinden ikisi de
+    # 422'dir; onemli olan setsiz bir kitin OLUSMAMASI.
+    for gecersiz in (0, None):
+        with pytest.raises((HTTPException, ValidationError)) as hata:
+            _kit_ekle(db, kurulumcu, code=f"PMK-X{gecersiz}", set_count=gecersiz)
+        if isinstance(hata.value, HTTPException):
+            assert hata.value.status_code == 422
+    assert not db.scalars(select(Device).where(Device.code.like("PMK-X%"))).all()

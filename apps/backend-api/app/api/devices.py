@@ -422,6 +422,24 @@ def delete_device(
     code = device.code
     device_id = device.id
     device_gateway = device.gateway_code
+
+    # ALT CIHAZLAR ONCE VE TEK TEK SILINIR.
+    #
+    # `devices.parent_device_id` CASCADE oldugu icin veritabani setleri
+    # kitle birlikte dusuruyor — ama setlerin `telemetry`,
+    # `telemetry_history` ve `alarm_events` satirlarinin FK'sinde ondelete
+    # YOK. Kaskad o satirlara carpiyor ve TUM silme FK ihlaliyle geri
+    # aliniyordu: kullanici "Cihaz silinemedi" goruyor, sebebi hicbir yerde
+    # gorunmuyordu.
+    #
+    # `repository.delete` yalnizca KENDI verdigimiz cihazin telemetrisini
+    # temizliyor; her seti ayri ayri gecirmek zorundayiz. Ayrica bu yol
+    # setlerin alarm kurali filtrelerinden de dusurulmesini sagliyor.
+    silinen_setler: list[str] = []
+    for alt in device_kit_service.list_subunits(db, device.id):
+        repository.delete(alt)
+        silinen_setler.append(alt.code)
+
     deleted_counts = repository.delete(device)
     _bump_gateway_config_nonce(db, device_gateway)
     record_event(
@@ -436,6 +454,10 @@ def delete_device(
             "device_id": device_id,
             "gateway_code": device_gateway,
             "cleanup": deleted_counts,
+            # Kit silindiyse hangi setlerin birlikte gittigi denetim
+            # kaydinda gorunmeli; sonradan "bu setler nereye gitti"
+            # sorusunun tek cevabi bu satir olur.
+            "deleted_subunits": silinen_setler,
         },
         i18n_key="device_deleted",
         i18n_params={"name": name, "code": code},
