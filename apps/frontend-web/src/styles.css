@@ -10857,40 +10857,6 @@ th.event-col-category {
   text-shadow: 0 1px 2px rgba(255, 255, 255, 0.9);
 }
 
-/* Bransman noktasi pin'i — pin'in kenari ve uzerinde catallanma rozeti.
-   Trafo'da bu efektler GORUNMEZ; trafo zaten kendi sembolu ile ifade
-   edilir, ek halka karmasiklik yapar. */
-.grid-pole-pin.is-branch-point:not(.is-transformer) {
-  position: relative;
-  box-shadow: 0 0 0 2px #6366f1, 0 1px 4px rgba(0, 0, 0, 0.4);
-}
-.grid-pole-pin.is-transformer .grid-pole-branch-badge {
-  display: none;
-}
-.grid-pole-branch-badge {
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #6366f1;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 900;
-  line-height: 14px;
-  text-align: center;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-  pointer-events: none;
-}
-
-/* Bransman dali ilk diregi (parent'a bagli olan); parent ile cakisik
-   degilse ayri pin gosterilir, ayni morumsu vurgu ile. */
-.grid-pole-pin.is-branch-entry {
-  position: relative;
-  box-shadow: 0 0 0 2px #6366f1, 0 1px 4px rgba(0, 0, 0, 0.4);
-}
 
 /* ===== Harita info-card (hat / direk tikla -> sag ust kart) ===== */
 .map-info-card {

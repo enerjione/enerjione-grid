@@ -56,50 +56,62 @@ const faultPin = () =>
 // ayni kombinasyon icin yeni divIcon yaratmasin (DOM re-render +
 // olasi flicker).
 const _polePinCache = new Map<string, L.DivIcon>();
+/**
+ * Direk pini.
+ *
+ * BRANSMAN DIREGI AYRI GORUNMEZ (kullanici istegi): eskiden dallanma
+ * noktasina mor bir halka + kosede "⑂" rozeti konuyordu. Haritaya bakan
+ * kisinin isi "hangi direk" sorusudur; diregin TIPI onu ilgilendirmiyor ve
+ * fazladan iki isaret, kalabalik bir hatta okumayi zorlastiriyordu.
+ * Dallanma bilgisi kayboluyor DEGIL: direk secildiginde (tooltip + sag alt
+ * kart) "Branşman noktası" ve ayrilan hatlar yaziyor.
+ */
 const polePin = (
   label: string,
   isStart: boolean,
   isEnd: boolean,
-  pole?: { topology_role?: string | null; energy_role?: string | null; pole_type?: string | null },
-  isBranchPoint?: boolean,
-  isBranchEntry?: boolean
+  pole?: { topology_role?: string | null; energy_role?: string | null; pole_type?: string | null }
 ) => {
   const { topo, energy } = rolesOf(pole ?? {});
-  const key = `${label}|${isStart ? 1 : 0}|${isEnd ? 1 : 0}|${topo}|${energy}|${isBranchPoint ? 1 : 0}|${isBranchEntry ? 1 : 0}`;
+  const key = `${label}|${isStart ? 1 : 0}|${isEnd ? 1 : 0}|${topo}|${energy}`;
   const cached = _polePinCache.get(key);
   if (cached) return cached;
   // ANA ikon topolojik rolden; enerji rolu kose rozeti (rol modeli).
   const meta = topologyMeta(topo);
   const typeCls = meta.cls;
-  const cls = [
-    isStart ? "is-start" : isEnd ? "is-end" : "",
-    typeCls,
-    // Branşman pole iki türlü olabilir:
-    //   isBranchPoint = bu direk bir veya birden fazla dalin "kaynagi"dir
-    //   isBranchEntry = bu direk bir dalin ilk diregidir (parent'a bagli)
-    // Iki sinif birden olabilir (zincir bransman); CSS bunu ele alir.
-    isBranchPoint ? "is-branch-point" : "",
-    isBranchEntry ? "is-branch-entry" : ""
-  ].filter(Boolean).join(" ");
+  const cls = [isStart ? "is-start" : isEnd ? "is-end" : "", typeCls]
+    .filter(Boolean)
+    .join(" ");
   // Trafo: ic ice cift halka — fiziksel sembol cagrisimi.
   // Numara halka altinda kucuk badge olarak gosterilir.
   const inner = meta.symbol
     ? `<span class="grid-pole-symbol" aria-label="${meta.title}">${meta.symbol}</span><span class="grid-pole-seq">${label}</span>`
     : `<span>${label}</span>`;
-  // Bransman noktasi ise pin'in ust kosesine kucuk Y-catalli rozet.
-  const branchBadge = (isBranchPoint || isBranchEntry)
-    ? `<span class="grid-pole-branch-badge" title="Branşman noktası">⑂</span>`
-    : "";
   const size: [number, number] = meta.symbol ? [40, 40] : [20, 20];
   const icon = L.divIcon({
     className: "grid-pole-leaflet-wrap",
-    html: `<div class="grid-pole-pin grid-pole-pin--sm ${cls}">${inner}${branchBadge}${energyBadgeHtml(energy)}</div>`,
+    html: `<div class="grid-pole-pin grid-pole-pin--sm ${cls}">${inner}${energyBadgeHtml(energy)}</div>`,
     iconSize: size,
     iconAnchor: [size[0] / 2, size[1] / 2]
   });
   _polePinCache.set(key, icon);
   return icon;
 };
+
+/**
+ * Haritaya cizilebilir bir konum mu?
+ *
+ * (0, 0) Gine Korfezi'dir. Konumu GIRILMEMIS cihaz/direk kaydi oraya duser ve
+ * iki zarar verir: haritada okyanusun ortasinda bir pin birakir, ve "hepsini
+ * sigdir" hesabini yarim dunyaya yayar — ana sayfa hatta yakinlasmak yerine
+ * kita gorunumunde aciliyordu.
+ */
+function gecerliKonum(lat?: number | null, lon?: number | null): boolean {
+  if (typeof lat !== "number" || typeof lon !== "number") return false;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+  if (lat === 0 && lon === 0) return false;
+  return Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+}
 
 /** Leaflet harita ornegini MapContainer DISINA tasir.
  *  react-leaflet'te `useMap` sadece MapContainer'in ICINDE calisir; cevrimdisi
@@ -202,8 +214,40 @@ function AutoFitOnLoad({
     if (points.length === 0) return;
     const bounds = L.latLngBounds(points.map((p) => L.latLng(p[0], p[1])));
     if (!bounds.isValid()) return;
-    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15, animate: false });
-    fittedRef.current = true;
+
+    const sigdir = (): boolean => {
+      // OLCU TAZELENMEDEN SIGDIRMA: kap (container) o an 0x0 ise Leaflet
+      // sigdirmayi en dusuk yakinlikta yapar ve harita DUNYA gorunumunde
+      // acilir — kullanicinin gordugu tam olarak buydu.
+      map.invalidateSize({ animate: false });
+      const boyut = map.getSize();
+      if (boyut.x < 40 || boyut.y < 40) return false;
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15, animate: false });
+      return true;
+    };
+
+    if (sigdir()) {
+      fittedRef.current = true;
+      return;
+    }
+
+    // Kap henuz olculemedi (sekme gecisi / yan panel animasyonu). Boyut
+    // gelince BIR KEZ dene; ResizeObserver yoksa kisa bir zamanlayiciya dus.
+    const kap = map.getContainer();
+    if (typeof ResizeObserver === "undefined") {
+      const zamanlayici = window.setTimeout(() => {
+        if (sigdir()) fittedRef.current = true;
+      }, 300);
+      return () => window.clearTimeout(zamanlayici);
+    }
+    const gozlemci = new ResizeObserver(() => {
+      if (sigdir()) {
+        fittedRef.current = true;
+        gozlemci.disconnect();
+      }
+    });
+    gozlemci.observe(kap);
+    return () => gozlemci.disconnect();
   }, [map, points, hasSelection]);
   return null;
 }
@@ -359,16 +403,15 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
     const acc: Array<[number, number]> = [];
     if (gridSnapshot?.poles?.length) {
       for (const p of gridSnapshot.poles) {
-        if (typeof p.latitude === "number" && typeof p.longitude === "number") {
-          acc.push([p.latitude, p.longitude]);
-        }
+        // KONUMU OLMAYAN KAYIT (0,0) HESABA GIRMEZ: tek bir (0,0) direk,
+        // sigdirilacak kutuyu Gine Korfezi'ne kadar buyutup haritayi kita
+        // gorunumunde aciyordu.
+        if (gecerliKonum(p.latitude, p.longitude)) acc.push([p.latitude, p.longitude]);
       }
     }
     if (acc.length === 0) {
       for (const d of devices) {
-        if (typeof d.latitude === "number" && typeof d.longitude === "number") {
-          acc.push([d.latitude, d.longitude]);
-        }
+        if (gecerliKonum(d.latitude, d.longitude)) acc.push([d.latitude, d.longitude]);
       }
     }
     return acc;
@@ -1321,13 +1364,13 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
               mergedWithParent: dal'in ilk diregi parent ile cakisik ise
               ayri bir pin gosterilmez (gorsel kalabaligi onler). */}
           {topology?.polesWithRole
-            .filter((info) => !info.mergedWithParent)
+            .filter((info) => !info.mergedWithParent && gecerliKonum(info.p.latitude, info.p.longitude))
             .map(({ p, isStart, isEnd, isBranchPoint, childLineNames, lineName, isBranchEntry, branchParentLineName }) => (
             <Marker
               key={`pole-${p.id}`}
               position={[p.latitude, p.longitude]}
               opacity={hiddenLineIds?.has(p.line_id) ? 0.35 : 1}
-              icon={polePin(String(p.sequence_no), isStart, isEnd, p, isBranchPoint, isBranchEntry)}
+              icon={polePin(String(p.sequence_no), isStart, isEnd, p)}
               eventHandlers={{
                 click: () => {
                   setPoleInfo({
@@ -1374,6 +1417,11 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
             const position: [number, number] = override
               ? override
               : [device.latitude, device.longitude];
+            // KONUMU YOK -> HARITADA YOK. Onceden konumu girilmemis her cihaz
+            // (0,0)'a, yani Gine Korfezi'ne bir pin birakiyordu; sahada boyle
+            // bir cihaz olmadigi icin bu pin yalnizca kafa karistiriyordu.
+            // Cihaz listede duruyor; oradan konumu girilebilir.
+            if (!gecerliKonum(position[0], position[1])) return null;
             const isAlarmed = alarmActiveDeviceIds.has(device.id);
             const dimmed = dimmedDeviceIds.has(device.id);
             return (
