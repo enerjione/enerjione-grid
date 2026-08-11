@@ -10,8 +10,7 @@
  *      kapatmak demekti.
  *   2. Iki arizayi karsilastirmak imkansizdi — modal tek ve modaldir.
  *      Oysa "ayni hatta iki ariza var mi" siradan bir soru.
- *   3. Icerik modal cercevesine sigmadigi icin uc dar kolona sikismisti;
- *      harita 300 piksel kaliyordu, oysa bu ekranin en degerli parcasi o.
+ *   3. Icerik modal cercevesine sigmadigi icin uc dar kolona sikismisti.
  *
  * Artik `{ kind: "fault-detail", faultId }` rotasiyla acilan bir sekme.
  *
@@ -20,17 +19,49 @@
  * Sekmeler localStorage'a yazildigi icin sayfa, ariza listesi HIC
  * yuklenmemisken de acilabilir. Kayit listede yoksa (kapanmis ariza,
  * gecmisten acilmisti) kendi cekiyor.
+ *
+ * DUZEN — 2026-08 yeniden tasarim
+ * -------------------------------
+ * Onceki duzen "solda dev harita + sagda 400px form rayi" idi. Uc somut
+ * sikayet vardi:
+ *
+ *   1. Harita ekranin yarisini kapliyor, geri kalan her sey onun yaninda
+ *      ikincil gorunuyordu. Harita degerli ama sayfanin TAMAMI degil.
+ *   2. Atama ile durum ayni kartin icindeydi; ikisi farkli sorular
+ *      ("kim gidiyor" / "is nerede") ve ayri okunmali.
+ *   3. Yan yana duran kartlarin boylari tutmuyordu (grid `align-items:start`)
+ *      — biri alcak biri yuksek, sayfa dagilmis gorunuyordu.
+ *
+ * Artik sayfa TAM GENISLIK SERITLERDEN olusur. Her serit bir grid satiri ve
+ * satirdaki kartlar AYNI YUKSEKLIKTEDIR (stretch); uzun listeler kartin
+ * icinde kayar, karti uzatmaz:
+ *
+ *   1) Atama            | Durum (adim seridi + zaman cizelgesi)
+ *   2) Konum haritasi   | Ariza kunyesi (cihazdan gelen olcumler)
+ *   3) Ariza bolgesi | Tetikleyen alarmlar | Direkler | Kollar | Hat gecmisi
+ *   4) Cozum & notlar   | Saha raporu (yorumlar)
+ *
+ * HARITA VARSAYILAN UYDU: hat arizasinda sahada aranan sey agac teması,
+ * dere yatagi, yol kenari — sokak gorunumu bunlarin hicbirini gostermez.
+ * Bu ekranda uydu katmani ISE YARAYAN katmandir, o yuzden acilis katmani.
+ *
+ * GERI DUGMESI YOK: sayfa bir SEKME; geri donus sekme seridinden yapilir,
+ * ekranin icinde ikinci bir gezinme ogesi gereksiz.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  ArrowLeft,
+  Activity,
   ArrowRight,
   CalendarClock,
+  Check,
   CircleDot,
+  GitBranch,
+  History,
   Lightbulb,
   MapPin,
   MessagesSquare,
+  Radio,
   Route,
   Save,
   Send,
@@ -43,6 +74,7 @@ import { LayersControl, MapContainer, Marker, Polyline, Tooltip } from "react-le
 import L from "leaflet";
 
 import { buildFaultMapView } from "./faultMapView";
+import { buildFaultRecurrence } from "./faultRecurrence";
 import { FitFocus } from "./FaultMapFocus";
 
 import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
@@ -57,6 +89,7 @@ import type {
   FaultCauseCatalog,
   FaultComment,
   FaultEvent,
+  FaultTriggerAlarm,
   UserRead
 } from "../../shared/types";
 
@@ -71,7 +104,6 @@ type Props = {
   gridSnapshot?: GridSnapshot | null;
   devices?: DeviceRow[];
   alarms?: AlarmEvent[];
-  onBack: () => void;
   onAssign: (faultId: number, username: string | null) => Promise<void>;
   onUpdateStatus: (faultId: number, status: string) => Promise<void>;
   onUpdateNote: (faultId: number, note: string | null) => Promise<void>;
@@ -101,6 +133,20 @@ const AKIS: readonly ["assigned", "in_progress", "resolved", "closed"] = [
 function fmtDate(iso: string | null | undefined, localeTag: string): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleString(localeTag);
+}
+
+function fmtClock(iso: string | null | undefined, localeTag: string): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleTimeString(localeTag, { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Ad-soyaddan iki harf. Kullanici adi yoksa "?" — uydurma bas harf yok. */
+function bashafler(ad: string | null | undefined): string {
+  const temiz = (ad ?? "").trim();
+  if (!temiz) return "?";
+  const parcalar = temiz.split(/\s+/);
+  if (parcalar.length === 1) return parcalar[0].substring(0, 2).toUpperCase();
+  return (parcalar[0][0] + parcalar[parcalar.length - 1][0]).toUpperCase();
 }
 
 /** Mini harita direk pini. */
@@ -141,7 +187,6 @@ export function FaultDetailPage({
   gridSnapshot,
   devices,
   alarms,
-  onBack,
   onAssign,
   onUpdateStatus,
   onUpdateNote,
@@ -221,8 +266,7 @@ export function FaultDetailPage({
   }, [faultId]);
 
   // Sunucudaki deger ilk geldiginde taslaga yansisin (kullanici henuz
-  // dokunmadiysa). `?? ""` yerine bos kontrol: kullanicinin bilerek
-  // bosalttigi bir alani geri doldurmayalim.
+  // dokunmadiysa).
   const [taslakYuklendi, setTaslakYuklendi] = useState(false);
   useEffect(() => {
     if (!fault || taslakYuklendi) return;
@@ -310,6 +354,13 @@ export function FaultDetailPage({
     });
   }, [gridSnapshot, fault, devices, alarmActiveDeviceIds, t]);
 
+  /** BU HAT DAHA ONCE DE ARIZALANDI MI — tekrar eden ariza baska bir istir:
+   *  gecici bir olay degil, cozulmemis bir kok sebep vardir. */
+  const recurrence = useMemo(
+    () => (fault ? buildFaultRecurrence(fault, faults) : null),
+    [fault, faults]
+  );
+
   /** Mutasyon sarmalayicisi: hata mesajini tek yerde topla, listede olmayan
    *  bir arizada kendi kopyamizi tazele. */
   const calistir = useCallback(
@@ -356,14 +407,80 @@ export function FaultDetailPage({
     return c ? { code: c.code, label: causeLabel(c) } : null;
   }, [causeCatalog, fault, causeLabel]);
 
+  /** ARIZA KUNYESI — cihazdan gelen olcumler. Yalnizca DOLU alanlar: "—" ile
+   *  dolu bir tablo bilgi tasimadigi gibi, gercekten bilinen iki degeri de
+   *  gorunmez kilar. */
+  const specRows = useMemo(() => {
+    const rows: { key: string; label: string; value: string; tone?: "red" | "green" }[] = [];
+    if (!fault) return rows;
+    const ekle = (
+      key: string,
+      label: string,
+      value: string | null | undefined,
+      tone?: "red" | "green"
+    ) => {
+      if (value == null || value === "") return;
+      rows.push({ key, label, value, tone });
+    };
+
+    if (fault.fault_kind) {
+      ekle(
+        "kind",
+        t("faults.card.specKind"),
+        t(`faults.card.kind.${fault.fault_kind}`, { defaultValue: fault.fault_kind }),
+        fault.fault_kind === "permanent" ? "red" : undefined
+      );
+    }
+    if (fault.phase) {
+      // "abc" -> "A-B-C". Backend fazlari harf harf ve sirali yazar.
+      ekle(
+        "phase",
+        t("faults.card.specPhase"),
+        fault.phase.toUpperCase().split("").join("-"),
+        "red"
+      );
+    }
+    if (fault.fault_direction) {
+      ekle(
+        "dir",
+        t("faults.card.specDirection"),
+        t(`faults.card.direction.${fault.fault_direction}`, {
+          defaultValue: fault.fault_direction
+        })
+      );
+    }
+    if (fault.fault_current_a != null) {
+      ekle("ia", t("faults.card.specFaultCurrent"), `${fault.fault_current_a.toFixed(1)} A`, "red");
+    }
+    if (fault.load_current_before_a != null) {
+      ekle(
+        "il",
+        t("faults.card.specLoadCurrent"),
+        `${fault.load_current_before_a.toFixed(1)} A`
+      );
+    }
+    if (fault.conductor_temp_c != null) {
+      ekle("temp", t("faults.card.specTemp"), `${fault.conductor_temp_c.toFixed(0)} °C`);
+    }
+    if (fault.momentary_fault_count != null) {
+      ekle("mc", t("faults.detail.specMomentaryCount"), String(fault.momentary_fault_count));
+    }
+    if (fault.permanent_fault_count != null) {
+      ekle("pc", t("faults.detail.specPermanentCount"), String(fault.permanent_fault_count));
+    }
+    if (fault.measured_at) {
+      ekle("at", t("faults.card.specMeasuredAt"), fmtClock(fault.measured_at, localeTag));
+    }
+    return rows;
+  }, [fault, t, localeTag]);
+
+  const triggerAlarms: FaultTriggerAlarm[] = fault?.trigger_alarms ?? [];
+  const triggerSignals = fault?.trigger_signals ?? [];
+
   // ---- Yukleniyor / bulunamadi -------------------------------------------
   if (!fault) {
     return (
       <div className="fd-page fd-page--bare">
-        <button type="button" className="fd-back" onClick={onBack}>
-          <ArrowLeft size={15} />
-          {t("faults.detail.backToList")}
-        </button>
         <div className="fd-placeholder">
           {yukleniyor ? (
             <>
@@ -382,16 +499,56 @@ export function FaultDetailPage({
   }
 
   const statusColor = STATUS_COLOR[fault.status] ?? "#64748b";
+  const akisIndex = AKIS.indexOf(fault.status as (typeof AKIS)[number]);
+  const assigneeName = fault.assigned_to_full_name ?? fault.assigned_to_username ?? null;
+  const distanceText = formatDistanceRange(fault.zone_start_m, fault.zone_end_m);
+
+  /** Kaydedilmemis degisiklik var mi — Cozum kartinin kaydet dugmesi bunu
+   *  okur. Sebep ve not TEK dugmede kaydedilir: operator ikisini birlikte
+   *  yaziyor, iki ayri "Kaydet" biri unutuldugunda sessizce veri kaybiydi. */
+  const causeDirty =
+    (fault.cause_code ?? "") !== causeDraft ||
+    (fault.cause_detail ?? "") !== causeDetailDraft.trim();
+  const noteDirty = (fault.note ?? "") !== noteDraft.trim();
+  const dirty = causeDirty || noteDirty;
+
+  const zamanCizelgesi = [
+    { key: "opened", label: t("faults.detail.timelineOpened"), at: fault.opened_at, color: "#ef4444" },
+    {
+      key: "assigned",
+      label: t("faults.detail.timelineAssigned"),
+      at: fault.assigned_at,
+      color: "#f59e0b"
+    },
+    {
+      key: "resolved",
+      label: t("faults.detail.timelineResolved"),
+      at: fault.resolved_at,
+      color: "#10b981"
+    },
+    {
+      key: "closed",
+      label: t("faults.detail.timelineClosed"),
+      at: fault.closed_at,
+      color: "#64748b"
+    }
+  ].filter((s) => Boolean(s.at));
 
   return (
     <div className="fd-page">
-      {/* ---- Ust serit: geri + kunye + olculer ---- */}
+      {/* ---- Ust serit: kunye + olculer ---- */}
       <header className="fd-head">
         <div className="fd-head-top">
-          <button type="button" className="fd-back" onClick={onBack}>
-            <ArrowLeft size={15} />
-            {t("faults.detail.backToList")}
-          </button>
+          <nav className="fd-breadcrumb" aria-label={t("faults.detail.mapTitle")}>
+            <MapPin size={13} />
+            <span>{fault.region_name}</span>
+            <em>/</em>
+            <span>{fault.line_name}</span>
+            <em>/</em>
+            <strong>
+              {t("faults.card.rangeText", { from: fault.from_pole_seq, to: fault.to_pole_seq })}
+            </strong>
+          </nav>
           <span
             className="fd-status-badge"
             style={{ background: `${statusColor}18`, color: statusColor }}
@@ -401,18 +558,10 @@ export function FaultDetailPage({
           </span>
         </div>
 
-        <h1 className="fd-title">{fault.line_name}</h1>
-
-        <nav className="fd-breadcrumb" aria-label={t("faults.detail.mapTitle")}>
-          <MapPin size={13} />
-          <span>{fault.region_name}</span>
-          <em>/</em>
-          <span>{fault.line_name}</span>
-          <em>/</em>
-          <strong>
-            {t("faults.card.rangeText", { from: fault.from_pole_seq, to: fault.to_pole_seq })}
-          </strong>
-        </nav>
+        <h1 className="fd-title">
+          {fault.line_name}
+          <span className="fd-record">#{fault.id}</span>
+        </h1>
 
         <div className="fd-metrics">
           <Metric
@@ -430,544 +579,730 @@ export function FaultDetailPage({
           <Metric
             Icon={UserRound}
             label={t("faults.detail.assignee")}
-            value={
-              fault.assigned_to_full_name ??
-              fault.assigned_to_username ??
-              t("faults.detail.assigneeEmpty")
-            }
+            value={assigneeName ?? t("faults.detail.assigneeEmpty")}
           />
           <Metric
             Icon={Route}
             label={t("faults.detail.distanceFromStart")}
-            value={formatDistanceRange(fault.zone_start_m, fault.zone_end_m) || "—"}
+            value={distanceText || "—"}
           />
         </div>
       </header>
 
-      <div className="fd-body">
-        {/* ================= ANA KOLON ================= */}
-        <div className="fd-main">
-          <section className="fd-card fd-card--map">
-            <header className="fd-card-head">
-              <h2>
-                <MapPin size={15} />
-                {t("faults.detail.mapTitle")}
-              </h2>
-              {/* ODAK SECICI: ariza bolgesine zoom yapinca "bu hattin
-                  neresi?" belirsiz kaliyor, tum hatta bakinca ariza noktasi
-                  kayboluyordu. Ucu de ayni haritada. */}
-              {mapView ? (
-                <div className="fd-focus" role="group">
-                  {(["zone", "line", "grid"] as const).map((k) => (
-                    <button
-                      key={k}
-                      type="button"
-                      className={mapFocus === k ? "is-active" : undefined}
-                      onClick={() => setMapFocus(k)}
-                    >
-                      {t(`faults.detail.focus.${k}`)}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </header>
+      {error ? <p className="fd-error">{error}</p> : null}
 
-            {mapView ? (
-              <>
-                <div className="fd-map-wrap">
-                  <MapContainer
-                    center={mapView.center}
-                    zoom={mapView.zoom}
-                    className="fd-map"
-                    scrollWheelZoom={false}
-                    dragging
-                    doubleClickZoom={false}
-                    attributionControl={false}
-                  >
-                    <LayersControl position="topright">
-                      <LayersControl.BaseLayer checked name={t("map.layers.street")}>
-                        {/* maxZoom verilmezse Leaflet 18'e duser ve sokak
-                            gorunumu uydudan (19) bir kademe geride kalir. */}
-                        <ResilientTileLayer
-                          layer="osm"
-                          attribution={MAP_LAYERS[0].attribution}
-                          maxZoom={MAP_LAYERS[0].maxZoom}
-                        />
-                      </LayersControl.BaseLayer>
-                      <LayersControl.BaseLayer name={t("map.layers.satellite")}>
-                        <ResilientTileLayer
-                          layer="satellite"
-                          attribution={MAP_LAYERS[1].attribution}
-                          maxZoom={MAP_LAYERS[1].maxZoom}
-                        />
-                      </LayersControl.BaseLayer>
-                    </LayersControl>
-                    <MapLayerSwitchFix />
-                    <FitFocus
-                      points={
-                        mapFocus === "zone"
-                          ? mapView.zoneBounds
-                          : mapFocus === "line"
-                            ? mapView.lineBounds
-                            : mapView.gridBounds
-                      }
-                    />
-                    {/* Tum sebeke gorunumunde komsu hatlar SOLUK — ariza
-                        hatti one cikmaya devam etsin. */}
-                    {mapFocus === "grid"
-                      ? mapView.otherLines.map((l) => (
-                          <Polyline
-                            key={`ol-${l.lineId}`}
-                            positions={l.path}
-                            pathOptions={{ color: "#94a3b8", weight: 2.5, opacity: 0.45 }}
-                          >
-                            <Tooltip>{l.name}</Tooltip>
-                          </Polyline>
-                        ))
-                      : null}
-                    {mapView.preGreen.length >= 2 ? (
-                      <Polyline
-                        positions={mapView.preGreen}
-                        pathOptions={{ color: "#16a34a", weight: 4, opacity: 0.85 }}
-                      />
-                    ) : null}
-                    {mapView.postGreen.length >= 2 ? (
-                      <Polyline
-                        positions={mapView.postGreen}
-                        pathOptions={{ color: "#16a34a", weight: 4, opacity: 0.85 }}
-                      />
-                    ) : null}
-                    {mapView.faultRed.length >= 2 ? (
-                      <Polyline
-                        positions={mapView.faultRed}
-                        pathOptions={{
-                          color: "#ef4444",
-                          weight: 6,
-                          opacity: 0.95,
-                          dashArray: "10 6"
-                        }}
-                      />
-                    ) : null}
-                    {mapView.polesWithRole.map(({ p, isFromFault, isToFault, isInFaultRange }) => (
-                      <Marker
-                        key={`p-${p.id}`}
-                        position={[p.latitude, p.longitude]}
-                        icon={polePin(
-                          String(p.sequence_no),
-                          isFromFault,
-                          isToFault || (isInFaultRange && !isFromFault)
-                        )}
-                      >
-                        <Tooltip>
-                          {p.name ?? `${t("faults.detail.tooltipPole")} #${p.sequence_no}`}
-                          {isFromFault ? ` (${t("faults.detail.tooltipFaultStart")})` : ""}
-                          {isToFault ? ` (${t("faults.detail.tooltipFaultEnd")})` : ""}
-                        </Tooltip>
-                      </Marker>
-                    ))}
-                    {mapView.deviceMarkers.map((d) => (
-                      <Marker
-                        key={`d-${d.deviceId}`}
-                        position={[d.lat, d.lon]}
-                        icon={deviceIcon(d.isRed)}
-                      >
-                        <Tooltip>
-                          <strong>{d.name}</strong>
-                          {d.code ? (
-                            <>
-                              <br />
-                              <span style={{ opacity: 0.7 }}>{d.code}</span>
-                            </>
-                          ) : null}
-                          <br />
-                          <em style={{ color: d.isRed ? "#dc2626" : "#10b981" }}>
-                            {d.isRed
-                              ? t("faults.detail.deviceDetectedFault")
-                              : t("faults.detail.deviceNoFault")}
-                          </em>
-                        </Tooltip>
-                      </Marker>
-                    ))}
-                  </MapContainer>
-                </div>
-                <div className="fd-legend">
-                  <span>
-                    <i className="fd-legend-line" style={{ background: "#ef4444" }} />
-                    {t("faults.detail.mapLegendFault")}
-                  </span>
-                  <span>
-                    <i className="fd-legend-line" style={{ background: "#16a34a" }} />
-                    {t("faults.detail.mapLegendOk")}
-                  </span>
-                  <span>
-                    <i className="fd-legend-dot" style={{ background: "#dc2626" }} />
-                    {t("faults.detail.mapLegendDeviceRed")}
-                  </span>
-                  <span>
-                    <i className="fd-legend-dot" style={{ background: "#10b981" }} />
-                    {t("faults.detail.mapLegendDeviceGreen")}
-                  </span>
-                </div>
-              </>
-            ) : (
-              <p className="fd-empty">{t("faults.detail.mapEmpty")}</p>
-            )}
-          </section>
+      {/* ================= 1) ATAMA | DURUM =================
+          Ikisi eskiden tek kartta ("Sorumluluk") idi. Farkli iki soru:
+          "kim gidiyor" ve "is nerede". Ayri kartlar. */}
+      <div className="fd-row fd-row--split">
+        <section className="fd-card">
+          <header className="fd-card-head">
+            <h2>
+              <UserRound size={15} />
+              {t("faults.detail.assignTitle")}
+            </h2>
+            <small>{t("faults.detail.ticketsHint")}</small>
+          </header>
 
-          <div className="fd-subgrid">
-            {/* Ariza tespit eden cihazlar — arizanin YERINI daraltan cift. */}
-            <section className="fd-card">
-              <header className="fd-card-head">
-                <h2>
-                  <Zap size={15} />
-                  {t("faults.detail.devicesTitle")}
-                </h2>
-                <small>{t("faults.detail.devicesHint")}</small>
-              </header>
-              <div className="fd-devices">
-                <div className="fd-device fd-device--red">
-                  <span className="fd-device-dot" />
-                  <span className="fd-device-role">{t("faults.detail.deviceLastRedRole")}</span>
-                  <strong>{fault.last_red_device_name ?? "—"}</strong>
-                  {fault.last_red_device_code ? <small>{fault.last_red_device_code}</small> : null}
-                </div>
-                <ArrowRight className="fd-device-arrow" size={16} />
-                <div className="fd-device fd-device--green">
-                  <span className="fd-device-dot" />
-                  <span className="fd-device-role">{t("faults.detail.deviceFirstGreenRole")}</span>
-                  <strong>
-                    {fault.first_green_device_name ?? t("faults.detail.deviceFirstGreenLineEnd")}
-                  </strong>
-                  {fault.first_green_device_code ? (
-                    <small>{fault.first_green_device_code}</small>
-                  ) : null}
-                </div>
-              </div>
-            </section>
-
-            {/* Tel mesafesi — backend'de direk + cihaz koordinatlarindan hat
-                boyunca hesaplanip kayda yazilir (line_distance_service). */}
-            {formatDistanceRange(fault.zone_start_m, fault.zone_end_m) ? (
-              <section className="fd-card">
-                <header className="fd-card-head">
-                  <h2>
-                    <Route size={15} />
-                    {t("faults.detail.distanceTitle")}
-                  </h2>
-                </header>
-                <dl className="fd-kv">
-                  <div>
-                    <dt>{t("faults.detail.distanceFromStart")}</dt>
-                    <dd>{formatDistanceRange(fault.zone_start_m, fault.zone_end_m)}</dd>
-                  </div>
-                  {fault.zone_length_m != null ? (
-                    <div>
-                      <dt>
-                        {t("faults.detail.distanceFromDevice", {
-                          device:
-                            fault.last_red_device_name ?? fault.last_red_device_code ?? "—"
-                        })}
-                      </dt>
-                      <dd>
-                        {t("faults.detail.distanceAheadRange", {
-                          span: formatDistanceM(fault.zone_length_m)
-                        })}
-                      </dd>
-                    </div>
-                  ) : null}
-                </dl>
-              </section>
-            ) : null}
-
-            {mapView && mapView.rangePoles.length > 0 ? (
-              <section className="fd-card">
-                <header className="fd-card-head">
-                  <h2>
-                    <CircleDot size={15} />
-                    {t("faults.detail.rangePolesTitle")}
-                  </h2>
-                </header>
-                <ul className="fd-poles">
-                  {mapView.rangePoles.map((rp) => (
-                    <li
-                      key={rp.id}
-                      className={rp.isStart ? "is-start" : rp.isEnd ? "is-end" : undefined}
-                    >
-                      <span className="fd-pole-seq">#{rp.sequence_no}</span>
-                      <strong>{rp.name}</strong>
-                      {rp.isStart ? (
-                        <span className="fd-tag fd-tag--red">
-                          {t("faults.detail.poleRangeStart")}
-                        </span>
-                      ) : rp.isEnd ? (
-                        <span className="fd-tag fd-tag--green">
-                          {t("faults.detail.poleRangeEnd")}
-                        </span>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
+          <div className="fd-assignee">
+            <span
+              className={`fd-avatar ${assigneeName ? "" : "fd-avatar--empty"}`}
+              aria-hidden="true"
+            >
+              {assigneeName ? bashafler(assigneeName) : "—"}
+            </span>
+            <div className="fd-assignee-body">
+              <strong>{assigneeName ?? t("faults.detail.assigneeEmpty")}</strong>
+              {/* Alt satir: adi VARSA kullanici adi (telsizde soylenen sey o),
+                  atanmamissa uyari. Atanma zamani asagida kunyede duruyor —
+                  burada tekrar edilmez. */}
+              {fault.assigned_to_full_name && fault.assigned_to_username ? (
+                <small>{fault.assigned_to_username}</small>
+              ) : assigneeName ? null : (
+                <small>{t("faults.detail.assignHint")}</small>
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* ================= YAN KOLON (ticket) ================= */}
-        <aside className="fd-rail">
-          {error ? <p className="fd-error">{error}</p> : null}
-
-          <section className="fd-card">
-            <header className="fd-card-head">
-              <h2>
-                <UserRound size={15} />
-                {t("faults.detail.tickets")}
-              </h2>
-              <small>{t("faults.detail.ticketsHint")}</small>
-            </header>
-
-            <label className="fd-label" htmlFor="fd-assignee">
-              {t("faults.detail.assignee")}
-            </label>
-            {canAssign ? (
-              <select
-                id="fd-assignee"
-                className="fd-select"
-                value={fault.assigned_to_username ?? ""}
-                onChange={(e) =>
-                  void calistir(
-                    () => onAssign(fault.id, e.target.value || null),
-                    "alarms.errors.assignFailed"
-                  )
-                }
-                disabled={saving}
-              >
-                <option value="">{t("faults.detail.assigneeUnset")}</option>
-                {userOptions.map((u) => (
-                  <option key={u.id} value={u.username}>
-                    {u.full_name} ({u.username})
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="fd-assignee">
-                {fault.assigned_to_username ? (
-                  <>
-                    <span className="fd-avatar">
-                      {(fault.assigned_to_username || "?").substring(0, 2).toUpperCase()}
-                    </span>
-                    <div>
-                      <strong>
-                        {fault.assigned_to_full_name ?? fault.assigned_to_username}
-                      </strong>
-                      {fault.assigned_to_full_name ? (
-                        <small>{fault.assigned_to_username}</small>
-                      ) : null}
-                    </div>
-                  </>
-                ) : (
-                  <span className="fd-muted">{t("faults.detail.assigneeEmpty")}</span>
-                )}
-              </div>
-            )}
-
-            <span className="fd-label">{t("faults.detail.statusLabel")}</span>
-            <div className="fd-status-grid">
-              {AKIS.map((s) => {
-                const active = fault.status === s;
-                const color = STATUS_COLOR[s];
-                return (
+          {canAssign ? (
+            <>
+              <label className="fd-label" htmlFor="fd-assignee">
+                {t("faults.detail.changeAssignee")}
+              </label>
+              <div className="fd-assign-row">
+                <select
+                  id="fd-assignee"
+                  className="fd-select"
+                  value={fault.assigned_to_username ?? ""}
+                  onChange={(e) =>
+                    void calistir(
+                      () => onAssign(fault.id, e.target.value || null),
+                      "alarms.errors.assignFailed"
+                    )
+                  }
+                  disabled={saving}
+                >
+                  <option value="">{t("faults.detail.assigneeUnset")}</option>
+                  {userOptions.map((u) => (
+                    <option key={u.id} value={u.username}>
+                      {u.full_name} ({u.username})
+                    </option>
+                  ))}
+                </select>
+                {/* Sahadaki kisi arizayi kendi ustlenebilsin — listede kendi
+                    adini aramak gereksiz bir adim. */}
+                {fault.assigned_to_username !== currentUsername ? (
                   <button
-                    key={s}
                     type="button"
-                    className={`fd-status-btn ${active ? "is-active" : ""}`}
+                    className="fd-ghost-btn"
                     onClick={() =>
                       void calistir(
-                        () => onUpdateStatus(fault.id, s),
-                        "common.errorOccurred"
+                        () => onAssign(fault.id, currentUsername),
+                        "alarms.errors.assignFailed"
                       )
                     }
-                    disabled={saving || !canEdit}
-                    style={
-                      active
-                        ? { background: color, borderColor: color, color: "#fff" }
-                        : { borderColor: `${color}55` }
-                    }
+                    disabled={saving}
                   >
-                    <span className="fd-status-dot" style={{ background: color }} />
-                    {t(`faults.status.${s}`)}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* Ariza sebebi — analiz katmaninin ogrenecegi TEK insan etiketi. */}
-          <section className="fd-card">
-            <header className="fd-card-head">
-              <h2>
-                <TriangleAlert size={15} />
-                {t("faults.detail.causeTitle")}
-              </h2>
-              <small>{t("faults.detail.causeHint")}</small>
-            </header>
-
-            {suggestedCause ? (
-              <div className="fd-suggestion">
-                <Lightbulb size={14} />
-                <span>{t("faults.detail.causeSuggested", { cause: suggestedCause.label })}</span>
-                {canEdit && causeDraft !== suggestedCause.code ? (
-                  <button type="button" onClick={() => setCauseDraft(suggestedCause.code)}>
-                    {t("faults.detail.causeUseSuggestion")}
+                    {t("faults.detail.assignToMe")}
                   </button>
                 ) : null}
               </div>
-            ) : null}
+            </>
+          ) : null}
 
-            <select
-              className="fd-select"
-              value={causeDraft}
-              disabled={saving || !canEdit || causeCatalog === null}
-              onChange={(e) => setCauseDraft(e.target.value)}
-            >
-              <option value="">{t("faults.detail.causeNotSet")}</option>
-              {causeGroups.map(([grup, liste]) => (
-                <optgroup
-                  key={grup}
-                  label={t(`faults.causeGroup.${grup}`, { defaultValue: grup })}
-                >
-                  {liste.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {causeLabel(c)}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+          {fault.assigned_at ? (
+            <dl className="fd-kv">
+              <div>
+                <dt>{t("faults.detail.assignedAtLabel")}</dt>
+                <dd>{fmtDate(fault.assigned_at, localeTag)}</dd>
+              </div>
+            </dl>
+          ) : null}
+        </section>
 
-            <textarea
-              className="fd-textarea"
-              rows={3}
-              value={causeDetailDraft}
-              onChange={(e) => setCauseDetailDraft(e.target.value)}
-              disabled={saving || !canEdit}
-              placeholder={t("faults.detail.causeDetailPlaceholder")}
-            />
+        <section className="fd-card">
+          <header className="fd-card-head">
+            <h2>
+              <CircleDot size={15} />
+              {t("faults.detail.statusLabel")}
+            </h2>
+            <small>{t("faults.detail.statusHint")}</small>
+          </header>
 
-            {canEdit ? (
-              <button
-                type="button"
-                className="fd-save"
-                onClick={() =>
-                  void calistir(
-                    () =>
-                      onUpdateCause(fault.id, {
-                        // Bos secim = sebebi GERI AL (yanlis secildiyse
-                        // duzeltilebilmeli).
-                        cause_code: causeDraft || null,
-                        cause_detail: causeDetailDraft.trim() || null
-                      }),
-                    "common.errorOccurred"
-                  )
-                }
-                disabled={saving}
-              >
-                <Save size={14} />
-                {t("faults.detail.saveCause")}
-              </button>
-            ) : null}
-          </section>
-
-          <section className="fd-card">
-            <header className="fd-card-head">
-              <h2>
-                <Save size={15} />
-                {t("faults.detail.writeNote")}
-              </h2>
-              <small>{t("faults.detail.writeNoteHint")}</small>
-            </header>
-            <textarea
-              className="fd-textarea"
-              rows={4}
-              value={noteDraft}
-              onChange={(e) => setNoteDraft(e.target.value)}
-              disabled={saving || !canEdit}
-              placeholder={t("faults.detail.writeNotePlaceholder")}
-            />
-            {canEdit ? (
-              <button
-                type="button"
-                className="fd-save"
-                onClick={() =>
-                  void calistir(
-                    () => onUpdateNote(fault.id, noteDraft.trim() || null),
-                    "common.errorOccurred"
-                  )
-                }
-                disabled={saving}
-              >
-                <Save size={14} />
-                {t("faults.detail.saveNote")}
-              </button>
-            ) : null}
-          </section>
-
-          <section className="fd-card">
-            <header className="fd-card-head">
-              <h2>
-                <MessagesSquare size={15} />
-                {t("faults.detail.commentsTitle")}
-                {comments.length > 0 ? <span className="fd-count">{comments.length}</span> : null}
-              </h2>
-            </header>
-            <ul className="fd-comments">
-              {comments.length === 0 ? (
-                <li className="fd-muted">{t("faults.detail.commentsHint")}</li>
-              ) : (
-                comments.map((c) => (
-                  <li key={c.id} className="fd-comment">
-                    <header>
-                      <span className="fd-avatar">
-                        {(c.author_username || "?").substring(0, 2).toUpperCase()}
-                      </span>
-                      <strong>{c.author_username}</strong>
-                      <time>{fmtDate(c.created_at, localeTag)}</time>
-                    </header>
-                    <p>{c.body}</p>
-                  </li>
-                ))
-              )}
-            </ul>
-            {canEdit ? (
-              <div className="fd-comment-add">
-                <textarea
-                  className="fd-textarea"
-                  rows={3}
-                  placeholder={t("faults.detail.commentsAddPlaceholder")}
-                  value={commentDraft}
-                  onChange={(e) => setCommentDraft(e.target.value)}
-                  disabled={saving}
-                />
+          {/* ADIM SERIDI: dort durum bir AKIS'tir; 2x2 dugme izgarasi bu
+              sirayi gizliyordu. Gecilmis adimlar dolu, siradaki solgun. */}
+          <div className="fd-steps" role="group" aria-label={t("faults.detail.statusLabel")}>
+            {AKIS.map((s, i) => {
+              const active = fault.status === s;
+              const done = akisIndex >= 0 && i < akisIndex;
+              const color = STATUS_COLOR[s];
+              return (
                 <button
+                  key={s}
                   type="button"
-                  className="fd-save fd-save--send"
+                  className={`fd-step ${active ? "is-active" : ""} ${done ? "is-done" : ""}`}
+                  style={{ "--fd-step-c": color } as CSSProperties}
                   onClick={() =>
-                    void calistir(async () => {
-                      const body = commentDraft.trim();
-                      if (!body) return;
-                      await onAddComment(fault.id, body);
-                      setComments(await onLoadComments(fault.id));
-                      setCommentDraft("");
-                    }, "alarms.errors.commentFailed")
+                    void calistir(() => onUpdateStatus(fault.id, s), "common.errorOccurred")
                   }
-                  disabled={saving || !commentDraft.trim()}
+                  disabled={saving || !canEdit}
+                  title={t(`faults.status.${s}`)}
                 >
-                  <Send size={14} />
-                  {t("faults.detail.addCommentBtn")}
+                  <span className="fd-step-dot">
+                    {done ? <Check size={12} strokeWidth={3} /> : i + 1}
+                  </span>
+                  <span className="fd-step-label">{t(`faults.status.${s}`)}</span>
                 </button>
+              );
+            })}
+          </div>
+
+          {/* ZAMAN CIZELGESI — "ne zaman ne oldu" sorusu her devir teslimde
+              soruluyordu; kayit zaten var, gosterilmiyordu. */}
+          <span className="fd-label">{t("faults.detail.timelineTitle")}</span>
+          <ol className="fd-timeline">
+            {zamanCizelgesi.map((s) => (
+              <li key={s.key}>
+                <i style={{ background: s.color }} />
+                <span>{s.label}</span>
+                <time>{fmtDate(s.at, localeTag)}</time>
+              </li>
+            ))}
+          </ol>
+        </section>
+      </div>
+
+      {/* ================= 2) HARITA | KUNYE ================= */}
+      <div className="fd-row fd-row--map">
+        <section className="fd-card fd-card--map">
+          <header className="fd-card-head">
+            <h2>
+              <MapPin size={15} />
+              {t("faults.detail.mapTitle")}
+            </h2>
+            {/* ODAK SECICI: ariza bolgesine zoom yapinca "bu hattin
+                neresi?" belirsiz kaliyor, tum hatta bakinca ariza noktasi
+                kayboluyordu. Ucu de ayni haritada. */}
+            {mapView ? (
+              <div className="fd-focus" role="group">
+                {(["zone", "line", "grid"] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    className={mapFocus === k ? "is-active" : undefined}
+                    onClick={() => setMapFocus(k)}
+                  >
+                    {t(`faults.detail.focus.${k}`)}
+                  </button>
+                ))}
               </div>
             ) : null}
+          </header>
+
+          {mapView ? (
+            <>
+              <div className="fd-map-wrap">
+                <MapContainer
+                  center={mapView.center}
+                  zoom={mapView.zoom}
+                  className="fd-map"
+                  scrollWheelZoom={false}
+                  dragging
+                  doubleClickZoom={false}
+                  attributionControl={false}
+                >
+                  <LayersControl position="topright">
+                    {/* UYDU ONCE ve `checked`: hat arizasinda aranan sey agac,
+                        dere yatagi, yol kenari — sokak cizimi bunlari
+                        gostermez. Sokak katmani ikinci sirada duruyor. */}
+                    <LayersControl.BaseLayer checked name={t("map.layers.satellite")}>
+                      <ResilientTileLayer
+                        layer="satellite"
+                        attribution={MAP_LAYERS[1].attribution}
+                        maxZoom={MAP_LAYERS[1].maxZoom}
+                      />
+                    </LayersControl.BaseLayer>
+                    <LayersControl.BaseLayer name={t("map.layers.street")}>
+                      {/* maxZoom verilmezse Leaflet 18'e duser ve sokak
+                          gorunumu uydudan (19) bir kademe geride kalir. */}
+                      <ResilientTileLayer
+                        layer="osm"
+                        attribution={MAP_LAYERS[0].attribution}
+                        maxZoom={MAP_LAYERS[0].maxZoom}
+                      />
+                    </LayersControl.BaseLayer>
+                  </LayersControl>
+                  <MapLayerSwitchFix />
+                  <FitFocus
+                    points={
+                      mapFocus === "zone"
+                        ? mapView.zoneBounds
+                        : mapFocus === "line"
+                          ? mapView.lineBounds
+                          : mapView.gridBounds
+                    }
+                  />
+                  {/* Tum sebeke gorunumunde komsu hatlar SOLUK — ariza
+                      hatti one cikmaya devam etsin. */}
+                  {mapFocus === "grid"
+                    ? mapView.otherLines.map((l) => (
+                        <Polyline
+                          key={`ol-${l.lineId}`}
+                          positions={l.path}
+                          pathOptions={{ color: "#e2e8f0", weight: 2.5, opacity: 0.55 }}
+                        >
+                          <Tooltip>{l.name}</Tooltip>
+                        </Polyline>
+                      ))
+                    : null}
+                  {mapView.preGreen.length >= 2 ? (
+                    <Polyline
+                      positions={mapView.preGreen}
+                      pathOptions={{ color: "#22c55e", weight: 4, opacity: 0.9 }}
+                    />
+                  ) : null}
+                  {mapView.postGreen.length >= 2 ? (
+                    <Polyline
+                      positions={mapView.postGreen}
+                      pathOptions={{ color: "#22c55e", weight: 4, opacity: 0.9 }}
+                    />
+                  ) : null}
+                  {mapView.faultRed.length >= 2 ? (
+                    <Polyline
+                      positions={mapView.faultRed}
+                      pathOptions={{
+                        color: "#ef4444",
+                        weight: 6,
+                        opacity: 0.95,
+                        dashArray: "10 6"
+                      }}
+                    />
+                  ) : null}
+                  {mapView.polesWithRole.map(({ p, isFromFault, isToFault, isInFaultRange }) => (
+                    <Marker
+                      key={`p-${p.id}`}
+                      position={[p.latitude, p.longitude]}
+                      icon={polePin(
+                        String(p.sequence_no),
+                        isFromFault,
+                        isToFault || (isInFaultRange && !isFromFault)
+                      )}
+                    >
+                      <Tooltip>
+                        {p.name ?? `${t("faults.detail.tooltipPole")} #${p.sequence_no}`}
+                        {isFromFault ? ` (${t("faults.detail.tooltipFaultStart")})` : ""}
+                        {isToFault ? ` (${t("faults.detail.tooltipFaultEnd")})` : ""}
+                      </Tooltip>
+                    </Marker>
+                  ))}
+                  {mapView.deviceMarkers.map((d) => (
+                    <Marker
+                      key={`d-${d.deviceId}`}
+                      position={[d.lat, d.lon]}
+                      icon={deviceIcon(d.isRed)}
+                    >
+                      <Tooltip>
+                        <strong>{d.name}</strong>
+                        {d.code ? (
+                          <>
+                            <br />
+                            <span style={{ opacity: 0.7 }}>{d.code}</span>
+                          </>
+                        ) : null}
+                        <br />
+                        <em style={{ color: d.isRed ? "#dc2626" : "#10b981" }}>
+                          {d.isRed
+                            ? t("faults.detail.deviceDetectedFault")
+                            : t("faults.detail.deviceNoFault")}
+                        </em>
+                      </Tooltip>
+                    </Marker>
+                  ))}
+                </MapContainer>
+              </div>
+              <div className="fd-legend">
+                <span>
+                  <i className="fd-legend-line" style={{ background: "#ef4444" }} />
+                  {t("faults.detail.mapLegendFault")}
+                </span>
+                <span>
+                  <i className="fd-legend-line" style={{ background: "#22c55e" }} />
+                  {t("faults.detail.mapLegendOk")}
+                </span>
+                <span>
+                  <i className="fd-legend-dot" style={{ background: "#dc2626" }} />
+                  {t("faults.detail.mapLegendDeviceRed")}
+                </span>
+                <span>
+                  <i className="fd-legend-dot" style={{ background: "#10b981" }} />
+                  {t("faults.detail.mapLegendDeviceGreen")}
+                </span>
+              </div>
+            </>
+          ) : (
+            <p className="fd-empty">{t("faults.detail.mapEmpty")}</p>
+          )}
+        </section>
+
+        {/* ARIZA KUNYESI — cihazin arizanin KENDISI hakkinda soyledikleri.
+            Bu ekranda hic gorunmuyordu; operator ayni bilgiyi liste
+            kartindan okumak icin geri donuyordu. */}
+        <section className="fd-card">
+          <header className="fd-card-head">
+            <h2>
+              <Activity size={15} />
+              {t("faults.card.specTitle")}
+            </h2>
+            <small>{t("faults.detail.specHint")}</small>
+          </header>
+
+          {specRows.length === 0 ? (
+            <p className="fd-empty">{t("faults.card.specEmpty")}</p>
+          ) : (
+            <dl className="fd-spec">
+              {specRows.map((row) => (
+                <div key={row.key}>
+                  <dt>{row.label}</dt>
+                  <dd className={row.tone ? `is-${row.tone}` : undefined}>{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+
+          {triggerSignals.length > 0 ? (
+            <>
+              <span className="fd-label">{t("faults.detail.specSignals")}</span>
+              <div className="fd-signals">
+                {triggerSignals.map((s) => (
+                  <code key={s}>{s}</code>
+                ))}
+              </div>
+            </>
+          ) : null}
+        </section>
+      </div>
+
+      {/* ================= 3) BOLGE / ALARM / DIREK / KOL / GECMIS ========= */}
+      <div className="fd-row fd-row--tiles">
+        {/* Ariza tespit eden cihazlar + tel mesafesi: ikisi ayni soruyu
+            yanitliyor (SAHADA NEREYE GIDILECEK), tek kartta. */}
+        <section className="fd-card">
+          <header className="fd-card-head">
+            <h2>
+              <Zap size={15} />
+              {t("faults.detail.devicesTitle")}
+            </h2>
+            <small>{t("faults.detail.devicesHint")}</small>
+          </header>
+          <div className="fd-devices">
+            <div className="fd-device fd-device--red">
+              <span className="fd-device-dot" />
+              <span className="fd-device-role">{t("faults.detail.deviceLastRedRole")}</span>
+              <strong>{fault.last_red_device_name ?? "—"}</strong>
+              {fault.last_red_device_code ? <small>{fault.last_red_device_code}</small> : null}
+            </div>
+            <ArrowRight className="fd-device-arrow" size={16} />
+            <div className="fd-device fd-device--green">
+              <span className="fd-device-dot" />
+              <span className="fd-device-role">{t("faults.detail.deviceFirstGreenRole")}</span>
+              <strong>
+                {fault.first_green_device_name ?? t("faults.detail.deviceFirstGreenLineEnd")}
+              </strong>
+              {fault.first_green_device_code ? (
+                <small>{fault.first_green_device_code}</small>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Tel mesafesi — backend'de direk + cihaz koordinatlarindan hat
+              boyunca hesaplanip kayda yazilir (line_distance_service). */}
+          {distanceText ? (
+            <dl className="fd-kv">
+              <div>
+                <dt>{t("faults.detail.distanceFromStart")}</dt>
+                <dd>{distanceText}</dd>
+              </div>
+              {fault.zone_length_m != null ? (
+                <div>
+                  <dt>{t("faults.detail.distanceSpanLabel")}</dt>
+                  <dd>{formatDistanceM(fault.zone_length_m)}</dd>
+                </div>
+              ) : null}
+            </dl>
+          ) : null}
+        </section>
+
+        {/* Arizayi acan alarmlar — "cihaz neyi gordu" sorusunun kanidi. */}
+        <section className="fd-card">
+          <header className="fd-card-head">
+            <h2>
+              <TriangleAlert size={15} />
+              {t("faults.card.causeTitle")}
+            </h2>
+          </header>
+          {triggerAlarms.length === 0 ? (
+            <p className="fd-empty">{t("faults.card.causeEmpty")}</p>
+          ) : (
+            <ul className="fd-alarms">
+              {triggerAlarms.map((a) => (
+                <li key={a.id} className={`fd-alarm fd-alarm--${a.level}`}>
+                  <div className="fd-alarm-top">
+                    <strong>{a.title}</strong>
+                    {a.signal_source ? (
+                      <span className="fd-phase">
+                        <Radio size={10} strokeWidth={2.6} />
+                        {t(`faults.phase.${a.signal_source}`, {
+                          defaultValue: a.signal_source
+                        })}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="fd-alarm-sub">
+                    {a.device_name ?? a.device_code ?? "—"}
+                    <span>·</span>
+                    {fmtClock(a.created_at, localeTag)}
+                    {a.acknowledged ? (
+                      <>
+                        <span>·</span>
+                        {t("faults.card.alarmAcked")}
+                      </>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {mapView && mapView.rangePoles.length > 0 ? (
+          <section className="fd-card">
+            <header className="fd-card-head">
+              <h2>
+                <CircleDot size={15} />
+                {t("faults.detail.rangePolesTitle")}
+              </h2>
+            </header>
+            <ul className="fd-poles">
+              {mapView.rangePoles.map((rp) => (
+                <li
+                  key={rp.id}
+                  className={rp.isStart ? "is-start" : rp.isEnd ? "is-end" : undefined}
+                >
+                  <span className="fd-pole-seq">#{rp.sequence_no}</span>
+                  <strong>{rp.name}</strong>
+                  {rp.isStart ? (
+                    <span className="fd-tag fd-tag--red">{t("faults.detail.poleRangeStart")}</span>
+                  ) : rp.isEnd ? (
+                    <span className="fd-tag fd-tag--green">{t("faults.detail.poleRangeEnd")}</span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
           </section>
-        </aside>
+        ) : null}
+
+        {/* Ana hattaki ariza bir dallanma diregini kapsiyorsa o kol da
+            enerjisiz kalir; ekip sahada kolu da kontrol etmelidir. */}
+        {(fault.affected_branches?.length ?? 0) > 0 ? (
+          <section className="fd-card">
+            <header className="fd-card-head">
+              <h2>
+                <GitBranch size={15} />
+                {t("faults.card.branchesTitle")}
+              </h2>
+            </header>
+            <ul className="fd-branches">
+              {fault.affected_branches!.map((b) => (
+                <li key={b.line_id} className={b.has_own_fault ? "is-confirmed" : undefined}>
+                  <strong>{b.line_name}</strong>
+                  <small>
+                    {t("faults.card.branchAt", {
+                      pole: b.branch_pole_name || `#${b.branch_pole_seq ?? "?"}`
+                    })}
+                  </small>
+                  <span className={`fd-tag ${b.has_own_fault ? "fd-tag--red" : "fd-tag--amber"}`}>
+                    {b.has_own_fault
+                      ? t("faults.card.branchConfirmed")
+                      : t("faults.card.branchCheck")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        {/* Tekrar eden ariza baska bir istir: cozulmemis bir kok sebep
+            vardir (agac, izolator, kacak). Ekip bunu bilerek gitsin. */}
+        {recurrence ? (
+          <section className="fd-card">
+            <header className="fd-card-head">
+              <h2>
+                <History size={15} />
+                {t("faults.card.historyTitle")}
+              </h2>
+            </header>
+            {recurrence.total === 0 ? (
+              <p className="fd-empty">{t("faults.card.historyNone")}</p>
+            ) : (
+              <div className="fd-repeat">
+                <div className="fd-repeat-head">
+                  <strong>{recurrence.total}</strong>
+                  <span>{t("faults.card.historyCount", { days: recurrence.windowDays })}</span>
+                </div>
+                <ul>
+                  {recurrence.sameSection > 0 ? (
+                    <li className="is-hit">
+                      {t("faults.card.historySameSection", { count: recurrence.sameSection })}
+                    </li>
+                  ) : null}
+                  {recurrence.lastAt ? (
+                    <li>
+                      {t("faults.card.historyLast", {
+                        at: fmtDate(recurrence.lastAt, localeTag)
+                      })}
+                    </li>
+                  ) : null}
+                </ul>
+              </div>
+            )}
+          </section>
+        ) : null}
+      </div>
+
+      {/* ================= 4) COZUM & NOTLAR | SAHA RAPORU ================= */}
+      <div className="fd-row fd-row--solve">
+        <section className="fd-card fd-card--solve">
+          <header className="fd-card-head">
+            <h2>
+              <TriangleAlert size={15} />
+              {t("faults.detail.solveTitle")}
+            </h2>
+            <small>{t("faults.detail.causeHint")}</small>
+          </header>
+
+          {suggestedCause ? (
+            <div className="fd-suggestion">
+              <Lightbulb size={14} />
+              <span>{t("faults.detail.causeSuggested", { cause: suggestedCause.label })}</span>
+              {canEdit && causeDraft !== suggestedCause.code ? (
+                <button type="button" onClick={() => setCauseDraft(suggestedCause.code)}>
+                  {t("faults.detail.causeUseSuggestion")}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* SEBEP: acilir liste degil ETIKET IZGARASI. 19 sebebi bir
+              dropdown'un icinde aramak, eldivenli elle telefonun basindayken
+              en yavas yoldu; grup grup duran etiketler tek dokunusla secilir.
+              Secili etikete tekrar basmak secimi GERI ALIR (yanlis secim
+              duzeltilebilmeli). */}
+          {causeCatalog === null ? (
+            <p className="fd-empty">{t("faults.detail.causeCatalogEmpty")}</p>
+          ) : (
+            <div className="fd-causes">
+              {causeGroups.map(([grup, liste]) => (
+                <div key={grup} className="fd-cause-group">
+                  <span className="fd-cause-group-label">
+                    {t(`faults.causeGroup.${grup}`, { defaultValue: grup })}
+                  </span>
+                  <div className="fd-chips">
+                    {liste.map((c) => (
+                      <button
+                        key={c.code}
+                        type="button"
+                        className={`fd-chip ${causeDraft === c.code ? "is-on" : ""}`}
+                        disabled={saving || !canEdit}
+                        onClick={() => setCauseDraft(causeDraft === c.code ? "" : c.code)}
+                      >
+                        {causeDraft === c.code ? <Check size={12} strokeWidth={3} /> : null}
+                        {causeLabel(c)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="fd-fields">
+            <label className="fd-field">
+              <span className="fd-label">{t("faults.detail.causeDetailLabel")}</span>
+              <textarea
+                className="fd-textarea"
+                rows={3}
+                value={causeDetailDraft}
+                onChange={(e) => setCauseDetailDraft(e.target.value)}
+                disabled={saving || !canEdit}
+                placeholder={t("faults.detail.causeDetailPlaceholder")}
+              />
+            </label>
+            <label className="fd-field">
+              <span className="fd-label">{t("faults.detail.writeNote")}</span>
+              <textarea
+                className="fd-textarea"
+                rows={3}
+                value={noteDraft}
+                onChange={(e) => setNoteDraft(e.target.value)}
+                disabled={saving || !canEdit}
+                placeholder={t("faults.detail.writeNotePlaceholder")}
+              />
+              <small className="fd-field-hint">{t("faults.detail.writeNoteHint")}</small>
+            </label>
+          </div>
+
+          {canEdit ? (
+            <footer className="fd-solve-foot">
+              <span className={`fd-dirty ${dirty ? "is-on" : ""}`}>
+                {dirty ? t("faults.detail.unsaved") : t("faults.detail.saved")}
+              </span>
+              <button
+                type="button"
+                className="fd-save"
+                onClick={() =>
+                  void calistir(async () => {
+                    // Yalnizca DEGISENI gonder: her kaydette iki ucu birden
+                    // cagirmak olay kaydini (record_event) sahte "guncellendi"
+                    // satirlariyla doldururdu.
+                    if (causeDirty) {
+                      await onUpdateCause(fault.id, {
+                        // Bos secim = sebebi GERI AL.
+                        cause_code: causeDraft || null,
+                        cause_detail: causeDetailDraft.trim() || null
+                      });
+                    }
+                    if (noteDirty) await onUpdateNote(fault.id, noteDraft.trim() || null);
+                  }, "common.errorOccurred")
+                }
+                disabled={saving || !dirty}
+              >
+                <Save size={14} />
+                {t("faults.detail.saveAll")}
+              </button>
+            </footer>
+          ) : null}
+        </section>
+
+        <section className="fd-card fd-card--talk">
+          <header className="fd-card-head">
+            <h2>
+              <MessagesSquare size={15} />
+              {t("faults.detail.commentsTitle")}
+              {comments.length > 0 ? <span className="fd-count">{comments.length}</span> : null}
+            </h2>
+            <small>{t("faults.detail.commentsAddPlaceholder")}</small>
+          </header>
+          <ul className="fd-comments">
+            {comments.length === 0 ? (
+              <li className="fd-empty">{t("faults.detail.commentsHint")}</li>
+            ) : (
+              comments.map((c) => (
+                <li
+                  key={c.id}
+                  className={`fd-comment ${c.author_username === currentUsername ? "is-mine" : ""}`}
+                >
+                  <header>
+                    <span className="fd-avatar fd-avatar--sm">
+                      {bashafler(c.author_username)}
+                    </span>
+                    <strong>{c.author_username}</strong>
+                    <time>{fmtDate(c.created_at, localeTag)}</time>
+                  </header>
+                  <p>{c.body}</p>
+                </li>
+              ))
+            )}
+          </ul>
+          {canEdit ? (
+            <div className="fd-comment-add">
+              <textarea
+                className="fd-textarea"
+                rows={2}
+                placeholder={t("faults.detail.commentPlaceholder")}
+                value={commentDraft}
+                onChange={(e) => setCommentDraft(e.target.value)}
+                disabled={saving}
+              />
+              <button
+                type="button"
+                className="fd-save fd-save--send"
+                onClick={() =>
+                  void calistir(async () => {
+                    const body = commentDraft.trim();
+                    if (!body) return;
+                    await onAddComment(fault.id, body);
+                    setComments(await onLoadComments(fault.id));
+                    setCommentDraft("");
+                  }, "alarms.errors.commentFailed")
+                }
+                disabled={saving || !commentDraft.trim()}
+              >
+                <Send size={14} />
+                {t("faults.detail.addCommentBtn")}
+              </button>
+            </div>
+          ) : null}
+        </section>
       </div>
     </div>
   );

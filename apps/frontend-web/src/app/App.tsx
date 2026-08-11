@@ -2740,7 +2740,6 @@ export function App() {
               gridSnapshot={gridSnapshot}
               devices={devices}
               alarms={alarms}
-              onBack={() => openTab({ kind: "page", page: "faults" })}
               onAssign={handleAssignFault}
               onUpdateStatus={handleUpdateFaultStatus}
               onUpdateNote={handleUpdateFaultNote}

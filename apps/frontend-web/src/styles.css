@@ -24944,21 +24944,24 @@ th.event-col-category {
   gap: 8px;
 }
 
-/* ===========================================================================
-   Hat Arizalari — DETAY MODAL (popup)
-   =========================================================================== */
 /* =========================================================================
-   Ariza Detayi — TAM SAYFA (kendi sekmesinde)
+   Ariza Detayi — TAM SAYFA (features/faults/FaultDetailPage.tsx)
 
-   Onceki hali modaldi ve icerik modal cercevesine sigmadigi icin UC DAR
-   kolona sikismisti: harita 300 piksel kaliyordu, kart basliklari kirpiliyor,
-   yorum alani bir serit haline geliyordu. Oysa bu ekranin en degerli parcasi
-   harita — sahaya hangi acikliga gidilecegini o soyluyor.
+   2026-08 YENIDEN TASARIM. Onceki duzen "solda dev harita + sagda 400px form
+   rayi" idi ve uc somut sikayeti vardi:
 
-   Sayfa duzeni: solda ANA kolon (harita + olcumler), sagda sabit genislikte
-   RAY (durum, sebep, not, saha raporu). Ray sabit 400px cunku icindekiler
-   FORM: bir select ya da textarea 1fr ile buyudukce okunakli olmuyor, sadece
-   satir uzuyor.
+     1. Harita ekranin yarisini kapliyordu; geri kalan her sey onun yaninda
+        ikincil gorunuyordu. Harita degerli ama sayfanin TAMAMI degil.
+     2. Atama ile durum ayni kartin icindeydi. Ikisi farkli soru: "kim
+        gidiyor" ve "is nerede".
+     3. Yan yana kartlarin boylari tutmuyordu (`align-items:start`): biri
+        alcak biri yuksek, sayfa dagilmis gorunuyordu.
+
+   Artik sayfa TAM GENISLIK SERITLERDEN (`.fd-row`) olusur. Her serit bir
+   grid satiridir ve satirdaki kartlar AYNI YUKSEKLIKTEDIR — `align-items`
+   varsayilani `stretch` birakildi, `.fd-card` de `height:100%`. Kart iceriginin
+   uzunlugu boyu belirlemez: uzun listeler (`.fd-poles`, `.fd-comments`,
+   `.fd-causes`) kartin ICINDE kayar.
    ========================================================================= */
 .fd-page {
   --fd-ink: #0f172a;
@@ -24966,9 +24969,11 @@ th.event-col-category {
   --fd-faint: #94a3b8;
   --fd-line: #e6ebf2;
   --fd-surface: #ffffff;
-  --fd-sunken: #f6f8fb;
+  --fd-sunken: #f7f9fc;
   --fd-brand: #2563eb;
-  --fd-radius: 14px;
+  --fd-radius: 16px;
+  /* Kartlari kagit gibi ayirir; cerceve tek basina duz ve sert kaliyordu. */
+  --fd-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 26px -20px rgba(15, 23, 42, 0.35);
 
   display: flex;
   flex-direction: column;
@@ -24976,7 +24981,7 @@ th.event-col-category {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px 18px 24px;
+  padding: 16px 18px 26px;
 }
 
 .fd-page--bare {
@@ -24991,39 +24996,21 @@ th.event-col-category {
   flex-shrink: 0;
 }
 
+/* Solda kunye (bolge / hat / aralik), sagda durum rozeti.
+   GERI DUGMESI YOK: sayfa bir sekme; geri donus sekme seridinden yapilir. */
 .fd-head-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-}
-
-.fd-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px 6px 8px;
-  border: 1px solid var(--fd-line);
-  border-radius: 999px;
-  background: var(--fd-surface);
-  color: var(--fd-muted);
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.14s, color 0.14s, border-color 0.14s;
-}
-
-.fd-back:hover {
-  background: var(--fd-sunken);
-  color: var(--fd-ink);
-  border-color: #cbd5e1;
+  flex-wrap: wrap;
 }
 
 .fd-status-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
+  padding: 6px 13px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
@@ -25031,12 +25018,28 @@ th.event-col-category {
 }
 
 .fd-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
   margin: 0;
-  font-size: 1.55rem;
+  font-size: 1.6rem;
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.15;
   color: var(--fd-ink);
+}
+
+/* Kayit numarasi: telefonda "hangi kayit" diye sorulunca soylenen sey. */
+.fd-record {
+  padding: 3px 9px;
+  border-radius: 8px;
+  background: var(--fd-sunken);
+  border: 1px solid var(--fd-line);
+  color: var(--fd-faint);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .fd-breadcrumb {
@@ -25072,13 +25075,14 @@ th.event-col-category {
   border: 1px solid var(--fd-line);
   border-radius: var(--fd-radius);
   overflow: hidden;
+  box-shadow: var(--fd-shadow);
 }
 
 .fd-metric {
   display: flex;
   align-items: center;
   gap: 11px;
-  padding: 12px 15px;
+  padding: 13px 15px;
   background: var(--fd-surface);
   min-width: 0;
 }
@@ -25143,38 +25147,59 @@ th.event-col-category {
   50% { opacity: 0.35; transform: scale(0.8); }
 }
 
-/* ---- Govde: ana kolon + sabit ray -------------------------------------- */
-.fd-body {
+/* ---- Seritler: her satirdaki kartlar AYNI BOYDA --------------------------
+   `align-items` bilerek varsayilan (stretch) birakildi — kullanicinin
+   sikayeti tam olarak "biri alcak biri yuksek" idi. */
+.fd-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 400px;
   gap: 14px;
-  align-items: start;
 }
 
-/* Ray asagi kayinca formlar ekrandan cikiyordu; harita uzun oldugu icin
-   sayfa da uzun. 1200'un altinda tek kolona duser. */
-@media (max-width: 1200px) {
-  .fd-body {
+.fd-row--split {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Harita artik satirin TAMAMI degil; yaninda ariza kunyesi duruyor. */
+.fd-row--map {
+  grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.7fr);
+}
+
+/* Kutucuk seridi GRID DEGIL flex: kart sayisi degisken (kollar ve hat
+   gecmisi kosullu). Grid'de alt satira tek basina dusen kart bir sutun
+   genisliginde kalip yaninda kocaman bir bosluk birakiyordu; flex'te ayni
+   kart satirin tamamina yayilir. Ayni SATIRDAKI kartlar yine ayni boyda
+   (stretch). */
+.fd-row--tiles {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.fd-row--tiles > .fd-card {
+  flex: 1 1 280px;
+}
+
+.fd-row--solve {
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+}
+
+@media (max-width: 1180px) {
+  .fd-row--split,
+  .fd-row--map,
+  .fd-row--solve {
     grid-template-columns: minmax(0, 1fr);
   }
-}
-
-.fd-main,
-.fd-rail {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  min-width: 0;
 }
 
 .fd-card {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 15px 17px;
+  height: 100%;
+  padding: 15px 17px 16px;
   background: var(--fd-surface);
   border: 1px solid var(--fd-line);
   border-radius: var(--fd-radius);
+  box-shadow: var(--fd-shadow);
   min-width: 0;
 }
 
@@ -25197,7 +25222,8 @@ th.event-col-category {
 
 .fd-card-head h2 svg {
   flex-shrink: 0;
-  color: var(--fd-faint);
+  color: var(--fd-brand);
+  opacity: 0.85;
 }
 
 .fd-card-head small {
@@ -25228,23 +25254,256 @@ th.event-col-category {
   font-weight: 700;
 }
 
+/* ---- Atama -------------------------------------------------------------- */
+.fd-assignee {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: var(--fd-sunken);
+  border: 1px solid var(--fd-line);
+}
+
+.fd-assignee-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fd-assignee-body strong {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--fd-ink);
+}
+
+.fd-assignee-body small {
+  font-size: 11.5px;
+  color: var(--fd-faint);
+}
+
+.fd-avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #dbeafe, #eff4ff);
+  color: var(--fd-brand);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+/* Atanmamis: dolu bir avatar "birisi var" izlenimi verir. */
+.fd-avatar--empty {
+  background: var(--fd-surface);
+  border: 1px dashed #cbd5e1;
+  color: var(--fd-faint);
+}
+
+.fd-avatar--sm {
+  width: 26px;
+  height: 26px;
+  font-size: 10.5px;
+}
+
+.fd-assign-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fd-assign-row .fd-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.fd-ghost-btn {
+  flex-shrink: 0;
+  padding: 9px 13px;
+  border: 1px solid var(--fd-line);
+  border-radius: 9px;
+  background: var(--fd-surface);
+  color: var(--fd-brand);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s, border-color 0.14s;
+}
+
+.fd-ghost-btn:hover:not(:disabled) {
+  background: #eff4ff;
+  border-color: #bfdbfe;
+}
+
+.fd-ghost-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- Durum: adim seridi + zaman cizelgesi -------------------------------
+   Dort durum bir AKIS'tir (atandi -> devam -> normale dondu -> kapatildi);
+   onceki 2x2 dugme izgarasi bu sirayi gizliyordu. */
+.fd-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.fd-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 6px 11px;
+  border: 1px solid var(--fd-line);
+  border-radius: 12px;
+  background: var(--fd-surface);
+  cursor: pointer;
+  transition: border-color 0.14s, background 0.14s, box-shadow 0.14s;
+}
+
+/* Adimlar arasindaki baglanti cizgisi — bosluga cizilir. */
+.fd-step + .fd-step::before {
+  content: "";
+  position: absolute;
+  top: 25px;
+  left: -9px;
+  width: 9px;
+  height: 2px;
+  background: var(--fd-line);
+}
+
+.fd-step-dot {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--fd-line);
+  background: var(--fd-sunken);
+  color: var(--fd-faint);
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+.fd-step-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  color: var(--fd-muted);
+}
+
+.fd-step.is-done .fd-step-dot {
+  background: var(--fd-step-c);
+  border-color: var(--fd-step-c);
+  color: #fff;
+}
+
+.fd-step.is-active {
+  border-color: var(--fd-step-c);
+  box-shadow: inset 0 0 0 1px var(--fd-step-c);
+}
+
+.fd-step.is-active .fd-step-dot {
+  background: var(--fd-step-c);
+  border-color: var(--fd-step-c);
+  color: #fff;
+}
+
+.fd-step.is-active .fd-step-label {
+  color: var(--fd-ink);
+}
+
+.fd-step:hover:not(:disabled):not(.is-active) {
+  border-color: #cbd5e1;
+  background: var(--fd-sunken);
+}
+
+.fd-step:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* "Ne zaman ne oldu" — her devir teslimde sorulan soru; kayit zaten vardi,
+   gosterilmiyordu. */
+.fd-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.fd-timeline li {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 0 7px 18px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fd-muted);
+}
+
+.fd-timeline li::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 18px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--fd-line);
+}
+
+.fd-timeline li:last-child::after {
+  display: none;
+}
+
+.fd-timeline i {
+  position: absolute;
+  left: 0;
+  top: 12px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.fd-timeline time {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fd-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* ---- Harita ------------------------------------------------------------- */
 .fd-map-wrap {
   position: relative;
-  border-radius: 11px;
+  /* Kart satirda uzarsa harita da uzasin — altta bos beyaz kalmasin. */
+  flex: 1;
+  min-height: 340px;
+  border-radius: 12px;
   border: 1px solid var(--fd-line);
   overflow: hidden;
 }
 
 .fd-map {
-  height: 480px;
-  width: 100%;
+  /* mutlak konum: yuzde yukseklik flex zincirinde belirsiz kalabiliyor,
+     Leaflet ise KESIN bir yukseklik ister. */
+  position: absolute;
+  inset: 0;
   z-index: 0; /* Leaflet panelleri ust serite tirmanmasin. */
 }
 
 @media (max-width: 900px) {
-  .fd-map {
-    height: 340px;
+  .fd-map-wrap {
+    min-height: 290px;
   }
 }
 
@@ -25311,7 +25570,9 @@ th.event-col-category {
   border-radius: 50%;
 }
 
-/* Leaflet divIcon'lari — global (Leaflet DOM'u React agacinin disinda). */
+/* Leaflet divIcon'lari — global (Leaflet DOM'u React agacinin disinda).
+   Uydu katmani varsayilan oldugu icin isaretcilerin beyaz cercevesi ve
+   golgesi SART: koyu goruntu uzerinde cerceve olmadan kayboluyorlar. */
 .fd-pole-icon-wrap,
 .fd-dev-icon-wrap {
   background: transparent !important;
@@ -25329,7 +25590,7 @@ th.event-col-category {
   font-weight: 700;
   color: #fff;
   border: 2px solid #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
 }
 
 .fd-dev-icon {
@@ -25339,7 +25600,7 @@ th.event-col-category {
   border-radius: 50%;
   background: var(--c);
   border: 3px solid #fff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -25356,15 +25617,65 @@ th.event-col-category {
   pointer-events: none;
 }
 
-/* ---- Harita altindaki uclu satir --------------------------------------- */
-.fd-subgrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 14px;
-  align-items: start;
+/* ---- Ariza kunyesi (cihaz olcumleri) ------------------------------------ */
+.fd-spec {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Ariza tespit eden cihaz CIFTI — arizanin yerini daraltan sey bu ikili. */
+.fd-spec > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px dashed #eef2f7;
+}
+
+.fd-spec > div:last-child {
+  border-bottom: none;
+}
+
+.fd-spec dt {
+  font-size: 12px;
+  color: var(--fd-muted);
+  min-width: 0;
+}
+
+.fd-spec dd {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--fd-ink);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.fd-spec dd.is-red {
+  color: #dc2626;
+}
+
+.fd-spec dd.is-green {
+  color: #059669;
+}
+
+.fd-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.fd-signals code {
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--fd-sunken);
+  border: 1px solid var(--fd-line);
+  color: var(--fd-muted);
+  font-size: 10.5px;
+}
+
+/* ---- Ariza tespit eden cihaz CIFTI -------------------------------------- */
 .fd-devices {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -25381,7 +25692,7 @@ th.event-col-category {
     "dot code";
   column-gap: 8px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 11px;
   border: 1px solid var(--fd-line);
   background: var(--fd-sunken);
   min-width: 0;
@@ -25452,7 +25763,7 @@ th.event-col-category {
   }
 }
 
-/* Etiket/deger listesi (tel mesafesi). */
+/* Etiket/deger listesi (tel mesafesi, atama zamani). */
 .fd-kv {
   margin: 0;
   display: flex;
@@ -25489,7 +25800,80 @@ th.event-col-category {
   white-space: nowrap;
 }
 
-/* Ariza araligindaki direkler. */
+/* ---- Arizayi acan alarmlar ---------------------------------------------- */
+.fd-alarms {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Alarm sayisi degisken; kart bunun yuzunden komsulariyla ayni boyu
+     kaybetmesin. */
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.fd-alarm {
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--fd-line);
+  border-left: 3px solid var(--fd-faint);
+  background: var(--fd-sunken);
+}
+
+.fd-alarm--critical {
+  border-left-color: #dc2626;
+}
+
+.fd-alarm--warning {
+  border-left-color: #f59e0b;
+}
+
+.fd-alarm--info {
+  border-left-color: #3b82f6;
+}
+
+.fd-alarm-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.fd-alarm-top strong {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--fd-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fd-phase {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #eff4ff;
+  color: var(--fd-brand);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.fd-alarm-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--fd-faint);
+}
+
+/* ---- Ariza araligindaki direkler ---------------------------------------- */
 .fd-poles {
   list-style: none;
   margin: 0;
@@ -25497,7 +25881,7 @@ th.event-col-category {
   display: flex;
   flex-direction: column;
   /* Uzun hatlarda liste kartlari asagi itiyordu; kendi icinde kayar. */
-  max-height: 240px;
+  max-height: 260px;
   overflow-y: auto;
 }
 
@@ -25559,7 +25943,101 @@ th.event-col-category {
   color: #15803d;
 }
 
-/* ---- Ray: form ogeleri -------------------------------------------------- */
+.fd-tag--amber {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+/* ---- Etkilenen bransman kollari ----------------------------------------- */
+.fd-branches {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.fd-branches li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--fd-line);
+  background: var(--fd-sunken);
+  font-size: 12.5px;
+}
+
+.fd-branches li.is-confirmed {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.fd-branches li strong {
+  color: var(--fd-ink);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fd-branches li small {
+  color: var(--fd-faint);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* ---- Hat gecmisi (tekrar eden ariza) ------------------------------------ */
+.fd-repeat {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fd-repeat-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.fd-repeat-head strong {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #b45309;
+  font-variant-numeric: tabular-nums;
+}
+
+.fd-repeat-head span {
+  font-size: 12px;
+  color: var(--fd-muted);
+}
+
+.fd-repeat ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--fd-muted);
+}
+
+.fd-repeat li.is-hit {
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-weight: 600;
+}
+
+/* ---- Form ogeleri ------------------------------------------------------- */
 .fd-label {
   display: block;
   font-size: 10.5px;
@@ -25574,7 +26052,7 @@ th.event-col-category {
   width: 100%;
   padding: 9px 11px;
   border: 1px solid var(--fd-line);
-  border-radius: 9px;
+  border-radius: 10px;
   background: var(--fd-surface);
   color: var(--fd-ink);
   font-size: 13px;
@@ -25600,83 +26078,11 @@ th.event-col-category {
   cursor: not-allowed;
 }
 
-.fd-assignee {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.fd-assignee strong {
-  display: block;
-  font-size: 13px;
-  color: var(--fd-ink);
-}
-
-.fd-assignee small {
-  font-size: 11px;
-  color: var(--fd-faint);
-}
-
-.fd-avatar {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background: #eff4ff;
-  color: var(--fd-brand);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.fd-muted {
-  color: var(--fd-faint);
-  font-size: 12.5px;
-}
-
-/* Durum akisi: atandi -> devam -> normale dondu -> kapatildi. Dort kutu,
-   iki sutun; sirali okunsun diye satir satir degil ikili ikili. */
-.fd-status-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.fd-status-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 9px 11px;
-  border: 1px solid var(--fd-line);
-  border-radius: 9px;
-  background: var(--fd-surface);
-  color: var(--fd-muted);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.14s, color 0.14s, border-color 0.14s;
-}
-
-.fd-status-btn:hover:not(:disabled):not(.is-active) {
-  background: var(--fd-sunken);
-  color: var(--fd-ink);
-}
-
-.fd-status-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.fd-status-dot {
-  width: 8px;
-  height: 8px;
-  flex-shrink: 0;
-  border-radius: 50%;
-}
-
-.fd-status-btn.is-active .fd-status-dot {
-  background: #fff !important;
+/* ---- Cozum & notlar -----------------------------------------------------
+   Sebep, cozum ayrintisi ve saha notu TEK karttadir: uc ayri kart, ayni
+   anda doldurulan uc alani birbirinden kopariyordu. Kaydet de tektir. */
+.fd-card--solve {
+  gap: 13px;
 }
 
 /* Kural onerisi. Bilerek SOLGUN ve ayri: bir oneridir, girilmis bir deger
@@ -25687,7 +26093,7 @@ th.event-col-category {
   gap: 8px;
   flex-wrap: wrap;
   padding: 9px 11px;
-  border-radius: 9px;
+  border-radius: 10px;
   background: #f5f3ff;
   border: 1px solid #ddd6fe;
   color: #5b21b6;
@@ -25716,14 +26122,133 @@ th.event-col-category {
   background: #f5f3ff;
 }
 
+/* SEBEP SECIMI: acilir liste degil ETIKET IZGARASI. 19 sebebi bir
+   dropdown'un icinde aramak eldivenli elle en yavas yoldu. */
+.fd-causes {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  max-height: 230px;
+  overflow-y: auto;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: var(--fd-sunken);
+  border: 1px solid var(--fd-line);
+}
+
+.fd-cause-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fd-cause-group-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fd-faint);
+}
+
+.fd-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--fd-line);
+  background: var(--fd-surface);
+  color: var(--fd-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+}
+
+.fd-chip:hover:not(:disabled):not(.is-on) {
+  border-color: #bfdbfe;
+  background: #f8faff;
+  color: var(--fd-ink);
+}
+
+.fd-chip.is-on {
+  background: var(--fd-brand);
+  border-color: var(--fd-brand);
+  color: #fff;
+}
+
+.fd-chip:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.fd-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 11px;
+}
+
+.fd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.fd-field-hint {
+  font-size: 11px;
+  color: var(--fd-faint);
+}
+
+/* Kaydet seridi kartin DIBINE yapisir: yan yana duran kartlar ayni boyda
+   oldugu icin dugmeler de ayni hizada olsun. */
+.fd-solve-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 2px;
+}
+
+.fd-dirty {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--fd-faint);
+}
+
+.fd-dirty::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.fd-dirty.is-on {
+  color: #b45309;
+}
+
+.fd-dirty.is-on::before {
+  background: #f59e0b;
+}
+
 .fd-save {
-  align-self: flex-end;
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 8px 15px;
+  padding: 9px 16px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 10px;
   background: var(--fd-brand);
   color: #fff;
   font-size: 12.5px;
@@ -25742,6 +26267,7 @@ th.event-col-category {
 }
 
 .fd-save--send {
+  align-self: flex-end;
   background: #16a34a;
 }
 
@@ -25756,17 +26282,26 @@ th.event-col-category {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  /* Uzun bir yorum akisi sayfayi sonsuz uzatiyordu; kendi icinde kayar. */
-  max-height: 360px;
+  gap: 9px;
+  /* Kart satirda ne kadar yer bulursa yorum akisi onu doldurur; tasarsa
+     kendi icinde kayar, karti uzatmaz. */
+  flex: 1;
+  min-height: 120px;
+  max-height: 420px;
   overflow-y: auto;
 }
 
 .fd-comment {
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 11px;
   background: var(--fd-sunken);
   border: 1px solid var(--fd-line);
+}
+
+/* Kendi yorumun: uzun bir akista "hangisi benimdi" sorusu sik sorulur. */
+.fd-comment.is-mine {
+  background: #f5f9ff;
+  border-color: #dbeafe;
 }
 
 .fd-comment header {
@@ -25812,9 +26347,9 @@ th.event-col-category {
   justify-content: center;
   gap: 10px;
   margin: 0;
-  padding: 28px 18px;
+  padding: 24px 18px;
   border: 1px dashed var(--fd-line);
-  border-radius: 11px;
+  border-radius: 12px;
   background: var(--fd-sunken);
   color: var(--fd-faint);
   font-size: 12.5px;
@@ -25831,7 +26366,7 @@ th.event-col-category {
 .fd-error {
   margin: 0;
   padding: 9px 12px;
-  border-radius: 9px;
+  border-radius: 10px;
   border-left: 3px solid #dc2626;
   background: #fef2f2;
   color: #b91c1c;
