@@ -40151,7 +40151,16 @@ th.event-col-category {
   align-items: center;
   gap: 4px;
 }
-.device-group-head-item { flex: 1; min-width: 0; }
+/* Kart SUTUN GENISLIGINI doldurmali.
+   `display:flex` yapinca cocuk buton icerik genisligine dusuyordu: setleri
+   olmayan cihazlarin (SN2) kartlari da daraliyordu — yani kit ozelligi
+   ILGISIZ cihazlarin gorunumunu bozuyordu. */
+.device-group-head-item {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+}
+.device-group-head-item > * { flex: 1 1 auto; min-width: 0; }
 
 .device-collapse-btn {
   flex: 0 0 auto;
@@ -40185,13 +40194,16 @@ th.event-col-category {
 
 /* Setler: sol rayla girintili. Ray "bunlar o kite ait" demenin en sessiz
    yolu — ek ikon, ek metin yok. */
+/* Setler belirgin sekilde ICERIDE: girinti "bunlar o kite ait" demenin
+   en sessiz yolu. Onceki 11+12px zayif kaliyordu, alt cihaz oldugu
+   yeterince okunmuyordu. */
 .device-subunit-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin: 4px 0 2px 11px;
-  padding-left: 12px;
-  border-left: 1px solid #e2e8f0;
+  margin: 5px 0 2px 18px;
+  padding-left: 16px;
+  border-left: 2px solid #e2e8f0;
 }
 .device-item--subunit { padding-top: 6px; padding-bottom: 6px; }
 .device-item--subunit strong { font-weight: 600; }
