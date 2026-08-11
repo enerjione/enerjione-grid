@@ -14,6 +14,32 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.68.0] — 2026-08-11
+
+Arıza kayıtları artık kendiliğinden kapanmıyor: düzelen arıza ekranda kalıyor
+ve ancak sebebi girilip kapatıldığında geçmişe düşüyor. Arıza detayından PDF
+rapor alınabiliyor.
+
+### Eklendi
+
+- **PDF rapor.** Arıza detayından, EnerjiOne ve müşteri logosuyla birlikte
+  haritanın da yer aldığı rapor çıkarılabiliyor.
+- **Geçmiş listesinde arıza no.** Numaraya tıklamak kaydın detay sekmesini
+  açıyor; oradan atama, sebep girişi, yorum ve rapor yapılabiliyor. Önceden
+  geçmiş bir kaydın kendisine gitmenin yolu yoktu.
+
+### Değişti
+
+- **Arıza detayı üst şeridi.** Durum ilk sıraya alındı, mesafe aralık yerine
+  tek sayı olarak yazılıyor, sebep girişi ve yorum şeritteki düğmelerden
+  açılan pencereye taşındı — ikisi de sayfanın en altındaydı.
+
+### Düzeltildi
+
+- **Düzelen arıza listeden kendiliğinden düşüyordu.** Cihaz normale döndüğünde
+  kayıt "Aktif Arıza" listesinden anında kayboluyor, sebebi kimse girmeden
+  kapanmış sayılıyordu. Artık kaydı listeden ancak kullanıcı düşürür.
+
 ## [2.67.5] — 2026-08-11
 
 ### Düzeltildi
