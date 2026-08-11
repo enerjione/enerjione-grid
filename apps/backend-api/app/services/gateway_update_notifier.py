@@ -38,7 +38,7 @@ from sqlalchemy import select
 
 from app.db.session import SessionLocal
 from app.models.system_event import SystemEvent
-from app.services import gateway_agent_service
+from app.services import gateway_agent_service, gateway_release_service
 from app.services.event_service import record_event
 from app.services.notification_service import create_notification
 
@@ -78,6 +78,13 @@ def check_once(db) -> int:
     durum = gateway_agent_service.read_status()
     if not durum.available:
         return 0
+    # UZAK SURUMU BACKEND'DEN DE SOR: ajanin sorgusu `docker buildx`e bagli
+    # ve buildx cogu Docker Engine kurulumunda yok. O cihazlarda
+    # `update_available` kalici olarak None kaliyor ve bu dongu HICBIR
+    # bildirim uretmiyordu — yeni surum yayinlandigi halde operator hic
+    # haberdar olmuyordu (2026-08-11 saha bulgusu). Zenginlestirme ilk turda
+    # arka plan sorgusunu baslatir, sonuc bir sonraki turda kullanilir.
+    durum = gateway_release_service.enrich_agent_status(durum)
 
     gonderilen = 0
     for gw in durum.gateways:

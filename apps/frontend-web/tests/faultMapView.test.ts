@@ -157,6 +157,62 @@ test("uc parca hattin TAMAMINI kaplar — arada bosluk kalmaz", () => {
 });
 
 // ---------------------------------------------------------------------------
+// GECMIS ARIZA — bolge KAYITTAN gelir
+// ---------------------------------------------------------------------------
+
+test("alarm normale donmus KAPALI arizada bolge KAYITTAN cizilir", () => {
+  // Onceki davranis: bolge yalnizca canli alarmlardan cikariliyordu. Ariza
+  // kapaninca alarm resetleniyor, kirmizi parca kayboluyor ve gecmis bir
+  // kaydin haritasi hattin TAMAMINI saglam gosteriyordu — sahada nereye
+  // gidildigi bilgisi kaydin icinde durdugu halde ekranda yoktu.
+  const v = buildFaultMapView({
+    ...TEMEL,
+    poles: DIREKLER,
+    segments: [SEG(1, 2, 101), SEG(2, 3, 102), SEG(3, 4, 103)],
+    fault: { line_id: 1, last_red_device_id: 102, first_green_device_id: 103 },
+    alarmActiveDeviceIds: new Set() // hicbir alarm acik degil (ariza kapandi)
+  })!;
+  assert.ok(v.faultRed.length >= 2, "kapali arizada kirmizi parca cizilmemis");
+  assert.ok(Math.abs(v.faultRed[0][1] - 35.15) < 1e-6, `parca yanlis basliyor: ${v.faultRed[0]}`);
+  assert.ok(
+    Math.abs(v.faultRed[v.faultRed.length - 1][1] - 35.25) < 1e-6,
+    "parca yanlis bitiyor"
+  );
+  // Bolge odagi tum hatta degil BOLGEYE zoom yapmali.
+  assert.ok(v.zoneBounds.length < v.lineBounds.length, "bolge kutusu tum hatta esit");
+  // Kayitli cihaz haritada da kirmizi: kartta kirmizi yazanin haritada yesil
+  // gorunmesi ayni ekranda iki farkli cevap demekti.
+  assert.equal(v.deviceMarkers.find((d) => d.deviceId === 102)?.isRed, true);
+  assert.equal(v.deviceMarkers.find((d) => d.deviceId === 103)?.isRed, false);
+});
+
+test("kayitta yesil cihaz yoksa bolge hat UCUNA kadar surer", () => {
+  const v = buildFaultMapView({
+    ...TEMEL,
+    poles: DIREKLER,
+    segments: [SEG(1, 2, 101), SEG(2, 3, 102)],
+    fault: { line_id: 1, last_red_device_id: 102 },
+    alarmActiveDeviceIds: new Set()
+  })!;
+  const son = v.faultRed[v.faultRed.length - 1];
+  assert.ok(Math.abs(son[1] - 35.4) < 1e-6, `hat ucuna uzanmiyor: ${son}`);
+});
+
+test("kayittaki cihaz artik bu hatta degilse CANLI alarma dusulur", () => {
+  // Topoloji duzenlenip cihaz baska hatta tasinmis olabilir. Kayda korukorune
+  // guvenmek bolgeyi hic cizmemek olurdu.
+  const v = buildFaultMapView({
+    ...TEMEL,
+    poles: DIREKLER,
+    segments: [SEG(1, 2, 101), SEG(2, 3, 102)],
+    fault: { line_id: 1, last_red_device_id: 555 },
+    alarmActiveDeviceIds: new Set([101])
+  })!;
+  assert.ok(v.faultRed.length >= 2, "yedek yol kirmizi parca cizmemis");
+  assert.ok(Math.abs(v.faultRed[0][1] - 35.05) < 1e-6, "yedek yol yanlis cihazdan basliyor");
+});
+
+// ---------------------------------------------------------------------------
 // Cihaz konumlari
 // ---------------------------------------------------------------------------
 

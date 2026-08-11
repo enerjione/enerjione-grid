@@ -557,22 +557,52 @@ export function FaultDetailPage({
       {/* ---- Ust serit: kunye + olculer ---- */}
       <header className="fd-head">
         <div className="fd-head-top">
-          <nav className="fd-breadcrumb" aria-label={t("faults.detail.mapTitle")}>
-            <MapPin size={13} />
-            <span>{fault.region_name}</span>
-            <em>/</em>
-            <span>{fault.line_name}</span>
-            <em>/</em>
-            <strong>
-              {t("faults.card.rangeText", { from: fault.from_pole_seq, to: fault.to_pole_seq })}
-            </strong>
-          </nav>
-          {/* Baslik ARTIK AYNI SATIRDA: kunye / baslik / durum uc ayri
-              satirdayken ust bosluk olculerin yerini yiyordu. */}
-          <h1 className="fd-title">
-            {fault.line_name}
-            <span className="fd-record">#{fault.id}</span>
-          </h1>
+          {/* ---- KIMLIK ----
+              Onceki hali: kirinti ("BOLGE / HAT / Direk #1 — Direk #2") ile
+              baslik AYNI satirda, ayni taban cizgisindeydi. Uc sorun:
+
+                1. Hat adi IKI KERE geciyordu (kirintida ve baslikta).
+                2. Tek bir dizi gibi okunuyordu — "Direk #1 — Direk #2 BR-4 #4"
+                   nerede yol bitip baslik basliyor belirsizdi.
+                3. Kayit bir BRANSMAN KOLU ise hangi ana hattin kolu oldugu
+                   hicbir yerde yazmiyordu; "BR-4 nerede" sorusu ekranda
+                   cevapsizdi.
+
+              Artik iki kademe: ustte BASLIK (hat adi + arizanin kesimi + kayit
+              no), altinda konum yolu (bolge, kol ise ana hat). Hat adi ve
+              kesim ayni satirda ama AYNI AGIRLIKTA DEGIL — kesim daha soluk,
+              boylece tek satir olmasina ragmen iki ayri bilgi gibi okunur. */}
+          <div className="fd-head-id">
+            <h1 className="fd-title">
+              <span className="fd-title-line">{fault.line_name}</span>
+              {fault.from_pole_seq != null && fault.to_pole_seq != null ? (
+                <>
+                  <em className="fd-title-sep" aria-hidden="true">
+                    ·
+                  </em>
+                  <span className="fd-title-span">
+                    {t("faults.card.rangeText", {
+                      from: fault.from_pole_seq,
+                      to: fault.to_pole_seq
+                    })}
+                  </span>
+                </>
+              ) : null}
+              <span className="fd-record">#{fault.id}</span>
+            </h1>
+            <nav className="fd-breadcrumb" aria-label={t("faults.detail.locationLabel")}>
+              <MapPin size={13} />
+              <span>{fault.region_name}</span>
+              {fault.is_branch_line && fault.parent_line_name ? (
+                <>
+                  <em aria-hidden="true">›</em>
+                  <span>
+                    {t("faults.detail.branchOfLine", { line: fault.parent_line_name })}
+                  </span>
+                </>
+              ) : null}
+            </nav>
+          </div>
 
           {/* ---- EYLEM CUBUGU ----
               Once olcum seridinin ICINDE bir hucreydi: dugmeler kartlarin

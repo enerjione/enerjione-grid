@@ -50,6 +50,16 @@ export type ArizaGirdi = {
   to_pole_id?: number | null;
   from_pole_seq?: number | null;
   to_pole_seq?: number | null;
+  /**
+   * KAYITTAKI bolge uclari — arizanin acildigi andaki gercek.
+   *
+   * Bunlar olmadan bolge yalnizca CANLI alarmlardan cikarilabilir; alarm
+   * normale donunce (ariza kapaninca) kirmizi parca kayboluyor ve gecmis bir
+   * kaydin haritasi hattin tamamini saglam gosteriyordu. Kayit ise degismez:
+   * ay sonra acilan bir ariza da bolgesini gosterir.
+   */
+  last_red_device_id?: number | null;
+  first_green_device_id?: number | null;
 };
 
 export type CihazGirdi = { id: number; name?: string | null; code?: string | null };
@@ -196,6 +206,12 @@ export function buildFaultMapView(input: {
     t: number; // slot icindeki konum 0..1
     isRed: boolean;
   };
+  // Kayitta "arizayi goren son cihaz" yaziliysa o cihaz HER ZAMAN kirmizidir —
+  // alarmi cok once normale donmus olsa bile. Aksi halde kapanmis bir arizanin
+  // haritasinda "Ariza Tespit Eden Cihazlar" kartinda kirmizi yazan cihaz
+  // haritada yesil gorunuyordu; ayni ekranda iki farkli cevap.
+  const kayitliKirmizi = fault.last_red_device_id ?? null;
+
   const slotSegs = new Map<string, SegRec[]>();
   for (const seg of segments) {
     if (seg.line_id !== fault.line_id || !seg.device_id) continue;
@@ -206,7 +222,11 @@ export function buildFaultMapView(input: {
         : 0.5;
     const key = `${seg.from_pole_id}|${seg.to_pole_id}`;
     const arr = slotSegs.get(key) ?? [];
-    arr.push({ deviceId: seg.device_id, t, isRed: alarmActiveDeviceIds.has(seg.device_id) });
+    arr.push({
+      deviceId: seg.device_id,
+      t,
+      isRed: seg.device_id === kayitliKirmizi || alarmActiveDeviceIds.has(seg.device_id)
+    });
     slotSegs.set(key, arr);
   }
   for (const [, arr] of slotSegs) {
@@ -234,16 +254,36 @@ export function buildFaultMapView(input: {
   }
 
   // Son ariza ALGILAYAN ve ondan sonraki ilk ALGILAMAYAN cihaz.
-  let lastRedIdx = -1;
+  //
+  // ONCE KAYIT, SONRA CANLI ALARM: kaydin `last_red_device_id` /
+  // `first_green_device_id` alanlari arizanin acildigi andaki gercektir ve
+  // degismez. Canli alarmdan turetmek yalnizca ariza ACIKKEN dogru sonuc
+  // veriyordu; alarm normale donunce kirmizi parca kayboluyor, gecmis bir
+  // kaydin haritasi hattin tamamini yesil gosteriyordu (bolge odagi da tum
+  // hatta zoom yapiyordu). Kayitta cihaz yoksa ya da o cihaz artik bu hatta
+  // degilse (topoloji duzenlendi) eski alarm tabanli yola dusuyoruz.
+  let lastRedIdx =
+    kayitliKirmizi != null
+      ? lineDevices.findIndex((d) => d.deviceId === kayitliKirmizi)
+      : -1;
   let firstGreenAfterRedIdx = -1;
-  for (let i = 0; i < lineDevices.length; i += 1) {
-    if (lineDevices[i].isRed) lastRedIdx = i;
-  }
   if (lastRedIdx >= 0) {
-    for (let i = lastRedIdx + 1; i < lineDevices.length; i += 1) {
-      if (!lineDevices[i].isRed) {
-        firstGreenAfterRedIdx = i;
-        break;
+    const yesilId = fault.first_green_device_id ?? null;
+    const yesilIdx =
+      yesilId != null ? lineDevices.findIndex((d) => d.deviceId === yesilId) : -1;
+    // Yesil cihaz kirmizidan SONRA olmali; degilse yok say — ters siralanmis
+    // bir parca hattin uzerine yanlis yerde kirmizi cizerdi.
+    if (yesilIdx > lastRedIdx) firstGreenAfterRedIdx = yesilIdx;
+  } else {
+    for (let i = 0; i < lineDevices.length; i += 1) {
+      if (lineDevices[i].isRed) lastRedIdx = i;
+    }
+    if (lastRedIdx >= 0) {
+      for (let i = lastRedIdx + 1; i < lineDevices.length; i += 1) {
+        if (!lineDevices[i].isRed) {
+          firstGreenAfterRedIdx = i;
+          break;
+        }
       }
     }
   }

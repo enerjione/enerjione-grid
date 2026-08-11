@@ -60,6 +60,25 @@ class LocalGateway(BaseModel):
     #: Kayit defterindeki imajin surumu.
     remote_version: str | None = None
 
+    # --- Uzak surum NEREDEN geldi -----------------------------------------
+    #
+    # Ajanin uzak sorgusu `docker buildx`e bagli ve buildx Docker Engine
+    # kurulumlarinda siklikla yok. O cihazlarda hedef surum ekranda HIC
+    # gorunmuyordu (bkz. gateway_release_service). Artik backend ayni bilgiyi
+    # kayit defterinin HTTP API'sinden de okuyabiliyor; hangi kaynagin
+    # cevapladigini SAKLAMIYORUZ:
+    #   "agent"    -> cihazin kendisi dogruladi
+    #   "registry" -> backend kayit defterine sordu (cihaz dogrulayamadi;
+    #                 cihazin o imaji CEKEBILECEGI ayri bir sorudur)
+    remote_source: Literal["agent", "registry"] | None = None
+    #: Uzak surum sorgusu arka planda suruyor — arayuz "sorguluyor" gosterip
+    #: birkac saniye sonra tekrar sorabilir (istek icinde ag beklenmiyor).
+    remote_pending: bool = False
+    #: Hem ajan hem kayit defteri cevapsiz kaldiysa SEBEBI. "Bilinmiyor"
+    #: demek yetmiyor: operator neyi duzeltecegini bilmeli (paket private mi,
+    #: cihaz/sunucu internete cikmiyor mu).
+    remote_error: str | None = None
+
 
 class GatewayApplyStatus(BaseModel):
     """Ajanin isledigi son istegin sonucu."""

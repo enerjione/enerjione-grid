@@ -1149,7 +1149,9 @@
       "exportPdf": "PDF rapor",
       "exportPdfBusy": "PDF hazırlanıyor…",
       "exportPdfFailed": "PDF rapor oluşturulamadı.",
-      "reportTitle": "Arıza Raporu"
+      "reportTitle": "Arıza Raporu",
+      "branchOfLine": "{{line}} kolu",
+      "locationLabel": "Arızanın konumu"
     },
     "phase": {
       "master": "Master",
@@ -2394,6 +2396,9 @@
         "upToDate": "Güncel",
         "versionUnknown": "Sürüm bilinmiyor",
         "versionUnknownHint": "Kayıt defterine ulaşılamadı; güncel olup olmadığı doğrulanamadı.",
+        "versionChecking": "Sürüm sorgulanıyor…",
+        "versionUnknownBuildx": "Bu cihazda docker buildx kurulu değil, sürüm karşılaştırması cihazda yapılamıyor. Sunucu da kayıt defterine ulaşamadı.",
+        "remoteFromRegistry": "Sürüm kayıt defterine sunucudan sorularak bulundu; cihazın kendisi doğrulayamadı (docker buildx yok). Güncelleme için cihazın imajı çekebilmesi gerekir.",
         "updateConfirm": "Gateway güncellenecek ve yeniden başlatılacak. Bu sırada bu gateway'e bağlı cihazlardan kısa süre telemetri gelmez. Devam edilsin mi?",
         "progress": {
           "gonderiliyor": "İstek gönderiliyor…",

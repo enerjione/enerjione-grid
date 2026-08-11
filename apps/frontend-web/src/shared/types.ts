@@ -684,6 +684,17 @@ export type LocalGateway = {
   local_version?: string | null;
   /** Kayit defterindeki imajin okunabilir surumu. */
   remote_version?: string | null;
+  /** Uzak surum NEREDEN geldi:
+   *    "agent"    -> cihazin kendisi dogruladi (docker buildx)
+   *    "registry" -> backend kayit defterine sordu; cihaz dogrulayamadi
+   *  Ayrim onemli: backend yeni surumu gorse de cihazin o imaji CEKEBILECEGI
+   *  ayri bir sorudur (cihazin internet erisimi olmayabilir). */
+  remote_source?: "agent" | "registry" | null;
+  /** Uzak surum sorgusu arka planda suruyor — birkac saniye sonra tekrar
+   *  sorulunca deger gelir (istek icinde ag beklenmiyor). */
+  remote_pending?: boolean;
+  /** Ne ajan ne kayit defteri cevap veremediyse SEBEP. */
+  remote_error?: string | null;
 };
 
 /** Host ajaninin isledigi son kurulum/kaldirma istegi. */

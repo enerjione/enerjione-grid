@@ -100,6 +100,27 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
     };
   }, []);
 
+  /** UZAK SURUM SORGUSU ARKA PLANDA KOSAR — cevap gelince kendiliginden tazele.
+   *
+   *  Backend kayit defterine ag beklemeden soruyor (istek icinde beklemek,
+   *  guncelleme sirasinda saniyede bir yoklanan bu ucu kilitlerdi) ve ilk
+   *  cevapta `remote_pending` doner. Tazelemeseydik operator "sorgulanıyor"
+   *  yazisinda kalir, surumu gormek icin modali kapatip yeniden acardi.
+   *
+   *  Deneme TAVANLI: sorgu kalici olarak basarisizsa (cihaz da sunucu da
+   *  internete cikmiyor) modal acik kaldigi surece sonsuz yoklama yapmasin. */
+  const surumYoklama = useRef(0);
+  useEffect(() => {
+    const bekleyen = (agent?.gateways ?? []).some((g) => g.remote_pending);
+    if (!bekleyen || surumYoklama.current >= 4) return;
+    const id = window.setTimeout(() => {
+      surumYoklama.current += 1;
+      if (canli.current) void loadAgent();
+    }, 2500);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent]);
+
   useEffect(() => {
     void loadAgent();
     // Token ayri uctan gelir; basarisiz olursa (yetki yok) kutu bos kalir ve
@@ -354,7 +375,17 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
                   </span>
                 ) : null}
                 {local.update_available === true ? (
-                  <span className="gw-ver-badge is-new">
+                  <span
+                    className="gw-ver-badge is-new"
+                    // Surum kayit defterinden geldiyse bunu SAKLAMA: backend
+                    // yeni surumu gorse de cihazin o imaji cekebilecegi ayri
+                    // bir sorudur (cihaz internete cikmiyor olabilir).
+                    title={
+                      local.remote_source === "registry"
+                        ? t("engineering.gateways.editForm.remoteFromRegistry")
+                        : undefined
+                    }
+                  >
                     <ArrowUpCircle size={13} strokeWidth={2.2} />
                     {/* Hedef surum BILINIYORSA yaz: "0.6.0 -> 0.7.0".
                         Bilinmiyorsa (etiket yok / kayit defteri okunamadi)
@@ -369,8 +400,27 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
                   <span className="gw-ver-badge is-current">
                     {t("engineering.gateways.editForm.upToDate")}
                   </span>
+                ) : local.remote_pending ? (
+                  // Sorgu ARKA PLANDA suruyor: "bilinmiyor" demek yanlis olur,
+                  // birkac saniye sonra cevap gelecek (asagida tazeleniyor).
+                  <span className="gw-ver-badge is-unknown">
+                    <Loader2 size={13} strokeWidth={2.2} className="net-spin" />
+                    {t("engineering.gateways.editForm.versionChecking")}
+                  </span>
                 ) : (
-                  <span className="gw-ver-badge is-unknown" title={t("engineering.gateways.editForm.versionUnknownHint")}>
+                  <span
+                    className="gw-ver-badge is-unknown"
+                    // SEBEBI goster: "bilinmiyor" tek basina operatore neyi
+                    // duzeltecegini soylemiyor. `remote_error` backend'in
+                    // kayit defteri denemesinden gelir; yoksa cihazda buildx
+                    // olmadigi icin sorgu hic yapilamamis olabilir.
+                    title={
+                      local.remote_error ||
+                      (agent?.buildx_available === false
+                        ? t("engineering.gateways.editForm.versionUnknownBuildx")
+                        : t("engineering.gateways.editForm.versionUnknownHint"))
+                    }
+                  >
                     {t("engineering.gateways.editForm.versionUnknown")}
                   </span>
                 )}

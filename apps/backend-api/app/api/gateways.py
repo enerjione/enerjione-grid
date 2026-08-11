@@ -714,8 +714,16 @@ def get_local_agent_status(
     NOT: bu route parametreli `/{gateway_code}/...` route'larindan ONCE
     tanimli olmali degil — bu dosyada `GET /{gateway_code}` yok, cakisma
     olusmuyor. Ileride eklenirse sira onemli hale gelir.
+
+    UZAK SURUM ZENGINLESTIRMESI: ajanin uzak sorgusu `docker buildx`e bagli
+    ve buildx cogu Docker Engine kurulumunda yok; o cihazlarda hedef surum
+    ekranda HIC gorunmuyordu (kayit defterinde yeni surum dururken). Eksik
+    alanlar kayit defterinin HTTP API'sinden tamamlanir — ag beklenmez,
+    sorgu arka planda kosar (bkz. gateway_release_service).
     """
-    return gateway_agent_service.read_status()
+    from app.services import gateway_release_service
+
+    return gateway_release_service.enrich_agent_status(gateway_agent_service.read_status())
 
 
 @router.post(

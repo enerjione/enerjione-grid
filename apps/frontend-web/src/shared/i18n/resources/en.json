@@ -1152,7 +1152,9 @@
       "exportPdf": "PDF report",
       "exportPdfBusy": "Preparing PDF…",
       "exportPdfFailed": "Could not create the PDF report.",
-      "reportTitle": "Fault Report"
+      "reportTitle": "Fault Report",
+      "branchOfLine": "branch of {{line}}",
+      "locationLabel": "Fault location"
     },
     "phase": {
       "master": "Master",
@@ -2397,6 +2399,9 @@
         "upToDate": "Up to date",
         "versionUnknown": "Version unknown",
         "versionUnknownHint": "Could not reach the registry; unable to verify whether it is up to date.",
+        "versionChecking": "Checking version…",
+        "versionUnknownBuildx": "docker buildx is not installed on this host, so the version cannot be compared locally. The server could not reach the registry either.",
+        "remoteFromRegistry": "Version was read from the registry by the server; the host itself could not verify it (no docker buildx). Updating still requires the host to be able to pull the image.",
         "updateConfirm": "The gateway will be updated and restarted. Telemetry from devices on this gateway will pause briefly. Continue?",
         "progress": {
           "gonderiliyor": "Sending request…",

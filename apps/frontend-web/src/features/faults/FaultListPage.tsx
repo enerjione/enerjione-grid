@@ -467,11 +467,12 @@ export function FaultListPage({
                   } fx-fault-tab--${f.status}`}
                   onClick={() => setActiveFaultId(f.id)}
                 >
-                  {/* DURUM NOKTASI: devam eden ariza kirmizi yanip soner,
-                      normale donmus kayit sabit yesil. Cipler ayni gorunumde
-                      dururken hangisinin hala sahada oldugu ancak secip
-                      karta bakinca anlasiliyordu. */}
-                  <span className="fx-fault-tab-dot" aria-hidden="true" />
+                  {/* DURUM NOKTASI YOK: devam eden arizada KARTIN KENDISI
+                      yanip soner (bkz. `fx-fault-card-blink`). Nokta ayni
+                      seyi ikinci kez soyluyordu — kart zaten kirmizi zeminli
+                      ve yanip sonen; yaninda duran kucuk daire yalnizca
+                      gurultu yapiyordu. Normale donmus kayit sabit yesil
+                      kalir. */}
                   {/* BOLGE + HAT. Direk araligi burada YAZMIYOR: ayni
                       bilgi kartin basliginda ve detayda zaten var, cipte
                       tekrar edince secici bir tablo gibi kalabaliklasiyordu. */}
