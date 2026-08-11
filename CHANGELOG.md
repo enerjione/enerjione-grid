@@ -14,6 +14,30 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.67.2] — 2026-08-11
+
+### Düzeltildi
+
+- **Branşman bağlantı telindeki cihaz arıza algoritmasına girmiyordu.**
+  Ana hattaki dallanma direği ile kolun ilk direği arasındaki tel TEK bir
+  parça olarak kuruluyor, üzerine konan cihaz grafa hiç dahil edilmiyordu
+  (kodda "genellikle bu kısımda cihaz yok" yazıyordu). Cihaz düğüm olmayınca
+  arıza yayılımını kesemiyor, kolun ucunda ölçüm bulunamayınca telin TAMAMI
+  kırmızı boyanıyordu. Sahada cihaz "buradan akım geçmedi" derken harita "bu
+  telde arıza var" diyordu. Tel artık hat içi açıklıklarla aynı şekilde
+  cihazlarında bölünüyor: dallanma direğinden yeşil cihaza kadar şüpheli
+  (o cihaz kendi yukarısındaki arızayı göremez, akım ona ulaşmaz), cihazdan
+  sonrası temiz.
+
+- **Branşman direği haritada cihaz işaretçisiyle karıştırılıyordu.** Pin
+  yeşil-turkuaz bir daireydi; cihaz işaretçisi de yeşil daire ve neredeyse
+  aynı boyutta. Pin artık üç bağımsız eksende ayrışıyor: indigo renk, köşeleri
+  yuvarlatılmış kare siluet (haritadaki tek köşeli işaret) ve çatallanma
+  sembolü.
+
+- **Pole Master Kit set sayfası üst cihazın sinyal listesini gösteriyordu.**
+  Set kendi listesini gösteriyor; üst cihaz bilgilere taşındı.
+
 ## [2.67.1] — 2026-08-11
 
 ### Düzeltildi
