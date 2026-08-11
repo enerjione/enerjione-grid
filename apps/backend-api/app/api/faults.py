@@ -296,7 +296,20 @@ def _serialize_fault(db: Session, f: FaultEvent, refs: _FaultRefs | None = None)
             parent = refs.lines.get(parent_pole.line_id)
             parent_line_name = parent.name if parent else None
 
+    # BAGLANTI TELI: araligin baslangic diregi BASKA bir hatta ise, bu
+    # aralik iki hat noktasini birlestiren tekil teldir — bir hattin
+    # icindeki ardisik iki direk degil. Iki farkli numaralandirma tek
+    # aralikta karisir; arayuz bunu aralik gibi gostermemeli.
+    from_pole = refs.poles.get(f.from_pole_id)
+    is_link_span = from_pole is not None and from_pole.line_id != f.line_id
+    from_pole_line_name = None
+    if is_link_span and from_pole is not None:
+        kaynak = refs.lines.get(from_pole.line_id)
+        from_pole_line_name = kaynak.name if kaynak else None
+
     return FaultEventRead(
+        is_link_span=is_link_span,
+        from_pole_line_name=from_pole_line_name,
         id=f.id,
         line_id=f.line_id,
         line_name=line.name if line else "",

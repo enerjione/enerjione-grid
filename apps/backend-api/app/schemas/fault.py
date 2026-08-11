@@ -102,6 +102,21 @@ class FaultEventRead(BaseModel):
     parent_line_id: int | None = None
     parent_line_name: str | None = None
 
+    #: ARALIK IKI HATTI BIRLESTIREN TELDE MI?
+    #:
+    #: Bir bransman kolunun ilk acikligi, ana hattaki dallanma diregi ile
+    #: kolun ilk diregi arasindaki teldir. Bu tel HICBIR hattin direk
+    #: siralamasina ait degildir: `from_pole_seq` ana hattin numarasi,
+    #: `to_pole_seq` kolun numarasidir. Ikisini tek bir aralik gibi okumak
+    #: ("Direk #2 — Direk #1") anlamsizdir ve aralik zannedip icini tarayan
+    #: kod yanlis sonuc uretir.
+    #:
+    #: Bu bayrak acikken arayuz araligi "ANA HAT #2 <-> KOL-B #1" seklinde,
+    #: iki UCLU bir baglanti olarak gosterir.
+    is_link_span: bool = False
+    #: Araligin BASLANGIC diregi hangi hatta — `is_link_span` iken ana hat.
+    from_pole_line_name: str | None = None
+
     # ---- ANALIZ ALANLARI ----
     #: Insanin girdigi sebep (katalogdan). NULL = henuz doldurulmadi.
     cause_code: str | None = None
