@@ -14,6 +14,62 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.67.0] — 2026-08-11
+
+Hat arızası çizimi sahada kullanılabilir hale geldi: aynı direk aralığındaki
+birden fazla cihaz artık görünüyor, arıza sebebi karttan girilebiliyor ve
+batarya yüzdesi cihaz modeline göre hesaplanıyor.
+
+### Eklendi
+
+- **Çizimden cihaza gidiş.** Kelepçelerin altında cihaz adı yazıyor (önce
+  yalnızca ipucundaydı) ve işarete tıklamak cihazın kendi sekmesini açıyor.
+- **Arıza sebebi karttan girilebiliyor.** Cihaz verisinden türetilen öneri
+  görünüyor ama değiştirilemiyordu; sahada gerçek sebebi gören kişi onu
+  girmek için detay ekranını açmak zorundaydı. Sebep, analiz katmanına giren
+  tek insan etiketi olduğu için girişini zorlaştırmak doğrudan veri kaybıydı.
+  Katalog seçimi ve "öneriyi kullan" düğmesi eklendi.
+- **Cihaz modeline özel ayarlar.** Batarya eşikleri proje genelinde tek bir
+  çiftti ve tüm cihazlara uygulanıyordu. Pole Master Kit ile SN 2.0 aynı
+  eşikle ölçülünce bir model sürekli "dolu", diğeri sürekli "bitmek üzere"
+  görünüyordu; ne hata ne uyarı çıkıyor, yalnızca sayı yanlış oluyordu.
+  Çözüm zinciri artık: model ayarı → proje ayarı → kod varsayılanı.
+
+### Düzeltildi
+
+- **Aynı aralıktaki cihazlar üst üste biniyordu.** Konumu verilmemiş
+  cihazların hepsi aralığın ortasına düşüyordu. Sonuç yalnızca görsel
+  değildi: "gördüm" ile "görmedim" aynı noktada olduğu için arıza bölgesi
+  hesaplanamıyor, kod kaba direk aralığına düşüp **aralığın tamamını**
+  kırmızıya boyuyordu — 34 metrelik bir kesim, iki direk arasının tamamı
+  olarak gösteriliyordu. Artık cihazlar aralık içinde eşit dağıtılıyor (kaç
+  cihaz olursa olsun), kalabalık aralıkta direkler arası açılıyor ve kırmızı
+  kesim tam olarak iki cihazın arası.
+- **Sağlam branşman kolları "kontrol edin" diye işaretleniyordu.** Aday kol
+  kümesi arıza aralığının sınır direklerini de kapsıyordu; haritada yemyeşil
+  duran bir kol şemada aday görünüyor, altındaki alt kollar da zincirleme
+  aday oluyordu. Aday kümesi artık çizimin kırmızı boyadığı direklerden
+  türetiliyor — panel ile çizim tanım gereği ayrışamaz.
+- **Aynı direkten çıkan iki kol üst üste biniyordu.** Kardeş kollar sırayla
+  ana hattın altına ve üstüne dağılıyor; iç içe kollar bağlandıkları kolun
+  yönünü sürdürüyor.
+
+### Değişti
+
+- **Hat Arızaları üst şeridi tek satır.** Sekmeler, arıza seçici ve tazelik
+  göstergesi birleşti. "Son güncelleme" saati kaldırıldı; yerine yalnızca
+  çekim başarısız olurken çıkan bir uyarı kondu — sessizce bayat veri
+  göstermek bu ekranın en ağır hata sınıfı. Tek arıza olsa bile seçici
+  görünüyor, kartlar bölge + hat olarak adlandırıldı.
+- **Çizim alanı kartın boş yerini dolduruyor**, sahne kutuya ölçekleniyor:
+  sayfa kaymıyor, çok satırlı sahne kırpılmıyor, kısa hat da devasa
+  çizilmiyor. Sağ paneldeki sabit yükseklik tavanı kalktı.
+- **Direklerde boş giden toprak teli kaldırıldı**; üzerinde cihaz yok,
+  arızası olmuyordu ama her satırdan yer yiyor ve "kaç tel var" sorusunu
+  bulandırıyordu. Kol başlığında yalnızca kol adı yazıyor, ayrıntı ipucunda.
+
+---
+
 ## [2.66.0] — 2026-08-11
 
 Hat arızası detay ekranı baştan tasarlandı, kullanıcılar kendi profillerini
