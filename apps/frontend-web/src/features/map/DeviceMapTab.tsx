@@ -816,8 +816,23 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       }
     }
 
-    // Bransman edge'leri: parent_pole -> branch_first_pole.
-    // Genellikle bu kisimda cihaz yok — tek edge.
+    // BRANSMAN BAGLANTI TELI: parent_pole -> branch_first_pole.
+    //
+    // Bu tel hicbir hattin direk siralamasinin ICINDE degil; iki hat
+    // noktasini birlestirir. Ama uzerine CIHAZ KONABILIYOR (arayuz bunu
+    // destekliyor, backend `_validate_segment_endpoints` icinde bunun icin
+    // acik bir istisna tasiyor) — ve konan cihaz sahanin en kritik olcum
+    // noktalarindan biri: kola giden akimi gorur.
+    //
+    // ESKIDEN TEK EDGE IDI ("genellikle bu kisimda cihaz yok"). Cihaz grafa
+    // hic girmedigi icin ariza yayilimini KESEMIYORDU: kirmizi durumla
+    // girilen kolun ucunda cihaz bulunamiyor, `noDeviceBelow` kurali
+    // devreye giriyor ve telin TAMAMI kirmizi boyaniyordu. Sahada cihaz
+    // "buradan akim gecmedi" derken harita "bu telde ariza var" diyordu.
+    //
+    // Artik tel de bir slot gibi bolunuyor:
+    //   parent_pole -> dev1 -> ... -> devN -> branch_first_pole
+    // Hat ici slotlarla AYNI kaynaktan (`segsBySlot`) ve AYNI siralamayla.
     for (const [lineId, sorted] of sortedPolesByLine) {
       const line = linesById.get(lineId);
       if (!line || !line.branched_from_pole_id) continue;
@@ -833,14 +848,49 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       const firstDraw = isTrafoPoleId(firstPole.id)
         ? offsetTowardsFrom(parentRaw, firstRaw, TRAFO_OFFSET_M)
         : firstRaw;
+
+      // Segment KOLUN hattina yazilir (`line_id = kol`), uclari ana hattin
+      // dallanma diregi ile kolun ilk diregidir.
+      const linkSegs = (
+        segsBySlot.get(`${lineId}|${parentPole.id}|${firstPole.id}`) ?? []
+      ).filter((r) => r.seg.device_id);
+
+      if (linkSegs.length === 0) {
+        addEdge({
+          id: `branch-${lineId}`,
+          fromNodeId: poleNodeId(parentPole.id),
+          toNodeId: poleNodeId(firstPole.id),
+          positions: [parentDraw, firstDraw],
+          lineId,
+          lineName: line.name,
+          regionName: region?.name ?? ""
+        });
+        continue;
+      }
+
+      let prevNodeId = poleNodeId(parentPole.id);
+      let prevPos: [number, number] = parentDraw;
+      for (const rec of linkSegs) {
+        const did = rec.seg.device_id!;
+        const dNodeId = deviceNodeId(did);
+        const dPos = nodes.get(dNodeId)?.pos ?? prevPos;
+        addEdge({
+          id: `branch-${lineId}-d${did}-in`,
+          fromNodeId: prevNodeId,
+          toNodeId: dNodeId,
+          positions: [prevPos, dPos],
+          lineId,
+          lineName: line.name,
+          regionName: region?.name ?? ""
+        });
+        prevNodeId = dNodeId;
+        prevPos = dPos;
+      }
       addEdge({
-        id: `branch-${lineId}`,
-        fromNodeId: poleNodeId(parentPole.id),
+        id: `branch-${lineId}-tail`,
+        fromNodeId: prevNodeId,
         toNodeId: poleNodeId(firstPole.id),
-        positions: [
-          parentDraw,
-          firstDraw
-        ],
+        positions: [prevPos, firstDraw],
         lineId,
         lineName: line.name,
         regionName: region?.name ?? ""
