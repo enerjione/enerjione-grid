@@ -90,8 +90,19 @@ type Props = {
   onAddComment: (faultId: number, body: string) => Promise<void>;
 };
 
-/** Devam eden ariza statusleri — ana ekranda yalnizca bunlar gorunur. */
-const ACTIVE_STATUSES = new Set(["open", "assigned", "in_progress"]);
+/** Ana ekranda gorunen ariza statusleri.
+ *
+ * `resolved` BILEREK DAHIL: ariza sahada duzeldiginde kayit kendiliginden
+ * listeden dusmemeli. Duserse hicbir insan mudahalesi olmadan "bitti"
+ * sayilir; sebebi kimse girmez, ne yapildigi hicbir yere yazilmaz ve ayni
+ * direkte tekrarlayan ariza icin gecmis bos kalir.
+ *
+ * Kaydi listeden ancak KULLANICI dusurur: sebebi/cozum notunu girip
+ * kapatir (bkz. faults API — `closed` yalnizca `resolved_at` doluyken ve
+ * cozum notuyla kabul edilir). Yani `resolved` "islem bekliyor" demektir,
+ * "bitti" degil.
+ */
+const ACTIVE_STATUSES = new Set(["open", "assigned", "in_progress", "resolved"]);
 
 function fmtDurationSeconds(totalSec: number): string {
   let sec = Math.max(0, Math.round(totalSec));
@@ -170,8 +181,10 @@ export function FaultListPage({
     [faults]
   );
 
+  // Gecmis = yalnizca KAPATILMIS kayitlar. `resolved` hala islem bekler,
+  // bu yuzden aktif listede kalir (bkz. ACTIVE_STATUSES).
   const historyFaults = useMemo(
-    () => faults.filter((f) => f.status === "resolved" || f.status === "closed"),
+    () => faults.filter((f) => f.status === "closed"),
     [faults]
   );
 
