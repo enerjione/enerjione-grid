@@ -39,7 +39,24 @@
  *   1) Atama            | Durum (adim seridi + zaman cizelgesi)
  *   2) Konum haritasi   | Ariza kunyesi (cihazdan gelen olcumler)
  *   3) Ariza bolgesi | Tetikleyen alarmlar | Direkler | Kollar | Hat gecmisi
- *   4) Cozum & notlar   | Saha raporu (yorumlar)
+ *
+ * ISLEMLER SAYFADA DEGIL, KENDI EKRANLARINDA
+ * ------------------------------------------
+ * Sebep girisi ve saha yorumlari once sayfanin dibinde iki kartti, sonra
+ * ikisi TEK popup'a konuldu. Ikincisi de yanlisti: sebep bir siniflandirma,
+ * yorum ise serbest metinli bir akis; yan yana durunca hangisinin kalici
+ * kayit oldugu belirsizdi. Artik ust seritteki eylem cubugundan acilan iki
+ * ayri ekran var:
+ *
+ *   FaultResolveModal      -> sebep + cozum, ve KAPATMA
+ *   FaultFieldReportModal  -> saha raporu (yorum akisi)
+ *
+ * KAPATMA NORMALE DONUSE BAGLI: ariza sahada duzelmeden (`resolved_at`)
+ * kapatilamaz — dugme kilitli durur ve neden kilitli oldugunu yazar.
+ * Backend de ayni kurali dogrular (409). Acik bir arizanin kapatilabilmesi,
+ * sahada devam eden isin ekrandan dusmesi demekti.
+ *
+ * KAPATILMIS ARIZA SALT OKUNUR: rapor alinabilir, yorum/sebep degistirilemez.
  *
  * HARITA VARSAYILAN UYDU: hat arizasinda sahada aranan sey agac teması,
  * dere yatagi, yol kenari — sokak gorunumu bunlarin hicbirini gostermez.
@@ -51,27 +68,23 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 
-import { useProjectSettings } from "../../components/ProjectSettingsProvider";
 import {
   Activity,
   ArrowRight,
-  CalendarClock,
   Check,
   CircleDot,
   FileDown,
   GitBranch,
   History,
-  Lightbulb,
+  Lock,
   MapPin,
   MessagesSquare,
   Radio,
   Route,
-  Save,
-  Send,
   Timer,
   TriangleAlert,
   UserRound,
-  X,
+  Wrench,
   Zap
 } from "lucide-react";
 import { LayersControl, MapContainer, Marker, Polyline, Tooltip } from "react-leaflet";
@@ -80,16 +93,22 @@ import L from "leaflet";
 import { buildFaultMapView } from "./faultMapView";
 import { buildFaultRecurrence } from "./faultRecurrence";
 import { FitFocus } from "./FaultMapFocus";
+import { FaultResolveModal } from "./FaultResolveModal";
+import { bashafler, FaultFieldReportModal } from "./FaultFieldReportModal";
 
 import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
 import { ResilientTileLayer } from "../../components/ResilientTileLayer";
-import { fetchFault, fetchFaultCauses, type GridSnapshot } from "../../shared/api";
+import {
+  downloadFaultReport,
+  fetchFault,
+  fetchFaultCauses,
+  type GridSnapshot
+} from "../../shared/api";
 import { formatDistanceM, formatDistanceRange } from "../../shared/lineDistance";
 import { MAP_LAYERS } from "../../shared/mapTiles";
 import type {
   AlarmEvent,
   DeviceRow,
-  FaultCause,
   FaultCauseCatalog,
   FaultComment,
   FaultEvent,
@@ -132,13 +151,6 @@ const STATUS_COLOR: Record<string, string> = {
   closed: "#64748b"
 };
 
-const AKIS: readonly ["assigned", "in_progress", "resolved", "closed"] = [
-  "assigned",
-  "in_progress",
-  "resolved",
-  "closed"
-];
-
 function fmtDate(iso: string | null | undefined, localeTag: string): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleString(localeTag);
@@ -147,15 +159,6 @@ function fmtDate(iso: string | null | undefined, localeTag: string): string {
 function fmtClock(iso: string | null | undefined, localeTag: string): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleTimeString(localeTag, { hour: "2-digit", minute: "2-digit" });
-}
-
-/** Ad-soyaddan iki harf. Kullanici adi yoksa "?" — uydurma bas harf yok. */
-function bashafler(ad: string | null | undefined): string {
-  const temiz = (ad ?? "").trim();
-  if (!temiz) return "?";
-  const parcalar = temiz.split(/\s+/);
-  if (parcalar.length === 1) return parcalar[0].substring(0, 2).toUpperCase();
-  return (parcalar[0][0] + parcalar[parcalar.length - 1][0]).toUpperCase();
 }
 
 /** Mini harita direk pini. */
@@ -256,44 +259,25 @@ export function FaultDetailPage({
   }, [accessToken]);
 
   const [comments, setComments] = useState<FaultComment[]>([]);
-  const [commentDraft, setCommentDraft] = useState("");
-  const [noteDraft, setNoteDraft] = useState("");
-  // Kapanis gerekcesi. `note`dan AYRI: `note` acikken tutulan calisma
-  // notudur ve degisir; bu ise arizanin nasil giderildiginin kalici cevabi.
-  const [resolutionDraft, setResolutionDraft] = useState("");
-  // Sebep girisi ve yorumlar POPUP'ta: sayfanin en altinda dururken
-  // kullanici her islem icin oraya kaydiriyordu.
-  const [islemModal, setIslemModal] = useState<null | "close" | "comments">(null);
-  // Rapor basligi icin musteri logosu; EnerjiOne logosu sabit varliktan.
-  const { settings: projeAyarlari } = useProjectSettings();
-  const [causeDraft, setCauseDraft] = useState("");
-  const [causeDetailDraft, setCauseDetailDraft] = useState("");
+  /** Acik islem ekrani. Taslaklarin tamami o ekranlarin ICINDE tutulur;
+   *  ekran unmount oldugunda kendiliginden temizlenir ve arka planda liste
+   *  tazelendiginde kullanicinin yazdigi silinmez. */
+  const [islemModal, setIslemModal] = useState<null | "close" | "solve" | "comments">(
+    null
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [mapFocus, setMapFocus] = useState<"zone" | "line" | "grid">("zone");
+  /** PDF sunucuda uretilir (uydu karolari + reportlab); bir kac saniye
+   *  surebilir, o yuzden dugme beklemede kilitlenir. */
+  const [raporUretiliyor, setRaporUretiliyor] = useState(false);
 
-  // Taslaklar ariza KIMLIGI degisince sifirlanir — her render'da degil.
-  // Aksi halde kullanici yazarken liste tazelenip yazdigini silerdi.
+  // Baska bir ariza sekmesine gecildiyse acik islem ekrani kapansin —
+  // aksi halde diyalog onceki kaydin taslagiyla acik kalirdi.
   useEffect(() => {
-    setNoteDraft("");
-    setCauseDraft("");
-    setCauseDetailDraft("");
-    setCommentDraft("");
+    setIslemModal(null);
     setError("");
   }, [faultId]);
-
-  // Sunucudaki deger ilk geldiginde taslaga yansisin (kullanici henuz
-  // dokunmadiysa).
-  const [taslakYuklendi, setTaslakYuklendi] = useState(false);
-  useEffect(() => {
-    if (!fault || taslakYuklendi) return;
-    setNoteDraft(fault.note ?? "");
-    setResolutionDraft(fault.resolution_note ?? "");
-    setCauseDraft(fault.cause_code ?? "");
-    setCauseDetailDraft(fault.cause_detail ?? "");
-    setTaslakYuklendi(true);
-  }, [fault, taslakYuklendi]);
-  useEffect(() => setTaslakYuklendi(false), [faultId]);
 
   useEffect(() => {
     let iptal = false;
@@ -397,33 +381,64 @@ export function FaultDetailPage({
     [listeKaydi, cek, t]
   );
 
-  const causeLabel = useCallback(
-    (c: FaultCause) => (i18n.language?.startsWith("tr") ? c.label_tr : c.label_en),
-    [i18n.language]
+  /** ARIZA RAPORU (PDF) — sunucuda uretilir, burada indirilir.
+   *
+   *  Tarayicinin yazdirma diyalogu YOK: rapor artik gercek bir belge
+   *  (`services/fault_report_service.py`) ve dosya adi da sunucudan gelir. */
+  const raporIndir = useCallback(async () => {
+    setRaporUretiliyor(true);
+    setError("");
+    try {
+      const { blob, filename } = await downloadFaultReport(accessToken, faultId);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("faults.detail.exportPdfFailed"));
+    } finally {
+      setRaporUretiliyor(false);
+    }
+  }, [accessToken, faultId, t]);
+
+  /** ISLEM EKRANLARININ UCLARI — hata FIRLATIRLAR.
+   *
+   *  `calistir` hatayi yutup sayfaya yaziyor; diyalog icinde ise hata
+   *  eylemin YANINDA gorunmeli ve diyalog acik kalmali (kullanici yazdigini
+   *  kaybetmesin). Bu yuzden bunlar ayri. */
+  const sebepKaydet = useCallback(
+    async (kod: string | null, ayrinti: string | null) => {
+      await onUpdateCause(faultId, { cause_code: kod, cause_detail: ayrinti });
+      if (!listeKaydi) await cek();
+    },
+    [faultId, listeKaydi, cek, onUpdateCause]
   );
 
-  /** Aileye gore gruplanmis secim listesi — duz 19'luk liste taranmasi zor. */
-  const causeGroups = useMemo<[string, FaultCause[]][]>(() => {
-    if (!causeCatalog) return [];
-    const harita = new Map<string, FaultCause[]>();
-    for (const grup of causeCatalog.groups) harita.set(grup, []);
-    for (const c of causeCatalog.causes) {
-      const liste = harita.get(c.group);
-      if (liste) liste.push(c);
-      else harita.set(c.group, [c]);
-    }
-    return [...harita.entries()].filter(([, liste]) => liste.length > 0);
-  }, [causeCatalog]);
+  const notKaydet = useCallback(
+    async (not: string | null) => {
+      await onUpdateNote(faultId, not);
+      if (!listeKaydi) await cek();
+    },
+    [faultId, listeKaydi, cek, onUpdateNote]
+  );
 
-  /** Kuralin onerdigi sebep. SECILI GELMEZ — operator onaylamadan bir etiket
-   *  "girilmis" sayilirsa istatistik, kimsenin bakmadigi bir tahminle dolar. */
-  const suggestedCause = useMemo(() => {
-    if (!causeCatalog || !fault || fault.cause_code) return null;
-    const kod = fault.auto_cause_code;
-    if (!kod) return null;
-    const c = causeCatalog.causes.find((x) => x.code === kod);
-    return c ? { code: c.code, label: causeLabel(c) } : null;
-  }, [causeCatalog, fault, causeLabel]);
+  const arizayiKapat = useCallback(
+    async (cozumNotu: string) => {
+      await onUpdateStatus(faultId, "closed", cozumNotu);
+      if (!listeKaydi) await cek();
+    },
+    [faultId, listeKaydi, cek, onUpdateStatus]
+  );
+
+  const yorumEkle = useCallback(
+    async (body: string) => {
+      await onAddComment(faultId, body);
+      setComments(await onLoadComments(faultId));
+    },
+    [faultId, onAddComment, onLoadComments]
+  );
 
   /** ARIZA KUNYESI — cihazdan gelen olcumler. Yalnizca DOLU alanlar: "—" ile
    *  dolu bir tablo bilgi tasimadigi gibi, gercekten bilinen iki degeri de
@@ -517,7 +532,6 @@ export function FaultDetailPage({
   }
 
   const statusColor = STATUS_COLOR[fault.status] ?? "#64748b";
-  const akisIndex = AKIS.indexOf(fault.status as (typeof AKIS)[number]);
   const assigneeName = fault.assigned_to_full_name ?? fault.assigned_to_username ?? null;
   const distanceText = formatDistanceRange(fault.zone_start_m, fault.zone_end_m);
   //: Araligin ORTA NOKTASI — sahaya cikan kisiye verilecek tek sayi.
@@ -529,54 +543,17 @@ export function FaultDetailPage({
     return orta >= 1000 ? `~${(orta / 1000).toFixed(2)} km` : `~${Math.round(orta)} m`;
   }, [fault.zone_start_m, fault.zone_end_m]);
 
-  /** Kaydedilmemis degisiklik var mi — Cozum kartinin kaydet dugmesi bunu
-   *  okur. Sebep ve not TEK dugmede kaydedilir: operator ikisini birlikte
-   *  yaziyor, iki ayri "Kaydet" biri unutuldugunda sessizce veri kaybiydi. */
-  const causeDirty =
-    (fault.cause_code ?? "") !== causeDraft ||
-    (fault.cause_detail ?? "") !== causeDetailDraft.trim();
-  const noteDirty = (fault.note ?? "") !== noteDraft.trim();
-  const dirty = causeDirty || noteDirty;
-
-  const zamanCizelgesi = [
-    { key: "opened", label: t("faults.detail.timelineOpened"), at: fault.opened_at, color: "#ef4444" },
-    {
-      key: "assigned",
-      label: t("faults.detail.timelineAssigned"),
-      at: fault.assigned_at,
-      color: "#f59e0b"
-    },
-    {
-      key: "resolved",
-      label: t("faults.detail.timelineResolved"),
-      at: fault.resolved_at,
-      color: "#10b981"
-    },
-    {
-      key: "closed",
-      label: t("faults.detail.timelineClosed"),
-      at: fault.closed_at,
-      color: "#64748b"
-    }
-  ].filter((s) => Boolean(s.at));
+  /** KAPATILMIS ARIZA SALT OKUNUR: rapor alinir, kayit degistirilmez.
+   *  Kapanmis bir kayda sonradan yorum/sebep eklenmesi, arsivlenen raporun
+   *  sessizce degismesi demek olurdu. */
+  const kapali = fault.status === "closed";
+  /** Kapatma yalnizca ariza SAHADA DUZELDIKTEN sonra. `resolved_at`i cihaz
+   *  yazar (alarm kalkinca otomatik); backend de ayni kurali dogrular. */
+  const normaleDondu = Boolean(fault.resolved_at);
+  const islemYapilabilir = canEdit && !kapali;
 
   return (
     <div className="fd-page">
-      {/* YALNIZCA YAZDIRMADA: rapor basligi. Ekranda gorunmez. */}
-      <div className="fd-print-head" aria-hidden="true">
-        <img className="fd-print-logo" src="/logo.png" alt="" />
-        <div className="fd-print-title">
-          <strong>{t("faults.detail.reportTitle")}</strong>
-          <span>
-            {fault.region_name} / {fault.line_name} · #{fault.id}
-          </span>
-          <small>{fmtDate(fault.opened_at, localeTag)}</small>
-        </div>
-        {projeAyarlari.customer_logo ? (
-          <img className="fd-print-logo" src={projeAyarlari.customer_logo} alt="" />
-        ) : null}
-      </div>
-
       {/* ---- Ust serit: kunye + olculer ---- */}
       <header className="fd-head">
         <div className="fd-head-top">
@@ -596,6 +573,81 @@ export function FaultDetailPage({
             {fault.line_name}
             <span className="fd-record">#{fault.id}</span>
           </h1>
+
+          {/* ---- EYLEM CUBUGU ----
+              Once olcum seridinin ICINDE bir hucreydi: dugmeler kartlarin
+              arasinda ikinci satira tasiyor, kutu icinde kutu gibi
+              duruyordu. Artik basligin sag ucunda kendi seridinde —
+              once bilgilendirici (rapor/okuma), sonra ayirac, sonra
+              kayda dokunan eylemler. */}
+          <div className="fd-actions">
+            {/* PDF: BACKEND uretir (`/faults/{id}/report.pdf`). Eskiden
+                `window.print()` cagriliyordu; cikan sey bir belge degil
+                EKRANIN kagida dokulmus haliydi ve kapanmis arizada harita
+                bos cikiyordu (kirmizi bolge canli alarm durumundan
+                turetiliyor). Kapatilmis arizada da calisir: rapor her zaman
+                alinabilmeli. */}
+            <button
+              type="button"
+              className="fd-act"
+              onClick={() => void raporIndir()}
+              disabled={raporUretiliyor}
+            >
+              <FileDown size={15} />
+              {raporUretiliyor ? t("faults.detail.exportPdfBusy") : t("faults.detail.exportPdf")}
+            </button>
+            <button
+              type="button"
+              className="fd-act"
+              onClick={() => setIslemModal("comments")}
+            >
+              <MessagesSquare size={15} />
+              {t("faults.detail.actionFieldReport")}
+              {comments.length > 0 ? (
+                <span className="fd-act-count">{comments.length}</span>
+              ) : null}
+            </button>
+
+            {islemYapilabilir ? (
+              <>
+                <span className="fd-act-sep" aria-hidden="true" />
+                <button
+                  type="button"
+                  className="fd-act"
+                  onClick={() => setIslemModal("solve")}
+                >
+                  <Wrench size={15} />
+                  {t("faults.detail.actionSolve")}
+                </button>
+                {/* KAPATMA KILITLI: ariza sahada duzelmeden (`resolved_at`)
+                    kapatilamaz. Dugmeyi gizlemek yerine KILITLI gostermek,
+                    "kapatma nerede" sorusunu ekranda cevaplar. */}
+                <button
+                  type="button"
+                  className={`fd-act fd-act--go ${normaleDondu ? "" : "is-locked"}`}
+                  onClick={() => setIslemModal("close")}
+                  disabled={!normaleDondu}
+                  title={normaleDondu ? undefined : t("faults.detail.closeLocked")}
+                >
+                  {normaleDondu ? (
+                    <Check size={15} strokeWidth={2.8} />
+                  ) : (
+                    <Lock size={14} />
+                  )}
+                  {normaleDondu
+                    ? t("faults.detail.closeFault")
+                    : t("faults.detail.closeWaiting")}
+                </button>
+              </>
+            ) : null}
+
+            {kapali ? (
+              <span className="fd-act-note" title={t("faults.detail.closedReadOnlyHint")}>
+                <Lock size={13} />
+                {t("faults.detail.closedReadOnly")}
+              </span>
+            ) : null}
+          </div>
         </div>
 
         <div className="fd-metrics">
@@ -628,42 +680,6 @@ export function FaultDetailPage({
             label={t("faults.detail.estimatedDistance")}
             value={tahminiMesafe}
           />
-
-          {/* Eylemler seride BITISIK: sebep girisi ve yorum sayfanin en
-              altindaydi, kullanici her defasinda oraya kaydiriyordu. */}
-          <div className="fd-metric-actions">
-            {/* PDF: ayri bir cizim katmani YOK — sayfanin kendisi
-                yazdirilir. Harita zaten DOM'da; ayri bir raster uretmek
-                ikinci bir dogruluk kaynagi yaratirdi (ekranda gorulen ile
-                raporda cikan ayrisabilirdi). */}
-            <button
-              type="button"
-              className="fd-ghost-btn"
-              onClick={() => window.print()}
-            >
-              <FileDown size={14} />
-              {t("faults.detail.exportPdf")}
-            </button>
-            <button
-              type="button"
-              className="fd-ghost-btn"
-              onClick={() => setIslemModal("comments")}
-            >
-              <MessagesSquare size={14} />
-              {t("faults.detail.commentsTitle")}
-              {comments.length > 0 ? <span className="fd-count">{comments.length}</span> : null}
-            </button>
-            {canEdit && fault.status !== "closed" ? (
-              <button
-                type="button"
-                className="fd-save fd-save--close"
-                onClick={() => setIslemModal("close")}
-              >
-                <Check size={14} />
-                {t("faults.detail.closeFault")}
-              </button>
-            ) : null}
-          </div>
         </div>
       </header>
 
@@ -1160,255 +1176,33 @@ export function FaultDetailPage({
         ) : null}
       </div>
 
-      {/* ================= 4) COZUM & NOTLAR | SAHA RAPORU ================= */}
-      {/* ISLEM POPUP'I — sebep/cozum ve yorumlar.
-          Bu iki kart sayfanin EN ALTINDAYDI: kullanici sebep girmek ya da
-          yorum yazmak icin her seferinde asagi kaydiriyordu. Artik KPI
-          seridindeki dugmelerden aciliyor; sayfa da kisaldi. */}
-      {islemModal ? (
-        <div
-          className="fd-modal-backdrop"
-          onClick={() => setIslemModal(null)}
-          role="presentation"
-        >
-          <div
-            className="fd-modal"
-            role="dialog"
-            aria-modal="true"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              className="fd-modal-close"
-              onClick={() => setIslemModal(null)}
-              aria-label={t("common.close")}
-            >
-              <X size={16} />
-            </button>
-          <div className="fd-row fd-row--solve">
-            <section className="fd-card fd-card--solve">
-              <header className="fd-card-head">
-                <h2>
-                  <TriangleAlert size={15} />
-                  {t("faults.detail.solveTitle")}
-                </h2>
-                <small>{t("faults.detail.causeHint")}</small>
-              </header>
+      {/* ---- ISLEM EKRANLARI ----
+          Sebep/cozum ve saha raporu AYRI iki ekran. Once ikisi ayni popup'in
+          icinde yan yanaydi; sebep bir siniflandirma, yorum ise serbest
+          metinli bir akis oldugu icin ayni kutuda hangisinin kalici kayit
+          oldugu belirsiz kaliyordu. */}
+      {islemModal === "solve" || islemModal === "close" ? (
+        <FaultResolveModal
+          fault={fault}
+          mod={islemModal === "close" ? "kapat" : "duzenle"}
+          catalog={causeCatalog}
+          onKapat={() => setIslemModal(null)}
+          onSebepKaydet={sebepKaydet}
+          onNotKaydet={notKaydet}
+          onArizayiKapat={arizayiKapat}
+        />
+      ) : null}
 
-              {suggestedCause ? (
-                <div className="fd-suggestion">
-                  <Lightbulb size={14} />
-                  <span>{t("faults.detail.causeSuggested", { cause: suggestedCause.label })}</span>
-                  {canEdit && causeDraft !== suggestedCause.code ? (
-                    <button type="button" onClick={() => setCauseDraft(suggestedCause.code)}>
-                      {t("faults.detail.causeUseSuggestion")}
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {/* SEBEP: acilir liste degil ETIKET IZGARASI. 19 sebebi bir
-                  dropdown'un icinde aramak, eldivenli elle telefonun basindayken
-                  en yavas yoldu; grup grup duran etiketler tek dokunusla secilir.
-                  Secili etikete tekrar basmak secimi GERI ALIR (yanlis secim
-                  duzeltilebilmeli). */}
-              {causeCatalog === null ? (
-                <p className="fd-empty">{t("faults.detail.causeCatalogEmpty")}</p>
-              ) : (
-                <div className="fd-causes">
-                  {causeGroups.map(([grup, liste]) => (
-                    <div key={grup} className="fd-cause-group">
-                      <span className="fd-cause-group-label">
-                        {t(`faults.causeGroup.${grup}`, { defaultValue: grup })}
-                      </span>
-                      <div className="fd-chips">
-                        {liste.map((c) => (
-                          <button
-                            key={c.code}
-                            type="button"
-                            className={`fd-chip ${causeDraft === c.code ? "is-on" : ""}`}
-                            disabled={saving || !canEdit}
-                            onClick={() => setCauseDraft(causeDraft === c.code ? "" : c.code)}
-                          >
-                            {causeDraft === c.code ? <Check size={12} strokeWidth={3} /> : null}
-                            {causeLabel(c)}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="fd-fields">
-                <label className="fd-field">
-                  <span className="fd-label">{t("faults.detail.causeDetailLabel")}</span>
-                  <textarea
-                    className="fd-textarea"
-                    rows={3}
-                    value={causeDetailDraft}
-                    onChange={(e) => setCauseDetailDraft(e.target.value)}
-                    disabled={saving || !canEdit}
-                    placeholder={t("faults.detail.causeDetailPlaceholder")}
-                  />
-                </label>
-                <label className="fd-field">
-                  <span className="fd-label">{t("faults.detail.writeNote")}</span>
-                  <textarea
-                    className="fd-textarea"
-                    rows={3}
-                    value={noteDraft}
-                    onChange={(e) => setNoteDraft(e.target.value)}
-                    disabled={saving || !canEdit}
-                    placeholder={t("faults.detail.writeNotePlaceholder")}
-                  />
-                  <small className="fd-field-hint">{t("faults.detail.writeNoteHint")}</small>
-                </label>
-              </div>
-
-              {canEdit ? (
-                <footer className="fd-solve-foot">
-                  <span className={`fd-dirty ${dirty ? "is-on" : ""}`}>
-                    {dirty ? t("faults.detail.unsaved") : t("faults.detail.saved")}
-                  </span>
-                  <button
-                    type="button"
-                    className="fd-save"
-                    onClick={() =>
-                      void calistir(async () => {
-                        // Yalnizca DEGISENI gonder: her kaydette iki ucu birden
-                        // cagirmak olay kaydini (record_event) sahte "guncellendi"
-                        // satirlariyla doldururdu.
-                        if (causeDirty) {
-                          await onUpdateCause(fault.id, {
-                            // Bos secim = sebebi GERI AL.
-                            cause_code: causeDraft || null,
-                            cause_detail: causeDetailDraft.trim() || null
-                          });
-                        }
-                        if (noteDirty) await onUpdateNote(fault.id, noteDraft.trim() || null);
-                      }, "common.errorOccurred")
-                    }
-                    disabled={saving || !dirty}
-                  >
-                    <Save size={14} />
-                    {t("faults.detail.saveAll")}
-                  </button>
-                </footer>
-              ) : null}
-
-              {/* ---- KAPATMA ----
-                  Ariza yalnizca SAHADA DUZELDIKTEN sonra kapatilabilir.
-                  `resolved` gecisini cihaz belirler (alarm kalkinca otomatik);
-                  kullanicinin isi duzelen arizayi raporlayip kapatmaktir.
-                  Acik bir arizada kapatma YOK: aksi halde sahada devam eden is
-                  ekrandan duser ve kimse ilgilenmedigi halde kapali gorunur. */}
-              {canEdit && fault.status !== "closed" ? (
-                <div className="fd-close-box">
-                  {!fault.resolved_at ? (
-                    <p className="fd-close-locked">
-                      <CircleDot size={13} />
-                      {t("faults.detail.closeLocked")}
-                    </p>
-                  ) : (
-                    <>
-                      <label className="fd-field">
-                        <span className="fd-label">{t("faults.detail.resolutionNote")}</span>
-                        <textarea
-                          className="fd-textarea"
-                          rows={2}
-                          value={resolutionDraft}
-                          onChange={(e) => setResolutionDraft(e.target.value)}
-                          disabled={saving}
-                          placeholder={t("faults.detail.resolutionNotePlaceholder")}
-                        />
-                        <small className="fd-field-hint">
-                          {t("faults.detail.resolutionNoteHint")}
-                        </small>
-                      </label>
-                      <button
-                        type="button"
-                        className="fd-save fd-save--close"
-                        disabled={saving || !resolutionDraft.trim()}
-                        onClick={() =>
-                          void calistir(
-                            () => onUpdateStatus(fault.id, "closed", resolutionDraft.trim()),
-                            "common.errorOccurred"
-                          )
-                        }
-                      >
-                        <Check size={14} />
-                        {t("faults.detail.closeFault")}
-                      </button>
-                    </>
-                  )}
-                </div>
-              ) : null}
-            </section>
-
-            <section className="fd-card fd-card--talk">
-              <header className="fd-card-head">
-                <h2>
-                  <MessagesSquare size={15} />
-                  {t("faults.detail.commentsTitle")}
-                  {comments.length > 0 ? <span className="fd-count">{comments.length}</span> : null}
-                </h2>
-                <small>{t("faults.detail.commentsAddPlaceholder")}</small>
-              </header>
-              <ul className="fd-comments">
-                {comments.length === 0 ? (
-                  <li className="fd-empty">{t("faults.detail.commentsHint")}</li>
-                ) : (
-                  comments.map((c) => (
-                    <li
-                      key={c.id}
-                      className={`fd-comment ${c.author_username === currentUsername ? "is-mine" : ""}`}
-                    >
-                      <header>
-                        <span className="fd-avatar fd-avatar--sm">
-                          {bashafler(c.author_username)}
-                        </span>
-                        <strong>{c.author_username}</strong>
-                        <time>{fmtDate(c.created_at, localeTag)}</time>
-                      </header>
-                      <p>{c.body}</p>
-                    </li>
-                  ))
-                )}
-              </ul>
-              {canEdit ? (
-                <div className="fd-comment-add">
-                  <textarea
-                    className="fd-textarea"
-                    rows={2}
-                    placeholder={t("faults.detail.commentPlaceholder")}
-                    value={commentDraft}
-                    onChange={(e) => setCommentDraft(e.target.value)}
-                    disabled={saving}
-                  />
-                  <button
-                    type="button"
-                    className="fd-save fd-save--send"
-                    onClick={() =>
-                      void calistir(async () => {
-                        const body = commentDraft.trim();
-                        if (!body) return;
-                        await onAddComment(fault.id, body);
-                        setComments(await onLoadComments(fault.id));
-                        setCommentDraft("");
-                      }, "alarms.errors.commentFailed")
-                    }
-                    disabled={saving || !commentDraft.trim()}
-                  >
-                    <Send size={14} />
-                    {t("faults.detail.addCommentBtn")}
-                  </button>
-                </div>
-              ) : null}
-            </section>
-          </div>
-          </div>
-        </div>
+      {islemModal === "comments" ? (
+        <FaultFieldReportModal
+          fault={fault}
+          comments={comments}
+          currentUsername={currentUsername}
+          canComment={islemYapilabilir}
+          localeTag={localeTag}
+          onKapat={() => setIslemModal(null)}
+          onYorumEkle={yorumEkle}
+        />
       ) : null}
     </div>
   );

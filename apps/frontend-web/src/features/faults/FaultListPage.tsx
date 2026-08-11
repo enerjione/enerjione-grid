@@ -37,10 +37,8 @@ import type {
   FaultCauseCatalog,
   AlarmEvent,
   DeviceRow,
-  FaultComment,
   FaultEvent,
-  FaultStats,
-  UserRead
+  FaultStats
 } from "../../shared/types";
 import { ActiveFaultCard } from "./ActiveFaultCard";
 import type { StripPole } from "./FaultPoleStrip";
@@ -57,8 +55,6 @@ type Props = {
   /** Backend'den gelen ozet istatistikler (avg_resolution_seconds vb).
    * null ise henuz yuklenmedi/erisilmedi — chip'te "—" gosterilir. */
   stats?: FaultStats | null;
-  users: UserRead[];
-  currentUsername: string;
   canAssign: boolean; // engineer/installer
   loading?: boolean;
   /** Son cekim basarisiz olduysa mesaj.
@@ -76,9 +72,6 @@ type Props = {
   gridSnapshot?: GridSnapshot | null;
   devices?: DeviceRow[];
   alarms?: AlarmEvent[];
-  onAssign: (faultId: number, username: string | null) => Promise<void>;
-  onUpdateStatus: (faultId: number, status: string) => Promise<void>;
-  onUpdateNote: (faultId: number, note: string | null) => Promise<void>;
   /** Ariza sebebi — analiz katmaninin ogrenecegi tek insan etiketi. */
   onUpdateCause: (
     faultId: number,
@@ -86,8 +79,6 @@ type Props = {
   ) => Promise<void>;
   /** Oturum token'i — sebep katalogunu BIR KEZ cekmek icin. */
   accessToken: string;
-  onLoadComments: (faultId: number) => Promise<FaultComment[]>;
-  onAddComment: (faultId: number, body: string) => Promise<void>;
 };
 
 /** Ana ekranda gorunen ariza statusleri.
@@ -103,6 +94,16 @@ type Props = {
  * "bitti" degil.
  */
 const ACTIVE_STATUSES = new Set(["open", "assigned", "in_progress", "resolved"]);
+
+/** SIRALAMA ONCELIGI — sahada HALA ariza olan kayit her zaman basta.
+ *
+ * Once yalnizca `opened_at`e gore siralaniyordu; normale donmus ama henuz
+ * kapatilmamis eski bir kayit, yeni acilmis bir arizanin ONUNE gecebiliyordu.
+ * Secici varsayilan olarak ilk cipi acar — yani ekran, hala devam eden
+ * arizayi degil kapanmayi bekleyen kaydi gosterebiliyordu. */
+function siraOnceligi(status: string): number {
+  return status === "resolved" ? 1 : 0;
+}
 
 function fmtDurationSeconds(totalSec: number): string {
   let sec = Math.max(0, Math.round(totalSec));
@@ -122,21 +123,14 @@ export function FaultListPage({
   onOpenFault,
   onOpenDevice,
   stats: backendStats,
-  users,
-  currentUsername,
   canAssign,
   loading,
   error,
   gridSnapshot,
   devices,
   alarms,
-  onAssign,
-  onUpdateStatus,
-  onUpdateNote,
   onUpdateCause,
-  accessToken,
-  onLoadComments,
-  onAddComment
+  accessToken
 }: Props) {
   const { t, i18n } = useTranslation();
   const localeTag = i18n.language?.startsWith("tr") ? "tr-TR" : "en-US";
@@ -177,7 +171,13 @@ export function FaultListPage({
     () =>
       faults
         .filter((f) => ACTIVE_STATUSES.has(f.status))
-        .sort((a, b) => new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime()),
+        .sort((a, b) => {
+          // Once devam eden arizalar, sonra normale donup kapatilmayi
+          // bekleyenler; her grup kendi icinde en yeniden eskiye.
+          const fark = siraOnceligi(a.status) - siraOnceligi(b.status);
+          if (fark !== 0) return fark;
+          return new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime();
+        }),
     [faults]
   );
 
@@ -467,11 +467,19 @@ export function FaultListPage({
                   } fx-fault-tab--${f.status}`}
                   onClick={() => setActiveFaultId(f.id)}
                 >
+                  {/* DURUM NOKTASI: devam eden ariza kirmizi yanip soner,
+                      normale donmus kayit sabit yesil. Cipler ayni gorunumde
+                      dururken hangisinin hala sahada oldugu ancak secip
+                      karta bakinca anlasiliyordu. */}
+                  <span className="fx-fault-tab-dot" aria-hidden="true" />
                   {/* BOLGE + HAT. Direk araligi burada YAZMIYOR: ayni
                       bilgi kartin basliginda ve detayda zaten var, cipte
                       tekrar edince secici bir tablo gibi kalabaliklasiyordu. */}
                   <span className="fx-fault-tab-region">{f.region_name}</span>
                   <span className="fx-fault-tab-line">{f.line_name}</span>
+                  <span className="fx-sr-only">
+                    {t(`faults.status.${f.status}`, { defaultValue: f.status })}
+                  </span>
                 </button>
               ))}
             </div>
@@ -560,9 +568,6 @@ export function FaultListPage({
         <FaultHistoryTable
           faults={historyFaults}
           localeTag={localeTag}
-          onLoadComments={onLoadComments}
-          onAddComment={onAddComment}
-          onUpdateNote={onUpdateNote}
           onOpenFault={onOpenFault}
         />
       )}

@@ -23828,8 +23828,12 @@ th.event-col-category {
    uyari duvarina ceviriyordu — hepsi ariza oldugu icin hicbiri one cikmiyor,
    yalnizca gurultu yapiyordu. Secili cip zaten mavi zeminle ayrisiyor. */
 .fx-fault-tab {
-  display: flex;
-  flex-direction: column;
+  /* Solda durum noktasi (iki satiri birden kapsar), sagda bolge + hat.
+     Onceden duz bir sutundu; nokta eklenince alt alta dusuyordu. */
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 8px;
   gap: 0;
   align-items: flex-start;
   padding: 5px 13px;
@@ -23860,6 +23864,83 @@ th.event-col-category {
   color: #94a3b8;
 }
 .fx-fault-tab.is-active .fx-fault-tab-region { color: #60a5fa; }
+
+/* ---- CIP DURUM RENGI ----
+   Cipler ayni gorunumdeyken hangisinin HALA sahada oldugu ancak secip karta
+   bakinca anlasiliyordu. Devam eden ariza kirmizi yanip soner; normale
+   donmus (kapatilmayi bekleyen) kayit sabit yesildir — ikisi ayni listede
+   durdugu icin renk tek ayirt edici. */
+.fx-fault-tab-dot {
+  grid-row: 1 / 3;
+  grid-column: 1;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  flex-shrink: 0;
+}
+.fx-fault-tab--open .fx-fault-tab-dot,
+.fx-fault-tab--assigned .fx-fault-tab-dot,
+.fx-fault-tab--in_progress .fx-fault-tab-dot {
+  background: #dc2626;
+  box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.55);
+  animation: fx-fault-blink 1.4s ease-in-out infinite;
+}
+.fx-fault-tab--resolved .fx-fault-tab-dot { background: #10b981; }
+
+/* Devam eden ariza cipinin kendisi de sicak tonda: nokta tek basina
+   kalabalik bir seritte gozden kaciyor. */
+.fx-fault-tab--open,
+.fx-fault-tab--assigned,
+.fx-fault-tab--in_progress {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+.fx-fault-tab--open:hover,
+.fx-fault-tab--assigned:hover,
+.fx-fault-tab--in_progress:hover { background: #fef2f2; }
+.fx-fault-tab--open.is-active,
+.fx-fault-tab--assigned.is-active,
+.fx-fault-tab--in_progress.is-active {
+  border-color: #f87171;
+  background: #fef2f2;
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.22);
+}
+.fx-fault-tab--open.is-active .fx-fault-tab-region,
+.fx-fault-tab--assigned.is-active .fx-fault-tab-region,
+.fx-fault-tab--in_progress.is-active .fx-fault-tab-region { color: #ef4444; }
+
+.fx-fault-tab--resolved { border-color: #bbf7d0; background: #f6fefa; }
+.fx-fault-tab--resolved:hover { background: #f0fdf4; }
+.fx-fault-tab--resolved.is-active {
+  border-color: #4ade80;
+  background: #f0fdf4;
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.2);
+}
+.fx-fault-tab--resolved.is-active .fx-fault-tab-region { color: #10b981; }
+
+@keyframes fx-fault-blink {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.5); }
+  50% { opacity: 0.3; box-shadow: 0 0 0 5px rgba(220, 38, 38, 0); }
+}
+
+/* Hareket hassasiyeti olan kullanicida yanip sonme kapanir; renk kalir. */
+@media (prefers-reduced-motion: reduce) {
+  .fx-fault-tab-dot { animation: none !important; }
+}
+
+/* Ekran okuyucu icin durum metni — renk tek basina bilgi tasiyamaz. */
+.fx-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 /* Sekme duzeninde kart kalan tum yuksekligi kaplar — AMA icerigin altina
    sikismaz.
 
@@ -24897,32 +24978,27 @@ th.event-col-category {
   color: #334155;
   vertical-align: middle;
 }
-.fx-col-toggle { width: 40px; }
-
+/* Satirin TAMAMI detay sekmesini acar (acilir panel kaldirildi — kapanmis
+   kayit salt okunur ve ayni bilgi detay sayfasinda zaten var). */
 .fx-history-row {
   cursor: pointer;
   transition: background 0.12s ease;
 }
 .fx-history-row:hover td { background: #f8fafc; }
-.fx-history-row.is-open td {
-  background: #f1f5f9;
-  border-bottom-color: transparent;
-}
 
-.fx-toggle-btn {
+.fx-col-go { width: 44px; text-align: right; }
+.fx-go {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
   background: #f1f5f9;
-  color: #64748b;
+  color: #94a3b8;
+  transition: background 0.12s ease, color 0.12s ease;
 }
-.fx-history-row.is-open .fx-toggle-btn {
-  background: #dbeafe;
-  color: #1d4ed8;
-}
+.fx-history-row:hover .fx-go { background: #dbeafe; color: #1d4ed8; }
 
 .fx-history-line {
   display: block;
@@ -24944,108 +25020,6 @@ th.event-col-category {
 .fx-history-duration {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-}
-
-/* --- acilir detay: yorum + cozum --- */
-.fx-history-detail-row td {
-  padding: 0 14px 14px !important;
-  background: #f1f5f9;
-}
-.fx-history-detail {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-@media (max-width: 960px) {
-  .fx-history-detail {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.fx-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 13px 15px;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-}
-.fx-panel-head {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: #334155;
-}
-.fx-panel-head svg { color: #94a3b8; }
-.fx-panel > p { margin: 0; font-size: 12.5px; line-height: 1.5; }
-.fx-note-body {
-  color: #334155;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.fx-comment-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 190px;
-  overflow-y: auto;
-}
-.fx-comment-list li {
-  padding: 8px 10px;
-  background: #f8fafc;
-  border-left: 3px solid #bfdbfe;
-  border-radius: 8px;
-}
-.fx-comment-meta {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 3px;
-}
-.fx-comment-meta strong { font-size: 12px; color: #1d4ed8; }
-.fx-comment-meta span { font-size: 10.5px; color: #94a3b8; }
-.fx-comment-list p {
-  margin: 0;
-  font-size: 12.5px;
-  color: #334155;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.fx-inline-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: flex-start;
-}
-.fx-inline-form textarea {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 9px;
-  font-size: 12.5px;
-  font-family: inherit;
-  color: #0f172a;
-  resize: vertical;
-  background: #f8fafc;
-}
-.fx-inline-form textarea:focus {
-  outline: none;
-  border-color: #93c5fd;
-  background: #fff;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
-}
-.fx-inline-form-actions {
-  display: flex;
-  gap: 8px;
 }
 
 /* =========================================================================
@@ -25289,14 +25263,9 @@ th.event-col-category {
   flex: 1 1 280px;
 }
 
-.fd-row--solve {
-  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
-}
-
 @media (max-width: 1180px) {
   .fd-row--split,
-  .fd-row--map,
-  .fd-row--solve {
+  .fd-row--map {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -26189,12 +26158,9 @@ th.event-col-category {
   cursor: not-allowed;
 }
 
-/* ---- Cozum & notlar -----------------------------------------------------
-   Sebep, cozum ayrintisi ve saha notu TEK karttadir: uc ayri kart, ayni
-   anda doldurulan uc alani birbirinden kopariyordu. Kaydet de tektir. */
-.fd-card--solve {
-  gap: 13px;
-}
+/* ---- Cozum & notlar (FaultResolveModal) ---------------------------------
+   Sebep secimi, cozum ayrintisi ve notlar artik sayfada degil kendi
+   diyalogunda; asagidaki ogeler oradan kullanilir. */
 
 /* Kural onerisi. Bilerek SOLGUN ve ayri: bir oneridir, girilmis bir deger
    degil. Operator "Oneriyi kullan"a basmadan istatistige girmez. */
@@ -26315,42 +26281,6 @@ th.event-col-category {
 .fd-field-hint {
   font-size: 11px;
   color: var(--fd-faint);
-}
-
-/* Kaydet seridi kartin DIBINE yapisir: yan yana duran kartlar ayni boyda
-   oldugu icin dugmeler de ayni hizada olsun. */
-.fd-solve-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: auto;
-  padding-top: 2px;
-}
-
-.fd-dirty {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--fd-faint);
-}
-
-.fd-dirty::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #cbd5e1;
-}
-
-.fd-dirty.is-on {
-  color: #b45309;
-}
-
-.fd-dirty.is-on::before {
-  background: #f59e0b;
 }
 
 .fd-save {
@@ -41333,115 +41263,467 @@ th.event-col-category {
   }
 }
 
-/* ---- ARIZA KAPATMA ----
-   Kapatma yalnizca ariza SAHADA DUZELDIKTEN sonra mumkun; acik arizada
-   burada yalnizca gerekce yazar. Kart icinde ayri bir kutu olmasi,
-   kaydetmeyle karistirilmasini onler. */
-.fd-close-box {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--fd-line);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.fd-close-locked {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 0;
-  font-size: 12px;
-  color: var(--fd-faint);
-  line-height: 1.5;
-}
-.fd-save--close { align-self: flex-end; }
-
 /* Kunye + atama alt alta, harita ile ayni yukseklikte. */
 .fd-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .fd-col > .fd-card { margin: 0; }
 
-/* ---- KPI SERIDINDEKI EYLEMLER ----
-   Sebep girisi ve yorum eskiden sayfanin en altindaydi; kullanici her islem
-   icin oraya kaydiriyordu. Artik olculerin yaninda. */
-.fd-metric-actions {
+/* =========================================================================
+   EYLEM CUBUGU (fd-actions)
+
+   Eylemler once OLCUM SERIDININ ICINDE bir hucreydi (`fd-metric-actions`):
+   olcum kartlarinin arasinda kutu icinde kutu gibi duruyor, dar ekranda
+   ikinci satira tasiyordu. Artik baslik satirinin sag ucunda kendi
+   seridinde. Sira bilerek boyle:
+
+     [ okuma / rapor eylemleri ] | [ kayda dokunan eylemler ]
+
+   Ayirac (`fd-act-sep`) bu iki grubu ayirir; kalici sonucu olan dugmeye
+   yanlislikla basilmasin.
+   ========================================================================= */
+.fd-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-left: auto;
+  align-self: center;
   flex-wrap: wrap;
 }
-.fd-metrics { flex-wrap: wrap; }
 
-/* ---- ISLEM POPUP'I ---- */
-.fd-modal-backdrop {
+.fd-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 13px;
+  border: 1px solid var(--fd-line);
+  border-radius: 10px;
+  background: var(--fd-surface);
+  color: var(--fd-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s, border-color 0.14s, color 0.14s, box-shadow 0.14s;
+}
+.fd-act svg { flex-shrink: 0; color: var(--fd-faint); transition: color 0.14s; }
+.fd-act:hover:not(:disabled) {
+  border-color: #cbd5e1;
+  background: var(--fd-sunken);
+  color: var(--fd-ink);
+}
+.fd-act:hover:not(:disabled) svg { color: var(--fd-brand); }
+.fd-act:focus-visible { outline: 2px solid var(--fd-brand); outline-offset: 1px; }
+
+/* Yorum sayaci — dugmenin icinde, metinden sonra. */
+.fd-act-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #eff4ff;
+  color: var(--fd-brand);
+  font-size: 10.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.fd-act-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--fd-line);
+  margin: 0 2px;
+}
+
+/* Kalici sonucu olan eylem (kapatma): dolu ve YESIL — mavi sayfanin her
+   yerinde kullaniliyor, "bitir" eylemi ondan ayrisiyor. */
+.fd-act--go {
+  border-color: #16a34a;
+  background: #16a34a;
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(22, 163, 74, 0.25);
+}
+.fd-act--go svg { color: #fff; }
+.fd-act--go:hover:not(:disabled) {
+  border-color: #15803d;
+  background: #15803d;
+  color: #fff;
+}
+.fd-act--go:hover:not(:disabled) svg { color: #fff; }
+
+/* KILITLI KAPATMA: ariza sahada duzelmeden kapatilamaz. Dugme gizlenmez —
+   gizlenirse "kapatma nerede" sorusu ekranda cevapsiz kalir; kilitli durur
+   ve nedenini `title` ile soyler. */
+.fd-act--go.is-locked,
+.fd-act--go:disabled {
+  border-color: var(--fd-line);
+  background: var(--fd-sunken);
+  color: var(--fd-faint);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.fd-act--go.is-locked svg,
+.fd-act--go:disabled svg { color: var(--fd-faint); }
+
+/* Kapatilmis ariza: dugme degil DURUM. Tiklanacak bir sey yok. */
+.fd-act-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px dashed var(--fd-line);
+  border-radius: 10px;
+  background: var(--fd-sunken);
+  color: var(--fd-faint);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* =========================================================================
+   ISLEM DIYALOGU (FaultResolveModal) — sebep/cozum ve kapatma
+
+   Once sebep ve saha yorumlari AYNI popup icinde yan yanaydi. Sebep bir
+   siniflandirma, yorum ise serbest metinli bir akis; ayni kutuda hangisinin
+   kalici kayit oldugu belirsiz kaliyordu. Artik yorum ayri panelde
+   (`fdr-*`), burada yalnizca sebep + cozum var ve iki NUMARALI ADIM olarak
+   duruyor: kapatma bir formdur, kart yigini degil.
+   ========================================================================= */
+.fdm-backdrop {
   position: fixed;
   inset: 0;
   z-index: 1200;
-  background: rgba(15, 23, 42, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(2px);
 }
-.fd-modal {
+
+.fdm {
+  --fd-ink: #0f172a;
+  --fd-muted: #475569;
+  --fd-faint: #94a3b8;
+  --fd-line: #e6ebf2;
+  --fd-surface: #ffffff;
+  --fd-sunken: #f7f9fc;
+  --fd-brand: #2563eb;
+
   position: relative;
-  width: min(1100px, 100%);
-  max-height: 88vh;
-  overflow-y: auto;
-  background: var(--fd-bg, #fff);
+  display: flex;
+  flex-direction: column;
+  width: min(640px, 100%);
+  max-height: min(88vh, 860px);
   border-radius: 16px;
-  padding: 18px;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.3);
+  overflow: hidden;
 }
-/* Popup icinde kartlar tam genislikte; disaridaki iki sutunlu yerlesim
-   dar modal icinde sikisik duruyordu. */
-.fd-modal .fd-row--solve { display: grid; grid-template-columns: 1fr; gap: 12px; }
-.fd-modal-close {
+
+.fdm-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 52px 15px 18px;
+  border-bottom: 1px solid var(--fd-line);
+  background: var(--fd-sunken);
+}
+.fdm-ico {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: #eff4ff;
+  color: var(--fd-brand);
+}
+.fdm-ico.is-close { background: #dcfce7; color: #15803d; }
+.fdm-head-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fdm-head-body h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--fd-ink);
+}
+.fdm-head-body p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--fd-faint);
+}
+/* Hangi kayit uzerinde calisildigi — diyalog acikken sayfa gorunmuyor. */
+.fdm-rec {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--fd-line);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--fd-muted);
+  white-space: nowrap;
+}
+.fdm-rec em {
+  font-style: normal;
+  color: var(--fd-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.fdm-x {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 14px;
+  right: 14px;
   z-index: 1;
   display: grid;
   place-items: center;
   width: 30px;
   height: 30px;
-  border: 1px solid var(--fd-line, #e2e8f0);
+  border: 1px solid var(--fd-line);
   border-radius: 9px;
   background: #fff;
   color: #64748b;
   cursor: pointer;
 }
-.fd-modal-close:hover { background: #f1f5f9; color: #0f172a; }
+.fdm-x:hover { background: #f1f5f9; color: #0f172a; }
 
-@media (min-width: 900px) {
-  .fd-modal .fd-row--solve { grid-template-columns: 1fr 1fr; }
+.fdm-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
-/* ---- ARIZA RAPORU (PDF) ----
-   Ayri bir cizim katmani YOK: sayfanin kendisi yazdirilir. Harita zaten
-   DOM'da; ikinci bir raster uretmek ekranda gorulen ile raporda cikanin
-   ayrisabilecegi ikinci bir dogruluk kaynagi yaratirdi. */
-.fd-print-head { display: none; }
+/* Numarali adim: kapatma bir FORM. Kart yigini degil. */
+.fdm-sec { display: flex; flex-direction: column; gap: 9px; }
+.fdm-sec-head { display: flex; align-items: center; gap: 9px; }
+.fdm-sec-no {
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  flex-shrink: 0;
+  border-radius: 7px;
+  background: #eff4ff;
+  color: var(--fd-brand);
+  font-size: 11px;
+  font-weight: 800;
+}
+.fdm-sec-head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--fd-ink);
+}
+.fdm-sec-hint {
+  margin: -3px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--fd-faint);
+}
+.fdm-badge {
+  margin-left: auto;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--fd-sunken);
+  border: 1px solid var(--fd-line);
+  color: var(--fd-faint);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.fdm-badge.is-req {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
 
+.fdm-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 13px 18px;
+  border-top: 1px solid var(--fd-line);
+  background: var(--fd-sunken);
+}
+.fdm-foot-btns { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.fdm-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 340px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--fd-faint);
+}
+.fdm-lock svg { flex-shrink: 0; }
+
+/* Kapatma dugmesi diyalogun icinde de YESIL — cubuktaki eylemin devami. */
+.fd-save--close { background: #16a34a; }
+.fd-save--close:hover:not(:disabled) { background: #15803d; }
+
+@media (max-width: 620px) {
+  .fdm-backdrop { padding: 0; align-items: stretch; }
+  .fdm { width: 100%; max-height: 100vh; border-radius: 0; }
+  .fdm-rec { display: none; }
+}
+
+/* =========================================================================
+   SAHA RAPORU PANELI (FaultFieldReportModal)
+
+   Ortada bir kutu DEGIL sag yan panel: yorum akisi dikeydir ve okunurken
+   arkadaki haritanin/kunyenin gorunur kalmasi ise yarar — saha ekibi
+   telefonda "hangi direk" derken ikisine birden bakiyor.
+   ========================================================================= */
+.fdr-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.fdr {
+  --fd-ink: #0f172a;
+  --fd-muted: #475569;
+  --fd-faint: #94a3b8;
+  --fd-line: #e6ebf2;
+  --fd-surface: #ffffff;
+  --fd-sunken: #f7f9fc;
+  --fd-brand: #2563eb;
+
+  display: flex;
+  flex-direction: column;
+  width: min(440px, 100%);
+  height: 100%;
+  background: #fff;
+  box-shadow: -18px 0 46px rgba(15, 23, 42, 0.22);
+  animation: fdr-in 0.18s ease-out;
+}
+
+@keyframes fdr-in {
+  from { transform: translateX(24px); opacity: 0.6; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fdr { animation: none; }
+}
+
+.fdr-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 15px 52px 14px 16px;
+  border-bottom: 1px solid var(--fd-line);
+  background: var(--fd-sunken);
+}
+.fdr-ico {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: #eff4ff;
+  color: var(--fd-brand);
+}
+.fdr-head-body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.fdr-head-body h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--fd-ink);
+}
+.fdr-head-body p {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--fd-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fdr-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.fdr-foot {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 13px 16px;
+  border-top: 1px solid var(--fd-line);
+  background: var(--fd-sunken);
+}
+.fdr-foot .fd-comment-add { flex-direction: column; align-items: stretch; }
+.fdr-foot .fd-save--send { align-self: flex-end; }
+
+/* Kapatilmis arizada yazma alani YOK: kapanis raporu sonradan degismez. */
+.fdr-locked {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--fd-line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--fd-faint);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.fdr-locked svg { flex-shrink: 0; }
+
+/* ---- YAZDIRMA (Ctrl+P) ----
+   ARIZA RAPORU ARTIK BURADAN URETILMIYOR: "PDF rapor" dugmesi backend'in
+   `/faults/{id}/report.pdf` ucundan gercek bir belge indirir (uydu haritali,
+   logolu, sayfa numarali). Yazdirma ciktisi bir belge DEGIL, ekranin kagida
+   dokulmus haliydi: kartlar sayfa ortasindan boluniyor, tarayici kendi
+   ustbilgisini/altbilgisini basiyor ve kapanmis arizada harita bos cikiyordu
+   (kirmizi bolge canli alarm durumundan turetiliyor).
+
+   Bu blok yalnizca kullanici gene de Ctrl+P yaparsa ciktinin okunur olmasi
+   icin duruyor — uygulama cercevesini ve etkilesim ogelerini gizler. */
 @media print {
-  /* Uygulama cercevesi (sekmeler, kenar cubugu, ust bar) rapora girmez. */
+  /* Uygulama cercevesi (sekmeler, kenar cubugu, ust bar) ciktiya girmez. */
   .app-tabs, .app-sidebar, .app-header, .header, nav.tabs,
-  .fd-metric-actions, .fd-modal-backdrop, .leaflet-control-container,
+  .fd-actions, .fdm-backdrop, .fdr-backdrop, .leaflet-control-container,
   .fd-legend { display: none !important; }
-
-  .fd-print-head {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding-bottom: 10px;
-    margin-bottom: 12px;
-    border-bottom: 2px solid #0f172a;
-  }
-  .fd-print-logo { height: 34px; width: auto; object-fit: contain; }
-  .fd-print-title { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; }
-  .fd-print-title strong { font-size: 15px; }
-  .fd-print-title span { font-size: 12px; color: #334155; }
-  .fd-print-title small { font-size: 10px; color: #64748b; }
 
   /* Uydu goruntusu ve durum renkleri BASILMALI: varsayilan olarak
      tarayici arka planlari atar ve harita bembeyaz cikar. */

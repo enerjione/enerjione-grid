@@ -84,6 +84,21 @@ def report_fonts() -> tuple[str, str]:
     return _font_cache
 
 
+def report_font_files() -> tuple[str, str] | None:
+    """(normal, bold) TTF DOSYA YOLU. Hicbir aday yoksa None.
+
+    `report_fonts()` reportlab'e kayitli font ADINI dondurur; harita figuru
+    (Pillow) ise dosya yolu ister. Aday listesi tek yerde dursun diye ayni
+    listeden okunur — iki liste zamanla ayrisir ve rapor ile harita farkli
+    fontla cikardi.
+    """
+    for regular_path, bold_path, _name in _FONT_CANDIDATES:
+        if Path(regular_path).exists():
+            bold = bold_path if Path(bold_path).exists() else regular_path
+            return regular_path, bold
+    return None
+
+
 def decode_data_url_image(data_url: str | None) -> ImageReader | None:
     """`data:image/png;base64,...` -> ImageReader. Bozuksa None (rapor yine cikar).
 

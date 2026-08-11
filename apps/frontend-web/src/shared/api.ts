@@ -1013,6 +1013,34 @@ export async function fetchFault(
   return (await response.json()) as import("./types").FaultEvent;
 }
 
+/**
+ * ARIZA RAPORU (PDF) — backend'de uretilir, burada yalnizca indirilir.
+ *
+ * NEDEN `window.print()` DEGIL: yazdirma ciktisi bir BELGE degil, ekranin
+ * kagida dokulmus haliydi (tarayicinin kendi ustbilgisi/altbilgisi, sayfa
+ * ortasindan bolunen kartlar) ve kapanmis arizada harita bos cikiyordu —
+ * ekrandaki kirmizi bolge canli alarm durumundan turetiliyor. Rapor artik
+ * kayittan, sunucuda uretiliyor (reportlab + uydu karolari).
+ *
+ * Dosya adi backend'in Content-Disposition basligindan gelir; sunucu ile
+ * istemci ayri ayri ad turetirse arsivde iki farkli isim olusur.
+ */
+export async function downloadFaultReport(
+  token: string,
+  faultId: number
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await apiFetch(`${API_BASE_URL}/faults/${faultId}/report.pdf`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw await buildApiError(response, "Arıza raporu oluşturulamadı.");
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = /filename="?([^";]+)"?/i.exec(disposition);
+  return {
+    blob: await response.blob(),
+    filename: match ? match[1] : `ariza-${faultId}.pdf`
+  };
+}
+
 export async function fetchFaultStats(
   token: string
 ): Promise<import("./types").FaultStats> {

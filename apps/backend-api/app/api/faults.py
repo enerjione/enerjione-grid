@@ -8,16 +8,25 @@ UI'daki "Hat Arizalari" sayfasi bu uclar uzerinden:
   PATCH  /faults/{id}/note         -> kisa not guncelle
   GET    /faults/{id}/comments     -> ticket yorumlari
   POST   /faults/{id}/comments     -> yorum/rapor ekle
+  GET    /faults/{id}/report.pdf   -> tek dosyalik ariza raporu (A4, haritali)
 
 Yetki:
   - Operator: sadece kendi sorumluluk alanindaki bolge/hatlardaki fault'lari
     gorur (scope_service.get_visible_line_ids).
   - Engineer/Installer: tum fault'lar.
+
+KAPATILMIS ARIZA SALT OKUNURDUR
+-------------------------------
+`closed` bir kayit ARSIVDIR: raporu her zaman alinir ama icerigi degismez.
+Yorum eklemek ya da kisa notu duzeltmek, arsivlenmis kapanis raporunun
+sonradan sessizce degismesi demek olurdu — asil olayin uzerinden aylar gecmis
+olabilir ve raporu okuyan kisi degisimden haberdar olmaz. Bu yuzden
+`POST /comments` ve `PATCH /note` kapali kayitta 409 doner.
 """
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -653,6 +662,139 @@ def get_fault(
     return _serialize_fault(db, f)
 
 
+#: Tekrar penceresi — frontend'deki buildFaultRecurrence ile AYNI (90 gun).
+_RECURRENCE_WINDOW_DAYS = 90
+
+
+@router.get("/{fault_id}/report.pdf")
+def fault_report_pdf(
+    fault_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Arizanin tek dosyalik PDF raporu (A4, uydu haritali).
+
+    NEDEN SUNUCUDA: eskiden arayuz `window.print()` cagiriyordu; cikan sey
+    belge degil EKRANIN kagida dokulmus haliydi (tarayici ustbilgisi, bolunmus
+    kartlar) ve KAPALI arizada harita bembeyaz cikiyordu — kirmizi bolge canli
+    alarm durumundan turetiliyor, alarm resetlenince kayboluyor. Rapor artik
+    KAYITTAN uretilir. Ayrintili gerekce: `services/fault_report_service.py`.
+
+    Yetki: `GET /{fault_id}` ile ayni — operator yalnizca kendi kapsamindaki
+    hattin arizasini alabilir. Rapor musteri logosu ve saha notlari tasidigi
+    icin kapsam disina sizmasi kabul edilemez.
+    """
+    from app.models.project_settings import ProjectSettings
+    from app.services.fault_report_map import collect_fault_geometry, render_fault_map
+    from app.services.fault_report_service import (
+        ReportPole,
+        ReportRecurrence,
+        build_fault_report_pdf,
+    )
+
+    f = db.get(FaultEvent, fault_id)
+    if f is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ariza bulunamadi.")
+    line_scope = get_visible_line_ids(db, current_user)
+    if line_scope is not None and f.line_id not in line_scope:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Bu arizaya erisim yetkiniz yok."
+        )
+
+    fault_read = _serialize_fault(db, f)
+    comments = list(
+        db.scalars(
+            select(FaultComment)
+            .where(FaultComment.fault_id == fault_id)
+            .order_by(FaultComment.created_at)
+        ).all()
+    )
+
+    # --- Ariza araligindaki direkler (koordinatli) -------------------------
+    zone_poles: list[ReportPole] = []
+    if f.line_id is not None and f.from_pole_seq is not None and f.to_pole_seq is not None:
+        low, high = sorted((f.from_pole_seq, f.to_pole_seq))
+        for pole in db.scalars(
+            select(Pole)
+            .where(Pole.line_id == f.line_id)
+            .where(Pole.sequence_no >= low)
+            .where(Pole.sequence_no <= high)
+            .order_by(Pole.sequence_no)
+        ).all():
+            role = (
+                "start"
+                if pole.id == f.from_pole_id
+                else "end"
+                if pole.id == f.to_pole_id
+                else "zone"
+            )
+            zone_poles.append(
+                ReportPole(
+                    sequence_no=pole.sequence_no,
+                    name=pole.name or f"Direk #{pole.sequence_no}",
+                    latitude=pole.latitude,
+                    longitude=pole.longitude,
+                    role=role,
+                )
+            )
+
+    # --- Tekrar eden ariza -------------------------------------------------
+    window_start = f.opened_at - timedelta(days=_RECURRENCE_WINDOW_DAYS)
+    previous = db.execute(
+        select(FaultEvent.opened_at, FaultEvent.from_pole_seq, FaultEvent.to_pole_seq)
+        .where(FaultEvent.line_id == f.line_id)
+        .where(FaultEvent.id != f.id)
+        .where(FaultEvent.opened_at < f.opened_at)
+        .where(FaultEvent.opened_at >= window_start)
+    ).all()
+    same_section = 0
+    for opened_at, from_seq, to_seq in previous:
+        # Ucu bilinmeyen aralik "ayni kesim" SAYILMAZ: "bilmiyorum"u "ayni yer"
+        # diye okumak sahaya yanlis oncelikle gitmek olur.
+        if None in (from_seq, to_seq, f.from_pole_seq, f.to_pole_seq):
+            continue
+        a_lo, a_hi = sorted((from_seq, to_seq))
+        b_lo, b_hi = sorted((f.from_pole_seq, f.to_pole_seq))
+        if a_lo <= b_hi and b_lo <= a_hi:
+            same_section += 1
+    recurrence = ReportRecurrence(
+        total=len(previous),
+        window_days=_RECURRENCE_WINDOW_DAYS,
+        same_section=same_section,
+        last_at=max((row[0] for row in previous), default=None),
+    )
+
+    # --- Harita figuru -----------------------------------------------------
+    # Harita ZORUNLU DEGIL: karo yoksa (cevrimdisi cihaz, indirilmemis alan)
+    # ya da topoloji eksikse rapor haritasiz cikar. Rapor hic uretilmemesi,
+    # eksik bir figurden cok daha kotu olurdu.
+    map_png: bytes | None = None
+    try:
+        geometry = collect_fault_geometry(db, f)
+        if geometry is not None:
+            map_png = render_fault_map(geometry)
+    except Exception:  # noqa: BLE001
+        map_png = None
+
+    pdf = build_fault_report_pdf(
+        fault=fault_read,
+        comments=comments,
+        zone_poles=zone_poles,
+        recurrence=recurrence,
+        settings_row=db.get(ProjectSettings, 1),
+        map_png=map_png,
+        generated_by=current_user.full_name or current_user.username,
+    )
+
+    stamp = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d-%H%M")
+    filename = f"ariza-{fault_id}-{stamp}.pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.patch("/{fault_id}/assign", response_model=FaultEventRead)
 def assign_fault(
     fault_id: int,
@@ -929,6 +1071,12 @@ def update_fault_note(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ariza bulunamadi.")
     if current_user.role == UserRole.OPERATOR and f.assigned_to_username != current_user.username:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bu arizaya yetkiniz yok.")
+    # Kapatilmis kayit salt okunur (bkz. modul docstring).
+    if f.status == "closed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Kapatilmis ariza degistirilemez.",
+        )
     f.note = (payload.note or "").strip() or None
     db.commit()
     db.refresh(f)
@@ -974,6 +1122,13 @@ def create_fault_comment(
     line_scope = get_visible_line_ids(db, current_user)
     if line_scope is not None and f.line_id not in line_scope:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Erisim yetkiniz yok.")
+    # Kapatilmis kayda yorum eklenemez (bkz. modul docstring). Eski yorumlar
+    # okunmaya devam eder; yalnizca YAZMA kapalidir.
+    if f.status == "closed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Kapatilmis arizaya yorum eklenemez.",
+        )
     body = (payload.body or "").strip()
     if not body:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Yorum bos olamaz.")

@@ -3080,21 +3080,14 @@ export function App() {
                 onOpenFault={openFaultTab}
                 onOpenDevice={openDeviceDetail}
                 stats={faultStats}
-                users={users}
-                currentUsername={session.username}
                 canAssign={session.role === "engineer" || session.role === "installer"}
                 loading={faultsLoading}
                 error={faultsError}
                 gridSnapshot={gridSnapshot}
                 devices={devices}
                 alarms={alarms}
-                onAssign={handleAssignFault}
-                onUpdateStatus={handleUpdateFaultStatus}
-                onUpdateNote={handleUpdateFaultNote}
                 onUpdateCause={handleUpdateFaultCause}
                 accessToken={session.accessToken}
-                onLoadComments={handleLoadFaultComments}
-                onAddComment={handleAddFaultComment}
               />
             ) : null}
             {pageMode === "events" ? (
