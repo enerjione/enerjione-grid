@@ -769,3 +769,47 @@ test("ters gelmis GORDUM/GORMEDIM ciftinde yalnizca O IKISI yer degistirir", () 
   // Ortadaki cihaz kendi yerinde kaldi.
   assert.ok(konum("X") > konum("B-RED") && konum("X") < konum("C-GREEN"));
 });
+
+/* ---------------------------------------------------------------------------
+ * TEK DIREKLI KOL — uydurma direk yok
+ *
+ * Kosul `uniq.length >= 2` idi: tek direkli bir bransman kolunda ikinci bir
+ * direk UYDURULUYORDU ("#2"). Sahada olmayan bir direk cizmek, ekibe var
+ * olmayan bir hat parcasi gostermek demek.
+ * ------------------------------------------------------------------------- */
+
+test("tek direkli kolda IKINCI direk uydurulmaz", () => {
+  const geo = buildStripGeometry({
+    poleSeqs: [1],
+    poles: [{ seq: 1, name: "TR21_D-12" }],
+    fromSeq: null,
+    toSeq: null
+  });
+  assert.deepEqual(geo.seqs, [1], "olmayan bir direk eklenmis");
+  assert.equal(geo.poles.length, 1);
+  assert.equal(geo.poles[0].name, "TR21_D-12");
+});
+
+test("tek direkli kolda tel ve konum hesabi COKMEZ", () => {
+  const geo = buildStripGeometry({ poleSeqs: [1], fromSeq: null, toSeq: null });
+  assert.ok(geo.wire.length >= 2, "tel cizilemiyor");
+  for (let i = 1; i < geo.wire.length; i += 1) {
+    assert.ok(geo.wire[i].x > geo.wire[i - 1].x, "tel geri donuyor");
+  }
+  // Tek direkte aranacak bir hat kesimi YOKTUR: supheli olan bag telidir.
+  assert.equal(geo.span, null);
+  assert.ok(Number.isFinite(geo.pointAt(0).x));
+  assert.ok(Number.isFinite(geo.xOf(0)));
+});
+
+test("tek direkli kol BASTAN SONA aday olarak isaretlenmez", () => {
+  // `wholeLineHot` iki direk ister: tek direkte kirmiziya boyanacak bir
+  // hat parcasi yok.
+  const geo = buildStripGeometry({ poleSeqs: [1], wholeLineHot: true });
+  assert.equal(geo.span, null);
+});
+
+test("hic direk yoksa yer tutucu URETILIR (snapshot eksik)", () => {
+  const geo = buildStripGeometry({ poleSeqs: [], fromSeq: 3, toSeq: 4 });
+  assert.deepEqual(geo.seqs, [3, 4]);
+});

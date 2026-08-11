@@ -79,8 +79,155 @@ type Props = {
 
 const GREY = "#94a3b8";
 const RED = "#dc2626";
+const GREEN = "#16a34a";
 
 type View = { x: number; y: number; w: number; h: number };
+
+type Nokta = { x: number; y: number };
+
+const lerpN = (a: Nokta, b: Nokta, t: number): Nokta => ({
+  x: a.x + (b.x - a.x) * t,
+  y: a.y + (b.y - a.y) * t
+});
+
+/** Kubik Bezier uzerinde t noktasi. */
+function kubikNokta(p0: Nokta, p1: Nokta, p2: Nokta, p3: Nokta, t: number): Nokta {
+  const u = 1 - t;
+  return {
+    x: u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x,
+    y: u * u * u * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t * t * t * p3.y
+  };
+}
+
+/**
+ * Egrinin [t0, t1] parcasi — de Casteljau ile GERCEK kubik dilim.
+ *
+ * Bag telini iki renge bolmek icin gerekli: parcalari duz cizgiyle
+ * yaklastirmak bagi kirikli gosterirdi.
+ */
+function kubikDilim(
+  p0: Nokta,
+  p1: Nokta,
+  p2: Nokta,
+  p3: Nokta,
+  t0: number,
+  t1: number
+): string {
+  // Once [0, t1] parcasini al (de Casteljau'nun SOL yarisi).
+  const a1 = lerpN(p0, p1, t1);
+  const b1 = lerpN(p1, p2, t1);
+  const c1 = lerpN(p2, p3, t1);
+  const d1 = lerpN(a1, b1, t1);
+  const e1 = lerpN(b1, c1, t1);
+  const f1 = lerpN(d1, e1, t1);
+  let q: readonly [Nokta, Nokta, Nokta, Nokta] = [p0, a1, d1, f1];
+
+  if (t0 > 0) {
+    // [0, t1] parcasi icinde t0'a karsilik gelen oran.
+    const oran = t0 / t1;
+    const [r0, r1, r2, r3] = q;
+    const a2 = lerpN(r0, r1, oran);
+    const b2 = lerpN(r1, r2, oran);
+    const c2 = lerpN(r2, r3, oran);
+    const d2 = lerpN(a2, b2, oran);
+    const e2 = lerpN(b2, c2, oran);
+    const f2 = lerpN(d2, e2, oran);
+    q = [f2, e2, c2, r3];
+  }
+
+  const [k0, k1, k2, k3] = q;
+  return `M${k0.x.toFixed(1)} ${k0.y.toFixed(1)} C${k1.x.toFixed(1)} ${k1.y.toFixed(1)}, ${k2.x.toFixed(1)} ${k2.y.toFixed(1)}, ${k3.x.toFixed(1)} ${k3.y.toFixed(1)}`;
+}
+
+/**
+ * BRANSMAN GIRISINDEKI CIHAZ — bag telinin uzerinde.
+ *
+ * Ana hattaki cihaz gibi uc kelepce cizilmez: bag teli sematik TEK bir
+ * cizgidir, uzerine uc faz sigmaz. Tek govde + faz noktalari yeterli.
+ * Onemli olan cihazin BURADA oldugunu ve ne dedigini gostermek.
+ */
+function LinkDeviceMark({
+  x,
+  y,
+  tone,
+  label,
+  distance,
+  sources,
+  onOpen
+}: {
+  x: number;
+  y: number;
+  tone: "red" | "green" | "idle";
+  label: string;
+  /** Dallanma diregi ile bu cihaz arasindaki tel mesafesi (bicimlenmis). */
+  distance: string | null;
+  sources: string[];
+  onOpen?: () => void;
+}) {
+  const renk = tone === "red" ? RED : tone === "green" ? GREEN : "#64748b";
+  return (
+    <g
+      className={`fx-strip-dev${onOpen ? " is-link" : ""}`}
+      onClick={onOpen}
+      role={onOpen ? "button" : undefined}
+      tabIndex={0}
+    >
+      <title>{label}</title>
+      <rect x={x - 11} y={y - 10} width={22} height={20} fill="transparent" />
+      <rect
+        x={x - 6}
+        y={y - 5.5}
+        width={12}
+        height={11}
+        rx={2.6}
+        fill="#fff"
+        stroke={renk}
+        strokeWidth={2}
+      />
+      {PHASE_LINES.map((f, i) => (
+        <circle
+          key={f.key}
+          cx={x - 3 + i * 3}
+          cy={y}
+          r={1.2}
+          fill={sources.includes(f.key) ? renk : "#fff"}
+          stroke={renk}
+          strokeWidth={0.8}
+        />
+      ))}
+      <text
+        x={x + 10}
+        y={y + 3}
+        fontSize={8}
+        fontWeight={700}
+        fill={renk}
+        stroke="#fcfdff"
+        strokeWidth={2.6}
+        strokeLinejoin="round"
+        paintOrder="stroke"
+      >
+        {label}
+      </text>
+      {/* DIREK - CIHAZ MESAFESI. "Kolun tamami aday" gibi bir genelleme
+          yerine ekibin gercekten yuruyecegi mesafe. */}
+      {distance ? (
+        <text
+          x={x + 10}
+          y={y + 12}
+          fontSize={7.5}
+          fontWeight={700}
+          fill="#b45309"
+          stroke="#fcfdff"
+          strokeWidth={2.4}
+          strokeLinejoin="round"
+          paintOrder="stroke"
+        >
+          {`\u2194 ${distance}`}
+        </text>
+      ) : null}
+    </g>
+  );
+}
 
 export function FaultPoleStrip({
   lineName,
@@ -145,6 +292,9 @@ export function FaultPoleStrip({
         parentSeq: b.atSeq,
         parentPoleName: b.atPoleName,
         confirmed: b.confirmed,
+        linkDevice: b.linkDevice,
+        clearedByLink: b.clearedByLink,
+        linkDistanceM: b.linkDistanceM,
         active
       });
     }
@@ -390,14 +540,27 @@ export function FaultPoleStrip({
                tesadufen yanindan gectigi izlenimi veriyordu. */}
           {scene.rows.map((r) => {
             if (!r.link) return null;
-            const renk = active ? RED : GREY;
             const { fromX, fromY, toX, toY } = r.link;
             // Yon: +1 asagi inen kol, -1 yukari cikan kol. Egri ve giris
             // parcasi ayni formulle iki tarafa da calisir.
             const d = r.side === -1 ? -1 : 1;
-            const yol =
-              `M${fromX} ${fromY + 5 * d}` +
-              ` C${fromX + 30} ${fromY + 26 * d}, ${toX + 30} ${toY - 42 * d}, ${toX} ${toY - 12 * d}`;
+            const p0 = { x: fromX, y: fromY + 5 * d };
+            const p1 = { x: fromX + 30, y: fromY + 26 * d };
+            const p2 = { x: toX + 30, y: toY - 42 * d };
+            const p3 = { x: toX, y: toY - 12 * d };
+            const yol = kubikDilim(p0, p1, p2, p3, 0, 1);
+
+            // BAG TELI CIHAZI: bag, cihazin oturdugu noktada IKIYE bolunur.
+            // Cihaz "gormedim" diyorsa fault akimi ondan GECMEMISTIR: ust
+            // yari supheli, alt yari kesinlikle saglamdir. "Gordum" diyorsa
+            // tersi. Cihaz yoksa bagin tamami supheli kalir.
+            const cihaz = r.linkDevice ?? null;
+            const orta = kubikNokta(p0, p1, p2, p3, 0.5);
+            const renk = active ? RED : GREY;
+            const ustRenk = !active || (cihaz && cihaz.tone === "red") ? GREY : RED;
+            const altRenk = !active || (cihaz && cihaz.tone === "green") ? GREY : RED;
+            const ustYol = kubikDilim(p0, p1, p2, p3, 0, cihaz ? 0.5 : 1);
+            const altYol = cihaz ? kubikDilim(p0, p1, p2, p3, 0.5, 1) : null;
             return (
               <g key={`lnk-${r.key}`} className="fx-strip-link">
                 {/* Govde: bagin fiziksel kalinligi. */}
@@ -410,13 +573,36 @@ export function FaultPoleStrip({
                   opacity={0.12}
                 />
                 <path
-                  d={yol}
+                  d={ustYol}
                   fill="none"
-                  stroke={renk}
+                  stroke={ustRenk}
                   strokeWidth={1.9}
                   strokeDasharray="6 5"
                   strokeLinecap="round"
                 />
+                {altYol ? (
+                  <path
+                    d={altYol}
+                    fill="none"
+                    stroke={altRenk}
+                    strokeWidth={1.9}
+                    strokeDasharray="6 5"
+                    strokeLinecap="round"
+                  />
+                ) : null}
+                {cihaz ? (
+                  <LinkDeviceMark
+                    x={orta.x}
+                    y={orta.y}
+                    tone={active ? cihaz.tone : "idle"}
+                    label={cihaz.label}
+                    distance={
+                      r.linkDistanceM != null ? formatDistanceM(r.linkDistanceM) : null
+                    }
+                    sources={active ? cihaz.sources ?? [] : []}
+                    onOpen={onOpenDevice ? () => onOpenDevice(cihaz.code) : undefined}
+                  />
+                ) : null}
                 {/* Kol satirina giris: ilk direginin tepesine (asagi inen
                     kolda) ya da dibine (yukari cikan kolda) oturur. */}
                 <line

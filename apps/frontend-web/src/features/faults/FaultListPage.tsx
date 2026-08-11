@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 
 import { fetchFaultCauses, type GridSnapshot } from "../../shared/api";
+import { buildLineDistanceIndex } from "../../shared/lineDistance";
 import type {
   FaultCauseCatalog,
   AlarmEvent,
@@ -256,6 +257,14 @@ export function FaultListPage({
     return kume;
   }, [alarms, devices]);
 
+  /** Tel mesafesi indeksi — dallanma diregi ile giris cihazi arasindaki
+   *  gercek mesafeyi yazabilmek icin. Snapshot degismedikce yeniden
+   *  hesaplanmaz (indeks tum hatlari dolasiyor). */
+  const mesafeIndeksi = useMemo(
+    () => (gridSnapshot ? buildLineDistanceIndex(gridSnapshot) : null),
+    [gridSnapshot]
+  );
+
   /** ADAY HAT KESIMLERI — ariza bolgesindeki dallanma direklerinden cikan
    *  kollar. Cizimde her biri AYRI SATIR olarak tam hat halinde gosterilir;
    *  ekip kac yeri gezecegini cizimden okur (bkz. branchRows.ts). */
@@ -277,6 +286,20 @@ export function FaultListPage({
       openFaultByLine
     });
   }, [shownFault, gridSnapshot, openFaultByLine, alarmliCihazKodlari]);
+
+  /** Kol satirlarina bag telinin GERCEK uzunlugunu ekle. */
+  const branchRowsWithDistance = useMemo(() => {
+    if (!mesafeIndeksi || branchScene.rows.length === 0) return branchScene.rows;
+    const idByCode = new Map((devices ?? []).map((d) => [d.code, d.id]));
+    return branchScene.rows.map((r) => {
+      const kod = r.linkDevice?.code;
+      const cihazId = kod ? idByCode.get(kod) : undefined;
+      const direkM = r.atPoleId != null ? mesafeIndeksi.poleDistM.get(r.atPoleId) : undefined;
+      const cihazM = cihazId != null ? mesafeIndeksi.deviceDistM.get(cihazId) : undefined;
+      if (direkM == null || cihazM == null) return r;
+      return { ...r, linkDistanceM: Math.abs(cihazM - direkM) };
+    });
+  }, [branchScene.rows, mesafeIndeksi, devices]);
 
   /** SEBEP ETIKETI — insanin girdigi kod yoksa cihazin onerisi.
    *  Kod ("tree_contact") operatore hicbir sey soylemez; katalogdan
@@ -475,7 +498,7 @@ export function FaultListPage({
               fault={shownFault}
               poleSeqs={poleSeqsByLine.get(shownFault.line_id) ?? []}
               poles={polesByLine.get(shownFault.line_id) ?? []}
-              branchRows={branchScene.rows}
+              branchRows={branchRowsWithDistance}
               hiddenBranchCount={branchScene.hidden}
               segments={segmentsByLine.get(shownFault.line_id) ?? []}
               localeTag={localeTag}

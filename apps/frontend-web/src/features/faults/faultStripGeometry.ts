@@ -240,11 +240,16 @@ export function buildStripGeometry({
   wholeLineHot
 }: Input): StripGeometry {
   const uniq = Array.from(new Set(poleSeqs)).sort((a, b) => a - b);
+  // TEK DIREKLI HAT GERCEKTIR — uydurma yok.
+  //
+  // Kosul `uniq.length >= 2` idi: tek direkli bir bransman kolunda ikinci bir
+  // direk UYDURULUYORDU ("#2"). Sahada olmayan bir direk cizmek, ekibe var
+  // olmayan bir hat parcasi gostermek demek. Artik yalnizca hic direk yoksa
+  // (snapshot eksik) ariza araligindan bir yer tutucu uretilir.
   const seqs =
-    uniq.length >= 2
+    uniq.length >= 1
       ? uniq
       : (() => {
-          // Snapshot yok/eksik — en azindan ariza araligini ciz.
           const a = fromSeq ?? 1;
           const b = toSeq ?? a + 1;
           return a === b ? [a, a + 1] : [Math.min(a, b), Math.max(a, b)];
@@ -269,7 +274,7 @@ export function buildStripGeometry({
   // Iletken travers UCUNDAN travers ucuna gerilir; direk uzerindeki iki uc
   // arasi atlama (jumper) ile gecilir. Kisa spanlarda travers payi span'i
   // yutmasin diye ust sinir konur.
-  const attach = Math.min(ARM_HALF, step > 0 ? step * 0.28 : ARM_HALF);
+  const attach = step > 0 ? Math.min(ARM_HALF, step * 0.28) : ARM_HALF;
 
   const pointAt = (pos: number) => {
     const s = Math.max(0, Math.min(Math.max(0, count - 2), Math.floor(pos)));
@@ -287,6 +292,8 @@ export function buildStripGeometry({
   const wire: { pos: number; x: number; y: number }[] = [];
   // Hat basindaki gerdirme: tel ilk traversin SOL ucunda baslar.
   wire.push({ pos: 0, x: xOf(0) - attach, y: WIRE_Y });
+  // TEK DIREK: span yok, yalnizca traversler arasindaki atlama cizilir.
+  if (count === 1) wire.push({ pos: 0, x: xOf(0) + attach, y: WIRE_Y });
   for (let s = 0; s < count - 1; s += 1) {
     const x1 = xOf(s) + attach;
     const x2 = xOf(s + 1) - attach;
@@ -517,6 +524,28 @@ export type FaultRowInput = {
   parentPoleName?: string | null;
   /** Kolun KENDI acik ariza kaydi var mi (dogrulandi) yoksa aday mi? */
   confirmed?: boolean;
+  /**
+   * BRANSMAN GIRISINDEKI CIHAZ — ana direkle kolun ilk diregi ARASINDAKI
+   * telin uzerinde oturur, kolun kendi span'lerinden hicbirinde degildir.
+   *
+   * Once bu cihaz kolun ilk diregine cizilip yok sayiliyordu: "arizayi
+   * gormedim" dese bile kol bastan sona kirmizi kaliyordu. Oysa cihaz tam da
+   * bag telinin uzerinde ve o telin hangi yarisinin supheli oldugunu SOYLEYEN
+   * sey o.
+   */
+  linkDevice?: {
+    code: string;
+    label: string;
+    tone: "red" | "green" | "idle";
+    /** Alarm veren faz kaynaklari (kelepceler bunu doldurur). */
+    sources?: string[];
+  } | null;
+  /** Giris cihazi "gormedim" dedi: kolun kendisi saglam sayilir. */
+  clearedByLink?: boolean;
+  /** Dallanma diregi ile giris cihazi arasindaki TEL mesafesi (m).
+   *  "Kolun tamami aday" gibi bir genelleme yerine ekibin yuruyecegi
+   *  gercek mesafe yazilir. */
+  linkDistanceM?: number | null;
   /** Satir aktif bir arizaya mi ait (kirmizi) yoksa gecmise mi (gri)? */
   active?: boolean;
 };
@@ -569,6 +598,20 @@ export type StripBranchRow = {
   alarmsByDevice?: Record<string, StripDeviceAlarms>;
   /** Kolda kendi acik ariza kaydi var mi — bolge KESIN cizilir. */
   confirmed: boolean;
+  /** Bransman girisindeki cihaz — bag telinin uzerinde cizilir. */
+  linkDevice?: {
+    code: string;
+    label: string;
+    tone: "red" | "green" | "idle";
+    sources?: string[];
+  } | null;
+  /** Giris cihazi "gormedim" dedi: kolun kendisi saglam, yalnizca bag
+   *  telinin o cihaza kadarki parcasi supheli. */
+  clearedByLink?: boolean;
+  /** Dallanma diregi ile giris cihazi arasindaki tel mesafesi (m). */
+  linkDistanceM?: number | null;
+  /** Dallanma direginin id'si — mesafe hesabi icin. */
+  atPoleId?: number | null;
 };
 
 /** Ekrandaki cizim kutusu (piksel). */
@@ -635,8 +678,11 @@ export function buildFaultScene(inputs: FaultRowInput[]): FaultScene {
       toSeq: input.toSeq,
       lastRedDeviceCode: input.lastRedDeviceCode,
       firstGreenDeviceCode: input.firstGreenDeviceCode,
-      // Aday kol: kendi kaydi yoksa bastan sona suphelidir.
-      wholeLineHot: input.kind === "branch" && !input.confirmed
+      // Aday kol: kendi kaydi yoksa bastan sona suphelidir. AMA giris cihazi
+      // "gormedim" dediyse kolun kendisi saglamdir — supheli olan yalnizca
+      // bag teli (bkz. `clearedByLink`).
+      wholeLineHot:
+        input.kind === "branch" && !input.confirmed && !input.clearedByLink
     });
 
     const parent = input.parentKey ? rows.find((r) => r.key === input.parentKey) : undefined;

@@ -198,16 +198,27 @@ export function buildBranchRows({
    * cihazdan ilk "gormedim" diyene kadar. Alarmi olmayan cihaz "gormedim"
    * sayilir — sistemin her yerinde gecerli olan sozlesme budur.
    */
-  const kolSinirlari = (lineId: number): { red: string | null; green: string | null } => {
-    if (!alarmedDeviceCodes) return { red: null, green: null };
+  const kolSinirlari = (
+    lineId: number,
+    girisKodu: string | null
+  ): { red: string | null; green: string | null; girisTemiz: boolean } => {
+    if (!alarmedDeviceCodes) return { red: null, green: null, girisTemiz: false };
+    const kendiSeqleri = new Set(direkleriniAl(lineId).map((p) => p.sequence_no));
+    // GIRIS CIHAZI HER ZAMAN ILK SIRADA: bag teli kolun basindan once gelir.
     const sirali = segmentleriniAl(lineId)
       .filter((sg) => (sg.device_code ?? "").trim())
+      .filter(
+        (sg) =>
+          kendiSeqleri.has(sg.from_pole_seq ?? -1) && kendiSeqleri.has(sg.to_pole_seq ?? -1)
+      )
       .slice()
       .sort((a, b) => (a.from_pole_seq ?? 0) - (b.from_pole_seq ?? 0));
+
+    const zincir = girisKodu ? [girisKodu, ...sirali.map((sg) => (sg.device_code ?? "").trim())]
+                             : sirali.map((sg) => (sg.device_code ?? "").trim());
     let red: string | null = null;
     let green: string | null = null;
-    for (const sg of sirali) {
-      const kod = (sg.device_code ?? "").trim();
+    for (const kod of zincir) {
       if (alarmedDeviceCodes.has(kod)) {
         red = kod;
         green = null; // sonraki "gormedim" arayisi bu cihazdan SONRA baslar
@@ -215,7 +226,26 @@ export function buildBranchRows({
         green = kod;
       }
     }
-    return { red, green };
+    // Giris cihazi "gormedim" diyorsa arizanin kolda olmasi MUMKUN DEGIL:
+    // supheli olan yalnizca bag telinin o cihaza kadarki parcasi.
+    const girisTemiz = Boolean(girisKodu) && green === girisKodu;
+    return {
+      red: red === girisKodu ? null : red,
+      green: green === girisKodu ? null : green,
+      girisTemiz
+    };
+  };
+
+  /** Kolun GIRIS segmenti: bir ucu ana hatta, digeri kolun ilk direginde. */
+  const girisSegmenti = (lineId: number): BranchScanSegment | null => {
+    const kendiSeqleri = new Set(direkleriniAl(lineId).map((p) => p.sequence_no));
+    for (const sg of segmentleriniAl(lineId)) {
+      if (!(sg.device_code ?? "").trim()) continue;
+      const a = kendiSeqleri.has(sg.from_pole_seq ?? -1);
+      const b = kendiSeqleri.has(sg.to_pole_seq ?? -1);
+      if (a !== b) return sg;
+    }
+    return null;
   };
 
   /** Verilen direk kumesinden dallanan kollar. `null` = tum hat. */
@@ -256,7 +286,11 @@ export function buildBranchRows({
 
     const kolDirekleri = direkleriniAl(gorev.line.id);
     const kendiKaydi = openFaultByLine.get(gorev.line.id) ?? null;
-    const kolSiniri = kendiKaydi ? { red: null, green: null } : kolSinirlari(gorev.line.id);
+    const giris = girisSegmenti(gorev.line.id);
+    const girisKodu = giris ? (giris.device_code ?? "").trim() : null;
+    const kolSiniri = kendiKaydi
+      ? { red: null, green: null, girisTemiz: false }
+      : kolSinirlari(gorev.line.id, girisKodu);
     const ozet = kendiKaydi
       ? alarmOzeti(kendiKaydi)
       : { alarmsByDevice: undefined, faultPhases: [] };
@@ -267,13 +301,27 @@ export function buildBranchRows({
       parentLineId: gorev.parentLineId,
       atSeq: gorev.pole.sequence_no,
       atPoleName: gorev.pole.name ?? null,
+      atPoleId: gorev.pole.id,
       poleSeqs: kolDirekleri.map((p) => p.sequence_no),
       poles: kolDirekleri.map((p) => ({
         seq: p.sequence_no,
         name: p.name ?? null,
         role: p.topology_role ?? null
       })),
-      segments: segmentleriniAl(gorev.line.id),
+      // Giris segmenti kolun ICINDE degil: cihazi bag telinin uzerinde
+      // cizilir (`linkDevice`), kolun span'lerinden birine oturtulmaz.
+      segments: segmentleriniAl(gorev.line.id).filter((sg) => sg !== giris),
+      linkDevice: girisKodu
+        ? {
+            code: girisKodu,
+            label: (giris?.device_name ?? "").trim() || girisKodu,
+            tone: !alarmedDeviceCodes
+              ? "idle"
+              : alarmedDeviceCodes.has(girisKodu)
+                ? "red"
+                : "green"
+          }
+        : null,
       fromSeq: kendiKaydi?.from_pole_seq ?? null,
       toSeq: kendiKaydi?.to_pole_seq ?? null,
       // Kendi kaydi yoksa sinirlar kolun KENDI cihazlarindan cikar.
@@ -283,7 +331,10 @@ export function buildBranchRows({
       zoneEndM: kendiKaydi?.zone_end_m ?? null,
       faultPhases: ozet.faultPhases,
       alarmsByDevice: ozet.alarmsByDevice,
-      confirmed: Boolean(kendiKaydi)
+      confirmed: Boolean(kendiKaydi),
+      // Giris cihazi "gormedim" dediyse kolun kendisi kesinlikle saglam;
+      // yalnizca bag telinin o cihaza kadarki parcasi supheli kalir.
+      clearedByLink: kolSiniri.girisTemiz
     });
 
     // ALT KOLLAR: kolun kendi kaydi varsa yalnizca o kaydin bolgesindekiler,
