@@ -241,12 +241,28 @@ export function FaultListPage({
     [activeFaults, activeFaultId]
   );
 
+  /** O AN alarmi olan cihaz KODLARI — haritadaki kuralla AYNI
+   *  (`!reset` ve `produces_fault !== false`). Aday bir kolun kendi ariza
+   *  kaydi olmasa da uzerindeki cihazlarin ne dedigi buradan okunur; alarmi
+   *  olmayan cihaz "arizayi gormedim" sayilir. */
+  const alarmliCihazKodlari = useMemo(() => {
+    const idKod = new Map((devices ?? []).map((d) => [d.id, d.code]));
+    const kume = new Set<string>();
+    for (const a of alarms ?? []) {
+      if (a.reset || a.produces_fault === false) continue;
+      const kod = idKod.get(a.device_id);
+      if (kod) kume.add(kod);
+    }
+    return kume;
+  }, [alarms, devices]);
+
   /** ADAY HAT KESIMLERI — ariza bolgesindeki dallanma direklerinden cikan
    *  kollar. Cizimde her biri AYRI SATIR olarak tam hat halinde gosterilir;
    *  ekip kac yeri gezecegini cizimden okur (bkz. branchRows.ts). */
   const branchScene = useMemo(() => {
     if (!shownFault || !gridSnapshot) return { rows: [], hidden: 0 };
     return buildBranchRows({
+      alarmedDeviceCodes: alarmliCihazKodlari,
       lines: gridSnapshot.lines,
       poles: gridSnapshot.poles,
       segments: gridSnapshot.segments.map((s) => ({
@@ -260,7 +276,7 @@ export function FaultListPage({
       fault: shownFault,
       openFaultByLine
     });
-  }, [shownFault, gridSnapshot, openFaultByLine]);
+  }, [shownFault, gridSnapshot, openFaultByLine, alarmliCihazKodlari]);
 
   /** SEBEP ETIKETI — insanin girdigi kod yoksa cihazin onerisi.
    *  Kod ("tree_contact") operatore hicbir sey soylemez; katalogdan

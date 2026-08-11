@@ -413,6 +413,22 @@ export function buildStripGeometry({
     const end = green ? green.pos : count - 1;
     if (end > red.pos) span = { a: red.pos, b: end, byDevice: true };
   }
+  // "GORDUM" DIYEN YOK AMA "GORMEDIM" DIYEN VAR.
+  //
+  // Aday bir bransman kolunda tipik durum budur: kolun kendi ariza kaydi
+  // yoktur ama uzerinde alarm vermeyen bir cihaz durur. O cihazdan fault
+  // akimi GECMEDIGI icin arizanin ondan asagida olmasi mumkun degildir —
+  // supheli alan hat basi ile o cihaz arasidir.
+  //
+  // Bu kural olmadan kol bastan sona kirmizi ciziliyordu: cihazin
+  // "gormedim" demesi yok sayiliyor, kesinlikle saglam olan alt kisim da
+  // aday gosteriliyordu.
+  //
+  // Yalnizca direk araligi VERILMEMISSE devreye girer; verilmisse (ana hat
+  // kaydi) o sinirlar baglayicidir.
+  if (span === null && green && (fromSeq == null || toSeq == null) && green.pos > 0) {
+    span = { a: 0, b: green.pos, byDevice: true };
+  }
   if (span === null && fromSeq != null && toSeq != null) {
     // Cihaz bilgisi yok — kaba direk araligina duseriz (eski davranis).
     const iA = idxOf(Math.min(fromSeq, toSeq));

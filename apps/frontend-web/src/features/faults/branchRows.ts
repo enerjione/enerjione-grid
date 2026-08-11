@@ -67,6 +67,10 @@ type Input = {
   /** line_id -> o hatta ACIK ariza kaydi. Kolun kendi kaydi varsa bolge
    *  kesinlesir; yoksa kol bastan sona aday kalir. */
   openFaultByLine: Map<number, BranchScanFault>;
+  /** O AN alarmi olan cihaz KODLARI (haritadaki kural: `!reset` ve
+   *  `produces_fault !== false`). Kolun kendi ariza kaydi olmasa bile
+   *  uzerindeki cihazlarin ne dedigi buradan okunur. */
+  alarmedDeviceCodes?: Set<string>;
   /** Cizime sigacak en fazla kol satiri. */
   maxRows?: number;
 };
@@ -105,6 +109,7 @@ export function buildBranchRows({
   segments,
   fault,
   openFaultByLine,
+  alarmedDeviceCodes,
   maxRows = MAX_BRANCH_ROWS
 }: Input): { rows: StripBranchRow[]; hidden: number } {
   /** dallanma diregi id -> o direkten cikan kollar. */
@@ -178,6 +183,41 @@ export function buildBranchRows({
     return kume;
   };
 
+  /**
+   * KOLUN KENDI CIHAZLARI NE DIYOR?
+   *
+   * Aday kolun ayri bir ariza kaydi olmayabilir; bu, "kol hakkinda hicbir
+   * sey bilmiyoruz" demek DEGILDIR. Kolun uzerindeki cihazlar o anda alarm
+   * veriyor mu, veriyorsa hangisi — bu bilgi zaten elimizde.
+   *
+   * Kol bastan sona kirmizi cizilirken uzerindeki "ariza gormedim" diyen
+   * cihaz yok sayiliyordu: o cihazdan asagisi kesinlikle saglamken cizim
+   * kolun tamamini aday gosteriyor, ekip bosuna geziyordu.
+   *
+   * Kural ANA HATTAKIYLE ayni (ve harita ile ayni): son "gordum" diyen
+   * cihazdan ilk "gormedim" diyene kadar. Alarmi olmayan cihaz "gormedim"
+   * sayilir — sistemin her yerinde gecerli olan sozlesme budur.
+   */
+  const kolSinirlari = (lineId: number): { red: string | null; green: string | null } => {
+    if (!alarmedDeviceCodes) return { red: null, green: null };
+    const sirali = segmentleriniAl(lineId)
+      .filter((sg) => (sg.device_code ?? "").trim())
+      .slice()
+      .sort((a, b) => (a.from_pole_seq ?? 0) - (b.from_pole_seq ?? 0));
+    let red: string | null = null;
+    let green: string | null = null;
+    for (const sg of sirali) {
+      const kod = (sg.device_code ?? "").trim();
+      if (alarmedDeviceCodes.has(kod)) {
+        red = kod;
+        green = null; // sonraki "gormedim" arayisi bu cihazdan SONRA baslar
+      } else if (green === null) {
+        green = kod;
+      }
+    }
+    return { red, green };
+  };
+
   /** Verilen direk kumesinden dallanan kollar. `null` = tum hat. */
   const araliktakiKollar = (lineId: number, bolge: Set<number> | null) => {
     const cikti: { line: BranchScanLine; pole: BranchScanPole }[] = [];
@@ -216,6 +256,7 @@ export function buildBranchRows({
 
     const kolDirekleri = direkleriniAl(gorev.line.id);
     const kendiKaydi = openFaultByLine.get(gorev.line.id) ?? null;
+    const kolSiniri = kendiKaydi ? { red: null, green: null } : kolSinirlari(gorev.line.id);
     const ozet = kendiKaydi
       ? alarmOzeti(kendiKaydi)
       : { alarmsByDevice: undefined, faultPhases: [] };
@@ -235,8 +276,9 @@ export function buildBranchRows({
       segments: segmentleriniAl(gorev.line.id),
       fromSeq: kendiKaydi?.from_pole_seq ?? null,
       toSeq: kendiKaydi?.to_pole_seq ?? null,
-      lastRedDeviceCode: kendiKaydi?.last_red_device_code ?? null,
-      firstGreenDeviceCode: kendiKaydi?.first_green_device_code ?? null,
+      // Kendi kaydi yoksa sinirlar kolun KENDI cihazlarindan cikar.
+      lastRedDeviceCode: kendiKaydi?.last_red_device_code ?? kolSiniri.red,
+      firstGreenDeviceCode: kendiKaydi?.first_green_device_code ?? kolSiniri.green,
       zoneStartM: kendiKaydi?.zone_start_m ?? null,
       zoneEndM: kendiKaydi?.zone_end_m ?? null,
       faultPhases: ozet.faultPhases,
@@ -246,7 +288,17 @@ export function buildBranchRows({
 
     // ALT KOLLAR: kolun kendi kaydi varsa yalnizca o kaydin bolgesindekiler,
     // yoksa kolun tamami supheli oldugu icin hepsi.
-    const altBolge = bolgeDirekleri(gorev.line.id, kendiKaydi);
+    const altBolge = bolgeDirekleri(
+      gorev.line.id,
+      kendiKaydi ??
+        (kolSiniri.red || kolSiniri.green
+          ? {
+              line_id: gorev.line.id,
+              last_red_device_code: kolSiniri.red,
+              first_green_device_code: kolSiniri.green
+            }
+          : null)
+    );
     for (const alt of araliktakiKollar(gorev.line.id, altBolge)) {
       if (gorulen.has(alt.line.id)) continue;
       kuyruk.push({ line: alt.line, pole: alt.pole, parentLineId: gorev.line.id });

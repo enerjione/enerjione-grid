@@ -254,3 +254,92 @@ test("dongusel topoloji sonsuz donguye girmez", () => {
   assert.ok(rows.length <= 2);
   assert.ok(!rows.some((r) => r.lineId === 1), "ana hat kendi altina cizilmis");
 });
+
+/* ---------------------------------------------------------------------------
+ * ADAY KOLUN KENDI CIHAZLARI
+ *
+ * Kolun ayri bir ariza kaydi olmamasi "kol hakkinda hicbir sey bilmiyoruz"
+ * demek DEGIL: uzerindeki cihaz o anda alarm veriyor mu, bu bilgi zaten
+ * elimizde. Kol bastan sona kirmizi cizilirken "gormedim" diyen cihaz yok
+ * sayiliyordu — o cihazdan asagisi kesinlikle saglamken ekip bosuna geziyordu.
+ * ------------------------------------------------------------------------- */
+
+/** BR-A: 3 direk, 1-2 arasinda SN2-A1 cihazi (bkz. SEGMENTS). */
+function kolCihaziyla(alarmli: string[]) {
+  return buildBranchRows({
+    lines: LINES,
+    poles: POLES,
+    segments: SEGMENTS,
+    fault: ANA_ARIZA,
+    openFaultByLine: new Map(),
+    alarmedDeviceCodes: new Set(alarmli)
+  });
+}
+
+test("kolda ARIZA GORMEYEN cihaz varsa bolge o cihazda BITER", () => {
+  const kol = kolCihaziyla([]).rows.find((r) => r.name === "BR-A");
+  assert.ok(kol);
+  assert.equal(
+    kol.firstGreenDeviceCode,
+    "SN2-A1",
+    "alarmi olmayan cihaz 'gormedim' sinirini kurmali"
+  );
+  assert.equal(kol.lastRedDeviceCode, null, "alarm yokken 'gordum' cihazi olmamali");
+
+  // Cizim: bolge hat basindan o cihaza kadar — kolun TAMAMI degil.
+  const geo = buildStripGeometry({
+    poleSeqs: kol.poleSeqs,
+    segments: kol.segments,
+    fromSeq: kol.fromSeq,
+    toSeq: kol.toSeq,
+    lastRedDeviceCode: kol.lastRedDeviceCode,
+    firstGreenDeviceCode: kol.firstGreenDeviceCode,
+    wholeLineHot: true
+  });
+  assert.ok(geo.span, "bolge hesaplanamadi");
+  assert.equal(geo.span.a, 0);
+  assert.ok(geo.span.b < kol.poleSeqs.length - 1, "bolge hala kolun tamamini kapliyor");
+  assert.equal(geo.span.byDevice, true);
+});
+
+test("kolda ARIZA GOREN cihaz varsa bolge o cihazdan SONRASIDIR", () => {
+  const kol = kolCihaziyla(["SN2-A1"]).rows.find((r) => r.name === "BR-A");
+  assert.ok(kol);
+  assert.equal(kol.lastRedDeviceCode, "SN2-A1");
+  assert.equal(kol.firstGreenDeviceCode, null);
+
+  const geo = buildStripGeometry({
+    poleSeqs: kol.poleSeqs,
+    segments: kol.segments,
+    lastRedDeviceCode: kol.lastRedDeviceCode,
+    firstGreenDeviceCode: kol.firstGreenDeviceCode,
+    wholeLineHot: true
+  });
+  assert.ok(geo.span);
+  assert.ok(geo.span.a > 0, "bolge cihazdan SONRA baslamali");
+  assert.equal(geo.span.b, kol.poleSeqs.length - 1, "gormeyen cihaz yoksa hat ucuna kadar");
+});
+
+test("cihazi OLMAYAN kol bastan sona aday kalir", () => {
+  // Bilgi yoksa daraltma da olmaz — "bilmiyorum"u "saglam" diye okumak
+  // gezilmesi gereken bir kolu ekrandan siler.
+  const { rows } = kolCihaziyla([]);
+  const alt = rows.find((r) => r.name === "BR-A1");
+  assert.ok(alt, "cihazsiz alt kol adaylardan dusmus");
+  assert.equal(alt.firstGreenDeviceCode, null);
+  assert.equal(alt.lastRedDeviceCode, null);
+});
+
+test("alarm bilgisi verilmezse davranis DEGISMEZ (geriye uyum)", () => {
+  const { rows } = buildBranchRows({
+    lines: LINES,
+    poles: POLES,
+    segments: SEGMENTS,
+    fault: ANA_ARIZA,
+    openFaultByLine: new Map()
+  });
+  const kol = rows.find((r) => r.name === "BR-A");
+  assert.ok(kol);
+  assert.equal(kol.lastRedDeviceCode, null);
+  assert.equal(kol.firstGreenDeviceCode, null);
+});
