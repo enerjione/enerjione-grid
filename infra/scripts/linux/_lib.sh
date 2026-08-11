@@ -869,6 +869,42 @@ e1_target_user() {
     echo "$u"
   fi
 }
+# ---------------------------------------------------------------------------
+# .git SAHIPLIGINI CALISMA AGACIYLA HIZALA
+# ---------------------------------------------------------------------------
+# YASANAN ARIZA
+# -------------
+# `install.sh` ve `update.sh` root olarak calisir (`e1_require_root`) ve git'i
+# de root olarak cagirir. Root her dosyaya yazabildigi icin bu komutlar HATA
+# VERMEZ — sessizce `.git` icinde root'a ait nesneler birakirlar.
+#
+# Fatura sonra kesilir: depoyu normal kullanici olarak kullanmak isteyen
+# (ya da bir CI/ajan) `git fetch` dedigi anda
+#
+#     error: insufficient permission for adding an object to repository
+#     database .git/objects
+#     fatal: failed to write object
+#
+# ile duser. Olcum: tek bir saha kurulumunda 834 root sahipli dosya birikmisti.
+# Kendiliginden duzelmez ve her `sudo bash update.sh` biraz daha buyutur.
+#
+# NEDEN "CALISMA AGACININ SAHIBI", SUDO_USER DEGIL
+# ------------------------------------------------
+# `e1_chown_target` cagiran kullaniciyi (SUDO_USER) hedefler; burada dogru
+# olcut o degil. Depo root tarafindan kurulduysa `.git` de root'un kalmali —
+# baska bir kullanici `sudo -u` ile bir kez update calistirdi diye sahiplik
+# el degistirmemeli. Bu yuzden hedef, calisma agaci dizininin KENDI sahibi:
+# ne ise o korunur, yalnizca tutarsizlik giderilir.
+#
+# Idempotent: sahiplik zaten dogruysa hicbir sey degismez.
+e1_git_sahipligini_hizala() {
+  local dir="${1:-.}" sahip
+  [[ -d "$dir/.git" ]] || return 0
+  sahip="$(stat -c '%u:%g' "$dir" 2>/dev/null || echo '')"
+  [[ -n "$sahip" ]] || return 0
+  chown -R "$sahip" "$dir/.git" 2>/dev/null || true
+}
+
 e1_chown_target() {
   local u
   u="$(e1_target_user)"

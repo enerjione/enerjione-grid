@@ -302,6 +302,12 @@ if [[ $E1_PACKAGE_MODE -eq 0 ]]; then
   fi
 fi
 
+# clone/fetch/checkout root olarak calisti. Root her dosyaya yazabildigi icin
+# hata vermezler ama `.git` icinde root'a ait nesneler birakirlar; sonra
+# depoyu normal kullanici olarak kullanan herkes "insufficient permission for
+# adding an object" ile duser. Sahipligi calisma agaciyla hizala.
+e1_git_sahipligini_hizala "${INSTALL_DIR}"
+
 # Surum artik biliniyor — bundan sonraki tum adim basliklarinda gorunur.
 E1_VERSION_LABEL="$(e1_version "${INSTALL_DIR}")"
 e1_ok "Kaynak hazir — surum ${E1_VERSION_LABEL}"

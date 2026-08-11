@@ -60,6 +60,15 @@ done
 
 cd "$SCRIPT_DIR"
 
+# .git sahipligini calisma agaciyla hizala — HEM ONCE HEM SONRA.
+# Bu betik root olarak calisir ve git'i de root olarak cagirir; root her
+# dosyaya yazabildigi icin komutlar hata vermez ama `.git` icinde root'a ait
+# nesneler birakir. Sonra depoyu normal kullanici olarak kullanan herkes
+# "insufficient permission for adding an object" ile duser.
+# Bastaki cagri onceki kosulardan kalan birikimi onarir (erken cikis
+# yollarini da kapsar), sondaki bu kosunun urettigini.
+e1_git_sahipligini_hizala "$SCRIPT_DIR"
+
 # Update oncesi HEAD — sonda "neler degisti" ozeti icin.
 PREV_HEAD="$(git rev-parse HEAD 2>/dev/null || echo '')"
 
@@ -511,6 +520,10 @@ NEW_VERSION="$(e1_version "$SCRIPT_DIR")"
 if [[ "$NEW_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   e1_env_version_write "${NEW_VERSION}"
 fi
+
+# fetch/checkout root olarak calisti; urettigi nesneleri calisma agacinin
+# sahibine geri ver (bkz. yukaridaki not).
+e1_git_sahipligini_hizala "$SCRIPT_DIR"
 
 fi   # <- git modu sonu (E1_PACKAGE_MODE)
 
