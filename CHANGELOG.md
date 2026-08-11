@@ -14,6 +14,28 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.71.0] — 2026-08-11
+
+### Düzeltildi
+
+- **Gateway sürümü artık "bilinmiyor" demiyor.** Sürüm keşfi cihazdaki
+  `docker buildx`e bağlıydı; buildx Docker Engine kurulumlarında çoğu zaman
+  yok (`apt install docker.io` onu getirmiyor). O cihazlarda ekran hedef
+  sürümü hiç göstermiyor, operatör yayınlanmış güncellemeden haberdar
+  olamıyordu — kayıt defteri 1.6.2'ye taşınmışken cihaz 1.6.1'de kaldı.
+  Sürüm bilgisi artık backend tarafından doğrudan kayıt defterinden de
+  okunuyor; cihazda docker/buildx kurulu olmasına bağlı değil. Güncelleme
+  kararı yine digest karşılaştırması, ajan kendi değerini bildirebiliyorsa
+  onunki kullanılıyor.
+- **Kapanmış arızanın haritası artık boş çıkmıyor.** Kırmızı kesim canlı
+  alarmlardan türetiliyordu; arıza normale dönünce kesim kayboluyor ve
+  geçmiş bir kaydın haritası hattın tamamını sağlam gösteriyordu. Aynı
+  ekranda "Arıza Tespit Eden Cihazlar" kartında kırmızı yazan cihaz
+  haritada yeşil görünüyordu. Harita artık önce kayıttaki cihazları okuyor;
+  kayıt arızanın açıldığı andaki gerçektir ve değişmez.
+
+---
+
 ## [2.70.0] — 2026-08-11
 
 ### Eklendi
