@@ -887,7 +887,8 @@
       "branchConfirmed": "Fault confirmed on this branch",
       "branchSuspect": "Candidate — must be checked",
       "wholeLineSuspect": "↔ Entire branch is a candidate",
-      "moreBranches": "+{{count}} branch(es) did not fit the drawing"
+      "moreBranches": "+{{count}} branch(es) did not fit the drawing",
+      "zoneBetween": "↔ Candidate between {{from}} – {{to}}"
     },
     "title": "Line Faults",
     "stats": {

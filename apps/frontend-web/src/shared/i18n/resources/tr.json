@@ -884,7 +884,8 @@
       "branchConfirmed": "Arıza bu kolda doğrulandı",
       "branchSuspect": "Aday — kontrol edilmeli",
       "wholeLineSuspect": "↔ Kolun tamamı aday",
-      "moreBranches": "+{{count}} branşman kolu çizime sığmadı"
+      "moreBranches": "+{{count}} branşman kolu çizime sığmadı",
+      "zoneBetween": "↔ {{from}} – {{to}} arası aday"
     },
     "title": "Hat Arızaları",
     "stats": {

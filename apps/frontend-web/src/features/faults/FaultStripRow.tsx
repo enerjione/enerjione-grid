@@ -48,12 +48,18 @@ type Props = {
   labels: {
     zoneSpan: (span: string) => string;
     wholeLineSuspect: string;
+    /** "↔ X – Y arasi" — bolge kolun tamami DEGILSE. */
+    zoneBetween: (from: string, to: string) => string;
     range: string | null;
   };
   hover: RowHover;
   onHover: (h: RowHover) => void;
   /** Cihaz isaretine tiklaninca o cihazin sayfasini ac. */
   onOpenDevice?: (code: string) => void;
+  /** Satirin ariza bolgesi DISINDA kalsa da kirmizi cizilmesi gereken
+   *  direkler: uzerlerinden supheli bir BAG TELI cikiyor ya da giriyor
+   *  demektir, yani onlar da arama alanindadir. */
+  forcedHotSeqs?: Set<number>;
 };
 
 export function poleLabel(p: StripPole | { seq: number; name?: string | null }): string {
@@ -196,7 +202,8 @@ export function FaultStripRow({
   labels,
   hover,
   onHover,
-  onOpenDevice
+  onOpenDevice,
+  forcedHotSeqs
 }: Props) {
   const { geo, key: rowKey } = row;
   const { seqs, poles: poleList, width, wire, devices, span, xOf, pointAt } = geo;
@@ -209,6 +216,10 @@ export function FaultStripRow({
   // diyen cihazin OTESINDEKI direk kirmizi olamaz — ekip o direge bakmasin.
   const hotFrom = span ? Math.ceil(span.a) : -1;
   const hotTo = span ? Math.floor(span.b) : -1;
+  /** Direk kirmizi mi: bolgenin icinde YA DA supheli bir bag teli ona
+   *  dokunuyor (bkz. `forcedHotSeqs`). */
+  const direkHot = (idx: number, seq: number) =>
+    active && ((idx >= hotFrom && idx <= hotTo) || Boolean(forcedHotSeqs?.has(seq)));
 
   // ARIZALI FAZLAR: bilinmiyorsa (eski kayit / aday kol) uc tel de vurgulanir.
   // "Bilmiyorum"u tek bir faza indirgemek ekibi yanlis tele bakmaya gonderir.
@@ -222,6 +233,21 @@ export function FaultStripRow({
 
   const dimA = span ? pointAt(span.a).x : null;
   const dimB = span ? pointAt(span.b).x : null;
+
+  /** Bolge ucunda ne var: o noktadaki CIHAZ, yoksa DIREK. */
+  const ucAdi = (pos: number): string => {
+    const cihaz = devices.find((d) => Math.abs(d.pos - pos) < 1e-6);
+    if (cihaz) return cihaz.label;
+    const p = poleList[Math.round(pos)];
+    return p ? poleLabel(p) : "?";
+  };
+  /** Bolge KOLUN TAMAMI mi, yoksa bir parcasi mi?
+   *
+   *  Etiket "Kolun tamami aday" diye sabitti; kolun uzerindeki bir cihaz
+   *  bolgeyi daralttiginda bile ayni metin yaziyor ve cizimle CELISIYORDU:
+   *  kirmizi tel yalnizca ilk direge kadar uzanirken yazi "tamami" diyordu. */
+  const tumKol =
+    span != null && !span.byDevice && span.a <= 0 && span.b >= seqs.length - 1;
   const spanM =
     row.zoneStartM != null && row.zoneEndM != null
       ? Math.max(0, row.zoneEndM - row.zoneStartM)
@@ -345,7 +371,7 @@ export function FaultStripRow({
         <StripTower
           key={p.seq}
           x={xOf(idx)}
-          hot={active && idx >= hotFrom && idx <= hotTo}
+          hot={direkHot(idx, p.seq)}
           hotPhases={hotPhases}
           role={p.role}
           onEnter={() => onHover({ kind: "pole", rowKey, key: String(p.seq) })}
@@ -370,7 +396,7 @@ export function FaultStripRow({
 
       {/* ---- DIREK ADLARI ---- */}
       {poleList.map((p, idx) => {
-        const hot = active && idx >= hotFrom && idx <= hotTo;
+        const hot = direkHot(idx, p.seq);
         return (
           <text
             key={`l-${p.seq}`}
@@ -422,9 +448,10 @@ export function FaultStripRow({
             </text>
           ) : null}
         </g>
-      ) : suspectWholeLine && dimA != null && dimB != null ? (
-        // ADAY KOL: metre bilgisi yok — kolun tamaminin suphe altinda oldugu
-        // bastan sona kesikli bir olcu seridiyle soylenir.
+      ) : suspectWholeLine && span != null && dimA != null && dimB != null ? (
+        // ADAY KOL: metre bilgisi yok — supheli alan kesikli bir olcu
+        // seridiyle gosterilir. Metin CIZILEN alani anlatir: kolun tamami
+        // suphedeyse "tamami", bir cihaz bolgeyi daralttiysa iki ucun adi.
         <g className="fx-strip-dim" stroke={DIM_INK} fill={DIM_INK}>
           <line
             x1={dimA}
@@ -442,7 +469,9 @@ export function FaultStripRow({
             fontWeight={700}
             stroke="none"
           >
-            {labels.wholeLineSuspect}
+            {tumKol
+              ? labels.wholeLineSuspect
+              : labels.zoneBetween(ucAdi(span.a), ucAdi(span.b))}
           </text>
         </g>
       ) : labels.range ? (

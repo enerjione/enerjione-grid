@@ -316,6 +316,49 @@ export function FaultPoleStrip({
     active
   ]);
 
+  /**
+   * BAG TELININ SUPHELI YARILARI + DOKUNDUGU DIREKLER.
+   *
+   * Bir bag teli kirmizi ciziliyorsa ariza O TELIN uzerinde olabilir demektir;
+   * o telin iki ucundaki DIREKLER de arama alanina dahildir. Once yalnizca
+   * tel kirmiziya boyaniyordu: kolun ciktigi direk ile kolun ilk diregi gri
+   * kaliyor, ekip "ariza bu iki direk arasinda ama direklerin kendisi
+   * saglam" gibi bir sey okuyordu.
+   *
+   * Yarilarin kurali cihazdan gelir (bkz. bag cizimi):
+   *   * giris cihazi "gormedim" -> UST yari supheli, alt yari saglam
+   *   * "gordum"                -> ALT yari supheli, ust yari saglam
+   *   * cihaz yok               -> ikisi de supheli
+   * Kolun KENDI ariza kaydi varsa ariza kolun icinde bulunmustur; bag teli
+   * o arizanin YUKARISINDA kalir, yani supheli degildir.
+   */
+  const bagDurumu = useMemo(() => {
+    const ustHot = new Map<string, boolean>();
+    const altHot = new Map<string, boolean>();
+    /** rowKey -> o satirda KIRMIZI cizilecek ek direk sira numaralari. */
+    const zorunluHot = new Map<string, Set<number>>();
+    const ekle = (rowKey: string, seq: number | null | undefined) => {
+      if (seq == null) return;
+      const kume = zorunluHot.get(rowKey) ?? new Set<number>();
+      kume.add(seq);
+      zorunluHot.set(rowKey, kume);
+    };
+
+    for (const r of scene.rows) {
+      if (!r.link) continue;
+      const cihaz = r.linkDevice ?? null;
+      const ust = active && !r.confirmed && cihaz?.tone !== "red";
+      const alt = active && !r.confirmed && cihaz?.tone !== "green";
+      ustHot.set(r.key, ust);
+      altHot.set(r.key, alt);
+      // Ust yari supheliyse kolun CIKTIGI direk, alt yari supheliyse kolun
+      // ILK diregi arama alanindadir.
+      if (ust) ekle(r.parentKey ?? "main", r.parentSeq);
+      if (alt) ekle(r.key, r.geo.seqs[0]);
+    }
+    return { ustHot, altHot, zorunluHot };
+  }, [scene.rows, active]);
+
   /** Faz etiketleri — tellerin SOLUNDA yazar; dar bir seride sigmasi icin
    *  kisa bicim ("Sat 01"), ipucunda uzun bicim ("Satellite 01"). */
   const phaseLabels = useMemo(() => {
@@ -557,8 +600,8 @@ export function FaultPoleStrip({
             const cihaz = r.linkDevice ?? null;
             const orta = kubikNokta(p0, p1, p2, p3, 0.5);
             const renk = active ? RED : GREY;
-            const ustRenk = !active || (cihaz && cihaz.tone === "red") ? GREY : RED;
-            const altRenk = !active || (cihaz && cihaz.tone === "green") ? GREY : RED;
+            const ustRenk = bagDurumu.ustHot.get(r.key) ? RED : GREY;
+            const altRenk = bagDurumu.altHot.get(r.key) ? RED : GREY;
             const ustYol = kubikDilim(p0, p1, p2, p3, 0, cihaz ? 0.5 : 1);
             const altYol = cihaz ? kubikDilim(p0, p1, p2, p3, 0.5, 1) : null;
             return (
@@ -641,6 +684,8 @@ export function FaultPoleStrip({
               labels={{
                 zoneSpan: (s) => t("faults.poleStrip.spanLabel", { span: s }),
                 wholeLineSuspect: t("faults.poleStrip.wholeLineSuspect"),
+                zoneBetween: (from, to) =>
+                  t("faults.poleStrip.zoneBetween", { from, to }),
                 range:
                   r.geo.span && r.zoneStartM == null
                     ? t("faults.poleStrip.range", {
@@ -652,6 +697,7 @@ export function FaultPoleStrip({
               hover={hover}
               onHover={setHover}
               onOpenDevice={onOpenDevice}
+              forcedHotSeqs={bagDurumu.zorunluHot.get(r.key)}
             />
           ))}
 
