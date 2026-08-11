@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { sourceLabel as ortakKaynakEtiketi } from "../signals/signalCatalogConstants";
 import { useTranslation } from "react-i18next";
 import { LayersControl, MapContainer, Marker, Polyline, Tooltip, useMap } from "react-leaflet";
+import { nearestDeviceRedMap } from "./nearestDeviceRed";
 import { DEFAULT_MAP_LAYER, MAP_LAYERS } from "../../shared/mapTiles";
 import { ResilientTileLayer } from "../../components/ResilientTileLayer";
 import L from "leaflet";
@@ -903,53 +904,21 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
       }
     }
 
-    // 4) ON HESAPLAMA: Her node icin "subtreeHasRed" — node'un altindaki
-    //    (besleme yonunde) subtree'de en az bir RED cihaz var mi?
+    // 4) "Akim bu dala mi gitti?" — EN YAKIN cihaza gore.
     //
-    // Bu bilgi sayesinde branşman noktalarinda akim hangi dala
-    // "ilerledi" sezgisini kullaniriz: RED iceren dal, akimin gittigi
-    // koldur. Diger dallar (sadece GREEN veya cihazsiz) ana yolun
-    // disindadir; oradaki GREEN cihazlar ariza yolunda DEGIL — yani
-    // ana hattaki RED'den o yondeki GREEN'e fault olusturulmamali.
-    const subtreeHasRed = new Map<string, boolean>();
-    {
-      // Iteratif post-order: cocuklarin sonucu hesaplanmadan ebeveyn
-      // hesaplanamaz. Stack'te (node, phase) yaklaşimi.
-      type Frame = { nodeId: string; phase: 0 | 1 };
-      const stack: Frame[] = rootNodeIds.map((id) => ({ nodeId: id, phase: 0 as 0 | 1 }));
-      while (stack.length > 0) {
-        const f = stack[stack.length - 1];
-        const node = nodes.get(f.nodeId);
-        if (!node) {
-          stack.pop();
-          continue;
-        }
-        if (f.phase === 0) {
-          f.phase = 1;
-          const outs = outEdges.get(f.nodeId) ?? [];
-          for (const eid of outs) {
-            const e = edgeById.get(eid);
-            if (!e) continue;
-            stack.push({ nodeId: e.toNodeId, phase: 0 });
-          }
-        } else {
-          stack.pop();
-          // Cocuklarin sonuclarini birlestir
-          let has = false;
-          if (node.kind === "device" && node.isRed) has = true;
-          const outs = outEdges.get(f.nodeId) ?? [];
-          for (const eid of outs) {
-            const e = edgeById.get(eid);
-            if (!e) continue;
-            if (subtreeHasRed.get(e.toNodeId)) {
-              has = true;
-              break;
-            }
-          }
-          subtreeHasRed.set(f.nodeId, has);
-        }
-      }
-    }
+    // Eskiden bu bir subtree taramasiydi ("altta HERHANGI BIR yerde kirmizi
+    // var mi") ve araya giren YESIL cihazi asip dibe iniyordu. Test
+    // sunucusundaki gercek topolojide bu, direk #7'nin iki kolunu da
+    // "yan dal" ilan edip ariza boyamasindan tamamen disarida birakti:
+    // cok asagida, BR-4'te bir kirmizi vardi — ama arada onu yalanlayan
+    // yesil bir cihaz (cihaz 4) duruyordu. Gerekce ve testler
+    // `nearestDeviceRed.ts` icinde.
+    const subtreeHasRed = nearestDeviceRedMap({
+      nodes,
+      outEdges,
+      edgeTarget: (eid) => edgeById.get(eid)?.toNodeId,
+      rootNodeIds
+    });
 
     // 5) BESLEME YONUNDE DFS — RED -> GREEN gecisini yakala
     //

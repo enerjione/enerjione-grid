@@ -35,6 +35,10 @@ import "./faultMapView.test";
 // gorunmeli. Bagli gorunmeyen bir kola kimse cihaz yerlestirmez.
 import "./branchConnectors.test";
 
+// Dallanma noktasinda "akim bu dala mi gitti?" karari. Yanlis karar, kolu
+// yanlislikla temiz sayip oradaki arizayi EKRANDAN GIZLIYORDU.
+import "./nearestDeviceRed.test";
+
 // Aday hat kesimleri: ariza bolgesindeki bransman kollari cizime girsin.
 // Gezilmesi gereken bir kolun ekrandan dusmesi sessiz ve agir bir hatadir.
 import "./faultBranchRows.test";
