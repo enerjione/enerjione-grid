@@ -2699,6 +2699,13 @@ export function App() {
           setDashboardLineId(lineId);
           handleChangePage("home");
         }}
+        poles={gridSnapshot?.poles ?? []}
+        onSelectPole={(pole) => {
+          // Direk secimi hattina odaklanir: ana sayfaya donup o hatti
+          // filtreler — direk zaten haritada, detayi icin uzerine tiklanir.
+          setDashboardLineId(pole.line_id);
+          handleChangePage("home");
+        }}
       />
       <TabBar
         tabs={tabsApi.tabs}

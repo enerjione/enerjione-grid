@@ -1,16 +1,29 @@
 /**
- * HeaderSearch — global cihaz + bolge aramasi (header ortasi).
+ * HeaderSearch — global cihaz + direk + hat + bolge aramasi (header ortasi).
  *
- * Kullanici cihaz adi/kodu ya da bolge adi yazar; acilir panelde iki grup
- * (Cihazlar / Bolgeler) gosterilir. Cihaz secilince detay sekmesi acilir,
- * bolge secilince ana sayfaya gecip o bolge filtrelenir (caller karar verir).
+ * Kullanici cihaz adi/kodu, direk adi/sira no, hat ya da bolge adi yazar;
+ * acilir panelde gruplar halinde gosterilir. Cihaz secilince detay sekmesi
+ * acilir; direk/hat/bolge secilince ana sayfaya gecip filtrelenir (caller
+ * karar verir).
  * Klavye: cmd/ctrl+K odaklar, ArrowUp/Down gezinir, Enter secer, Esc kapatir.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, Router, MapPin, GitBranch } from "lucide-react";
+import { Search, Router, MapPin, GitBranch, Zap } from "lucide-react";
 
-import type { CommunicationStatus, DeviceRow, Line, Region } from "../shared/types";
+import type { CommunicationStatus, DeviceRow, Line, Pole, Region } from "../shared/types";
+
+/** Kisayol etiketi PLATFORMA gore: mac'te ⌘K, diger her yerde Ctrl+K.
+ *  Sabit "⌘K" Windows kullanicisina calismayan bir tus gosteriyordu.
+ *  Bir kez hesaplanir — platform oturum icinde degismez. */
+const IS_MAC = /Mac|iPhone|iPad|iPod/i.test(
+  // `userAgentData.platform` yeni tarayicilarda var, `platform` eski ama
+  // hala en genis destekli; ikisi de yoksa UA metnine dusuyoruz.
+  (navigator as unknown as { userAgentData?: { platform?: string } }).userAgentData?.platform ||
+    navigator.platform ||
+    navigator.userAgent
+);
+const SHORTCUT_LABEL = IS_MAC ? "⌘K" : "Ctrl+K";
 
 // Cihaz id -> topoloji (bolge adi etiketi icin). App.tsx deviceTopologyInfo.
 type DeviceTopology = Map<number, { regionId: number; regionName: string; lineId: number; lineName: string }>;
@@ -19,22 +32,37 @@ type Props = {
   devices: DeviceRow[];
   regions: Region[];
   lines: Line[];
+  /** Direk aramasi icin tum direkler (gridSnapshot.poles). */
+  poles?: Pole[];
   deviceTopology: DeviceTopology;
   onOpenDevice: (deviceId: number) => void;
   onSelectRegion: (regionId: number) => void;
   onSelectLine: (lineId: number) => void;
+  /** Direk secildi — caller diregin hattina odaklanir. */
+  onSelectPole?: (pole: Pole) => void;
 };
 
 const MAX_PER_GROUP = 6;
 
 // Duz "sonuc" listesi — klavye gezinmesi tek index uzerinden yurusun diye
-// cihaz + hat + bolge tek diziye serilir (grup basliklari render'da eklenir).
+// cihaz + direk + hat + bolge tek diziye serilir (grup basliklari render'da).
 type Result =
   | { kind: "device"; id: number; name: string; code: string; region: string; comm: CommunicationStatus; alarm: boolean }
+  | { kind: "pole"; id: number; name: string; meta: string; pole: Pole }
   | { kind: "line"; id: number; name: string; code: string }
   | { kind: "region"; id: number; name: string };
 
-export function HeaderSearch({ devices, regions, lines, deviceTopology, onOpenDevice, onSelectRegion, onSelectLine }: Props) {
+export function HeaderSearch({
+  devices,
+  regions,
+  lines,
+  poles = [],
+  deviceTopology,
+  onOpenDevice,
+  onSelectRegion,
+  onSelectLine,
+  onSelectPole
+}: Props) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -64,9 +92,16 @@ export function HeaderSearch({ devices, regions, lines, deviceTopology, onOpenDe
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  const { deviceResults, lineResults, regionResults, flat } = useMemo(() => {
+  const { deviceResults, poleResults, lineResults, regionResults, flat } = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return { deviceResults: [] as Result[], lineResults: [] as Result[], regionResults: [] as Result[], flat: [] as Result[] };
+    const bos = {
+      deviceResults: [] as Result[],
+      poleResults: [] as Result[],
+      lineResults: [] as Result[],
+      regionResults: [] as Result[],
+      flat: [] as Result[]
+    };
+    if (!q) return bos;
     const dev: Result[] = devices
       .filter((d) => d.name.toLowerCase().includes(q) || d.code.toLowerCase().includes(q))
       .slice(0, MAX_PER_GROUP)
@@ -87,8 +122,29 @@ export function HeaderSearch({ devices, regions, lines, deviceTopology, onOpenDe
       .filter((r) => r.name.toLowerCase().includes(q))
       .slice(0, MAX_PER_GROUP)
       .map((r) => ({ kind: "region", id: r.id, name: r.name }));
-    return { deviceResults: dev, lineResults: ln, regionResults: reg, flat: [...dev, ...ln, ...reg] };
-  }, [query, devices, lines, regions, deviceTopology]);
+    // DIREK: yalnizca ADA gore eslenir. Sira numarasi ARAMA ANAHTARI DEGIL —
+    // numara hatta ozeldir ve her hatta tekrar eder, "12" aramasi ayirt
+    // edilemez bir yigin satir uretirdi. Satirda yine de hat adi gosterilir
+    // ki ayni ada sahip direkler birbirinden ayrilabilsin.
+    const lineNameById = new Map(lines.map((l) => [l.id, l.name]));
+    const pol: Result[] = poles
+      .filter((p) => (p.name ?? "").toLowerCase().includes(q))
+      .slice(0, MAX_PER_GROUP)
+      .map((p) => ({
+        kind: "pole",
+        id: p.id,
+        name: (p.name ?? "").trim(),
+        meta: lineNameById.get(p.line_id) ?? "",
+        pole: p
+      }));
+    return {
+      deviceResults: dev,
+      poleResults: pol,
+      lineResults: ln,
+      regionResults: reg,
+      flat: [...dev, ...pol, ...ln, ...reg]
+    };
+  }, [query, devices, poles, lines, regions, deviceTopology]);
 
   // Sorgu degisince ilk sonuca sar + aktif index sifirla.
   useEffect(() => {
@@ -98,6 +154,7 @@ export function HeaderSearch({ devices, regions, lines, deviceTopology, onOpenDe
 
   const choose = (r: Result) => {
     if (r.kind === "device") onOpenDevice(r.id);
+    else if (r.kind === "pole") onSelectPole?.(r.pole);
     else if (r.kind === "line") onSelectLine(r.id);
     else onSelectRegion(r.id);
     setQuery("");
@@ -141,6 +198,8 @@ export function HeaderSearch({ devices, regions, lines, deviceTopology, onOpenDe
             className={`header-search-status status-${r.comm}${r.alarm ? " has-alarm" : ""}`}
             title={r.alarm ? t("header.searchAlarmTag") : t(`common.${r.comm}`)}
           />
+        ) : r.kind === "pole" ? (
+          <Zap size={16} />
         ) : r.kind === "line" ? (
           <GitBranch size={16} />
         ) : (
@@ -152,6 +211,11 @@ export function HeaderSearch({ devices, regions, lines, deviceTopology, onOpenDe
           <span className="header-search-item-meta">
             {r.code}
             {r.region ? ` · ${r.region}` : ""}
+          </span>
+        ) : r.kind === "pole" ? (
+          <span className="header-search-item-meta">
+            {r.meta ? `${r.meta} · ` : ""}
+            {t("header.searchPoleTag")}
           </span>
         ) : r.kind === "line" ? (
           <span className="header-search-item-meta">{r.code} · {t("header.searchLineTag")}</span>
@@ -176,7 +240,7 @@ export function HeaderSearch({ devices, regions, lines, deviceTopology, onOpenDe
         onFocus={() => query.trim() && setOpen(true)}
         onKeyDown={onKeyDown}
       />
-      <span className="header-search-kbd" aria-hidden="true">⌘K</span>
+      <span className="header-search-kbd" aria-hidden="true">{SHORTCUT_LABEL}</span>
 
       {open ? (
         <div className="header-search-panel">
@@ -190,16 +254,24 @@ export function HeaderSearch({ devices, regions, lines, deviceTopology, onOpenDe
                   {deviceResults.map((r, i) => renderRow(r, i))}
                 </div>
               ) : null}
+              {poleResults.length > 0 ? (
+                <div className="header-search-group">
+                  <div className="header-search-group-title">{t("header.searchPoles")}</div>
+                  {poleResults.map((r, i) => renderRow(r, deviceResults.length + i))}
+                </div>
+              ) : null}
               {lineResults.length > 0 ? (
                 <div className="header-search-group">
                   <div className="header-search-group-title">{t("header.searchLines")}</div>
-                  {lineResults.map((r, i) => renderRow(r, deviceResults.length + i))}
+                  {lineResults.map((r, i) => renderRow(r, deviceResults.length + poleResults.length + i))}
                 </div>
               ) : null}
               {regionResults.length > 0 ? (
                 <div className="header-search-group">
                   <div className="header-search-group-title">{t("header.searchRegions")}</div>
-                  {regionResults.map((r, i) => renderRow(r, deviceResults.length + lineResults.length + i))}
+                  {regionResults.map((r, i) =>
+                    renderRow(r, deviceResults.length + poleResults.length + lineResults.length + i)
+                  )}
                 </div>
               ) : null}
             </>

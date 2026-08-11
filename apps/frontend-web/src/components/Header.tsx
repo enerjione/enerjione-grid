@@ -14,7 +14,7 @@ import {
 import { NotificationBell } from "./NotificationBell";
 import { HeaderSearch } from "./HeaderSearch";
 import { useProjectSettings } from "./ProjectSettingsProvider";
-import type { DeviceRow, Line, Region, UserRole } from "../shared/types";
+import type { DeviceRow, Line, Pole, Region, UserRole } from "../shared/types";
 
 type NavPage = "home" | "alarms" | "faults" | "events" | "engineering";
 type DeviceTopology = Map<number, { regionId: number; regionName: string; lineId: number; lineName: string }>;
@@ -44,14 +44,16 @@ type Props = {
   onOpenFaultAnalytics?: () => void;
   /** Analiz sekmesi su an acik mi (ust menude vurgulanir). */
   faultAnalyticsActive?: boolean;
-  // Global arama (cihaz + hat + bolge).
+  // Global arama (cihaz + direk + hat + bolge).
   devices: DeviceRow[];
   regions: Region[];
   lines: Line[];
+  poles?: Pole[];
   deviceTopology: DeviceTopology;
   onOpenDevice: (deviceId: number) => void;
   onSelectRegion: (regionId: number) => void;
   onSelectLine: (lineId: number) => void;
+  onSelectPole?: (pole: Pole) => void;
 };
 
 // Nav sekmeleri: sayfa + i18n anahtar + lucide ikon.
@@ -82,10 +84,12 @@ export function Header({
   devices,
   regions,
   lines,
+  poles,
   deviceTopology,
   onOpenDevice,
   onSelectRegion,
-  onSelectLine
+  onSelectLine,
+  onSelectPole
 }: Props) {
   const { settings } = useProjectSettings();
   const { t } = useTranslation();
@@ -218,10 +222,12 @@ export function Header({
           devices={devices}
           regions={regions}
           lines={lines}
+          poles={poles}
           deviceTopology={deviceTopology}
           onOpenDevice={onOpenDevice}
           onSelectRegion={onSelectRegion}
           onSelectLine={onSelectLine}
+          onSelectPole={onSelectPole}
         />
         {/* Muhendislik/ayarlar: tum yetkili rollerde artik sadece cark ikonu. */}
         {role === "engineer" || role === "installer" || role === "ops_manager" ? (
