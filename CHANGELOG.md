@@ -14,6 +14,24 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.67.4] — 2026-08-11
+
+### Düzeltildi
+
+- **Şüpheli bağ telinin dokunduğu direkler gri kalıyordu.** Bir bağ teli
+  kırmızıysa arıza o telin üzerinde olabilir demektir; telin iki ucundaki
+  direkler de arama alanına dahildir. Çizim "arıza bu iki direk arasında ama
+  direklerin kendisi sağlam" gibi tutarsız bir şey söylüyordu. Boyama artık
+  bağın yarılarına bağlı: giriş cihazı görmediyse kolun çıktığı direk,
+  gördüyse kolun ilk direği, cihaz yoksa ikisi birden kırmızı.
+- **"Kolun tamamı aday" metni çizimle çelişiyordu.** Kolun üzerindeki bir
+  cihaz bölgeyi daralttığında kırmızı tel yalnızca ilk direğe kadar
+  uzanıyor ama yazı hâlâ "tamamı" diyordu. Etiket artık çizilen alanı
+  anlatıyor: gerçekten tamamıysa "Kolun tamamı aday", değilse iki ucun adıyla
+  "↔ Ckl1 – DEMO-3 arası aday".
+
+---
+
 ## [2.67.3] — 2026-08-11
 
 ### Düzeltildi
