@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 
 import { fetchFaultCauses, type GridSnapshot } from "../../shared/api";
-import { buildLineDistanceIndex } from "../../shared/lineDistance";
+import { haversineM } from "../../shared/lineDistance";
 import type {
   FaultCauseCatalog,
   AlarmEvent,
@@ -270,14 +270,6 @@ export function FaultListPage({
     return kume;
   }, [alarms, devices]);
 
-  /** Tel mesafesi indeksi — dallanma diregi ile giris cihazi arasindaki
-   *  gercek mesafeyi yazabilmek icin. Snapshot degismedikce yeniden
-   *  hesaplanmaz (indeks tum hatlari dolasiyor). */
-  const mesafeIndeksi = useMemo(
-    () => (gridSnapshot ? buildLineDistanceIndex(gridSnapshot) : null),
-    [gridSnapshot]
-  );
-
   /** ADAY HAT KESIMLERI — ariza bolgesindeki dallanma direklerinden cikan
    *  kollar. Cizimde her biri AYRI SATIR olarak tam hat halinde gosterilir;
    *  ekip kac yeri gezecegini cizimden okur (bkz. branchRows.ts). */
@@ -300,19 +292,54 @@ export function FaultListPage({
     });
   }, [shownFault, gridSnapshot, openFaultByLine, alarmliCihazKodlari]);
 
-  /** Kol satirlarina bag telinin GERCEK uzunlugunu ekle. */
+  /** Kol satirlarina BAG TELININ gercek uzunlugunu ekle.
+   *
+   *  NEDEN INDEKSTEN DEGIL: `buildLineDistanceIndex` kolu, asili oldugu
+   *  direkten BASLATIR — kolun ilk direginin "hat basindan mesafesi" ile
+   *  dallanma direginin mesafesi AYNIDIR. Bag telinin kendi uzunlugu o
+   *  modelde hic yoktur, dolayisiyla fark her zaman 0 cikiyordu ("0 m").
+   *  Gercek uzunluk iki direk arasindaki cografi mesafedir; cihaz da o telin
+   *  uzerinde `t` oraninda oturur. */
   const branchRowsWithDistance = useMemo(() => {
-    if (!mesafeIndeksi || branchScene.rows.length === 0) return branchScene.rows;
-    const idByCode = new Map((devices ?? []).map((d) => [d.code, d.id]));
+    if (!gridSnapshot || branchScene.rows.length === 0) return branchScene.rows;
+    const poleById = new Map(gridSnapshot.poles.map((p) => [p.id, p]));
     return branchScene.rows.map((r) => {
       const kod = r.linkDevice?.code;
-      const cihazId = kod ? idByCode.get(kod) : undefined;
-      const direkM = r.atPoleId != null ? mesafeIndeksi.poleDistM.get(r.atPoleId) : undefined;
-      const cihazM = cihazId != null ? mesafeIndeksi.deviceDistM.get(cihazId) : undefined;
-      if (direkM == null || cihazM == null) return r;
-      return { ...r, linkDistanceM: Math.abs(cihazM - direkM) };
+      if (!kod || r.atPoleId == null) return r;
+      const direk = poleById.get(r.atPoleId);
+      if (!direk) return r;
+      // Bag segmenti: kolun, bir ucu ana hatta olan girisi.
+      const kolDirekIdleri = new Set(
+        gridSnapshot.poles.filter((p) => p.line_id === r.lineId).map((p) => p.id)
+      );
+      const giris = gridSnapshot.segments.find(
+        (sg) =>
+          sg.line_id === r.lineId &&
+          sg.device_code === kod &&
+          kolDirekIdleri.has(sg.from_pole_id) !== kolDirekIdleri.has(sg.to_pole_id)
+      );
+      if (!giris) return r;
+      const otekiId = giris.from_pole_id === direk.id ? giris.to_pole_id : giris.from_pole_id;
+      const oteki = poleById.get(otekiId);
+      if (!oteki) return r;
+      const telBoyu = haversineM(
+        direk.latitude,
+        direk.longitude,
+        oteki.latitude,
+        oteki.longitude
+      );
+      const t =
+        giris.device_position_t != null &&
+        giris.device_position_t >= 0 &&
+        giris.device_position_t <= 1
+          ? giris.device_position_t
+          : 0.5;
+      // Kolun ilk diregi dallanma diregiyle AYNI koordinattaysa (veri girisi)
+      // mesafe anlamsizdir; "0 m" yazmak yerine hic yazma.
+      const m = telBoyu * t;
+      return m >= 1 ? { ...r, linkDistanceM: m } : r;
     });
-  }, [branchScene.rows, mesafeIndeksi, devices]);
+  }, [branchScene.rows, gridSnapshot]);
 
   /** SEBEP ETIKETI — insanin girdigi kod yoksa cihazin onerisi.
    *  Kod ("tree_contact") operatore hicbir sey soylemez; katalogdan
@@ -536,6 +563,7 @@ export function FaultListPage({
           onLoadComments={onLoadComments}
           onAddComment={onAddComment}
           onUpdateNote={onUpdateNote}
+          onOpenFault={onOpenFault}
         />
       )}
 

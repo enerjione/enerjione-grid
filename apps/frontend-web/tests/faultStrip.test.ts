@@ -813,3 +813,52 @@ test("hic direk yoksa yer tutucu URETILIR (snapshot eksik)", () => {
   const geo = buildStripGeometry({ poleSeqs: [], fromSeq: 3, toSeq: 4 });
   assert.deepEqual(geo.seqs, [3, 4]);
 });
+
+/* ---------------------------------------------------------------------------
+ * ARIZAYI GOREN CIHAZ BRANSMAN GIRISINDE
+ *
+ * Boyle bir cihaz ana hattin uzerinde degil, dallanma diregi ile kolun ilk
+ * diregi ARASINDAKI telin uzerindedir. "Gordum" demesi arizanin O KOLDA
+ * oldugu anlamina gelir. Kod cihazi bolge hesabindan disliyor ama hemen
+ * ardindan kaba direk araligina dusup ANA HATTI bastan sona kirmiziya
+ * boyuyordu: harita kolun uzerinde tek bir kirmizi kesik gosterirken sema
+ * koca bir ana hat parcasini isaretliyor, ekip yanlis yere gidiyordu.
+ * ------------------------------------------------------------------------- */
+
+test("giris cihazi gorduyse ANA HAT boyanmaz", () => {
+  const geo = buildStripGeometry({
+    poleSeqs: POLES,
+    // 3 nolu direkten cikan kolun girisindeki cihaz.
+    segments: [{ from_pole_seq: 3, to_pole_seq: 41, device_code: "SN2-KOL" }],
+    fromSeq: 3,
+    toSeq: 5,
+    lastRedDeviceCode: "SN2-KOL"
+  });
+  assert.equal(geo.span, null, "ana hatta kirmizi parca cizilmis");
+  assert.equal(hotPathOf(geo), "", "ana hat teli kirmizi");
+});
+
+test("ariza kolun hangi DIREKTEN asagida oldugu bildirilir", () => {
+  const geo = buildStripGeometry({
+    poleSeqs: POLES,
+    segments: [{ from_pole_seq: 3, to_pole_seq: 41, device_code: "SN2-KOL" }],
+    fromSeq: 3,
+    toSeq: 5,
+    lastRedDeviceCode: "SN2-KOL"
+  });
+  assert.equal(geo.branchTapSeq, 3, "aday kol bulunamaz — ariza kaybolurdu");
+});
+
+test("giris cihazi GORMEDIYSE ana hat eskisi gibi boyanir", () => {
+  // Geriye uyum: kol girisindeki cihaz bu arizayi gormediyse ana hattaki
+  // kaba aralik yine gecerlidir.
+  const geo = buildStripGeometry({
+    poleSeqs: POLES,
+    segments: [{ from_pole_seq: 3, to_pole_seq: 41, device_code: "SN2-KOL" }],
+    fromSeq: 3,
+    toSeq: 5,
+    lastRedDeviceCode: "SN2-BASKA"
+  });
+  assert.ok(geo.span, "ana hat bolgesi kaybolmus");
+  assert.equal(geo.branchTapSeq, null);
+});

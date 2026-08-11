@@ -33,6 +33,10 @@ type Props = {
   onLoadComments: (faultId: number) => Promise<FaultComment[]>;
   onAddComment: (faultId: number, body: string) => Promise<void>;
   onUpdateNote: (faultId: number, note: string | null) => Promise<void>;
+  /** Kayit numarasindan detay sekmesini acar — oradan islem yapilir ve
+   *  PDF rapor indirilir. Gecmiste bunun yolu YOKTU: satir yalnizca
+   *  yorumlari aciyordu, kaydin kendisine gitmek mumkun degildi. */
+  onOpenFault?: (faultId: number) => void;
 };
 
 /** Tarih araligi on ayarlari — tam takvim secici yerine sade preset. */
@@ -78,7 +82,8 @@ export function FaultHistoryTable({
   localeTag,
   onLoadComments,
   onAddComment,
-  onUpdateNote
+  onUpdateNote,
+  onOpenFault
 }: Props) {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
@@ -234,6 +239,7 @@ export function FaultHistoryTable({
             <thead>
               <tr>
                 <th className="fx-col-toggle" />
+                <th className="fx-col-no">{t("faults.history.colNo")}</th>
                 <th>{t("faults.history.colLine")}</th>
                 <th>{t("faults.card.rangeTag")}</th>
                 <th>{t("faults.history.colDate")}</th>
@@ -260,6 +266,22 @@ export function FaultHistoryTable({
                             <ChevronRight size={16} strokeWidth={2.2} />
                           )}
                         </span>
+                      </td>
+                      <td className="fx-col-no">
+                        {/* Satirin kendisi yorumlari acar; kayit no DETAYA
+                            goturur. Iki farkli is, bu yuzden tiklama
+                            yayilimi burada durduruluyor. */}
+                        <button
+                          type="button"
+                          className="fx-fault-no"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenFault?.(f.id);
+                          }}
+                          title={t("faults.history.openDetail")}
+                        >
+                          #{f.id}
+                        </button>
                       </td>
                       <td>
                         <strong className="fx-history-line">{f.line_name}</strong>
@@ -290,7 +312,7 @@ export function FaultHistoryTable({
 
                     {isOpen ? (
                       <tr className="fx-history-detail-row">
-                        <td colSpan={7}>
+                        <td colSpan={8}>
                           <div className="fx-history-detail">
                             {/* --- Kullanici yorumlari --- */}
                             <div className="fx-panel">

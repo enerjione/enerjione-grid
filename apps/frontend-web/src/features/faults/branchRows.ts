@@ -172,6 +172,12 @@ export function buildBranchRows({
       firstGreenDeviceCode: f.first_green_device_code
     });
     const kume = new Set<number>();
+    // Arizayi goren cihaz bir bransman girisindeyse ana hatta kirmizi bir
+    // parca YOKTUR ama o kol kesinlikle adaydir — hatta tek adaydir.
+    if (geo.branchTapSeq != null) {
+      kume.add(geo.branchTapSeq);
+      return kume;
+    }
     if (!geo.span) return kume;
     // Cizimdeki "sicak direk" araligiyla BIREBIR ayni (bkz. FaultStripRow).
     const lo = Math.ceil(geo.span.a);
@@ -291,6 +297,11 @@ export function buildBranchRows({
     const kolSiniri = kendiKaydi
       ? { red: null, green: null, girisTemiz: false }
       : kolSinirlari(gorev.line.id, girisKodu);
+    // Ariza kaydi "bu giris cihazi gordu" diyorsa kol KESINLIKLE supheli:
+    // canli alarm listesi gecikmis olsa bile kayit baglayicidir.
+    if (girisKodu && fault.last_red_device_code === girisKodu) {
+      kolSiniri.girisTemiz = false;
+    }
     const ozet = kendiKaydi
       ? alarmOzeti(kendiKaydi)
       : { alarmsByDevice: undefined, faultPhases: [] };
@@ -315,11 +326,19 @@ export function buildBranchRows({
         ? {
             code: girisKodu,
             label: (giris?.device_name ?? "").trim() || girisKodu,
-            tone: !alarmedDeviceCodes
-              ? "idle"
-              : alarmedDeviceCodes.has(girisKodu)
+            // Once ARIZA KAYDI: bu ariza icin "gordum/gormedim" diyen
+            // cihazlar orada yaziyor ve baglayici olan o. Kayitta gecmiyorsa
+            // canli alarm durumuna bakilir.
+            tone:
+              fault.last_red_device_code === girisKodu
                 ? "red"
-                : "green"
+                : fault.first_green_device_code === girisKodu
+                  ? "green"
+                  : !alarmedDeviceCodes
+                    ? "idle"
+                    : alarmedDeviceCodes.has(girisKodu)
+                      ? "red"
+                      : "green"
           }
         : null,
       fromSeq: kendiKaydi?.from_pole_seq ?? null,

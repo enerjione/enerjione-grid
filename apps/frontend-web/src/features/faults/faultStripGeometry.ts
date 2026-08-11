@@ -88,6 +88,9 @@ export type StripGeometry = {
   wire: { pos: number; x: number; y: number }[];
   devices: StripDevice[];
   span: StripSpan | null;
+  /** Arizayi goren cihaz bir BRANSMAN GIRISINDEYSE o kolun asili oldugu
+   *  direk. Ariza bu hatta degil, o kolun asagisindadir. */
+  branchTapSeq: number | null;
   xOf: (idx: number) => number;
   pointAt: (pos: number) => { x: number; y: number };
 };
@@ -436,7 +439,21 @@ export function buildStripGeometry({
   if (span === null && green && (fromSeq == null || toSeq == null) && green.pos > 0) {
     span = { a: 0, b: green.pos, byDevice: true };
   }
-  if (span === null && fromSeq != null && toSeq != null) {
+  // ARIZAYI GOREN CIHAZ BRANSMAN GIRISINDEYSE ANA HAT BOYANMAZ.
+  //
+  // Boyle bir cihaz ana hattin uzerinde degil, dallanma diregi ile kolun ilk
+  // diregi ARASINDAKI telin uzerindedir. "Gordum" demesi arizanin O KOLDA
+  // (kendisinden asagida) oldugu anlamina gelir — ana hatta degil.
+  //
+  // Kod bu cihazi bolge hesabindan disliyordu ama hemen ardindan kaba direk
+  // araligina (`from_pole_seq`..`to_pole_seq`) dusup ANA HATTI bastan sona
+  // kirmiziya boyuyordu. Harita ayni arizayi kolun uzerinde tek bir kirmizi
+  // kesik olarak gosterirken sema koca bir ana hat parcasini isaretliyordu;
+  // ekip yanlis yere gidiyordu.
+  const redOnBranch = lastRedDeviceCode
+    ? devices.find((d) => d.code === lastRedDeviceCode && d.onBranch) ?? null
+    : null;
+  if (span === null && !redOnBranch && fromSeq != null && toSeq != null) {
     // Cihaz bilgisi yok — kaba direk araligina duseriz (eski davranis).
     const iA = idxOf(Math.min(fromSeq, toSeq));
     const iB = idxOf(Math.max(fromSeq, toSeq));
@@ -452,7 +469,17 @@ export function buildStripGeometry({
   const bySeq = new Map((poles ?? []).map((p) => [p.seq, p]));
   const poleList: StripPole[] = seqs.map((s) => bySeq.get(s) ?? { seq: s });
 
-  return { seqs, poles: poleList, width, wire, devices, span, xOf, pointAt };
+  return {
+    seqs,
+    poles: poleList,
+    width,
+    wire,
+    devices,
+    span,
+    branchTapSeq: redOnBranch ? redOnBranch.fromSeq : null,
+    xOf,
+    pointAt
+  };
 }
 
 /** Ornek noktalari SVG path'ine cevirir. */
