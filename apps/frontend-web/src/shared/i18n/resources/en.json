@@ -1136,7 +1136,9 @@
       "resolutionNotePlaceholder": "What was done? (e.g. insulator replaced)",
       "resolutionNoteHint": "Required to close. It is never deleted; it is the fault's permanent answer.",
       "closeFault": "Close fault",
-      "estimatedDistance": "Estimated distance"
+      "estimatedDistance": "Estimated distance",
+      "exportPdf": "PDF report",
+      "reportTitle": "Fault Report"
     },
     "phase": {
       "master": "Master",

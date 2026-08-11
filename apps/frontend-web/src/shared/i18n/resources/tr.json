@@ -1133,7 +1133,9 @@
       "resolutionNotePlaceholder": "Ne yapıldı? (ör. izolatör değiştirildi)",
       "resolutionNoteHint": "Kapatmak için zorunlu. Sonradan silinmez; arızanın kalıcı cevabıdır.",
       "closeFault": "Arızayı kapat",
-      "estimatedDistance": "Tahmini mesafe"
+      "estimatedDistance": "Tahmini mesafe",
+      "exportPdf": "PDF rapor",
+      "reportTitle": "Arıza Raporu"
     },
     "phase": {
       "master": "Master",

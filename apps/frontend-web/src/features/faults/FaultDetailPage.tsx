@@ -50,12 +50,15 @@
  */
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
+
+import { useProjectSettings } from "../../components/ProjectSettingsProvider";
 import {
   Activity,
   ArrowRight,
   CalendarClock,
   Check,
   CircleDot,
+  FileDown,
   GitBranch,
   History,
   Lightbulb,
@@ -261,6 +264,8 @@ export function FaultDetailPage({
   // Sebep girisi ve yorumlar POPUP'ta: sayfanin en altinda dururken
   // kullanici her islem icin oraya kaydiriyordu.
   const [islemModal, setIslemModal] = useState<null | "close" | "comments">(null);
+  // Rapor basligi icin musteri logosu; EnerjiOne logosu sabit varliktan.
+  const { settings: projeAyarlari } = useProjectSettings();
   const [causeDraft, setCauseDraft] = useState("");
   const [causeDetailDraft, setCauseDetailDraft] = useState("");
   const [saving, setSaving] = useState(false);
@@ -557,6 +562,21 @@ export function FaultDetailPage({
 
   return (
     <div className="fd-page">
+      {/* YALNIZCA YAZDIRMADA: rapor basligi. Ekranda gorunmez. */}
+      <div className="fd-print-head" aria-hidden="true">
+        <img className="fd-print-logo" src="/logo.png" alt="" />
+        <div className="fd-print-title">
+          <strong>{t("faults.detail.reportTitle")}</strong>
+          <span>
+            {fault.region_name} / {fault.line_name} · #{fault.id}
+          </span>
+          <small>{fmtDate(fault.opened_at, localeTag)}</small>
+        </div>
+        {projeAyarlari.customer_logo ? (
+          <img className="fd-print-logo" src={projeAyarlari.customer_logo} alt="" />
+        ) : null}
+      </div>
+
       {/* ---- Ust serit: kunye + olculer ---- */}
       <header className="fd-head">
         <div className="fd-head-top">
@@ -612,6 +632,18 @@ export function FaultDetailPage({
           {/* Eylemler seride BITISIK: sebep girisi ve yorum sayfanin en
               altindaydi, kullanici her defasinda oraya kaydiriyordu. */}
           <div className="fd-metric-actions">
+            {/* PDF: ayri bir cizim katmani YOK — sayfanin kendisi
+                yazdirilir. Harita zaten DOM'da; ayri bir raster uretmek
+                ikinci bir dogruluk kaynagi yaratirdi (ekranda gorulen ile
+                raporda cikan ayrisabilirdi). */}
+            <button
+              type="button"
+              className="fd-ghost-btn"
+              onClick={() => window.print()}
+            >
+              <FileDown size={14} />
+              {t("faults.detail.exportPdf")}
+            </button>
             <button
               type="button"
               className="fd-ghost-btn"

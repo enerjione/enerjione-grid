@@ -664,7 +664,10 @@ body {
 .header-search-input {
   width: 100%;
   height: 38px;
-  padding: 0 44px 0 38px;
+  /* Sag bosluk kisayol rozetini KARSILAMALI: rozet mac'te "⌘K" (dar) ama
+     diger platformlarda "Ctrl+K" (belirgin genis). 44px yalnizca mac
+     etiketine yetiyordu; yazilan metin rozetin altina giriyordu. */
+  padding: 0 78px 0 38px;
   border-radius: 10px;
   border: 1px solid rgba(148, 163, 184, 0.3);
   background: rgba(15, 23, 42, 0.4);
@@ -769,6 +772,9 @@ body {
 @media (max-width: 1280px) {
   .header-search { width: 240px; }
   .header-search-kbd { display: none; }
+  /* Rozet gizlendi — sag bosluk da geri alinir, yoksa dar kutuda metin
+     bosuna sikisirdi. */
+  .header-search-input { padding-right: 12px; }
 }
 @media (max-width: 760px) {
   .header-search { display: none; }
@@ -41432,4 +41438,41 @@ th.event-col-category {
 
 @media (min-width: 900px) {
   .fd-modal .fd-row--solve { grid-template-columns: 1fr 1fr; }
+}
+
+/* ---- ARIZA RAPORU (PDF) ----
+   Ayri bir cizim katmani YOK: sayfanin kendisi yazdirilir. Harita zaten
+   DOM'da; ikinci bir raster uretmek ekranda gorulen ile raporda cikanin
+   ayrisabilecegi ikinci bir dogruluk kaynagi yaratirdi. */
+.fd-print-head { display: none; }
+
+@media print {
+  /* Uygulama cercevesi (sekmeler, kenar cubugu, ust bar) rapora girmez. */
+  .app-tabs, .app-sidebar, .app-header, .header, nav.tabs,
+  .fd-metric-actions, .fd-modal-backdrop, .leaflet-control-container,
+  .fd-legend { display: none !important; }
+
+  .fd-print-head {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+    border-bottom: 2px solid #0f172a;
+  }
+  .fd-print-logo { height: 34px; width: auto; object-fit: contain; }
+  .fd-print-title { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; }
+  .fd-print-title strong { font-size: 15px; }
+  .fd-print-title span { font-size: 12px; color: #334155; }
+  .fd-print-title small { font-size: 10px; color: #64748b; }
+
+  /* Uydu goruntusu ve durum renkleri BASILMALI: varsayilan olarak
+     tarayici arka planlari atar ve harita bembeyaz cikar. */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+  .fd-page { overflow: visible !important; height: auto !important; }
+  .fd-card { break-inside: avoid; page-break-inside: avoid; box-shadow: none !important; }
+  .fd-map-wrap, .fd-map { height: 300px !important; }
+
+  @page { size: A4 portrait; margin: 12mm; }
 }
