@@ -14,6 +14,27 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.67.3] — 2026-08-11
+
+### Düzeltildi
+
+- **Tek direkli branşman koluna ikinci bir direk uyduruluyordu.** Tek direk
+  "eksik veri" sayılıyor ve çizime olmayan bir "#2" direği ekleniyordu.
+  Sahada olmayan bir direk çizmek, ekibe var olmayan bir hat parçası
+  göstermek demek.
+- **Branşman girişindeki cihaz çizimde kanıt olarak yok sayılıyordu.** Ana
+  direkle kolun ilk direği arasındaki telde oturan cihaz, kolun ilk direğine
+  çiziliyor ve "arızayı görmedim" dese bile kol baştan sona kırmızı
+  kalıyordu. Artık cihaz bağ telinin üzerinde çiziliyor ve bağ onun
+  noktasında ikiye bölünüyor: cihaz görmediyse üst yarı şüpheli, alt yarı ve
+  **kolun kendisi kesinlikle sağlam**; gördüyse tersi. Cihaz yoksa bağın
+  tamamı şüpheli kalır — bilgi yoksa daraltma da olmaz.
+- **"Kolun tamamı aday" yerine gerçek mesafe.** Bağ telindeki cihazın
+  yanında adı ve dallanma direğine olan tel mesafesi yazıyor; cihaza
+  tıklayınca cihaz sayfası açılıyor.
+
+---
+
 ## [2.67.2] — 2026-08-11
 
 ### Düzeltildi
