@@ -98,7 +98,7 @@ def reset_caches() -> None:
     _last_archived.clear()
 
 
-def _load_catalog(db: Session) -> dict[str, SignalPolicy]:
+def _load_catalog(db: Session) -> dict[tuple[str, str], SignalPolicy]:
     global _catalog_cache, _catalog_cached_at
     now = time.monotonic()
     if _catalog_cache is not None and (now - _catalog_cached_at) < _CATALOG_TTL_SEC:
@@ -106,6 +106,7 @@ def _load_catalog(db: Session) -> dict[str, SignalPolicy]:
     try:
         rows = db.execute(
             select(
+                SignalCatalog.model,
                 SignalCatalog.key,
                 SignalCatalog.historize,
                 SignalCatalog.historize_deadband,
@@ -121,13 +122,21 @@ def _load_catalog(db: Session) -> dict[str, SignalPolicy]:
         _catalog_cache = {}
         _catalog_cached_at = now
         return _catalog_cache
+    # ANAHTAR (model, key) — katalog tekilligi bu ciftte.
+    #
+    # Onceden yalnizca `key` kullaniliyordu ve sozluk kurulurken ayni adli
+    # satirlar birbirini eziyordu: 821 satirdan 533 giris kaliyor, 288 satir
+    # YUTULUYORDU. Sonuc, bir modelin arsiv/olu bant ayarinin ayni ada sahip
+    # TUM modellerin sinyallerini yonetmesiydi — kurulumcu Pole Master Kit
+    # setinde bir sinyalin arsivini kapatiyor, SN2 filosunun ayni adli
+    # sinyali de susuyordu. Hicbir hata, hicbir uyari yoktu.
     _catalog_cache = {
-        str(key): SignalPolicy(
+        (str(model or ""), str(key)): SignalPolicy(
             historize=bool(historize),
             deadband=float(deadband or 0.0),
             data_type=str(data_type or ""),
         )
-        for key, historize, deadband, data_type in rows
+        for model, key, historize, deadband, data_type in rows
     }
     _catalog_cached_at = now
     return _catalog_cache
@@ -140,6 +149,7 @@ def should_archive(
     signal_key: str,
     value: float | None,
     quality: str = "good",
+    device_model: str | None = None,
 ) -> bool:
     """Bu okuma `telemetry_history`'ye yazılmalı mı?
 
@@ -150,7 +160,16 @@ def should_archive(
     bant YALNIZCA deger de kalite de ayni kaldiginda eler; kalite
     degistiyse okuma her zaman arsivlenir.
     """
-    politika = _load_catalog(db).get(signal_key)
+    katalog = _load_catalog(db)
+    if device_model:
+        politika = katalog.get((device_model, signal_key))
+    else:
+        # Model bilinmiyorsa (eski cagiran) ayni adli TEK bir satir varsa onu
+        # kullan; birden fazla model tasiyorsa karar VERILEMEZ ve bilinmeyen
+        # sinyal gibi davranilir (arsivle) — yanlis modelin ayariyla arsivi
+        # kapatmaktansa fazladan satir yazmak yeglenir.
+        adaylar = [p for (_m, k), p in katalog.items() if k == signal_key]
+        politika = adaylar[0] if len(adaylar) == 1 else None
     if politika is None:
         return True
     if not politika.historize:

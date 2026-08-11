@@ -963,6 +963,9 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
                 signal_key=reading.signal_key,
                 value=reading.value,
                 quality=_kalite,
+                # Arsiv politikasi MODELE aittir: ayni ada sahip sinyal iki
+                # modelde farkli olu banda/arsiv ayarina sahip olabilir.
+                device_model=device.model,
             ):
                 arsiv_satiri = (
                     device.id, reading.signal_key, reading.value,

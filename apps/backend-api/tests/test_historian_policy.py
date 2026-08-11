@@ -46,13 +46,21 @@ def _temiz():
     hp.reset_caches()
 
 
+#: Testlerin varsayilan modeli. Katalog artik (model, key) ile anahtarlaniyor
+#: (ayni ada sahip sinyaller farkli modellerde farkli arsiv ayari tasiyabilir),
+#: bu yuzden sahte satirlarda da bir model kolonu var.
+TEST_MODEL = "horstmann_sn_2_0"
+
+
 def _db(*satirlar):
     """Satir: (key, historize, deadband) veya (key, historize, deadband, data_type).
 
     Tip verilmezse `analog` — mevcut testlerin tamami olu bant testi ve olu
-    bant YALNIZCA analogda calisir.
+    bant YALNIZCA analogda calisir. Model kolonu burada eklenir; testler
+    modeli onemsemiyorsa `TEST_MODEL` kullanilir.
     """
-    return _SahteDB([s if len(s) == 4 else (*s, "analog") for s in satirlar])
+    tam = [s if len(s) == 4 else (*s, "analog") for s in satirlar]
+    return _SahteDB([(TEST_MODEL, *s) for s in tam])
 
 
 # ---------------------------------------------------------------------------
@@ -572,4 +580,95 @@ def test_TUM_analoglar_artik_ele_alindi():
 
     assert not ele_alinmayan, (
         f"su analog sinyaller hicbir karara baglanmadi: {sorted(ele_alinmayan)}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# MODEL AYRIMI — bir modelin arsiv ayari digerini YONETMEMELI
+# ---------------------------------------------------------------------------
+
+
+def test_ayni_adli_sinyal_MODELE_gore_ayri_politika_tasir():
+    """Katalog (model, key) ile tekil; onbellek de oyle anahtarlanmali.
+
+    YASANAN: onbellek yalnizca `key` ile kuruluyordu ve ayni adli satirlar
+    birbirini eziyordu — 821 satirdan 533 giris kaliyor, 288 satir YUTULUYORDU.
+    Sonuc, Pole Master Kit setinde bir sinyalin arsivini kapatmanin SN2
+    filosunun ayni adli sinyalini de susturmasiydi. Hicbir uyari yoktu.
+    """
+    hp.reset_caches()
+    db = _SahteDB([
+        ("horstmann_sn_2_0", "sat01.actual_current", True, 0.0, "analog"),
+        ("horstmann_pmk_set", "sat01.actual_current", False, 0.0, "analog"),
+    ])
+
+    # SN2: arsivleniyor.
+    assert hp.should_archive(
+        db, device_id=1, signal_key="sat01.actual_current", value=1.0,
+        device_model="horstmann_sn_2_0",
+    ) is True
+    # Kit seti: KAPALI — SN2'nin ayari buraya sizmamali.
+    assert hp.should_archive(
+        db, device_id=2, signal_key="sat01.actual_current", value=1.0,
+        device_model="horstmann_pmk_set",
+    ) is False
+
+
+def test_olu_bant_MODELE_gore_ayri_uygulanir():
+    hp.reset_caches()
+    db = _SahteDB([
+        ("horstmann_sn_2_0", "sat01.actual_voltage", True, 0.0, "analog"),
+        ("horstmann_pmk_set", "sat01.actual_voltage", True, 5.0, "analog"),
+    ])
+    ortak = dict(signal_key="sat01.actual_voltage")
+
+    # SN2'de olu bant 0: her okuma arsivlenir.
+    assert hp.should_archive(db, device_id=1, value=10.0, device_model="horstmann_sn_2_0", **ortak)
+    assert hp.should_archive(db, device_id=1, value=10.1, device_model="horstmann_sn_2_0", **ortak)
+
+    # Kit setinde olu bant 5: 0.1'lik degisim elenir.
+    assert hp.should_archive(db, device_id=2, value=10.0, device_model="horstmann_pmk_set", **ortak)
+    assert not hp.should_archive(db, device_id=2, value=10.1, device_model="horstmann_pmk_set", **ortak)
+
+
+def test_model_verilmezse_BELIRSIZ_anahtar_arsivlenir():
+    """Model bilinmiyorsa ve anahtar birden fazla modelde ise karar VERILEMEZ.
+
+    Yanlis modelin ayariyla arsivi kapatmaktansa fazladan satir yazmak
+    yeglenir — veri kaybi geri alinamaz, fazladan satir alinabilir.
+    """
+    hp.reset_caches()
+    db = _SahteDB([
+        ("horstmann_sn_2_0", "sat01.actual_current", False, 0.0, "analog"),
+        ("horstmann_pmk_set", "sat01.actual_current", False, 0.0, "analog"),
+    ])
+    assert hp.should_archive(db, device_id=1, signal_key="sat01.actual_current", value=1.0) is True
+
+    # Tek modelde ise eski davranis korunur.
+    hp.reset_caches()
+    tek = _SahteDB([("horstmann_sn_2_0", "master.gizli", False, 0.0, "analog")])
+    assert hp.should_archive(tek, device_id=1, signal_key="master.gizli", value=1.0) is False
+
+
+def test_gercek_katalogta_HIC_satir_yutulmuyor():
+    """821 satirin tamami onbellege girmeli (once 288'i kayboluyordu)."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    import app.models  # noqa: F401
+    from app.db.base import Base
+    from app.models.signal_catalog import SignalCatalog
+    from app.services.signal_catalog_seed import seed_default_signals
+
+    hp.reset_caches()
+    e = create_engine("sqlite://")
+    Base.metadata.create_all(e)
+    db = sessionmaker(bind=e)()
+    seed_default_signals(db, strict=True)
+    toplam = db.query(SignalCatalog).count()
+
+    katalog = hp._load_catalog(db)
+    assert len(katalog) == toplam, (
+        f"onbellek {len(katalog)} giris tutuyor ama katalogda {toplam} satir var "
+        "— ayni adli satirlar birbirini eziyor"
     )
