@@ -23,6 +23,7 @@ import { LayersControl, MapContainer, Marker, Polyline, Tooltip, useMap, useMapE
 import { MAP_LAYERS } from "../../shared/mapTiles";
 import { ResilientTileLayer } from "../../components/ResilientTileLayer";
 import L from "leaflet";
+import { branchConnectors } from "./branchConnectors";
 import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
 import { planLineFocus } from "./lineFocus";
 import {
@@ -491,6 +492,26 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
     () => devices.filter((d) => !usedDeviceIds.has(d.id)),
     [devices, usedDeviceIds]
   );
+
+  /**
+   * DIGER hatlarin bransman baglantilari.
+   *
+   * Secili hattin baglantisi asagida ayrica ciziliyor (`branchParentPos`).
+   * Digerlerininki cizilmedigi icin "Diger hatlar" acikken kollar sisteme
+   * BAGLI DEGILMIS gibi goruntuluyordu: tek direkli kol hic cizilmiyor
+   * (polyline iki nokta ister), iki direkli kol havada asili kaliyordu.
+   *
+   * Direk havuzu `gridSnapshot` — baglantinin bir ucu BASKA hattadir,
+   * yalnizca kolun kendi direkleriyle dallanma diregi bulunamaz.
+   */
+  const otherBranchLinks = useMemo(() => {
+    if (!showOtherLines || !gridSnapshot) return [];
+    return branchConnectors({
+      lines: lines.filter((l) => l.id !== selectedLineId),
+      poles: gridSnapshot.poles,
+      segments: gridSnapshot.segments
+    });
+  }, [showOtherLines, gridSnapshot, lines, selectedLineId]);
 
   // Bransman: secili hat baska bir hattin diregine bagliysa, o pole'un
   // konumu (gridSnapshot'tan). Hat haritasinda dal-baglanti cizgisi cizilir.
@@ -1009,6 +1030,11 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                           <Polyline
                             key={`other-${d.line.id}`}
                             positions={positions}
+                            // Gorup uzerine gidememek en sinir bozucu hali:
+                            // kullanici kolu haritada goruyor ama cihaz
+                            // yerlestirmek icin sol listeden aramak zorunda
+                            // kaliyordu. Tiklayinca o hatta gecilir.
+                            eventHandlers={{ click: () => setSelectedLineId(d.line.id) }}
                             pathOptions={{
                               color: otherLineColor,
                               weight: 3,
@@ -1019,7 +1045,9 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                             <Tooltip sticky>
                               <strong>{d.line.name}</strong>
                               <br />
-                              <em style={{ fontSize: 11 }}>(diğer hat — referans)</em>
+                              <em style={{ fontSize: 11 }}>
+                                {t("engineering.grid.otherLineClick")}
+                              </em>
                             </Tooltip>
                           </Polyline>
                         );
@@ -1037,11 +1065,50 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                               iconSize: [22, 22],
                               iconAnchor: [11, 11]
                             })}
+                            // TIKLANABILIR DEGIL — bilerek. Bir bransman kolu
+                            // ana hattaki direge YAKIN durur; bu isaretciyi
+                            // etkilesimli yapmak, ustune denk geldigi ana hat
+                            // diregine yapilan tiklamalari calardi. Kola
+                            // gecmek icin CIZGIYE tiklanir.
                             interactive={false}
                           />
                         ))
                       )
                     : null}
+
+                  {/* DIGER hatlarin bransman baglantilari.
+                      Bunlar cizilmedigi icin kollar haritada sisteme bagli
+                      DEGILMIS gibi goruntuluyordu: tek direkli kol yalniz bir
+                      gri nokta, iki direkli kol havada asili bir cizgi.
+                      Baglanti segmenti HENUZ KURULMAMIS olanlar daha soluk ve
+                      seyrek kesikli — "burasi bos, cihaz yerlestirilebilir". */}
+                  {otherBranchLinks.map((b) => (
+                    <Polyline
+                      key={`other-branch-${b.lineId}`}
+                      positions={[b.from, b.to]}
+                      eventHandlers={{ click: () => setSelectedLineId(b.lineId) }}
+                      pathOptions={{
+                        color: "#6366f1",
+                        weight: b.hasSegment ? 3 : 2,
+                        opacity: b.hasSegment ? 0.5 : 0.32,
+                        dashArray: b.hasSegment ? "6 4" : "2 6"
+                      }}
+                    >
+                      <Tooltip sticky>
+                        <strong>{b.lineName}</strong>
+                        <br />
+                        <em style={{ fontSize: 11 }}>{t("engineering.grid.branch")}</em>
+                        <br />
+                        <span style={{ fontSize: 11 }}>
+                          {b.hasDevice
+                            ? t("engineering.grid.branchLinkHasDevice")
+                            : b.hasSegment
+                              ? t("engineering.grid.branchLinkNoDevice")
+                              : t("engineering.grid.branchLinkNoSegment")}
+                        </span>
+                      </Tooltip>
+                    </Polyline>
+                  ))}
 
                   {/* Bransman: secili hat baska bir hattin diregine bagliysa,
                       o pole konumu ile hattin ilk diregi arasinda kesik mavi cizgi. */}

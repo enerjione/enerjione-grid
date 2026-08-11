@@ -31,6 +31,10 @@ import "./faultStrip.test";
 // cihazin arasinda olmali. Bir direk kaymasi ekibi yanlis acikliga gonderir.
 import "./faultMapView.test";
 
+// Bransman baglantilari: "Diger hatlar" acikken kollar sisteme bagli
+// gorunmeli. Bagli gorunmeyen bir kola kimse cihaz yerlestirmez.
+import "./branchConnectors.test";
+
 // Aday hat kesimleri: ariza bolgesindeki bransman kollari cizime girsin.
 // Gezilmesi gereken bir kolun ekrandan dusmesi sessiz ve agir bir hatadir.
 import "./faultBranchRows.test";

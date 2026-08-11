@@ -2997,6 +2997,10 @@
       "scadaOff": "Kapalı"
     },
     "grid": {
+      "otherLineClick": "Bu hatta geçmek için tıklayın",
+      "branchLinkHasDevice": "Bağlantıda cihaz var",
+      "branchLinkNoDevice": "Bağlantı kurulu — henüz cihaz yok",
+      "branchLinkNoSegment": "Bağlantı henüz kurulmadı — cihaz eklerseniz otomatik oluşur",
       "title": "Hat Yönetimi",
       "regions": "Bölgeler",
       "lines": "Hatlar",

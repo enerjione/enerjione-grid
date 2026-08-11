@@ -3000,6 +3000,10 @@
       "scadaOff": "Offline"
     },
     "grid": {
+      "otherLineClick": "Click to switch to this line",
+      "branchLinkHasDevice": "A device is on this link",
+      "branchLinkNoDevice": "Link exists — no device yet",
+      "branchLinkNoSegment": "Link not created yet — adding a device creates it",
       "title": "Line Management",
       "regions": "Regions",
       "lines": "Lines",
