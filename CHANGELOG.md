@@ -14,6 +14,48 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.70.0] — 2026-08-11
+
+### Eklendi
+
+- **PDF arıza raporu artık gerçek bir belge.** Önceden tarayıcının yazdırma
+  diyaloğu açılıyor ve çıkan şey bir rapor değil ekranın kâğıda dökülmüş
+  hâliydi; kartlar sayfa ortasından bölünüyor, kapatılmış arızada harita
+  boş çıkıyordu. Rapor artık sunucuda üretiliyor: uydu haritalı, logolu,
+  sayfa numaralı.
+
+### Değişti
+
+- **Arıza detayındaki butonlar yeniden düzenlendi.** Eylemler ölçüm
+  şeridinin içinde bir hücreydi ve dar ekranda alt satıra taşıyordu. Artık
+  başlık satırının sağında kendi çubuğunda; okuma/rapor eylemleri ile kayda
+  dokunan eylemler ayraçla ayrıldı.
+- **Arıza ancak normale döndükten sonra kapatılabilir.** Kural sunucuda
+  zaten vardı ama arayüz bunu söylemiyordu: buton açık arızada da aktif
+  görünüyor, basınca dip köşedeki bir uyarıya düşüyordu. Artık kilitli
+  duruyor ve nedenini yazıyor.
+- **Sebep girişi ile saha yorumları ayrıldı.** İkisi aynı açılır kutuda yan
+  yanaydı; sebep bir sınıflandırma, yorum ise serbest metinli bir akış
+  olduğu için hangisinin kalıcı kayıt olduğu belirsizdi. Sebep ve çözüm
+  numaralı iki adımlı bir ekranda, saha raporu sağdan açılan kendi
+  panelinde.
+- **Geçmiş arızalarda satır doğrudan detayı açıyor.** Açılır panel
+  kaldırıldı; aynı bilgi detay sayfasında zaten vardı ve satır içindeki
+  eksik kopya ikinci bir doğruluk kaynağı yaratıyordu.
+- **Aktif arıza seçicisinde devam eden arıza her zaman başta.** Kırmızı
+  yanıp sönüyor; normale dönüp kapatılmayı bekleyen kayıt sabit yeşil.
+  Önceden yalnızca açılış zamanına göre sıralanıyordu, bu yüzden kapanmayı
+  bekleyen eski bir kayıt yeni açılan arızanın önüne geçebiliyordu.
+
+### Güvenlik
+
+- **Kapatılmış arıza salt okunur.** Kapanmış kayda yorum eklemek ya da kısa
+  notu düzeltmek, arşivlenen kapanış raporunun sonradan sessizce değişmesi
+  demekti. Yazma artık sunucuda da reddediliyor (409); eski yorumlar
+  okunmaya ve rapor indirilmeye devam ediyor.
+
+---
+
 ## [2.69.0] — 2026-08-11
 
 ### Eklendi
