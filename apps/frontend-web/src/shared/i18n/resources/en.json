@@ -220,12 +220,15 @@
     "logout": "Log Out",
     "user": "User",
     "customerLogoAlt": "Customer Logo",
-    "searchPlaceholder": "Search device, line, region...",
+    "searchPlaceholder": "Search device, pole, line, region...",
     "searchDevices": "Devices",
+    "searchPoles": "Poles",
     "searchLines": "Lines",
     "searchRegions": "Regions",
     "searchRegionTag": "Region",
     "searchLineTag": "Line",
+    "searchPoleTag": "Pole",
+    "searchPoleFallback": "Pole {{no}}",
     "searchAlarmTag": "Active alarm",
     "searchEmpty": "No results found"
   },
@@ -1132,7 +1135,8 @@
       "resolutionNote": "Resolution note",
       "resolutionNotePlaceholder": "What was done? (e.g. insulator replaced)",
       "resolutionNoteHint": "Required to close. It is never deleted; it is the fault's permanent answer.",
-      "closeFault": "Close fault"
+      "closeFault": "Close fault",
+      "estimatedDistance": "Estimated distance"
     },
     "phase": {
       "master": "Master",

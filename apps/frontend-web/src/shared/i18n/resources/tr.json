@@ -217,12 +217,15 @@
     "logout": "Çıkış Yap",
     "user": "Kullanıcı",
     "customerLogoAlt": "Müşteri Logosu",
-    "searchPlaceholder": "Cihaz, hat, bölge ara...",
+    "searchPlaceholder": "Cihaz, direk, hat, bölge ara...",
     "searchDevices": "Cihazlar",
+    "searchPoles": "Direkler",
     "searchLines": "Hatlar",
     "searchRegions": "Bölgeler",
     "searchRegionTag": "Bölge",
     "searchLineTag": "Hat",
+    "searchPoleTag": "Direk",
+    "searchPoleFallback": "{{no}}. direk",
     "searchAlarmTag": "Aktif alarm",
     "searchEmpty": "Sonuç bulunamadı"
   },
@@ -1129,7 +1132,8 @@
       "resolutionNote": "Çözüm notu",
       "resolutionNotePlaceholder": "Ne yapıldı? (ör. izolatör değiştirildi)",
       "resolutionNoteHint": "Kapatmak için zorunlu. Sonradan silinmez; arızanın kalıcı cevabıdır.",
-      "closeFault": "Arızayı kapat"
+      "closeFault": "Arızayı kapat",
+      "estimatedDistance": "Tahmini mesafe"
     },
     "phase": {
       "master": "Master",

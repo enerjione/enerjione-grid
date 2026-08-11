@@ -41376,3 +41376,60 @@ th.event-col-category {
 /* Kunye + atama alt alta, harita ile ayni yukseklikte. */
 .fd-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .fd-col > .fd-card { margin: 0; }
+
+/* ---- KPI SERIDINDEKI EYLEMLER ----
+   Sebep girisi ve yorum eskiden sayfanin en altindaydi; kullanici her islem
+   icin oraya kaydiriyordu. Artik olculerin yaninda. */
+.fd-metric-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.fd-metrics { flex-wrap: wrap; }
+
+/* ---- ISLEM POPUP'I ---- */
+.fd-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.fd-modal {
+  position: relative;
+  width: min(1100px, 100%);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--fd-bg, #fff);
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+}
+/* Popup icinde kartlar tam genislikte; disaridaki iki sutunlu yerlesim
+   dar modal icinde sikisik duruyordu. */
+.fd-modal .fd-row--solve { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.fd-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--fd-line, #e2e8f0);
+  border-radius: 9px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+}
+.fd-modal-close:hover { background: #f1f5f9; color: #0f172a; }
+
+@media (min-width: 900px) {
+  .fd-modal .fd-row--solve { grid-template-columns: 1fr 1fr; }
+}
