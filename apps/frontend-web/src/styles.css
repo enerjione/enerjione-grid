@@ -24149,21 +24149,8 @@ th.event-col-category {
 .fx-state--resolved .fx-state-dot,
 .fx-state--closed .fx-state-dot { animation: none; }
 
-.fx-state-time {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #64748b;
-}
-.fx-state-time svg { align-self: center; color: #94a3b8; }
-.fx-state-time strong {
-  font-size: 14px;
-  font-weight: 800;
-  color: #0f172a;
-  font-variant-numeric: tabular-nums;
-}
+/* `.fx-state-time` KALDIRILDI — sure ust seritten kanit panelindeki SURE
+   kartina tasindi (bkz. `.fx-elapsed`). */
 .fx-state-tag {
   display: inline-flex;
   align-items: center;
@@ -24609,8 +24596,55 @@ th.event-col-category {
   overflow-y: auto;
   scrollbar-width: thin;
 }
-.fx-ev-block { padding: 11px 0; }
+/* Bloklar BENZER YUKSEKLIKTE dursun: alarm/sure/gecmis bloklari icerik
+   uzunluguna gore 40-110px arasinda oynuyor ve panel duzensiz bir merdivene
+   donuyordu. Ortak taban yukseklik ritmi sabitler; kunye gibi gercekten uzun
+   bir blok yine buyuyebilir (tavan degil TABAN veriyoruz). Icerik dikeyde
+   ortalanir, boylece taban yukseklikten kucuk bloklar kutunun ustune
+   yapismaz. */
+.fx-ev-block {
+  padding: 11px 0;
+  min-height: 104px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.fx-ev-block > .fx-ev-title { flex: none; }
 .fx-ev-block + .fx-ev-block { border-top: 1px solid #f1f5f9; }
+
+/* --- SURE karti --- */
+.fx-elapsed {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+}
+.fx-elapsed strong {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+.fx-elapsed span {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+.fx-elapsed-start {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 7px 0 0;
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+.fx-elapsed-start time {
+  font-weight: 700;
+  color: #475569;
+  font-variant-numeric: tabular-nums;
+}
 @media (max-width: 1180px) {
   .fx-evidence {
     border-left: 0;
@@ -40791,6 +40825,105 @@ th.event-col-category {
   }
 }
 
+/* ---- TAM YUKSEKLIK KESITI (harita) ----
+   Harita sabit 460 piksele hapsedilmisti ve altinda bos beyaz alan
+   kaliyordu: ekranin en cok bakilan karti en kucuk kart oluyordu. Zincir
+   ustten alta kesintisiz olmali — bir halkada `min-height: auto` kalirsa
+   flex cocugu icerigi kadar buyur ve `flex: 1` ise yaramaz. */
+.fa-page--fill {
+  /* Dolduran kesitte sayfa KAYMAZ; harita zaten kendi icinde kayiyor. */
+  overflow-y: hidden;
+}
+
+.fa-fill {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.fa-card--fill {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Kart govdesindeki harita sarmalayicisi ve Leaflet kabi. */
+.fa-card--fill .fa-heat {
+  flex: 1;
+  min-height: 0;
+}
+
+.fa-card--fill .fa-heat-map {
+  flex: 1;
+  height: auto;
+  /* Cok kisa ekranda harita bir seride donusmesin. */
+  min-height: 260px;
+}
+
+/* ---- Kesit anahtari (harita / takvim / cihaz x zaman) ----
+   Ucu de AYNI soruyu farkli eksenden soruyor; sekme yerine anahtar, cunku
+   kullanici aralarinda karsilastirma yaparak gidip geliyor. */
+.fa-switch {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--fa-sunken);
+  border: 1px solid var(--fa-line);
+}
+
+.fa-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--fa-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.fa-switch-btn:hover {
+  color: var(--fa-ink);
+}
+
+.fa-switch-btn.is-active {
+  background: var(--fa-surface);
+  color: var(--fa-ink);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.fa-switch-btn svg {
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.fa-switch-btn.is-active svg {
+  color: var(--fa-brand);
+  opacity: 1;
+}
+
+/* Dar ekranda anahtar basligin ALTINA duser; yan yana ikisi de kirpilirdi. */
+@media (max-width: 860px) {
+  .fa-card-head {
+    flex-wrap: wrap;
+  }
+
+  .fa-switch {
+    width: 100%;
+  }
+
+  .fa-switch-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
 /* ---- Kart basligi ----
    Ikon SOLDA kendi kutusunda, baslik ve ipucu onun sagında ALT ALTA.
    Baslik ile ipucu yan yanayken (eski `rad-card-head`, `flex` +
@@ -40865,8 +40998,14 @@ th.event-col-category {
   color: #cbd5e1;
 }
 
+/* Kart GOVDESINDE tek basina duran hali (basligin saginda degil). */
+.fa-head-stats--row {
+  padding-top: 0;
+  padding-bottom: 2px;
+}
+
 @media (max-width: 720px) {
-  .fa-head-stats {
+  .fa-card-head > .fa-head-stats {
     display: none;
   }
 }

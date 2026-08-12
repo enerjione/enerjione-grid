@@ -133,7 +133,6 @@ export function ActiveFaultCard({
 }: Props) {
   const { t } = useTranslation();
   const assignee = f.assigned_to_full_name ?? f.assigned_to_username ?? null;
-  const hasLocation = f.from_pole_seq != null && f.to_pole_seq != null;
   const alarms: FaultTriggerAlarm[] = f.trigger_alarms ?? [];
 
   // Cihaz koduna gore alarm ozeti — cizimdeki faz noktalari ve tooltip
@@ -274,68 +273,53 @@ export function ActiveFaultCard({
       {/* ---------- 1. UST SERIT: nerede, ne durumda ---------- */}
       <header className="fx-head">
         <div className="fx-head-id">
-          <div className="fx-head-region">
-            <MapPin size={13} strokeWidth={2.3} />
-            {f.region_name}
-          </div>
-          <h3 className="fx-head-line">
-            {/* Kayit bir bransman kolundaysa hangi ana hattan ciktigi
-                basliktan okunmali; yoksa "BR-4" tek basina nereye ait
-                oldugunu soylemiyor. */}
-            {f.is_branch_line && f.parent_line_name ? (
-              <span className="fx-head-parent">
-                {f.parent_line_name}
-                <ChevronRight size={13} strokeWidth={2.6} />
-              </span>
-            ) : null}
-            {f.line_name}
-            <span className="fx-head-range">
-              <ChevronRight size={16} strokeWidth={2.6} />
-              {rangeText}
-            </span>
-          </h3>
-
-          {/* DURUM SERIDI — kartin en cok bakilan satiri.
-              Onceden durum rozeti sagda, butonlarin arasinda kucuk bir
-              etiketti; "bu ariza acik mi, atandi mi, ne kadardir suruyor"
-              sorusu ekranin uc ayri yerinden toplanmak zorundaydi. Artik
-              hat adinin hemen altinda, tek bakista okunan bir serit. */}
+          {/* ONCE DURUM, SONRA YER.
+              Seride once konum yazip durumu sona birakmak, en cok sorulan
+              soruyu ("bu ariza acik mi, ne kadardir") en sona koyuyordu.
+              Simdi rozet seridin basinda; okuma soldan saga "ne durumda ->
+              nerede" diye ilerliyor. */}
           <div className="fx-head-state">
             <span className={`fx-state fx-state--${f.status}`}>
               <span className="fx-state-dot" aria-hidden="true" />
               {t(`faults.status.${f.status}`, { defaultValue: f.status })}
             </span>
-            <span className="fx-state-time">
-              <Timer size={13} strokeWidth={2.3} />
-              <strong>{fmtElapsed(f.opened_at, now)}</strong>
-              {t("faults.card.stateElapsed")}
-            </span>
-            {hasLocation ? (
-              <span className="fx-state-tag">
-                <MapPin size={11} strokeWidth={2.4} />
-                {t("faults.card.locationFound")}
-              </span>
-            ) : (
-              <span className="fx-state-tag fx-state-tag--warn">
-                {t("faults.card.locationUnknown")}
-              </span>
-            )}
-            {/* Ayni hat daha once de arizalandiysa bu bir tekrardir ve
-                mudahalenin onceligini degistirir — basligin yaninda durur. */}
-            {history && history.total > 0 ? (
-              <span className="fx-state-tag fx-state-tag--repeat">
-                <History size={11} strokeWidth={2.4} />
-                {t("faults.card.repeatTag", { count: history.total + 1 })}
-              </span>
-            ) : null}
           </div>
+
+          {/* YER = TEK BIR KIRINTI YOLU: bolge -> (ana hat) -> hat -> aralik.
+              Ucu de ayni hiyerarsinin kademeleri; ayri bicimlerde (kucuk
+              buyuk harf ustte, baslik altta) yazilinca aralarindaki
+              iliski gorunmuyordu. Kademeler ayni ayracla ilerliyor ve
+              vurgu sona, yani sahada gidilecek ARALIGA dogru artiyor.
+
+              "Konum tespit edildi" ve "N. kez" etiketleri KALDIRILDI:
+              birincisi aralik zaten yaziliyken bilgi tasimiyordu, ikincisi
+              ayni sayiyi kartin alt bolumundeki "bu hattin gecmisi"
+              blogunda tekrar ediyordu. */}
+          <nav className="fx-head-path" aria-label={t("faults.card.pathLabel")}>
+            <span className="fx-head-region">
+              <MapPin size={12} strokeWidth={2.3} />
+              {f.region_name}
+            </span>
+            <ChevronRight size={14} strokeWidth={2.6} aria-hidden="true" />
+            {/* Kayit bir bransman kolundaysa hangi ana hattan ciktigi
+                basliktan okunmali; yoksa "BR-4" tek basina nereye ait
+                oldugunu soylemiyor. */}
+            {f.is_branch_line && f.parent_line_name ? (
+              <>
+                <span className="fx-head-parent">{f.parent_line_name}</span>
+                <ChevronRight size={14} strokeWidth={2.6} aria-hidden="true" />
+              </>
+            ) : null}
+            <h3 className="fx-head-line">{f.line_name}</h3>
+            <ChevronRight size={14} strokeWidth={2.6} aria-hidden="true" />
+            <span className="fx-head-range">{rangeText}</span>
+          </nav>
         </div>
 
+        {/* BASLANGIC SAATI de kanit panelindeki SURE kartina tasindi: "ne
+            zaman basladi" ile "ne kadardir suruyor" ayni sorunun iki
+            yarisi ve ust seritte iki ayri kosede duruyorlardi. */}
         <div className="fx-head-facts">
-          <div className="fx-fact">
-            <span className="fx-fact-key">{t("faults.card.openedAt")}</span>
-            <span className="fx-fact-val">{fmtDateTime(f.opened_at, localeTag)}</span>
-          </div>
           <div className="fx-fact">
             <span className="fx-fact-key">
               <UserIcon size={12} strokeWidth={2.2} />
@@ -408,6 +392,27 @@ export function ActiveFaultCard({
         </section>
 
         <aside className="fx-evidence">
+          {/* --- 0. SURE ---
+              Ust seritte "1sa 40dk suredir acik" bir ETIKET gibi duruyordu;
+              oysa mudahale onceligini belirleyen sayi budur ve bakildiginda
+              okunacak yer kanit panelidir. Baslangic saati de yanina alindi:
+              "ne zaman basladi" ile "ne kadardir suruyor" ayni sorunun iki
+              yarisi ve serit ile panel arasinda bolunmusti. */}
+          <div className="fx-ev-block">
+            <h4 className="fx-ev-title">
+              <Timer size={13} strokeWidth={2.3} />
+              {t("faults.card.elapsedTitle")}
+            </h4>
+            <p className="fx-elapsed">
+              <strong>{fmtElapsed(f.opened_at, now)}</strong>
+              <span>{t("faults.card.stateElapsed")}</span>
+            </p>
+            <p className="fx-elapsed-start">
+              <span>{t("faults.card.openedAt")}</span>
+              <time dateTime={f.opened_at}>{fmtDateTime(f.opened_at, localeTag)}</time>
+            </p>
+          </div>
+
           {/* --- 1. ARIZA KUNYESI ---
               Panel once "alarm + kollar + sinirlar" seklinde uc ayri kutuydu
               ve arizanin KENDISI hakkinda tek bir sey yazmiyordu: turu,

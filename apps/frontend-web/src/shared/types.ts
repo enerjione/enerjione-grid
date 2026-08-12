@@ -447,6 +447,11 @@ export type FaultAnalytics = {
 /** Cihaz × zaman alarm yoğunluğu. "Kronik mi, tek günlük olay mı" sorusunu
  *  bir listenin cevaplayamadığı biçimde ayırır. */
 export type AlarmHeatmap = {
+  /** Matrisin KENDİ penceresi — sayfanın pencere seçimini izlemez, hep 30
+   *  gün. 365 günlük pencerede 25 satırlık matris sütun başına bir pikselin
+   *  altına düşerdi. Arayüz bunu yazar; kullanıcı pencereyi değiştirip
+   *  matris neden aynı kaldı diye düşünmesin. */
+  window_days: number;
   /** "day" | "hour" — pencereye göre seçilir. */
   bucket: string;
   /** Kronolojik kova etiketleri (sütunlar). */
@@ -462,8 +467,10 @@ export type AlarmHeatmap = {
   truncated: boolean;
 };
 
-/** Sistem sağlığı — `/faults/system-health`. Tek soru: saha ne zaman
- *  gürültülüydü. Kural/cihaz listeleri `DeviceHealth`e taşındı. */
+/** Alarm yoğunluğu — `/faults/system-health`. "Hat Arıza Yoğunluğu"
+ *  sekmesindeki anahtarın iki kesitini besler: takvim (NE ZAMAN) ve
+ *  cihaz × zaman matrisi (HANGİ CİHAZ, ne zaman). Kural/cihaz listeleri
+ *  `DeviceHealth`e taşındı. */
 export type SystemHealth = {
   window_days: number;
   alarm_summary: {
@@ -491,6 +498,9 @@ export type SystemHealth = {
     /** Pencere takvim tavanını (371 gün) aştıysa true. */
     truncated: boolean;
   };
+  /** Cihaz × zaman matrisi. Takvimle AYNI yanıtta: ikisi de aynı pencere ve
+   *  aynı kapsam üzerinde hesaplanıyor ve arayüzde anahtarla değişiyor. */
+  alarm_heatmap: AlarmHeatmap;
 };
 
 /** Cihaz sağlığı — `/faults/device-health`. */
@@ -531,7 +541,6 @@ export type DeviceHealth = {
     outages: number;
     last_at: string | null;
   }[];
-  alarm_heatmap: AlarmHeatmap;
   battery_drain: {
     device_id: number;
     code: string;

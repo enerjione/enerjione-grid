@@ -223,3 +223,77 @@ def test_bos_kapsam_HICBIR_sey_dondurmez(db):
     _alarm(db, d, gun_once=1)
     h = alarm_isi_haritasi(db, days=30, visible_device_ids=set())
     assert h["devices"] == [] and h["cells"] == []
+
+
+# ---- SUREKLI KIP: matris hep son 30 gun ------------------------------------
+#
+# Ekrandaki matris sayfanin pencere secimini IZLEMEZ. Sebep, kullanicinin
+# ilk ekran goruntusunde gordugu sey: sutunlar yalnizca VERI OLAN gunlerde
+# aciliyordu ve iki gunluk veri sonsuza kadar iki sutunluk bir grafik
+# uretiyordu — ekranda sahanin ritmi degil veri tabaninin sekli goruluyordu.
+
+
+def test_surekli_kip_BOS_gunlere_de_sutun_acar(db):
+    d = _cihaz(db, "A")
+    _alarm(db, d, gun_once=1)
+    _alarm(db, d, gun_once=20)
+
+    h = alarm_isi_haritasi(db, days=30, visible_device_ids=None, surekli=True)
+    assert len(h["buckets"]) == 30, "sessiz gunler atlandi — matris kisaldi"
+
+
+def test_surekli_kip_sutunlari_KESINTISIZ(db):
+    from datetime import date
+
+    d = _cihaz(db, "A")
+    _alarm(db, d, gun_once=1)
+
+    h = alarm_isi_haritasi(db, days=30, visible_device_ids=None, surekli=True)
+    gunler = [date.fromisoformat(b) for b in h["buckets"]]
+    assert gunler == sorted(gunler)
+    assert {(b - a).days for a, b in zip(gunler, gunler[1:])} == {1}
+
+
+def test_surekli_kip_VERI_YOKKEN_de_takvim_uretir(db):
+    """Hic alarm yokken bile 30 sutun donmeli; arayuz bos matris yerine
+    'bu donemde alarm yok' desenini cizebilsin."""
+    h = alarm_isi_haritasi(db, days=30, visible_device_ids=None, surekli=True)
+    assert len(h["buckets"]) == 30
+    assert h["devices"] == [] and h["cells"] == []
+
+
+def test_surekli_kip_hucre_sutunlari_DIZININ_icinde(db):
+    d = _cihaz(db, "A")
+    for g in (0, 3, 12, 29):
+        _alarm(db, d, gun_once=g)
+
+    h = alarm_isi_haritasi(db, days=30, visible_device_ids=None, surekli=True)
+    assert h["cells"], "alarm eklendi ama hucre uretilmedi"
+    for sutun, satir, adet in h["cells"]:
+        assert 0 <= sutun < len(h["buckets"]), f"sutun tasiyor: {sutun}"
+        assert 0 <= satir < len(h["devices"])
+        assert adet > 0
+
+
+def test_matris_KENDI_penceresini_bildirir(db):
+    """Sayfa 365 gun secmis olsa bile matris 30 gun gosteriyor. Bunu
+    SOYLEMEZSE kullanici pencereyi degistirip matris neden ayni kaldi diye
+    dusunur."""
+    h = alarm_isi_haritasi(db, days=30, visible_device_ids=None, surekli=True)
+    assert h["window_days"] == 30
+
+
+def test_sistem_sagligi_matrisi_PENCEREDEN_bagimsiz(db):
+    from app.services.fault_analytics_service import (
+        HEATMAP_WINDOW_DAYS,
+        sistem_sagligi,
+    )
+
+    d = _cihaz(db, "A")
+    _alarm(db, d, gun_once=1)
+
+    s = sistem_sagligi(db, days=365, visible_device_ids=None)
+    assert s["alarm_heatmap"]["window_days"] == HEATMAP_WINDOW_DAYS
+    assert len(s["alarm_heatmap"]["buckets"]) == HEATMAP_WINDOW_DAYS
+    # Takvim ise pencereyi IZLER — iki grafik ayri sorular soruyor.
+    assert len(s["alarm_calendar"]["days"]) == 365

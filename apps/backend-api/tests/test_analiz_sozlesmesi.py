@@ -241,6 +241,13 @@ def test_sistem_sagligi_yaniti_TS_TIPIYLE_ayni_alanlari_tasir(db):
         gelen["alarm_calendar"],
         _alt_blok_alanlari(govde, "alarm_calendar"),
     )
+    # Matris ayri bir TS tipine (AlarmHeatmap) bagli; bos veride de TAM
+    # bicimde doner ve KENDI penceresini bildirir.
+    _esitle(
+        "SystemHealth.alarm_heatmap",
+        gelen["alarm_heatmap"],
+        _ust_duzey_alanlar(_tip_govdesi("AlarmHeatmap")),
+    )
 
 
 def test_takvim_gunu_TS_ile_ayni(db):
@@ -320,14 +327,6 @@ def test_cihaz_sagligi_liste_ogeleri_TS_ile_ayni(db):
         "DeviceHealth.comm_status[]",
         gelen["comm_status"][0],
         _alt_blok_alanlari(govde, "comm_status"),
-    )
-
-    # `alarm_heatmap` ayri bir TS tipine (AlarmHeatmap) baglandi; bos veride
-    # de TAM bicimde doner.
-    _esitle(
-        "DeviceHealth.alarm_heatmap",
-        gelen["alarm_heatmap"],
-        _ust_duzey_alanlar(_tip_govdesi("AlarmHeatmap")),
     )
 
 

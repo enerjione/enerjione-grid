@@ -648,6 +648,20 @@ HEATMAP_TOP_DEVICES = 25
 HEATMAP_MAX_COLS = 120
 
 
+def _surekli_gunler(days: int) -> list[str]:
+    """Bugunden geriye `days` gunun KESINTISIZ `YYYY-MM-DD` listesi.
+
+    Hem takvim hem cihaz x zaman matrisi bunu kullanir: sutunlar VERIDEN
+    degil takvimden gelsin, sessiz gunler de yer kaplasin. Iki yerde ayri
+    ayri hesaplansaydi biri gun sinirina yuvarlarken digeri yuvarlamayabilir
+    ve ayni ekrandaki iki grafik farkli gunlerde biterdi.
+    """
+    bugun = datetime.now(timezone.utc).date()
+    uzunluk = max(1, days)
+    ilk = bugun - timedelta(days=uzunluk - 1)
+    return [(ilk + timedelta(days=i)).isoformat() for i in range(uzunluk)]
+
+
 def _kova_ifadesi(db: Session, damga, gunluk: bool):  # noqa: ANN001
     """Zaman kovasi etiketi — lehceye gore. Gunluk `YYYY-MM-DD`, saatlik
     `YYYY-MM-DD HH`."""
@@ -656,12 +670,23 @@ def _kova_ifadesi(db: Session, damga, gunluk: bool):  # noqa: ANN001
     return func.strftime("%Y-%m-%d" if gunluk else "%Y-%m-%d %H", damga)
 
 
+#: Cihaz x zaman matrisinin SABIT penceresi. Sayfanin pencere secimini
+#: (30/90/365/1095) IZLEMEZ ve bu bilinclidir: 25 satirlik matriste 365
+#: sutun, sutun basina bir pikselin altina duser ve desen okunmaz olur.
+#: Matrisin cevapladigi soru zaten "SON DONEMDE hangi cihaz gurultuluydu";
+#: uzun donem sorusunu takvim cevapliyor. Yanit bu pencereyi `window_days`
+#: ile BILDIRIR — arayuz "hep son 30 gun" diyebilsin, kullanici pencereyi
+#: degistirip matris neden ayni kaldi diye dusunmesin.
+HEATMAP_WINDOW_DAYS = 30
+
+
 def alarm_isi_haritasi(
     db: Session,
     *,
     days: int,
     visible_device_ids: set[int] | None,
     limit: int = HEATMAP_TOP_DEVICES,
+    surekli: bool = False,
 ) -> dict:
     """Cihaz x zaman alarm yogunlugu — TUM cihazlar tek ekranda karsilastirilir.
 
@@ -687,6 +712,13 @@ def alarm_isi_haritasi(
     KESILEN VERI SOYLENIR. Yalnizca en cok alarm ureten `limit` cihaz
     cizilir ve yanit bunu `truncated` / `device_total` ile bildirir —
     "listede yok" ile "alarm uretmemis" karistirilmasin.
+
+    `surekli=True`: sutunlar VERIDEN degil TAKVIMDEN uretilir; alarm
+    gorulmeyen gunler de sutun acar. Sessiz gecen bir hafta matriste
+    gercekten bir hafta genisligindedir. Yalnizca SINIRLI pencerede
+    guvenli — 365 gunluk pencerede 365 sutun, sutun basina bir pikselin
+    altina duser ve matris okunmaz olur. Bu yuzden varsayilan KAPALI ve
+    yalnizca 30 gune sabitlenmis matris (bkz. HEATMAP_WINDOW_DAYS) aciyor.
     """
     base = _alarm_temel(days, visible_device_ids).subquery()
     a = base.c
@@ -710,10 +742,12 @@ def alarm_isi_haritasi(
     ).all()
     if not satirlar:
         return {
-            # `window_days` UST duzeyde (`sistem_sagligi`) veriliyor; burada
-            # tekrar etmek ayrisabilen ikinci bir kaynak yaratirdi.
+            # Matrisin KENDI penceresi. Sayfanin pencere secimiyle ayni
+            # olmak ZORUNDA degil (bkz. HEATMAP_WINDOW_DAYS); arayuz
+            # "son 30 gun" diyebilsin diye yanitta tasiniyor.
+            "window_days": days,
             "bucket": "day",
-            "buckets": [],
+            "buckets": _surekli_gunler(days) if surekli else [],
             "devices": [],
             "cells": [],
             "max": 0,
@@ -732,10 +766,14 @@ def alarm_isi_haritasi(
         .group_by(a.device_id, kova)
     ).all()
 
-    # 2) Sutunlar: veride GORULEN kovalar, kronolojik. Bos gunler icin sutun
-    #    acilmaz — 365 gunluk pencerede sahanin sessiz gecen aylari grafigi
-    #    okunmaz genislige tasirdi.
-    kovalar = sorted({str(r[1]) for r in hucreler_ham})
+    # 2) Sutunlar.
+    #    `surekli`: takvimden uretilir, sessiz gunler de sutun acar.
+    #    Aksi halde veride GORULEN kovalar — 365 gunluk pencerede sahanin
+    #    sessiz gecen aylari grafigi okunmaz genislige tasirdi.
+    if surekli:
+        kovalar = _surekli_gunler(days)
+    else:
+        kovalar = sorted({str(r[1]) for r in hucreler_ham})
     if len(kovalar) > HEATMAP_MAX_COLS:
         kovalar = kovalar[-HEATMAP_MAX_COLS:]
     kova_sira = {k: i for i, k in enumerate(kovalar)}
@@ -751,6 +789,7 @@ def alarm_isi_haritasi(
         hucreler.append([sutun, id_sira[int(dev_id)], adet])
 
     return {
+        "window_days": days,
         "bucket": "day" if gunluk else "hour",
         "buckets": kovalar,
         "devices": [
@@ -972,26 +1011,22 @@ def alarm_takvimi(
     sayim = {str(r[0]): int(r[1]) for r in satirlar}
 
     # Kovalar VERIDEN degil TAKVIMDEN uretilir — bos gunler de sutun acsin.
-    # `_window_start` ile ayni pencere; gun sinirina yuvarlanir ki "bugun"
-    # her zaman son kare olsun.
-    bugun = datetime.now(timezone.utc).date()
-    uzunluk = min(max(1, days), CALENDAR_MAX_DAYS)
-    ilk_gun = bugun - timedelta(days=uzunluk - 1)
+    # Gun sinirina yuvarlanir ki "bugun" her zaman son kare olsun.
+    takvim = _surekli_gunler(min(max(1, days), CALENDAR_MAX_DAYS))
 
     gunler: list[dict] = []
     en_cok = 0
     toplam = 0
-    for i in range(uzunluk):
-        g = ilk_gun + timedelta(days=i)
-        adet = sayim.get(g.isoformat(), 0)
+    for g in takvim:
+        adet = sayim.get(g, 0)
         en_cok = max(en_cok, adet)
         toplam += adet
-        gunler.append({"date": g.isoformat(), "count": adet})
+        gunler.append({"date": g, "count": adet})
 
     ilk_alarm = db.scalar(select(func.min(a.created_at)).select_from(base))
     return {
-        "start": ilk_gun.isoformat(),
-        "end": bugun.isoformat(),
+        "start": takvim[0],
+        "end": takvim[-1],
         "days": gunler,
         "max": en_cok,
         "total": toplam,
@@ -1007,18 +1042,35 @@ def alarm_takvimi(
 def sistem_sagligi(
     db: Session, *, days: int = DEFAULT_WINDOW_DAYS, visible_device_ids: set[int] | None
 ) -> dict:
-    """Alarm ozeti + gun gun alarm sikligi (takvim).
+    """Alarm yogunlugunun IKI KESITI + ozet.
 
-    KURAL SIRALAMASI VE KOPAN CIHAZLAR BURADAN CIKTI: ikisi de CIHAZ
-    duzeyinde sorular ve artik cihaz sagligi ucundan doner
-    (`/faults/device-health`). Burada kalmalari, ayni ekranin iki sekmesinin
-    ayni sorguyu iki kez kosturmasi demekti.
+    Arayuzde "Hat Ariza Yogunlugu" sekmesini besler; sekmedeki anahtar
+    kesitler arasinda gecer:
+      * `alarm_calendar` -> NE ZAMAN (gun gun, takvim)
+      * `alarm_heatmap`  -> HANGI CIHAZ, ne zaman (cihaz x zaman matrisi)
+
+    IKISI AYNI YANITTA: ayni pencere ve ayni kapsam uzerinde hesaplaniyorlar
+    ve arayuzde anahtarla degisiyorlar. Ayri uclar olsaydi her gecis yeni
+    bir istek atar, ustelik iki kesit farkli donemleri gosterebilirdi.
+
+    KURAL SIRALAMASI VE KOPAN CIHAZLAR BURADA DEGIL: ikisi de CIHAZ
+    duzeyinde sorular ve cihaz sagligi ucundan doner
+    (`/faults/device-health`).
     """
     return {
         "window_days": days,
         "alarm_summary": alarm_ozeti(db, days=days, visible_device_ids=visible_device_ids),
         "alarm_calendar": alarm_takvimi(
             db, days=days, visible_device_ids=visible_device_ids
+        ),
+        # Matris sayfanin penceresini IZLEMEZ — hep son 30 gun, kesintisiz
+        # gunluk sutunlarla (bkz. HEATMAP_WINDOW_DAYS). 365 gunluk pencerede
+        # 25 satirlik matris sutun basina bir pikselin altina duserdi.
+        "alarm_heatmap": alarm_isi_haritasi(
+            db,
+            days=HEATMAP_WINDOW_DAYS,
+            visible_device_ids=visible_device_ids,
+            surekli=True,
         ),
     }
 

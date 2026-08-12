@@ -621,16 +621,16 @@ def fault_device_health(
             db, days=days, visible_device_ids=device_scope
         ),
         # --- Sistem sagligindan BURAYA tasindi ---
-        # Ikisi de CIHAZ duzeyinde sorular. Sistem sagligi sekmesi artik tek
-        # bir takvim gosteriyor; bu listeler cihaz karsilastirmasinin yaninda
-        # okunmali, ayri bir sekmede degil.
+        # Ikisi de CIHAZ duzeyinde sorular ve cihaz karsilastirmasinin
+        # yaninda okunmali, ayri bir sekmede degil.
+        #
+        # Cihaz x zaman matrisi BURADA DEGIL: o bir YOGUNLUK kesiti ve
+        # "Hat Ariza Yogunlugu" sekmesinde takvimle ayni anahtarin altinda
+        # duruyor; ikisi de `/faults/system-health` yanitindan geliyor.
         "top_rules": analiz.alarm_sikligi(
             db, days=days, visible_device_ids=device_scope
         ),
         "flapping_devices": analiz.haberlesme_kararsizligi(
-            db, days=days, visible_device_ids=device_scope
-        ),
-        "alarm_heatmap": analiz.alarm_isi_haritasi(
             db, days=days, visible_device_ids=device_scope
         ),
         # --- Filo karsilastirmasi (yeni) ---

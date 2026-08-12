@@ -20,16 +20,20 @@
  * Onceki duzende "Harita & Akis" iki bambaska soruyu tek sekmeye koyuyordu
  * (NEREDE ve NEREYE AKIYOR) ve ikisi de yariya kirpiliyordu; sistem sagligi
  * ise dort kartla "hangi kural / hangi cihaz / ne zaman"i ayni anda
- * soruyordu. Simdi her sekme tek soruya bakiyor:
+ * soruyordu. Simdi dort sekme var ve her biri tek soruya bakiyor:
  *
- *   Arizalar       -> ne oldu, nerede yogunlasti
- *   Harita         -> cografyada NEREDE
- *   Ariza Akisi    -> bolge -> hat -> faz, NEREYE akiyor
- *   Sistem Sagligi -> saha NE ZAMAN gurultuluydu (tek takvim)
- *   Cihaz Sagligi  -> hangi cihaz, ve cihazlar BIRBIRINE GORE nasil
+ *   Arizalar            -> ne oldu, nerede yogunlasti
+ *   Hat Ariza Yogunlugu -> yogunlasma NEREDE / NE ZAMAN / HANGI CIHAZDA
+ *   Ariza Akisi         -> bolge -> hat -> faz, NEREYE akiyor
+ *   Cihaz Sagligi       -> hangi cihaz, ve cihazlar BIRBIRINE GORE nasil
+ *
+ * "Yogunluk" sekmesi UC KESIT tasiyor ve aralarinda anahtarla gecilir:
+ * harita (cografya), takvim (gun gun) ve cihaz x zaman matrisi. Ucu ayri
+ * sekme olsaydi kullanici ayni soruyu uc yerde arardi; ustelik uc grafigin
+ * ucu birden monte edilirdi. Anahtar yalnizca SECILI kesiti cizer.
  *
  * Sekmeler yalnizca duzen tercihi degil PERFORMANS karari: harita ve akis
- * yalnizca kendi sekmesi acilinca MONTE EDILIR, sistem/cihaz sagligi da
+ * yalnizca kendi sekmesi acilinca MONTE EDILIR, alarm/cihaz verisi de
  * yalnizca o an CEKILIR. 600 cihazli bir sahada bu sorgular ucuz degil ve
  * kimse hepsine ayni anda bakmiyor.
  *
@@ -114,14 +118,24 @@ const WINDOWS = [30, 90, 365, 1095] as const;
  *  Kesin bir esik yok; amac "bu grafige dayanip karar verme" demek. */
 const LOW_LABEL_RATIO = 0.4;
 
-type Sekme = "faults" | "map" | "flow" | "system" | "devices";
+type Sekme = "faults" | "density" | "flow" | "devices";
 
 const SEKMELER: { key: Sekme; labelKey: string; Icon: typeof TrendingUp }[] = [
   { key: "faults", labelKey: "faultAnalytics.tabFaults", Icon: TrendingUp },
-  { key: "map", labelKey: "faultAnalytics.tabMap", Icon: MapIcon },
+  { key: "density", labelKey: "faultAnalytics.tabDensity", Icon: MapIcon },
   { key: "flow", labelKey: "faultAnalytics.tabFlow", Icon: Share2 },
-  { key: "system", labelKey: "faultAnalytics.tabSystem", Icon: CalendarDays },
   { key: "devices", labelKey: "faultAnalytics.tabDevices", Icon: Radio }
+];
+
+/** "Hat Ariza Yogunlugu" sekmesindeki kesitler. Ucu de AYNI soruyu farkli
+ *  eksenden soruyor — yogunlasma NEREDE, NE ZAMAN, HANGI CIHAZDA — bu
+ *  yuzden ayri sekmeler degil tek sekmede anahtar. */
+type Gorunum = "map" | "calendar" | "matrix";
+
+const GORUNUMLER: { key: Gorunum; labelKey: string; Icon: typeof TrendingUp }[] = [
+  { key: "map", labelKey: "faultAnalytics.viewMap", Icon: MapIcon },
+  { key: "calendar", labelKey: "faultAnalytics.viewCalendar", Icon: CalendarDays },
+  { key: "matrix", labelKey: "faultAnalytics.viewMatrix", Icon: Grid3x3 }
 ];
 
 function yuzde(x: number): string {
@@ -215,8 +229,15 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
     [t]
   );
 
+  // Harita kesiti EKRANI DOLDURUR ve sayfa kaymaz; digerlerinde sayfa
+  // normal akisinda kalir. Bir haritanin sabit 460 piksele hapsedilip
+  // altinda bos beyaz alan birakmasi, ekranin en cok bakilan kartini en
+  // kucuk kart yapiyordu.
+  const [gorunum, setGorunum] = useState<Gorunum>("map");
+  const dolduran = sekme === "density" && gorunum === "map";
+
   return (
-    <section className="tab-panel fa-page">
+    <section className={`tab-panel fa-page ${dolduran ? "fa-page--fill" : ""}`}>
       {/* ---- Ust serit: pencere secimi + uc ozet olcu ----
            KOMPAKT: bu serit ekranin baglami, ana icerigi degil. Onceki
            surumde 34px ikon kutusu + 1.35rem sayi ile serit 64px'e cikiyor
@@ -507,11 +528,17 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
         </div>
       ) : null}
 
-      {sekme === "map" ? <Harita accessToken={accessToken} analytics={data} /> : null}
+      {sekme === "density" ? (
+        <HatArizaYogunlugu
+          accessToken={accessToken}
+          days={days}
+          analytics={data}
+          gorunum={gorunum}
+          setGorunum={setGorunum}
+        />
+      ) : null}
 
       {sekme === "flow" ? <ArizaAkisi analytics={data} fazLabel={fazLabel} /> : null}
-
-      {sekme === "system" ? <SistemSagligi accessToken={accessToken} days={days} /> : null}
 
       {sekme === "devices" ? <CihazSagligi accessToken={accessToken} days={days} /> : null}
     </section>
@@ -519,17 +546,46 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
 }
 
 // ---------------------------------------------------------------------------
-// Harita — TEK SORU: cografyada nerede
+// Hat Ariza Yogunlugu — TEK SORU, UC EKSEN
 // ---------------------------------------------------------------------------
+//
+//   Harita       -> yogunlasma NEREDE (cografya)
+//   Alarm sikligi-> NE ZAMAN (gun gun takvim)
+//   Cihaz x zaman-> HANGI CIHAZDA, ne zaman (matris)
+//
+// Ucu ayri sekme olsaydi kullanici ayni soruyu uc yerde arardi. Anahtar
+// (switch) uc kesiti tek yerde tutuyor ve yalnizca SECILI olani ciziyor —
+// echarts ornekleri ve Leaflet karolari bosuna monte edilmiyor.
 
-function Harita({
+function HatArizaYogunlugu({
   accessToken,
-  analytics
+  days,
+  analytics,
+  gorunum,
+  setGorunum
 }: {
   accessToken: string;
+  days: number;
   analytics: FaultAnalytics | null;
+  gorunum: Gorunum;
+  setGorunum: (g: Gorunum) => void;
 }) {
   const { t } = useTranslation();
+
+  // ISTEKLER GEREKTIGINDE, BIR KEZ.
+  //
+  // Iki bayrak da YAPISKAN: bir kez acildiktan sonra kapanmaz. Dogrudan
+  // `gorunum === "map"` yazsaydik, kullanici harita <-> takvim arasinda her
+  // gecisinde ayni istek yeniden atilirdi. Takvim ve matris AYNI yanittan
+  // (`/faults/system-health`) geldigi icin aralarindaki gecis zaten
+  // bedava.
+  const [topolojiIstendi, setTopolojiIstendi] = useState(gorunum === "map");
+  const [alarmIstendi, setAlarmIstendi] = useState(gorunum !== "map");
+
+  useEffect(() => {
+    if (gorunum === "map") setTopolojiIstendi(true);
+    else setAlarmIstendi(true);
+  }, [gorunum]);
 
   /**
    * Sebeke topolojisi — isi haritasinin ZEMINI.
@@ -540,7 +596,13 @@ function Harita({
    * aynidir) ve degismiyorsa bosuna yeniden hesaplanmasin.
    */
   const topoloji = useBolumVerisi(
-    useCallback(() => fetchGridSnapshot(accessToken), [accessToken])
+    useCallback(() => fetchGridSnapshot(accessToken), [accessToken]),
+    topolojiIstendi
+  );
+
+  const alarm = useBolumVerisi<SystemHealth>(
+    useCallback(() => fetchSystemHealth(accessToken, days), [accessToken, days]),
+    alarmIstendi
   );
 
   const cizgiler = useMemo(
@@ -556,27 +618,164 @@ function Harita({
   const noktalar = analytics?.fault_heatmap ?? [];
   const haritaGosterilir = noktalar.length > 0 || cizgiler.length > 0;
 
+  const secili = GORUNUMLER.find((g) => g.key === gorunum);
+  const ozet = alarm.veri?.alarm_summary;
+
+  const anahtar = (
+    <div className="fa-switch" role="tablist" aria-label={t("faultAnalytics.tabDensity")}>
+      {GORUNUMLER.map(({ key, labelKey, Icon }) => (
+        <button
+          key={key}
+          type="button"
+          role="tab"
+          aria-selected={gorunum === key}
+          className={`fa-switch-btn ${gorunum === key ? "is-active" : ""}`}
+          onClick={() => setGorunum(key)}
+        >
+          <Icon size={13} />
+          {t(labelKey)}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
-    <div className="fa-grid">
+    <div className={gorunum === "map" ? "fa-fill" : "fa-grid"}>
       <Kart
-        genislik="wide"
-        Icon={MapIcon}
-        baslik={t("faultAnalytics.heatmap")}
-        ipucu={t("faultAnalytics.heatmapHint")}
+        genislik={gorunum === "map" ? "fill" : "wide"}
+        Icon={secili?.Icon ?? MapIcon}
+        baslik={t(`faultAnalytics.${gorunum}Title`)}
+        ipucu={t(`faultAnalytics.${gorunum}Hint`)}
+        sag={anahtar}
       >
-        {topoloji.yukleniyor ? (
+        {gorunum === "map" ? (
+          topoloji.yukleniyor ? (
+            <Bos Icon={Loader}>{t("faultAnalytics.loading")}</Bos>
+          ) : topoloji.hata ? (
+            <p className="net-banner net-banner--bad">{topoloji.hata}</p>
+          ) : haritaGosterilir ? (
+            <Suspense fallback={<Bos Icon={Loader}>{t("faultAnalytics.loading")}</Bos>}>
+              <FaultHeatMap points={noktalar} lines={cizgiler} />
+            </Suspense>
+          ) : (
+            <Bos Icon={MapPin}>{t("faultAnalytics.noHeat")}</Bos>
+          )
+        ) : alarm.yukleniyor ? (
           <Bos Icon={Loader}>{t("faultAnalytics.loading")}</Bos>
-        ) : topoloji.hata ? (
-          <p className="net-banner net-banner--bad">{topoloji.hata}</p>
-        ) : haritaGosterilir ? (
-          <Suspense fallback={<Bos Icon={Loader}>{t("faultAnalytics.loading")}</Bos>}>
-            <FaultHeatMap points={noktalar} lines={cizgiler} />
-          </Suspense>
+        ) : alarm.hata ? (
+          <p className="net-banner net-banner--bad">{alarm.hata}</p>
+        ) : !alarm.veri ? null : gorunum === "calendar" ? (
+          <Takvim veri={alarm.veri} ozet={ozet} />
         ) : (
-          <Bos Icon={MapPin}>{t("faultAnalytics.noHeat")}</Bos>
+          <Matris veri={alarm.veri} />
         )}
       </Kart>
     </div>
+  );
+}
+
+/** Gun gun alarm sikligi. Pencereyi IZLER. */
+function Takvim({
+  veri,
+  ozet
+}: {
+  veri: SystemHealth;
+  ozet: SystemHealth["alarm_summary"] | undefined;
+}) {
+  const { t } = useTranslation();
+  const takvim = veri.alarm_calendar;
+
+  return (
+    <>
+      {/* Alarm ozeti takvimin BAGLAMI. Basligin saginda duruyordu; orayi
+          kesit anahtari aldi. Ayri KPI kartlarina cikarmak, tek grafikli
+          bir kesitte grafikten cok yer kaplardi. */}
+      {ozet ? (
+        <span className="fa-head-stats fa-head-stats--row">
+          <b>{ozet.total}</b> {t("faultAnalytics.alarmUnit")}
+          <i aria-hidden="true">·</i>
+          <b>{ozet.total > 0 ? yuzde(ozet.ack_ratio) : "—"}</b>{" "}
+          {t("faultAnalytics.ackShort")}
+          <i aria-hidden="true">·</i>
+          <b>{ozet.comm_outages}</b> {t("faultAnalytics.outageUnit")}
+        </span>
+      ) : null}
+
+      {/* Siniflandirilmamis kayitlar HABERLESME sayisini eksik gosterir.
+          Sifirsa gosterilmez; sifir degilse SUSULMAZ. */}
+      {ozet && ozet.unclassified > 0 ? (
+        <p className="fa-inline-warn">
+          <AlertTriangle size={13} />
+          {t("faultAnalytics.unclassifiedHint")}
+        </p>
+      ) : null}
+
+      {takvim.truncated ? (
+        <p className="fa-inline-warn">
+          <AlertTriangle size={13} />
+          {t("faultAnalytics.calendarTruncated", { days: takvim.days.length })}
+        </p>
+      ) : null}
+
+      {takvim.days.length ? (
+        <>
+          <AlarmTakvimi
+            days={takvim.days}
+            start={takvim.start}
+            end={takvim.end}
+            max={takvim.max}
+            birim={t("faultAnalytics.alarmUnit")}
+          />
+          <TakvimSeridi
+            max={takvim.max}
+            azLabel={t("faultAnalytics.calendarLess")}
+            cokLabel={t("faultAnalytics.calendarMore")}
+          />
+          {/* Pencerede HIC alarm yoksa bos bir takvim "her sey yolunda" gibi
+              de okunabilir, "veri gelmiyor" gibi de. Ayrimi SOYLUYORUZ. */}
+          {takvim.total === 0 ? (
+            <p className="fa-cal-note">{t("faultAnalytics.calendarAllQuiet")}</p>
+          ) : null}
+        </>
+      ) : (
+        <Bos Icon={CalendarDays}>{t("faultAnalytics.noData")}</Bos>
+      )}
+    </>
+  );
+}
+
+/** Cihaz x zaman alarm yogunlugu. Pencereyi IZLEMEZ — hep son 30 gun. */
+function Matris({ veri }: { veri: SystemHealth }) {
+  const { t } = useTranslation();
+  const isi = veri.alarm_heatmap;
+
+  return (
+    <>
+      {/* Kesilen satirlar SESSIZCE atilmaz: "listede yok" ile "alarm
+          uretmemis" karistirilmasin. */}
+      {isi.truncated ? (
+        <p className="fa-inline-warn">
+          <AlertTriangle size={13} />
+          {t("faultAnalytics.alarmHeatmapTruncated", {
+            shown: isi.devices.length,
+            total: isi.device_total
+          })}
+        </p>
+      ) : null}
+
+      {isi.cells.length ? (
+        <AlarmIsiHaritasi
+          buckets={isi.buckets}
+          devices={isi.devices}
+          cells={isi.cells}
+          max={isi.max}
+          bucket={isi.bucket}
+          birim={t("faultAnalytics.alarmUnit")}
+        />
+      ) : (
+        <Bos Icon={Grid3x3}>{t("faultAnalytics.noAlarmHeatmap")}</Bos>
+      )}
+    </>
   );
 }
 
@@ -634,87 +833,6 @@ function ArizaAkisi({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Sistem Sagligi — TEK SORU: saha ne zaman gurultuluydu
-// ---------------------------------------------------------------------------
-
-function SistemSagligi({ accessToken, days }: { accessToken: string; days: number }) {
-  const { t } = useTranslation();
-  const { veri, hata, yukleniyor } = useBolumVerisi<SystemHealth>(
-    useCallback(() => fetchSystemHealth(accessToken, days), [accessToken, days])
-  );
-
-  if (yukleniyor) return <Bos Icon={Loader}>{t("faultAnalytics.loading")}</Bos>;
-  if (hata) return <p className="net-banner net-banner--bad">{hata}</p>;
-  if (!veri) return null;
-
-  const a = veri.alarm_summary;
-  const takvim = veri.alarm_calendar;
-
-  return (
-    <div className="fa-grid">
-      <Kart
-        genislik="wide"
-        Icon={CalendarDays}
-        baslik={t("faultAnalytics.alarmCalendar")}
-        ipucu={t("faultAnalytics.alarmCalendarHint")}
-        /* Alarm ozeti AYRI KART DEGIL, basligin sagindaki serh. Uc ayri KPI
-           kutusu, tek grafikli bir sekmede grafikten cok yer kapliyordu ve
-           bu sayilar zaten takvimin BAGLAMI — basrol degil. */
-        sag={
-          <span className="fa-head-stats">
-            <b>{a.total}</b> {t("faultAnalytics.alarmUnit")}
-            <i aria-hidden="true">·</i>
-            <b>{a.total > 0 ? yuzde(a.ack_ratio) : "—"}</b> {t("faultAnalytics.ackShort")}
-            <i aria-hidden="true">·</i>
-            <b>{a.comm_outages}</b> {t("faultAnalytics.outageUnit")}
-          </span>
-        }
-      >
-        {/* Siniflandirilmamis kayitlar HABERLESME sayisini eksik gosterir.
-            Sifirsa gosterilmez; sifir degilse SUSULMAZ. */}
-        {a.unclassified > 0 ? (
-          <p className="fa-inline-warn">
-            <AlertTriangle size={13} />
-            {t("faultAnalytics.unclassifiedHint")}
-          </p>
-        ) : null}
-
-        {takvim.truncated ? (
-          <p className="fa-inline-warn">
-            <AlertTriangle size={13} />
-            {t("faultAnalytics.calendarTruncated", { days: takvim.days.length })}
-          </p>
-        ) : null}
-
-        {takvim.days.length ? (
-          <>
-            <AlarmTakvimi
-              days={takvim.days}
-              start={takvim.start}
-              end={takvim.end}
-              max={takvim.max}
-              birim={t("faultAnalytics.alarmUnit")}
-            />
-            <TakvimSeridi
-              max={takvim.max}
-              azLabel={t("faultAnalytics.calendarLess")}
-              cokLabel={t("faultAnalytics.calendarMore")}
-            />
-            {/* Pencerede HIC alarm yoksa bos bir takvim "her sey yolunda"
-                gibi de okunabilir, "veri gelmiyor" gibi de. Ayrimi
-                SOYLUYORUZ. */}
-            {takvim.total === 0 ? (
-              <p className="fa-cal-note">{t("faultAnalytics.calendarAllQuiet")}</p>
-            ) : null}
-          </>
-        ) : (
-          <Bos Icon={CalendarDays}>{t("faultAnalytics.noData")}</Bos>
-        )}
-      </Kart>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Cihaz Sagligi — hangi cihaz, ve cihazlar BIRBIRINE GORE nasil
@@ -1071,43 +1189,6 @@ function CihazSagligi({ accessToken, days }: { accessToken: string; days: number
         )}
       </Kart>
 
-      {/* ---- 6) NE ZAMAN: cihaz x zaman alarm yogunlugu ----
-           Ustteki listeler "kim" der; bu matris "NE ZAMAN" der. Uc ay her
-           gun 2 alarm ile tek gunde 180 alarm listede AYNI sayiya duser,
-           burada bakista ayrilir. Ustelik AYNI sutunda birden cok cihaz
-           kararmissa sorun cihazlarda degil o gun yasanan ortak olaydadir. */}
-      <Kart
-        genislik="wide"
-        Icon={Grid3x3}
-        baslik={t("faultAnalytics.alarmHeatmap")}
-        ipucu={t("faultAnalytics.alarmHeatmapHint")}
-      >
-        {veri.alarm_heatmap.cells.length ? (
-          <>
-            {/* Kesilen satirlar SESSIZCE atilmaz: "listede yok" ile "alarm
-                uretmemis" karistirilmasin. */}
-            {veri.alarm_heatmap.truncated ? (
-              <p className="fa-inline-warn">
-                <AlertTriangle size={13} />
-                {t("faultAnalytics.alarmHeatmapTruncated", {
-                  shown: veri.alarm_heatmap.devices.length,
-                  total: veri.alarm_heatmap.device_total
-                })}
-              </p>
-            ) : null}
-            <AlarmIsiHaritasi
-              buckets={veri.alarm_heatmap.buckets}
-              devices={veri.alarm_heatmap.devices}
-              cells={veri.alarm_heatmap.cells}
-              max={veri.alarm_heatmap.max}
-              bucket={veri.alarm_heatmap.bucket}
-              birim={t("faultAnalytics.alarmUnit")}
-            />
-          </>
-        ) : (
-          <Bos Icon={Grid3x3}>{t("faultAnalytics.noAlarmHeatmap")}</Bos>
-        )}
-      </Kart>
 
       {/* ---- 7) OLCUM AYRINTISI ---- */}
       <Kart
@@ -1213,8 +1294,9 @@ function Kart({
   Icon: typeof TrendingUp;
   baslik: string;
   ipucu?: string;
-  /** Izgara genisligi. Varsayilan yarim (6/12). */
-  genislik?: "wide" | "twothird" | "half" | "third";
+  /** Izgara genisligi. Varsayilan yarim (6/12). `fill` = kalan dikey alani
+   *  DOLDURUR (harita kesiti); izgara disinda, kendi kabinde. */
+  genislik?: "wide" | "twothird" | "half" | "third" | "fill";
   /** Basligin sagindaki serh — sayi seridi gibi. */
   sag?: React.ReactNode;
   children: React.ReactNode;
@@ -1290,14 +1372,21 @@ function Bos({ Icon, children }: { Icon: typeof TrendingUp; children: React.Reac
  *
  * Burada polling YOK: analiz penceresi gunler olceginde ve bu sorgular 600
  * cihazli sahada ucuz degil. Kullanici sekmeye her gelisinde tazelenir.
+ *
+ * `etkin=false`: istek ATILMAZ ve ELDEKI veri de silinmez. Yogunluk
+ * sekmesindeki anahtar bunu kullaniyor — harita kesitindeyken alarm
+ * istegi hic atilmaz, ama takvimden haritaya gecip geri donuldugunde veri
+ * yeniden cekilmez. Bayrak cagiran tarafta YAPISKAN tutulur; burada
+ * true->false gecisi yalnizca "cekme" demektir, "unut" demez.
  */
-function useBolumVerisi<T>(getir: () => Promise<T>) {
+function useBolumVerisi<T>(getir: () => Promise<T>, etkin = true) {
   const { t } = useTranslation();
   const [veri, setVeri] = useState<T | null>(null);
   const [hata, setHata] = useState<string | null>(null);
-  const [yukleniyor, setYukleniyor] = useState(true);
+  const [yukleniyor, setYukleniyor] = useState(etkin);
 
   useEffect(() => {
+    if (!etkin) return;
     let iptal = false;
     setYukleniyor(true);
     getir()
@@ -1317,7 +1406,7 @@ function useBolumVerisi<T>(getir: () => Promise<T>) {
     return () => {
       iptal = true;
     };
-  }, [getir, t]);
+  }, [getir, etkin, t]);
 
   return { veri, hata, yukleniyor };
 }
