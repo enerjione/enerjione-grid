@@ -30,10 +30,11 @@ from typing import Sequence
 from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_LEFT, TA_RIGHT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
 from reportlab.platypus import (
     Image,
     KeepTogether,
@@ -227,8 +228,8 @@ class _Styles:
             alignment=TA_LEFT,
         )
         self.pill = ParagraphStyle(
-            "pill", fontName=bold, fontSize=11, leading=14, textColor=colors.white,
-            alignment=TA_RIGHT,
+            "pill", fontName=bold, fontSize=10.5, leading=13, textColor=colors.white,
+            alignment=TA_CENTER,
         )
 
 
@@ -457,7 +458,7 @@ def build_fault_report_pdf(
 
     if map_png:
         story.append(Spacer(1, 12))
-        story.append(_section_head(st, "Konum", "Arıza bölgesi — uydu görüntüsü"))
+        story.append(_section_head(st, "Konum"))
         story.append(Spacer(1, 6))
         story.extend(_map_figure(st, map_png, fault))
 
@@ -517,7 +518,14 @@ def _title_block(
         Paragraph(_esc(crumb), st.crumb),
     ]
 
-    pill = Table([[Paragraph(status_label, st.pill)]])
+    # ROZET METIN KADAR GENIS.
+    #
+    # `colWidths` verilmeyince tablo, icinde bulundugu hucrenin TAMAMINA
+    # yayiliyordu (~63 mm): "Açık" gibi iki heceli bir durum icin sayfanin
+    # sag ucunu kaplayan kocaman bir kirmizi blok. Genislik artik yazinin
+    # kendisinden olculuyor.
+    _pill_w = pdfmetrics.stringWidth(status_label, st.bold, 10.5) + 22
+    pill = Table([[Paragraph(status_label, st.pill)]], colWidths=[_pill_w])
     pill.setStyle(
         TableStyle(
             [
