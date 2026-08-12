@@ -700,6 +700,14 @@ function Write-Posta {
 <#
 .SYNOPSIS
   Posta kutusunu kilitleyip $Blok ile gunceller (defter kilidiyle ayni desen).
+.DESCRIPTION
+  $Blok YENI LISTEYI dondurmeli. Bos liste dondurecekse VIRGUL OPERATORU
+  kullanmali: `return ,@()`.
+
+  NEDEN: PowerShell bos diziyi cikis yolunda $null'a cevirir. Duz `return @()`
+  yazildiginda burada "blok bir sey dondurmedi" gorunur, yazma ATLANIR ve
+  silinen son mesaj diskte KALIR. Tam bu yasandi: posta kutusu temizlendi
+  denildi, panel mesajlari gostermeye devam etti.
 #>
 function Invoke-PostaKilitli {
   param([Parameter(Mandatory = $true)][scriptblock]$Blok)
@@ -745,7 +753,7 @@ function Send-OturumMesaji {
     zaman   = (Get-Date).ToUniversalTime().ToString("s") + "Z"
     okuyan  = @()
   }
-  Invoke-PostaKilitli { param($liste) return @(@($liste) + $mesaj) } | Out-Null
+  Invoke-PostaKilitli { param($liste) return ,@(@($liste) + $mesaj) } | Out-Null
   return $mesaj
 }
 
@@ -791,7 +799,7 @@ function Receive-OturumMesajlari {
     foreach ($m in @($liste)) {
       if ($idler -contains $m.id) { $m.okuyan = @(@($m.okuyan) + $Oturum | Sort-Object -Unique) }
     }
-    return $liste
+    return ,@($liste)
   } | Out-Null
 
   return $benim
@@ -918,24 +926,35 @@ function Read-TranskriptOzeti {
     if (-not $o -or -not $o.message) { continue }
 
     if ($istekAdayi -and $o.type -eq "user") {
+      # TUM metin parcalarina bak, ilkine degil.
+      #
+      # Bir kullanici mesaji genellikle birden fazla parca tasir ve ILKI
+      # sistem enjeksiyonudur: <system-reminder>, <command-name>, "Caveat:".
+      # Sadece ilk parcaya bakan surum bunlari eleyip gercek istege hic
+      # ulasamiyordu -- en cok calisan oturum panelde "kayitli istek yok"
+      # goruyordu. Testte yakalandi.
+      $adaylar = New-Object System.Collections.ArrayList
       $icerik = $o.message.content
-      $yazi = ""
       if ($icerik -is [string]) {
-        $yazi = $icerik
+        [void]$adaylar.Add([string]$icerik)
       } else {
-        foreach ($p in @($icerik)) { if ($p.type -eq "text" -and $p.text) { $yazi = [string]$p.text; break } }
+        foreach ($p in @($icerik)) { if ($p.type -eq "text" -and $p.text) { [void]$adaylar.Add([string]$p.text) } }
       }
-      $yazi = $yazi.Trim()
-      # Sistem enjeksiyonlarini ele: <system-reminder>, <command-name>,
-      # "Caveat:" ile baslayan girisler kullanicinin istegi DEGIL.
-      if ($yazi -and -not $yazi.StartsWith("<") -and -not $yazi.StartsWith("Caveat:")) {
-        $ilk = ($yazi -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -First 1)
-        if ($ilk) {
-          $ilk = $ilk.Trim()
-          if ($ilk.Length -gt 110) { $ilk = $ilk.Substring(0, 107) + "..." }
-          $bos.sonIstek = $ilk
-          $istekTamam = $true
-        }
+
+      foreach ($yazi in $adaylar) {
+        $yazi = $yazi.Trim()
+        if (-not $yazi -or $yazi.StartsWith("<") -or $yazi.StartsWith("Caveat:")) { continue }
+        # Baglam tasindiginda uretilen ozet de "user" olarak kaydediliyor ama
+        # kullanicinin cumlesi degil; kartta gorunmesi yaniltici olur.
+        if ($yazi.StartsWith("This session is being continued")) { continue }
+        $ilk = ($yazi -split "`r?`n" | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith("<") } |
+                Select-Object -First 1)
+        if (-not $ilk) { continue }
+        $ilk = $ilk.Trim()
+        if ($ilk.Length -gt 110) { $ilk = $ilk.Substring(0, 107) + "..." }
+        $bos.sonIstek = $ilk
+        $istekTamam = $true
+        break
       }
       continue
     }
@@ -1030,6 +1049,14 @@ function Get-OturumIzleri {
     }
 
     $ozet = Read-TranskriptOzeti -Yol $bilgi.Yol
+    # Son istek bulunamadiysa pencereyi genislet. Arac ciktilarinin buyuk
+    # oldugu bir oturumda (npm/pytest/git log) kullanicinin son cumlesi
+    # 900 KB'in disinda kalabiliyor; kart o zaman "kayitli istek yok" der ve
+    # tam da en cok is yapan oturum bos gorunur.
+    if ([string]::IsNullOrWhiteSpace($ozet.sonIstek) -and $uzunluk -gt 900KB) {
+      $genis = Read-TranskriptOzeti -Yol $bilgi.Yol -KacBayt 6291456
+      if (-not [string]::IsNullOrWhiteSpace($genis.sonIstek)) { $ozet = $genis }
+    }
     $yeni[$anahtar] = [pscustomobject]@{
       uzunluk      = $uzunluk
       oturumSayisi = $bilgi.OturumSayisi

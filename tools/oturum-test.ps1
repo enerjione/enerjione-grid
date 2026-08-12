@@ -214,7 +214,7 @@ $mA = "test-ajan-a"; $mB = "test-ajan-b"
 $temizle = {
   $idler = @(Read-Posta | Where-Object { $_.kimden -like "test-ajan-*" } | ForEach-Object { $_.id })
   if ($idler.Count -gt 0) {
-    Invoke-PostaKilitli { param($l) return @(@($l) | Where-Object { $idler -notcontains $_.id }) } | Out-Null
+    Invoke-PostaKilitli { param($l) return ,@(@($l) | Where-Object { $idler -notcontains $_.id }) } | Out-Null
   }
 }
 & $temizle
@@ -239,6 +239,18 @@ try {
     Receive-OturumMesajlari -Oturum $mB | Out-Null
     @(Receive-OturumMesajlari -Oturum "test-ajan-c" -SadeceBak | Where-Object { $_.metin -eq "herkese duyuru" }).Count -eq 1
   }
+  Sina "SON mesaj silinince kutu gercekten bosalir" {
+    # PowerShell bos diziyi cikis yolunda $null'a cevirir; kilitli blok
+    # `return @()` yazsaydi "degisiklik yok" sanilir ve silinen mesaj diskte
+    # KALIRDI. Panel "temizledim" dedigi mesajlari gostermeye devam etti.
+    $yedek = @(Read-Posta)
+    try {
+      Invoke-PostaKilitli { param($l) return ,@() } | Out-Null
+      @(Read-Posta).Count -eq 0
+    } finally {
+      Invoke-PostaKilitli { param($l) return ,@($yedek) } | Out-Null
+    }
+  }
   Sina "hook mesaji baglama enjekte eder" {
     Send-OturumMesaji -Kime (Get-BuOturumAdi) -Metin "hook teslim denemesi" -Kimden $mA | Out-Null
     $c = Hook-Calistir "oturum-baslik.ps1" ('{"session_id":"test-teslim","prompt":"devam","cwd":"' +
@@ -260,10 +272,18 @@ Sina "bu oturumun transkripti bulunur" {
 Sina "olmayan dizin icin bos doner" {
   (Get-TranskriptBilgisi -CalismaDizini "C:\boyle-bir-yer-yok-98765").Yol -eq $null
 }
-Sina "ozet bu oturumun son istegini okur" {
+Sina "ozet bu oturumun su anki aracini okur" {
   $b = Get-TranskriptBilgisi -CalismaDizini (Get-Location).Path
   $o = Read-TranskriptOzeti -Yol $b.Yol
-  -not [string]::IsNullOrWhiteSpace($o.sonIstek)
+  -not [string]::IsNullOrWhiteSpace($o.suAnArac)
+}
+Sina "son istek bulunamazsa pencere genisletilir" {
+  # Arac ciktilarinin buyuk oldugu bir oturumda kullanicinin son cumlesi
+  # 900 KB'lik pencerenin disinda kalabiliyor. Get-OturumIzleri o durumda
+  # 6 MB ile tekrar deniyor; bu oturum tam o vaka.
+  $iz = Get-OturumIzleri
+  $benim = $iz[(ConvertTo-WindowsYol ((Invoke-GitOku rev-parse --show-toplevel) -join ""))]
+  $benim -and -not [string]::IsNullOrWhiteSpace($benim.sonIstek)
 }
 Sina "izler onbellekten hizli doner (<2sn)" {
   Get-OturumIzleri | Out-Null

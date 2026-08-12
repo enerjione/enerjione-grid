@@ -92,6 +92,7 @@ function Get-PanelVerisi {
       saniye     = $saniye
       durum      = $durum
       oturumSayisi = $(if ($iz) { [int]$iz.oturumSayisi } else { 0 })
+      dizin      = $yol
       ileride    = [int]$a.ileride
       geride     = [int]$a.geride
       kirli      = $kirli
@@ -131,8 +132,11 @@ function Get-PanelVerisi {
     })
   }
 
+  $anaKok = Get-AnaAgacKok
   return [pscustomobject]@{
     guncelleme  = (Get-Date).ToString("HH:mm:ss")
+    proje       = $(if ($anaKok) { Split-Path -Leaf $anaKok } else { "?" })
+    projeYolu   = [string]$anaKok
     ajanlar     = @($ajanlar)
     carpismalar = @($carpismalar)
     mesajlar    = @($mesajlar)

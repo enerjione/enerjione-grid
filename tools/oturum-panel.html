@@ -30,6 +30,12 @@ h1{font-size:15px;margin:0;letter-spacing:.24em;text-transform:uppercase}
 .ust{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
      border-bottom:2px solid var(--cerceve);padding-bottom:10px;margin-bottom:16px}
 .ust .alt{color:var(--sonuk);font-size:11px}
+.ust .proje{color:var(--mor);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+.ust .secenek{margin-left:auto;color:var(--sonuk);font-size:10.5px;
+              display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+.ust .secenek input{accent-color:var(--mavi);cursor:pointer}
+.ust .secenek span{color:var(--cok-sonuk)}
+.yok{color:var(--cok-sonuk);font-size:11.5px;padding:14px 0}
 .imlec{display:inline-block;width:8px;height:13px;background:var(--yesil);
        vertical-align:-2px;animation:yanip 1s steps(2,end) infinite}
 @keyframes yanip{50%{opacity:0}}
@@ -113,7 +119,12 @@ h1{font-size:15px;margin:0;letter-spacing:.24em;text-transform:uppercase}
 
 <div class="ust">
   <h1>Oturum Odasi<span class="imlec"></span></h1>
+  <div class="proje" id="proje"></div>
   <div class="alt" id="ozet">baglaniyor...</div>
+  <label class="secenek">
+    <input type="checkbox" id="uykuGoster"> uykudakileri de goster
+    <span id="uykuSayi"></span>
+  </label>
 </div>
 
 <div class="oda" id="oda"></div>
@@ -236,11 +247,42 @@ function ilerlemeHTML(a){
   </div>`;
 }
 
+/* Bir oturumu gostermeye deger mi?
+   Panel git WORKTREE'lerini listeliyor; worktree kalicidir, oturum degil.
+   Aylar once acilmis ama icinde hic Claude calismamis bir worktree ekrani
+   doldurup asil calisanlari goze batmaz hale getiriyordu.
+
+   ELEME OLCUSU: son 2 saatte hareket. Ama commit'lenmemis isi ya da bekleyen
+   mesaji olan bir agac, uykuda bile olsa GOSTERILIR -- ikisi de unutulmus is
+   demek, gizlemek tam tersi etki yapar. */
+const CANLI_ESIK = 7200;
+function gosterilsinMi(a, cakisanlar){
+  /* Hic Claude calismamis worktree (transkript yok): her kosulda gizli.
+     Boyle bir agaca yollanmis okunmamis mesaj kartinin SONSUZA KADAR
+     kalmasina yol acardi -- mesaji okuyacak bir oturum hic olmadi. */
+  if (a.saniye < 0) return false;
+  if (a.saniye < CANLI_ESIK) return true;
+  if (a.kirli > 0) return true;
+  if (a.okunmamis > 0) return true;
+  if (cakisanlar.has(a.konu)) return true;
+  return false;
+}
+
 function ciz(veri){
   const cakisanlar = new Set();
   for (const c of veri.carpismalar) for (const k of c.kimler) cakisanlar.add(k);
 
-  document.getElementById("oda").innerHTML = veri.ajanlar.map(a => {
+  document.getElementById("proje").textContent = veri.proje || "";
+  document.getElementById("proje").title = veri.projeYolu || "";
+
+  const hepsiGoster = document.getElementById("uykuGoster").checked;
+  const gorunen = veri.ajanlar.filter(a => hepsiGoster || gosterilsinMi(a, cakisanlar));
+  const gizli = veri.ajanlar.length - gorunen.length;
+  document.getElementById("uykuSayi").textContent = gizli ? `(${gizli} gizli)` : "";
+
+  document.getElementById("oda").innerHTML = gorunen.length === 0
+    ? `<div class="yok">Su an aktif oturum yok. Uykudakileri gormek icin yukaridaki kutuyu isaretle.</div>`
+    : gorunen.map(a => {
     const rozet = [];
     if (a.anaMi) rozet.push(`<span class="rz mavi">ana agac</span>`);
     if (a.oturumSayisi > 1) rozet.push(`<span class="rz mavi">${a.oturumSayisi} claude oturumu</span>`);
@@ -257,7 +299,8 @@ function ciz(veri){
         <div class="kimlik">
           <div class="ad"><span class="nokta ${a.durum}"></span>${kacar(a.konu)}</div>
           <div class="dal">${kacar(a.dal || "-")}</div>
-          <div class="gecen">${sureMetni(a.saniye)}</div>
+          <div class="gecen" title="${kacar(a.dizin || "")}">${sureMetni(a.saniye)}
+            ${a.dizin ? ` · ${kacar(a.dizin.split("\\").pop())}` : ""}</div>
         </div>
       </div>
       ${a.baslik ? `<div class="is">${kacar(a.baslik)}</div>`
@@ -294,9 +337,15 @@ function ciz(veri){
   const calisan = veri.ajanlar.filter(a => a.durum === "yaziyor").length;
   const bekleyen = veri.mesajlar.filter(m => !m.okuyan || !m.okuyan.length).length;
   document.getElementById("ozet").textContent =
-    `${veri.ajanlar.length} oturum · ${calisan} calisiyor · ${veri.carpismalar.length} carpisma`
-    + ` · ${bekleyen} mesaj bekliyor · ${veri.guncelleme}`;
+    `${gorunen.length}/${veri.ajanlar.length} oturum · ${calisan} calisiyor`
+    + ` · ${veri.carpismalar.length} carpisma · ${bekleyen} mesaj bekliyor · ${veri.guncelleme}`;
 }
+
+/* Kutu degisince sunucuya gitmeye gerek yok; son veriyi yeniden ciz. */
+let sonVeri = null;
+document.getElementById("uykuGoster").addEventListener("change", () => {
+  if (sonVeri) ciz(sonVeri);
+});
 
 async function gonder(kime, girdiId){
   const el = document.getElementById(girdiId);
@@ -326,7 +375,8 @@ async function tazele(){
   try{
     const cevap = await fetch("/durum", { cache:"no-store" });
     const saklanan = yazilanlar();
-    ciz(await cevap.json());
+    sonVeri = await cevap.json();
+    ciz(sonVeri);
     geriYaz(saklanan);
   }catch(e){
     document.getElementById("ozet").innerHTML =
