@@ -63,7 +63,14 @@ def list_alarm_events(
     en yeni 500 kaydi icinden kendine denk gelenleri goruyordu. Artik daraltma
     SQL'de, LIMIT'ten once.
     """
-    base = select(AlarmEvent)
+    # ARSIVLENMIS KAYITLAR CANLI LISTEDE YOK. Yasam dongusu tamamlanmis
+    # (onaylanip normale donmus) ya da ayni alarm tekrar tetikledigi icin
+    # yerini yenisine birakmis satirlar `superseded_at` damgasi tasir.
+    # Eskiden bu satirlar SILINIYORDU; artik duruyorlar ve tarihce
+    # sorularini (alarm takvimi, cihaz x zaman) onlar cevapliyor. Canli
+    # panelin bunlari gostermesi ise "kapanmis isi tekrar onune koymak"
+    # olurdu — suzgec burada.
+    base = select(AlarmEvent).where(AlarmEvent.superseded_at.is_(None))
     if visible_device_ids is not None:
         base = base.where(AlarmEvent.device_id.in_(visible_device_ids))
 
@@ -316,8 +323,8 @@ def acknowledge_alarm(db: Session, alarm_id: int, actor_username: str) -> AlarmE
         i18n_params={"title": alarm.title},
     )
     # SCADA modeli: cihaz zaten normale donmusse (reset) ve simdi onaylandiysa
-    # alarm yasam dongusu tamamlanmistir -> kaydi sil (aktif alarm listesinde
-    # asili kalmasin). Gecmis event log'da durur (Olaylar sayfasi).
+    # alarm yasam dongusu tamamlanmistir -> kayit canli listeden DUSER (aktif
+    # alarm listesinde asili kalmasin).
     if alarm.reset:
         return _finalize_acknowledged_reset(db, alarm, actor_username)
     db.commit()
@@ -326,41 +333,33 @@ def acknowledge_alarm(db: Session, alarm_id: int, actor_username: str) -> AlarmE
 
 
 def _finalize_acknowledged_reset(db: Session, alarm: AlarmEvent, actor_username: str) -> AlarmEvent:
-    """Onaylanmis + reset olmus alarmi sil, response icin detached kopya don."""
-    # Response icin snapshot (silindikten sonra ORM nesnesi kullanilamaz).
-    snapshot = AlarmEvent(
-        id=alarm.id,
-        device_id=alarm.device_id,
-        level=alarm.level,
-        title=alarm.title,
-        description=alarm.description,
-        signal_key=alarm.signal_key,
-        assigned_to=alarm.assigned_to,
-        acknowledged=True,
-        reset=True,
-        acknowledged_at=alarm.acknowledged_at,
-        reset_at=alarm.reset_at,
-        produces_fault=alarm.produces_fault,
-        created_at=alarm.created_at,
-    )
-    title = alarm.title
-    alarm_id = alarm.id
-    db.query(AlarmComment).filter(AlarmComment.alarm_event_id == alarm_id).delete(synchronize_session=False)
-    db.delete(alarm)
+    """Onaylanmis + reset olmus alarmi ARSIVE al (canli listeden dusur).
+
+    ONCEDEN SILINIYORDU — hem alarm satiri hem YORUMLARI. Yasam dongusu
+    tamamlanan bir kaydin listede asili kalmamasi bir GORUNUM gereksinimi;
+    cozumu satiri yok etmekti ve bedeli tarihceydi: "gecen ay hangi gun kac
+    alarm geldi" sorusu cevapsiz kaliyor, ariza analizindeki alarm takvimi
+    ile cihaz x zaman matrisi bos gorunuyordu. Sahada bir kisinin alarma
+    yazdigi yorum da onunla birlikte gidiyordu.
+
+    Artik `superseded_at` damgasi: canli listeler suzer, analiz katmani
+    tamamini gorur, yorumlar yerinde kalir.
+    """
+    alarm.superseded_at = datetime.now(timezone.utc)
     record_event(
         db,
         category="alarm",
         event_type="alarm_auto_cleared",
         severity="info",
         actor_username=actor_username,
-        message=f"Alarm \"{title}\" onaylandi ve normale donmustu -> temizlendi",
-        metadata={"alarm_id": alarm_id, "title": title},
+        message=f"Alarm \"{alarm.title}\" onaylandi ve normale donmustu -> arsive alindi",
+        metadata={"alarm_id": alarm.id, "title": alarm.title},
         i18n_key="alarm_auto_cleared_acked",
-        i18n_params={"title": title},
+        i18n_params={"title": alarm.title},
     )
     db.commit()
-    # snapshot session'a hic eklenmedi -> zaten detached, dogrudan don.
-    return snapshot
+    db.refresh(alarm)
+    return alarm
 
 
 def reset_alarm(db: Session, alarm_id: int, actor_username: str) -> AlarmEvent:

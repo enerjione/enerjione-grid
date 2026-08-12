@@ -699,7 +699,7 @@
       "fault_comment_added": "Fault comment added: fault {{fault_id}}",
       "alarm_triggered": "Alarm rule triggered: {{title}}",
       "alarm_auto_cleared": "Alarm returned to normal: {{title}}",
-      "alarm_auto_cleared_acked": "Acknowledged alarm returned to normal and removed: {{title}}",
+      "alarm_auto_cleared_acked": "Acknowledged alarm returned to normal and archived: {{title}}",
       "alarm_rule_created": "Alarm rule created: {{name}} ({{signal}})",
       "alarm_rule_updated": "Alarm rule updated: {{name}}",
       "alarm_rule_deleted": "Alarm rule deleted: {{name}} ({{signal}})",

@@ -199,28 +199,37 @@ def _evaluate_rule(rule: AlarmRule, value: float) -> bool:
 
 
 def _resolve_alarm(db, alarm: AlarmEvent, reason: str) -> str:
-    """Alarmi onay durumuna gore sil veya reset et. Action stringini doner."""
+    """Alarmi onay durumuna gore ARSIVE al ya da reset et. Action doner.
+
+    ONAYLANMIS alarm eskiden SILINIYORDU (kullanici gormustu, listede yer
+    kaplamasin). Bir gorunum karariydi ama tarihceyi goturuyordu: alarm
+    takvimi ve cihaz x zaman matrisi gecmis gunler icin bos kaliyordu.
+    Artik satir duruyor, `superseded_at` ile canli listeden dusuyor.
+    """
+    simdi = datetime.now(timezone.utc)
     if alarm.acknowledged:
+        alarm.reset = True
+        alarm.reset_at = simdi
+        alarm.superseded_at = simdi
         record_event(
             db,
             category="alarm",
             event_type="alarm_auto_cleared",
             severity="info",
-            message=f"Acknowledged alarm cleared and removed (reconcile): {alarm.title}",
+            message=f"Acknowledged alarm cleared and archived (reconcile): {alarm.title}",
             metadata={
                 "alarm_id": alarm.id,
                 "device_id": alarm.device_id,
                 "signal_key": alarm.signal_key,
                 "reason": reason,
-                "auto_deleted": True,
+                "archived": True,
             },
             i18n_key="alarm_auto_cleared_acked",
             i18n_params={"title": alarm.title},
         )
-        db.delete(alarm)
-        return "deleted"
+        return "archived"
     alarm.reset = True
-    alarm.reset_at = datetime.now(timezone.utc)
+    alarm.reset_at = simdi
     record_event(
         db,
         category="alarm",

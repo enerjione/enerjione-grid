@@ -311,12 +311,19 @@ def ingest_alarm(
         return {"status": "deduplicated", "alarm_id": existing.id}
 
     # Ayni sinyal icin "Normale Donen - Onay Bekliyor" listesinde bekleyen
-    # onaylanmamis kayit varsa, alarm tekrar tetiklendigi icin onu sil. Kullanici
-    # "alarmim normale dondu, kabul edeyim" demeden sinyal yine gitti — bu
-    # durumda alt panelde tutmaya gerek yok, ust panele yeni satir gelir.
+    # onaylanmamis kayit varsa, alarm tekrar tetiklendigi icin onu ARSIVE al:
+    # kullanici "normale dondu, kabul edeyim" demeden sinyal yine gitti, alt
+    # panelde tutmanin anlami yok — ust panele yeni satir gelir.
+    #
+    # ONCEDEN SILINIYORDU. Panelin temiz kalmasi icin satirin kendisi yok
+    # ediliyordu; boylece tekrar eden bir alarm geriye TEK satir birakiyordu
+    # ve "gecen ay hangi gun kac alarm geldi" sorusunun cevabi kalmiyordu
+    # (ariza analizindeki alarm takvimi ve cihaz x zaman matrisi bos
+    # goruntu veriyordu). Artik satir duruyor, yalnizca `superseded_at`
+    # damgasi yiyor: canli listeler suzer, analiz katmani tamamini gorur.
     #
     # ESLESME ONCELIK SIRASI:
-    #   1) signal_key varsa: ayni signal_key (level/title uyusmasa bile siler).
+    #   1) signal_key varsa: ayni signal_key (level/title uyusmasa bile).
     #      Ayni sinyal icin baska kural varsa onlar zaten farkli title ile
     #      kendi kaydina sahip; burada ayni signal_key + reset=true + !ack tek
     #      bir kayit olacak (alt panelde her kural icin tek satir).
@@ -326,35 +333,37 @@ def ingest_alarm(
         .where(AlarmEvent.device_id == device_id)
         .where(AlarmEvent.reset.is_(True))
         .where(AlarmEvent.acknowledged.is_(False))
+        .where(AlarmEvent.superseded_at.is_(None))
     )
 
-    deleted_any = False
+    arsivlenecek: list[AlarmEvent] = []
     if payload.signal_key:
-        # 1) Yeni kayitlar (signal_key dolu) — aynı sinyalin tüm pending'leri.
-        for stale in db.scalars(
-            base_stale.where(AlarmEvent.signal_key == payload.signal_key)
-        ).all():
-            db.delete(stale)
-            deleted_any = True
-        # 2) Eski kayitlar (signal_key NULL) ama ayni title+level → onları da sil.
-        for stale in db.scalars(
-            base_stale.where(AlarmEvent.signal_key.is_(None))
-            .where(AlarmEvent.title == payload.title)
-            .where(AlarmEvent.level == payload.level)
-        ).all():
-            db.delete(stale)
-            deleted_any = True
+        # 1) Yeni kayitlar (signal_key dolu) — ayni sinyalin tum pending'leri.
+        arsivlenecek += list(
+            db.scalars(base_stale.where(AlarmEvent.signal_key == payload.signal_key)).all()
+        )
+        # 2) Eski kayitlar (signal_key NULL) ama ayni title+level.
+        arsivlenecek += list(
+            db.scalars(
+                base_stale.where(AlarmEvent.signal_key.is_(None))
+                .where(AlarmEvent.title == payload.title)
+                .where(AlarmEvent.level == payload.level)
+            ).all()
+        )
     else:
         # Payload'da signal_key gelmediyse (eski alarm-service uretimi),
-        # title + level esitligi ile sil.
-        for stale in db.scalars(
-            base_stale.where(AlarmEvent.title == payload.title)
-            .where(AlarmEvent.level == payload.level)
-        ).all():
-            db.delete(stale)
-            deleted_any = True
+        # title + level esitligi ile eslestir.
+        arsivlenecek += list(
+            db.scalars(
+                base_stale.where(AlarmEvent.title == payload.title)
+                .where(AlarmEvent.level == payload.level)
+            ).all()
+        )
 
-    if deleted_any:
+    if arsivlenecek:
+        damga = datetime.now(timezone.utc)
+        for stale in arsivlenecek:
+            stale.superseded_at = damga
         db.flush()
 
     # ZAMAN OTORITESI: alarm saati DAIMA backend'in olayi ALGILADIGI andir.
@@ -619,27 +628,35 @@ def clear_alarm(
     if existing is None:
         return {"status": "no_match"}
 
-    # Önemli kural: alarm zaten ONAYLANMIS ise normale donduğunde tarihçeye
-    # düşmeden direkt SİLİNİR. Kullanıcı zaten onaylamıştı, bilgilendi → alt
-    # panelde gereksiz yer kaplamasın. Sadece olay log'una gider.
+    # Kural: alarm zaten ONAYLANMIS ise normale donunce canli panellerden
+    # DUSER — kullanici zaten gormustu, alt panelde yer kaplamasin.
+    #
+    # ONCEDEN SATIR SILINIYORDU ve tek iz olay kaydiydi. Bir gorunum
+    # kararinin veri silmesiydi: onaylanan her alarm tarihceden de siliniyor,
+    # "gecen ay kac alarm geldi" sorusu cevapsiz kaliyordu. Artik satir
+    # duruyor — reset + `superseded_at` damgasi ile canli listelerden dusuyor,
+    # analiz katmani (takvim / cihaz x zaman) tamamini goruyor.
     was_acknowledged = bool(existing.acknowledged)
     alarm_id = existing.id
     alarm_title = existing.title
     if was_acknowledged:
-        db.delete(existing)
+        simdi = datetime.now(timezone.utc)
+        existing.reset = True
+        existing.reset_at = simdi
+        existing.superseded_at = simdi
         record_event(
             db,
             category="alarm",
             event_type="alarm_auto_cleared",
             severity="info",
             device_code=payload.device_code,
-            message=f"Acknowledged alarm cleared and removed: {alarm_title}",
+            message=f"Acknowledged alarm cleared and archived: {alarm_title}",
             metadata={
                 "alarm_id": alarm_id,
                 "rule_id": payload.rule_id,
                 "signal_key": payload.signal_key,
                 "source_gateway": payload.source_gateway,
-                "auto_deleted": True,
+                "archived": True,
             },
             i18n_key="alarm_auto_cleared_acked",
             i18n_params={"title": alarm_title},
@@ -651,7 +668,7 @@ def clear_alarm(
             import logging as _logging
             _logging.getLogger(__name__).exception("fault_recompute_failed_after_clear_ack")
         db.commit()
-        return {"status": "cleared_and_deleted", "alarm_id": alarm_id}
+        return {"status": "cleared_and_archived", "alarm_id": alarm_id}
 
     # Onaylanmamis aktif alarm normale dondu → reset=True (alt panele duser)
     existing.reset = True

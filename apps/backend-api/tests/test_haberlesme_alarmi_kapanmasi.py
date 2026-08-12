@@ -154,11 +154,12 @@ def test_pencerede_BOZUK_okuma_varsa_alarm_ACIK_kalir(db, monkeypatch, kotu):
     assert alarm.reset is False
 
 
-def test_ONAYLANMIS_alarm_kapaninca_SILINIR(db, monkeypatch):
-    """Mevcut kural: onaylanmis alarm cozulunce kayit silinir (gereksiz satir).
+def test_ONAYLANMIS_alarm_kapaninca_ARSIVE_alinir(db, monkeypatch):
+    """Onaylanmis alarm cozulunce canli listeden duser ama SATIR KALIR.
 
-    Haberlesme alarmi da ayni yoldan (`_resolve_alarm`) gecmeli — ayri bir
-    kapanma semantigi olusturmuyoruz.
+    Eskiden silinirdi; tarihce de onunla giderdi ("gecen ay kac alarm
+    geldi" cevapsizdi). Haberlesme alarmi da ayni yoldan (`_resolve_alarm`)
+    gecmeli — ayri bir kapanma semantigi olusturmuyoruz.
     """
     alarm = _kur(db, kalite_gecmisi=["good"])
     alarm.acknowledged = True
@@ -166,4 +167,7 @@ def test_ONAYLANMIS_alarm_kapaninca_SILINIR(db, monkeypatch):
 
     _tik(db, monkeypatch)
 
-    assert db.get(AlarmEvent, 1) is None
+    kayit = db.get(AlarmEvent, 1)
+    assert kayit is not None, "onaylanmis alarm silinmis — tarihce kayboldu"
+    assert kayit.reset is True
+    assert kayit.superseded_at is not None, "canli listeden dusurulmemis"

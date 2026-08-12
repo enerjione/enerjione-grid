@@ -696,7 +696,7 @@
       "fault_comment_added": "Arıza yorumu eklendi: arıza {{fault_id}}",
       "alarm_triggered": "Alarm kuralı gerçekleşti: {{title}}",
       "alarm_auto_cleared": "Alarm sahada normale döndü: {{title}}",
-      "alarm_auto_cleared_acked": "Onaylanmış alarm normale döndü ve silindi: {{title}}",
+      "alarm_auto_cleared_acked": "Onaylanmış alarm normale döndü ve arşive alındı: {{title}}",
       "alarm_rule_created": "Alarm kuralı eklendi: {{name}} ({{signal}})",
       "alarm_rule_updated": "Alarm kuralı güncellendi: {{name}}",
       "alarm_rule_deleted": "Alarm kuralı silindi: {{name}} ({{signal}})",

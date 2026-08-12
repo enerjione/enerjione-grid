@@ -10,13 +10,20 @@ degeri okunabilirliginde.
 
 KRITIK AYRIM — IKI TEMIZLENME YOLU AYNI DEGIL
 ----------------------------------------------
-* ONAYLANMAMIS alarm temizlenir  -> satir KALIR (`reset=True`, `reset_at`).
-  Olay kaydi TEKRAR; kapatilabilir.
-* ONAYLANMIS alarm temizlenir    -> satir SILINIR (`db.delete`).
-  Olay kaydi geriye kalan TEK IZ; kapatilamaz.
+* ONAYLANMAMIS alarm temizlenir  -> satir CANLI KALIR (`reset=True`).
+  Alt panelde "onay bekliyor" olarak durur. Olay kaydi TEKRAR eder;
+  kapatilabilir.
+* ONAYLANMIS alarm temizlenir    -> satir ARSIVE duser (`superseded_at`).
+  Yasam dongusu bitmistir, canli listede yeri yoktur. Bu SEYREK bir olaydir
+  (birinin onaylamis olmasi gerekir) ve gurultu uretmez; olay kaydi
+  kapatilamaz.
 
 Ikisini ayni bayrakla kapatmak, onaylanmis bir alarmin sahada olup bittigine
-dair tum kaydi yok ederdi.
+dair operator izini gurultuye kurban ederdi.
+
+NOT: onaylanmis dal ESKIDEN `db.delete` yapiyordu ve olay kaydi geriye kalan
+TEK iz oluyordu. Artik satir duruyor (tarihce icin), olay kaydi ise operator
+izi olarak yine kosulsuz yaziliyor.
 """
 
 from __future__ import annotations
@@ -47,8 +54,11 @@ def test_varsayilan_KAPALI():
 
 
 def test_ONAYLANMAMIS_temizlenme_kaydi_BAYRAGA_bagli():
+    """Gurultunun kaynagi bu dal: dalgalanan sinyal binlerce cift uretiyor."""
     kod = _kod(inspect.getsource(_clear_fn()))
-    i_reset = kod.find("existing.reset = True")
+    # ONAYLANMAMIS dal, onaylanmis dalin ARDINDAN gelir; son `reset = True`
+    # atamasindan itibaren bakiyoruz (ilk atama onaylanmis daldadir).
+    i_reset = kod.rfind("existing.reset = True")
     assert i_reset != -1, "reset atamasi bulunamadi"
     kalan = kod[i_reset:]
     i_bayrak = kalan.find("settings.alarm_auto_clear_events")
@@ -59,18 +69,28 @@ def test_ONAYLANMAMIS_temizlenme_kaydi_BAYRAGA_bagli():
 
 
 def test_ONAYLANMIS_temizlenme_kaydi_HER_ZAMAN_yaziliyor():
-    """Orada alarm satiri SILINIYOR; olay kaydi geriye kalan tek iz."""
+    """Seyrek ve operator izli bir olay; gurultu uretmez, kapatilamaz."""
     kod = _kod(inspect.getsource(_clear_fn()))
-    i_sil = kod.find("db.delete(existing)")
-    assert i_sil != -1, "onaylanmis dalda silme bulunamadi"
-    # Silme ile onu izleyen record_event arasinda bayrak kontrolu OLMAMALI.
-    i_kayit = kod.find("record_event(", i_sil)
-    assert i_kayit != -1, "onaylanmis dalda olay kaydi yok — TEK IZ kayboldu"
-    arasi = kod[i_sil:i_kayit]
+    i_arsiv = kod.find("existing.superseded_at")
+    assert i_arsiv != -1, "onaylanmis dalda arsivleme damgasi bulunamadi"
+    i_kayit = kod.find("record_event(", i_arsiv)
+    assert i_kayit != -1, "onaylanmis dalda olay kaydi yok"
+    arasi = kod[i_arsiv:i_kayit]
     assert "alarm_auto_clear_events" not in arasi, (
         "onaylanmis alarmin temizlenme kaydi da kapatilabilir yapilmis — "
-        "satir siliniyor, bu kayit geriye kalan TEK iz"
+        "bu dal seyrek ve operator izli, gurultuye girmez"
     )
+
+
+def test_ONAYLANMIS_alarm_SILINMIYOR():
+    """Tarihce: satir arsive duser, yok edilmez.
+
+    Silinseydi "gecen ay hangi gun kac alarm geldi" sorusunun cevabi
+    kalmazdi — ariza analizindeki alarm takvimi ve cihaz x zaman matrisi
+    gecmis gunler icin bos gorunurdu.
+    """
+    kod = _kod(inspect.getsource(_clear_fn()))
+    assert "db.delete(existing)" not in kod, "alarm satiri hala siliniyor"
 
 
 def test_reset_bilgisi_ALARM_SATIRINDA_duruyor():

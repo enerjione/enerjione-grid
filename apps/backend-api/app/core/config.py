@@ -495,9 +495,23 @@ class Settings(BaseSettings):
     # icinde kayboluyor. Denetim kaydinin degeri okunabilirliginde.
     #
     # DIKKAT: bu ayar YALNIZCA onaylanmamis alarmin temizlenmesini etkiler.
-    # ONAYLANMIS alarm temizlendiginde satir SILINIYOR ve olay kaydi geriye
-    # kalan TEK iz — o her zaman yazilir, bu bayrak onu kapatmaz.
+    # ONAYLANMIS alarm temizlendiginde olay kaydi operator izidir — o her
+    # zaman yazilir, bu bayrak onu kapatmaz.
     alarm_auto_clear_events: bool = False
+
+    # ALARM TARIHCESI — `alarm_events` artik ARSIVLIYOR (satirlar silinmiyor,
+    # `superseded_at` damgasi yiyor) cunku "gecen ay hangi gun kac alarm
+    # geldi" sorusunu ariza analizi bu tablodan cevapliyor. Biriken tabloya
+    # bir tavan sart: sahadaki cihazin diski sinirli.
+    #
+    # Pencere olay kaydiyla AYNI (2 yil): ikisi de "gecmiste ne oldu"
+    # sorusunun kaydi. Silme YALNIZCA arsivlenmis satirlara dokunur — canli
+    # bir alarm yasi ne olursa olsun silinmez.
+    alarm_events_retention_days: int = 730
+    alarm_events_interval_sec: int = 21_600  # 6 saat
+    # FIFO tavani: alarm firtinasinda 2 yil DOLMADAN da sinir devreye girsin.
+    # 0 = kapali (yalnizca sure).
+    alarm_events_max_rows: int = 2_000_000
 
     system_events_retention_days: int = 730
     system_events_interval_sec: int = 21_600  # 6 saat

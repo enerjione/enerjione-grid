@@ -337,6 +337,7 @@ class RetentionWorker:
             ["telemetry", lambda: settings.telemetry_retention_interval_sec, self.purge_telemetry, 0.0],
             ["processed_messages", lambda: settings.processed_messages_interval_sec, self.purge_processed_messages, 0.0],
             ["system_events", lambda: settings.system_events_interval_sec, self._purge_system_events, 0.0],
+            ["alarm_events", lambda: settings.alarm_events_interval_sec, self._purge_alarm_events, 0.0],
             ["outbox_events", lambda: settings.outbox_purge_interval_sec, self.purge_outbox_events, 0.0],
             # Disk guard: yukaridaki TTL'lerin hepsi dogru calissa BILE diskin
             # dolmadigini gercek olcumle dogrular; dolmaya yaklasilirsa
@@ -608,6 +609,88 @@ class RetentionWorker:
                 dl_cutoff.isoformat(),
             )
         return removed + dl_removed
+
+    def _purge_alarm_events(self) -> int:
+        """Alarm tarihcesi temizligi — YALNIZCA arsivlenmis satirlar.
+
+        `alarm_events` eskiden kendi kendini buduyordu: tekrar eden alarm
+        oncekini siler, onaylanmis alarm kapaninca satir yok olurdu. Bu
+        yuzden retention'a hic ihtiyac duymamisti — ve ayni yuzden "gecen ay
+        kac alarm geldi" sorusunun cevabi yoktu. Silme kalkinca tabloya bir
+        tavan sart oldu.
+
+        CANLI ALARM ASLA SILINMEZ: kosul `superseded_at IS NOT NULL`. Yasi
+        iki yili gecmis ama hala ACIK bir alarm, urunun bildirmesi gereken
+        en onemli seydir; retention onu goturemez.
+
+        Yorumlar ONCE dusulur (FK) — ve yalnizca silinecek alarmlarinki.
+        """
+        from app.models.alarm import AlarmComment, AlarmEvent
+
+        removed = 0
+        cutoff = datetime.now(timezone.utc) - timedelta(
+            days=settings.alarm_events_retention_days
+        )
+        dusecek = (
+            select(AlarmEvent.id)
+            .where(AlarmEvent.superseded_at.is_not(None))
+            .where(AlarmEvent.created_at < cutoff)
+        )
+        _batch_delete(
+            AlarmComment,
+            AlarmComment.alarm_event_id.in_(dusecek),
+            label="alarm_comments_age",
+            pause=self._pause,
+        )
+        removed += _batch_delete(
+            AlarmEvent,
+            and_(
+                AlarmEvent.superseded_at.is_not(None),
+                AlarmEvent.created_at < cutoff,
+            ),
+            label="alarm_events_age",
+            pause=self._pause,
+        )
+
+        # FIFO tavani — emniyet subabi. Yine yalnizca arsiv satirlari.
+        max_rows = settings.alarm_events_max_rows
+        if max_rows > 0:
+            db = SessionLocal()
+            try:
+                threshold_id = db.scalar(
+                    select(AlarmEvent.id)
+                    .order_by(AlarmEvent.id.desc())
+                    .offset(max_rows)
+                    .limit(1)
+                )
+            finally:
+                db.close()
+            if threshold_id is not None:
+                tavan = and_(
+                    AlarmEvent.id <= threshold_id,
+                    AlarmEvent.superseded_at.is_not(None),
+                )
+                _batch_delete(
+                    AlarmComment,
+                    AlarmComment.alarm_event_id.in_(select(AlarmEvent.id).where(tavan)),
+                    label="alarm_comments_fifo",
+                    pause=self._pause,
+                )
+                over = _batch_delete(
+                    AlarmEvent, tavan, label="alarm_events_fifo", pause=self._pause
+                )
+                if over:
+                    logger.warning(
+                        "alarm_events_fifo_cap_applied removed=%d max_rows=%d "
+                        "(alarm uretimi beklenenden yuksek — kaynagi inceleyin)",
+                        over,
+                        max_rows,
+                    )
+                removed += over
+
+        if removed:
+            logger.info("alarm_events_purged removed=%d", removed)
+        return removed
 
     def _purge_system_events(self) -> int:
         """Denetim/olay kaydi temizligi: once SURE, sonra ADET tavani (FIFO).

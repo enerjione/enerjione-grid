@@ -42,6 +42,27 @@ class AlarmEvent(Base):
     #:
     #: NULL = eski kayit (bu alan eklenmeden once yazilmis).
     kind: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+
+    #: Kayit ARSIVE dustu: canli panellerde gorunmez ama TARIHCEDE durur.
+    #:
+    #: NEDEN VAR: bu satirlar eskiden SILINIYORDU. Iki yerde:
+    #:   1) Ayni sinyal icin alarm tekrar tetiklendiginde "Onay Bekliyor"da
+    #:      bekleyen onceki kayit siliniyordu (panel tek satir kalsin diye).
+    #:   2) ONAYLANMIS bir alarm normale donunce satir tamamen siliniyordu
+    #:      ("kullanici zaten gordu, yer kaplamasin").
+    #:
+    #: Ikisi de bir GORUNUM sorununu VERI SILEREK cozuyordu. Sonucu: "gecen
+    #: ay hangi gun kac alarm geldi" sorusunun cevabi yoktu — tekrar eden bir
+    #: alarm geriye tek satir birakiyordu. Ariza analizi (takvim, cihaz x
+    #: zaman matrisi) bos gorunuyordu; 18 ariza kaydina karsilik 6 alarm
+    #: satiri kaliyordu.
+    #:
+    #: Artik satir DURUYOR, yalnizca damgalaniyor. Canli listeler
+    #: `superseded_at IS NULL` suzer; analiz katmani bu alani HIC bakmaz —
+    #: tarihce tamdir. NULL = canli kayit.
+    superseded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
