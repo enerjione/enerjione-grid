@@ -24002,15 +24002,16 @@ th.event-col-category {
 
 
 /* ---------- 1. UST SERIT ---------- */
-/* Uc sutun: kimlik+durum | olcu/zaman | eylemler.
-   Dorduncu sutun (durum rozetleri) KALDIRILDI — durum artik solda, hat
-   adinin altindaki serit. Rozet butonlarin arasinda kaybolyordu. */
+/* TEK SATIR: bolge + hat + aralik + durum + sure + etiketler solda; olcu/zaman
+   ve eylemler sagda. Onceden solda uc satir vardi (bolge / hat adi / durum
+   seridi) ve serit kartin ucte birini yiyordu; asil is olan CIZIM asagi
+   kayiyordu. Dar ekranda flex-wrap devreye girer, bilgi kaybolmaz. */
 .fx-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 18px;
-  padding: 13px 18px;
+  padding: 9px 18px;
   background: linear-gradient(180deg, #fcfdfe, #f8fafc);
   border-bottom: 1px solid #eef2f7;
 }
@@ -24021,7 +24022,13 @@ th.event-col-category {
   }
 }
 
-.fx-head-id { min-width: 0; }
+.fx-head-id {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
 .fx-head-region {
   display: inline-flex;
   align-items: center;
@@ -24032,15 +24039,17 @@ th.event-col-category {
   text-transform: uppercase;
   color: #64748b;
 }
+/* Tek satira inince baslik da kuculdu: 22px bir SATIR BASLIGI olcusudur,
+   yaninda rozet duran bir seritte komsularini ezer. */
 .fx-head-line {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   gap: 2px;
-  margin: 1px 0 0;
-  font-size: 22px;
+  margin: 0;
+  font-size: 17px;
   font-weight: 800;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
   color: #0f172a;
   line-height: 1.15;
 }
@@ -24069,15 +24078,15 @@ th.event-col-category {
 .fx-head-parent svg { color: #cbd5e1; }
 
 /* --- DURUM SERIDI ---
-   Kartin en cok bakilan satiri: ariza acik mi, ne kadardir suruyor, yeri
-   bulundu mu, bu hat kacinci kez arizalaniyor. Hepsi hat adinin ALTINDA tek
-   satirda; onceden uc ayri koseye dagilmisti. */
+   Ariza acik mi, ne kadardir suruyor, yeri bulundu mu, bu aralik kacinci kez
+   arizalaniyor. Artik hat adinin ALTINDA degil YANINDA: ust serit tek satir
+   (bkz. `.fx-head-id`). */
 .fx-head-state {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 7px;
+  margin-top: 0;
 }
 .fx-state {
   display: inline-flex;
@@ -24210,10 +24219,12 @@ th.event-col-category {
   align-items: stretch;
   gap: 18px;
 }
+/* Anahtar/deger YAN YANA: ust serit tek satira indi, iki satirlik kutucuklar
+   seridi yeniden iki katina cikariyordu. */
 .fx-fact {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  align-items: baseline;
+  gap: 6px;
   padding-left: 18px;
   border-left: 1px solid #eef2f7;
 }

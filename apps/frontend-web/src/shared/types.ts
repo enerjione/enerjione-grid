@@ -316,6 +316,11 @@ export type FaultEvent = {
   zone_end_m?: number | null;
   /** Belirsizlik araligi = zone_end_m - zone_start_m (metre). */
   zone_length_m?: number | null;
+  /** ARIZA ARALIĞININ KİMLİĞİ — "L12/D34>D35". Arıza bir hattın değil, iki
+      cihaz arasındaki aralığın olayıdır; tekrar sayımı ve risk puanı bu
+      kodla yapılır. Araya cihaz eklenirse kod değişir (artık başka aralık).
+      Eski kayıtlarda boş olabilir. */
+  zone_code?: string | null;
   status: "open" | "assigned" | "in_progress" | "resolved" | "closed" | string;
   opened_at: string;
   resolved_at?: string | null;
@@ -395,6 +400,28 @@ export type FaultAnalytics = {
     to_pole_seq: number | null;
     count: number;
     last_opened_at: string | null;
+  }[];
+  /** ARALIK RİSK PUANI — bakım önceliğinin asıl girdisi.
+      `repeat_spans` direk çiftini SAYAR; bu liste cihaz aralığına bakar ve
+      tazelik (90 gün yarı ömür) + arıza türüyle ağırlıklandırır. Puan 0-100
+      ve MUTLAKTIR (küme içinde normalize edilmez) — eşik/anomali kuralları
+      bunun üzerine kurulabilsin diye. */
+  zone_scores: {
+    zone_code: string;
+    line_id: number;
+    line_name: string | null;
+    last_red_device_id: number | null;
+    last_red_device_code: string | null;
+    last_red_device_name: string | null;
+    first_green_device_id: number | null;
+    first_green_device_code: string | null;
+    first_green_device_name: string | null;
+    from_pole_seq: number | null;
+    to_pole_seq: number | null;
+    count: number;
+    permanent_count: number;
+    last_opened_at: string | null;
+    score: number;
   }[];
   cause_distribution: { cause_code: string; count: number }[];
   rule_accuracy: {

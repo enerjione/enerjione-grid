@@ -1011,6 +1011,7 @@
       "specCause": "Cause",
       "specCauseAuto": "{{cause}} (suggested)",
       "specSearchSpan": "Search section",
+      "specZoneCode": "Fault zone",
       "specMeasuredAt": "Measured at",
       "kind": {
         "permanent": "Permanent",

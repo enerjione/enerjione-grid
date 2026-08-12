@@ -1008,6 +1008,7 @@
       "specCause": "Sebep",
       "specCauseAuto": "{{cause}} (öneri)",
       "specSearchSpan": "Aranacak kesim",
+      "specZoneCode": "Arıza aralığı",
       "specMeasuredAt": "Ölçüm saati",
       "kind": {
         "permanent": "Kalıcı",

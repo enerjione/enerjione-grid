@@ -473,15 +473,10 @@ export function FaultDetailPage({
         "red"
       );
     }
-    if (fault.fault_direction) {
-      ekle(
-        "dir",
-        t("faults.card.specDirection"),
-        t(`faults.card.direction.${fault.fault_direction}`, {
-          defaultValue: fault.fault_direction
-        })
-      );
-    }
+    // YON GOSTERILMIYOR — kart kunyesiyle ayni karar (bkz. ActiveFaultCard):
+    // "ileri/geri" bayragi kelepcenin takilis yonune gore anlam degistiriyor.
+    // Alan DB'de duruyor, yalnizca kunyede yazilmiyor.
+    ekle("zone", t("faults.card.specZoneCode"), fault.zone_code ?? null);
     if (fault.fault_current_a != null) {
       ekle("ia", t("faults.card.specFaultCurrent"), `${fault.fault_current_a.toFixed(1)} A`, "red");
     }

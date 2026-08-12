@@ -217,13 +217,10 @@ export function ActiveFaultCard({
       // "abc" -> "A-B-C". Backend fazlari harf harf ve sirali yazar.
       ekle("phase", t("faults.card.specPhase"), f.phase.toUpperCase().split("").join("-"), "red");
     }
-    if (f.fault_direction) {
-      ekle(
-        "dir",
-        t("faults.card.specDirection"),
-        t(`faults.card.direction.${f.fault_direction}`, { defaultValue: f.fault_direction })
-      );
-    }
+    // YON GOSTERILMIYOR (kullanici karari): cihazin "ileri/geri" bayragi
+    // kelepcenin takilis yonune gore anlam degistiriyor ve sahada yanlis
+    // tarafa yonlendirebiliyordu. Alan DB'de duruyor (analiz/rapor okuyabilir),
+    // yalnizca kunyede yazilmiyor.
     if (f.fault_current_a != null) {
       ekle("ia", t("faults.card.specFaultCurrent"), `${f.fault_current_a.toFixed(1)} A`, "red");
     }
@@ -250,6 +247,11 @@ export function ActiveFaultCard({
     if (f.zone_length_m != null) {
       ekle("span", t("faults.card.specSearchSpan"), formatDistanceM(f.zone_length_m));
     }
+    // ARALIK KODU — ariza bir HATTIN degil, iki cihaz arasindaki ARALIGIN
+    // olayidir. Telsizde/raporda "hangi ariza" sorusunun kisa cevabi budur
+    // ve tekrar sayimi ile risk puani da bu kodla tutulur. Araya cihaz
+    // eklenirse kod degisir: artik baska bir aralik konusuluyor.
+    ekle("zone", t("faults.card.specZoneCode"), f.zone_code ?? null);
     if (f.measured_at) {
       ekle("at", t("faults.card.specMeasuredAt"), fmtClock(f.measured_at, localeTag));
     }
