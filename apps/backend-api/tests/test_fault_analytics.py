@@ -76,7 +76,7 @@ class Saha:
 
     def ariza(
         self, hat_adi="HAT-1", *, gun_once=1, sure_saat=None, sebep=None,
-        oneri=None, faz=None, aciklik=(1, 2),
+        oneri=None, faz=None, aciklik=(1, 2), kod=None, tur=None,
     ) -> FaultEvent:
         h = self.hat(hat_adi)
         acilis = datetime.now(timezone.utc) - timedelta(days=gun_once)
@@ -94,10 +94,77 @@ class Saha:
             cause_code=sebep,
             auto_cause_code=oneri,
             phase=faz,
+            zone_code=kod,
+            fault_kind=tur,
         )
         self.db.add(f)
         self.db.flush()
         return f
+
+
+# ---- Aralik risk puani -----------------------------------------------------
+#
+# Puan bakim onceligi uretecek ve ileride anomali esigi bunun uzerine
+# kurulacak. Iki ozelligi test altinda: TAZELIK (eski ariza daha az sey
+# soyler) ve MUTLAKLIK (kume icinde normalize edilmez).
+
+def test_puan_TAZELIK_ile_azalir():
+    an = datetime.now(timezone.utc)
+    taze = analiz.bolge_puani([(an, "permanent")], an)
+    eski = analiz.bolge_puani(
+        [(an - timedelta(days=analiz.PUAN_YARI_OMUR_GUN), "permanent")], an
+    )
+    assert taze == 50.0, "tek taze kalici ariza = 50 (dogrusal olmayan doyum egrisi)"
+    assert 0 < eski < taze, "yari omurde puan yariya yakin dusmeli"
+
+
+def test_puan_KALICI_ile_GECICI_arizayi_ayirir():
+    an = datetime.now(timezone.utc)
+    kalici = analiz.bolge_puani([(an, "permanent")], an)
+    gecici = analiz.bolge_puani([(an, "transient")], an)
+    assert gecici < kalici, "kendiliginden duzelen ariza ekip cikartmaz"
+
+
+def test_puan_bir_ARALIK_iyilesince_digerini_YUKSELTMEZ(db):
+    """Mutlak puan: normalize edilseydi esik/anomali kurali anlamsizlasirdi."""
+    s = Saha(db)
+    s.ariza(kod="L1/D1>D2", gun_once=1, tur="permanent")
+    s.ariza(kod="L1/D2>D3", gun_once=2, tur="permanent")
+    once = {r["zone_code"]: r["score"] for r in analiz.bolge_puanlari(
+        db, days=365, visible_line_ids=None
+    )}
+
+    s.ariza(kod="L1/D2>D3", gun_once=1, tur="permanent")
+    sonra = {r["zone_code"]: r["score"] for r in analiz.bolge_puanlari(
+        db, days=365, visible_line_ids=None
+    )}
+
+    assert sonra["L1/D2>D3"] > once["L1/D2>D3"]
+    assert sonra["L1/D1>D2"] == once["L1/D1>D2"], (
+        "baska araligin arizasi bu araligin puanini degistiremez"
+    )
+
+
+def test_siralama_HAT_degil_ARALIK_bazli(db):
+    """Ayni hattin iki ucu ayri sorunlardir; ekip hatta degil ARALIGA gider."""
+    s = Saha(db)
+    for _ in range(3):
+        s.ariza(kod="L1/D5>D6", gun_once=3, tur="permanent")
+    s.ariza(kod="L1/D1>D2", gun_once=200, tur="transient")
+
+    siralama = analiz.bolge_puanlari(db, days=365, visible_line_ids=None)
+
+    assert [r["zone_code"] for r in siralama] == ["L1/D5>D6", "L1/D1>D2"]
+    assert siralama[0]["count"] == 3
+    assert siralama[0]["permanent_count"] == 3
+    assert siralama[0]["score"] > siralama[1]["score"]
+
+
+def test_kodsuz_ESKI_kayitlar_siralamaya_girmez(db):
+    """Kod olmadan hangi aralik oldugu bilinmiyor — uydurma kova acilmaz."""
+    s = Saha(db)
+    s.ariza(kod=None)
+    assert analiz.bolge_puanlari(db, days=365, visible_line_ids=None) == []
 
 
 # ---- Ozet ------------------------------------------------------------------

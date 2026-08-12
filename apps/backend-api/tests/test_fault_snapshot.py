@@ -177,6 +177,53 @@ def test_apply_alanlari_kayda_yazar(db):
     assert f.auto_cause_code == "third_party"
 
 
+def _aktif_alarm(db, device_id: int, signal_key: str) -> None:
+    from app.models.alarm import AlarmEvent
+
+    db.add(
+        AlarmEvent(
+            device_id=device_id, title="Test alarmi", description="-", level="critical",
+            signal_key=signal_key, kind="rule", produces_fault=True, reset=False,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db.flush()
+
+
+def test_faz_ALARMDAN_gelir_dusmeyen_bayraklar_uc_faz_gostermez(db):
+    """TEK unite alarm verdiyse kunye "A-B-C" YAZMAMALI.
+
+    `telemetry_latest` son deger tablosudur: bir ariza bayragi orada kalkar
+    ama DUSMEZ. Onceki denemelerden kalan master/sat01 bayraklari duruyorken
+    tek fazli bir ariza uc fazli gorunuyordu — kart, olculmemis bir seyi
+    olculmus gibi gosteriyordu.
+    """
+    d = _cihaz(db)
+    for unite in ("master", "sat01", "sat02"):
+        _olcum(db, d.id, f"{unite}.overcurrent_tripped", value=1)
+    _aktif_alarm(db, d.id, "sat02.overcurrent_tripped")
+    db.flush()
+    f = _SahteFault(d.id)
+
+    apply_snapshot(db, f)
+
+    assert f.phase == "c", "sat02 -> C fazi; digerleri eski bayrak"
+    # Imza yine TAM: hangi bayraklarin acik oldugu kanit olarak durur.
+    assert len(f.trigger_signals) == 3
+
+
+def test_alarmi_olmayan_cihazda_faz_TELEMETRIDEN_okunur(db):
+    """Alarm kaydi yoksa (elle acilmis/eski kayit) davranis degismemeli."""
+    d = _cihaz(db)
+    _olcum(db, d.id, "sat01.overcurrent_tripped", value=1)
+    db.flush()
+    f = _SahteFault(d.id)
+
+    apply_snapshot(db, f)
+
+    assert f.phase == "b"
+
+
 def test_apply_HATA_YUTAR_ariza_acilmaya_devam_eder(db, monkeypatch):
     """Anlik goruntu ariza motorunun ICINDE kosuyor. Patlarsa ariza kaydinin
     kendisi acilamaz — bu cok daha agir bir hata olurdu."""

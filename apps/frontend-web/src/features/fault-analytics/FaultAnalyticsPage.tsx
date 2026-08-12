@@ -447,6 +447,55 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
             )}
           </section>
 
+          {/* ---- ARALIK RISK PUANI ---------------------------------------
+               "Tekrarlayan aciklikar" SAYAR; bu liste TARTAR. Bir aralikta
+               dort ariza da 11 ay onceyse orasi bugun sorunlu degildir;
+               ucu son iki haftada olan aralik ise ekip bekliyor demektir.
+               Puan tazelik (90 gun yari omur) ve ariza turuyle agirliklidir
+               ve MUTLAKTIR — esik koyup anomali kurali yazilabilsin diye
+               kume icinde normalize EDILMEZ.
+
+               Anahtar CIHAZ ARALIGI (zone_code): ariza bir hattin degil,
+               iki cihaz arasindaki araligin olayidir; bakim ekibi de hatta
+               degil o araliga gider. ---- */}
+          <section className="fa-card">
+            <header className="fa-card-head">
+              <h3>
+                <Gauge size={16} />
+                {t("faultAnalytics.zoneScores")}
+              </h3>
+              <small>{t("faultAnalytics.zoneScoresHint")}</small>
+            </header>
+            {data?.zone_scores.length ? (
+              <ul className="fa-list">
+                {data.zone_scores.map((z) => (
+                  <li key={z.zone_code}>
+                    <span className="fa-list-label">
+                      {z.line_name ?? z.zone_code}
+                      <em>
+                        {/* Aralik CIHAZ adlariyla yazilir: telsizde
+                            konusulan sey direk numarasi degil cihaz kodu. */}
+                        {z.last_red_device_code ?? "?"} →{" "}
+                        {z.first_green_device_code ?? t("faults.card.lineEnd")}
+                        {" · "}
+                        {t("faultAnalytics.zoneFaultCount", { count: z.count })}
+                      </em>
+                    </span>
+                    <strong
+                      className={`fa-list-count ${
+                        z.score >= 50 ? "fa-list-count--hot" : ""
+                      }`}
+                    >
+                      {z.score.toFixed(0)}
+                    </strong>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <Bos Icon={Gauge}>{t("faultAnalytics.noData")}</Bos>
+            )}
+          </section>
+
           {/* ---- Kural isabeti — cikarim katmanina guvenmeden ONCE
                bakilmasi gereken sayi ---- */}
           <section className="fa-card fa-card--third">

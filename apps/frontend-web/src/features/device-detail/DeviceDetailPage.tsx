@@ -13,7 +13,9 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { useTranslation } from "react-i18next";
 
 import { useDeviceModelSettings } from "../../components/DeviceModelSettingsProvider";
+import { WsStatusBadge } from "../../components/WsStatusBadge";
 import { voltageToPercent } from "../../shared/battery";
+import type { WsConnectionState } from "../../shared/useLiveValuesSocket";
 import { fizikselUydular, setMi, uyduKaynagi } from "../../shared/deviceKit";
 
 import { fetchAlarmEvents } from "../../shared/api";
@@ -57,6 +59,12 @@ type Props = {
   canConfig?: boolean;
   onDeviceCommand?: (deviceCode: string, command: string, label: string) => Promise<void>;
   token?: string;
+  /** Canli veri akisinin durumu — ust cubuktaki rozet icin. Verilmezse rozet
+   *  hic cizilmez (bileseni baska yerde kullanan cagiran bozulmasin). */
+  wsState?: WsConnectionState;
+  /** Son TELEMETRI mesajinin zamani (ms). Soket durumundan AYRI: soket acik
+   *  olup gateway susmus olabilir. */
+  wsLastDataAt?: number | null;
 };
 
 // ---- Kategori tanimi (source-agnostic suffix -> kategori + TR etiket) --------
@@ -177,6 +185,8 @@ export function DeviceDetailPage({
   canConfig = false,
   onDeviceCommand,
   token,
+  wsState,
+  wsLastDataAt,
 }: Props) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
@@ -556,6 +566,14 @@ export function DeviceDetailPage({
             ))}
           </nav>
           <div className="device-detail-topbar-actions">
+            {/* CANLI MI, DONMUS MU — bu ekranda hicbir gosterge YOKTU.
+                Baglanti sessizce olduğunde (uyku, ag degisimi) sayfa son
+                gelen degerleri sanki taze gibi gostermeye devam ediyordu;
+                operator bunu ancak baska bir kaynakla karsilastirinca fark
+                ediyordu. Rozet soket durumunu DEGIL veri akisini soyler
+                (bkz. wsDataStatus): soket acikken gateway sussa da "Veri yok"
+                yazar. */}
+            {wsState ? <WsStatusBadge state={wsState} lastDataAt={wsLastDataAt ?? null} /> : null}
             {device.alarmActive ? (
               <span className="device-alarm-badge">
                 <span className="device-alarm-pulse" aria-hidden="true" />

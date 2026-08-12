@@ -62,6 +62,41 @@ export function wsDataStatus(
   return "live";
 }
 
+/**
+ * SESSIZ OLUM ESIGI (ms) — soket "acik" gorunuyor ama hicbir sey gelmiyor.
+ *
+ * Sunucu 30 saniyede bir `ping` atar. 45 saniyedir PING BILE gelmiyorsa
+ * baglanti fiilen olmustur. Tarayici bunu her zaman soylemez: dizustu uykuya
+ * girdiginde, ag degistiginde ya da aradaki bir vekil sunucu baglantiyi
+ * dusurdugunde TCP "yari acik" kalir; `readyState` OPEN, `onclose` HIC
+ * tetiklenmez. Sonuc: ekran son gelen degerlerde donar ve kullanicinin tek
+ * caresi sayfayi yenilemektir — bu esik tam olarak onu kapatmak icin var.
+ */
+export const WATCHDOG_SILENCE_MS = 45_000;
+
+/**
+ * Baglanti sessizce olmus mu? (bekci karari)
+ *
+ * `wsDataStatus`tan FARKI: orada TELEMETRI yasina bakilir ve "gateway sustu"
+ * durumu dogru sekilde `stale` gosterilir — soket saglamdir, sorun sahadadir.
+ * Burada ise PING dahil HICBIR mesajin gelmemesine bakilir; bu sokete ait bir
+ * sorundur ve cozumu yeniden baglanmaktir. Ikisini ayni sayaca baglamak,
+ * gateway sustugunda saglam bir soketi bosuna kapatmak olurdu.
+ *
+ * @param lastMessageAt Son mesajin (ping/hello/telemetri) zamani; `null` =
+ *                      baglantidan beri hic mesaj gelmedi.
+ */
+export function connectionIsDead(
+  state: WsConnectionState,
+  lastMessageAt: number | null | undefined,
+  simdi: number,
+  silenceMs: number = WATCHDOG_SILENCE_MS
+): boolean {
+  if (state !== "open") return false;
+  if (lastMessageAt == null) return false;
+  return simdi - lastMessageAt > silenceMs;
+}
+
 /** Son veriden bu yana gecen sure (ms); bilinmiyorsa `null`. */
 export function veriYasi(lastDataAt: number | null | undefined, simdi: number): number | null {
   if (lastDataAt == null) return null;

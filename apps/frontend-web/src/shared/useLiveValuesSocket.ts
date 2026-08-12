@@ -7,9 +7,19 @@
  *
  * Davranis:
  *   - Auto-reconnect: bagi koparsa exponential backoff (1s, 2s, 4s, 8s, max 30s)
- *   - Heartbeat ping: server her 30sn ping; client beklemiyor disconnect tetikleyici
- *   - Snapshot fallback: WS bagli olsa bile periyodik (60sn) `/signals/live`
- *     cagirilir — yeni eklenen cihazlar veya ws drop ettigi mesajlar telafi
+ *   - Heartbeat ping: server her 30sn ping
+ *   - BEKCI (watchdog): 45 sn'dir PING BILE gelmiyorsa soket "acik" gorunse de
+ *     olmus sayilir, kapatilir ve yeniden baglanilir. Tarayici her kopmayi
+ *     bildirmez (uyku, ag degisimi, vekil dusurmesi -> yari acik TCP:
+ *     `readyState` OPEN ama `onclose` hic gelmez). Eskiden bu durumda ekran
+ *     son degerlerde DONUYOR ve tek care sayfayi yenilemekti.
+ *   - UYANMA: sekme one geldiginde / pencere odaga girdiginde / ag geri
+ *     geldiginde backoff sifirlanir ve HEMEN baglanilir (arka plandaki sekmede
+ *     zamanlayicilar kisildigi icin aksi halde 30 sn'ye kadar beklenirdi).
+ *   - Snapshot fallback: WS bagli olsa bile periyodik (30sn) `/signals/live`
+ *     cagirilir — yeni eklenen cihazlar veya ws drop ettigi mesajlar telafi.
+ *     Kopus SONRASI da bir kez cagrilir (App.tsx): WS yalnizca bundan sonraki
+ *     degisimleri gonderir, kopukluk sirasinda degisen deger ekranda eski kalirdi.
  *   - WS bagli degilken polling otomatik daha sik (5sn) yapilir
  *
  * OLCEK — mesajlar BATCH'lenir (bkz. FLUSH_INTERVAL_MS):
@@ -27,6 +37,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { SignalLiveRow } from "./types";
+import { connectionIsDead } from "./wsDataStatus";
 
 type WsTelemetryMessage = {
   type: "telemetry";
@@ -142,6 +153,9 @@ const FLUSH_INTERVAL_MS = 250;
  */
 const MAX_BUFFERED_MESSAGES = 5000;
 
+/** Bekci ne siklikta bakar. Esik 45 sn oldugu icin 10 sn yeterince sik. */
+const WATCHDOG_CHECK_MS = 10_000;
+
 function deriveWsUrl(
   apiBaseUrl: string,
   authParam: { ticket: string } | { token: string },
@@ -220,15 +234,33 @@ export function useLiveValuesSocket(opts: Options): {
    *  veri gelmedi. Soket durumundan AYRIDIR: soket acik olup veri akmiyor
    *  olabilir. */
   lastDataAt: number | null;
+  /** BEKLENMEDIK kopus sonrasi baglanti geri geldiginde artar (sayfa gecisiyle
+   *  yapilan bilincli kapatmalarda ARTMAZ). Cagiran taraf bunu izleyip anlik
+   *  goruntuyu tazeler: WS yalnizca bundan sonraki degisimleri gonderir,
+   *  kopukluk sirasinda degisen deger ekranda eski kalirdi. */
+  recoveryTick: number;
 } {
   const { token, apiBaseUrl, deviceCodes, enabled = true, flushIntervalMs = FLUSH_INTERVAL_MS } = opts;
   const [connectionState, setConnectionState] = useState<WsConnectionState>("closed");
   const [lastDataAt, setLastDataAt] = useState<number | null>(null);
+  // BEKLENMEDIK kopus sonrasi kurulan her baglantida artar. Sayfa gecisinde
+  // soket BILEREK kapatilir (baska sekmede canli veri gerekmiyor); onu kopus
+  // saymak, her sekme gecisinde fazladan bir anlik goruntu istegi demekti.
+  const [recoveryTick, setRecoveryTick] = useState(0);
+  const unexpectedDropRef = useRef(false);
   const handlerRef = useRef<((msgs: readonly WsTelemetryMessage[]) => void) | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<number | null>(null);
   const explicitlyClosedRef = useRef(false);
+  // Ayni anda iki soket acilmasini engeller: `connect` async (once bilet
+  // aliniyor) ve bekci/uyanma/backoff yollarinin ucu de onu cagirabiliyor.
+  const connectingRef = useRef(false);
+  //: SON MESAJ zamani — ping/hello DAHIL. `lastDataAt`ten (yalnizca telemetri)
+  //  ayri tutulmali: gateway sussa bile sunucu ping atmaya devam eder, yani
+  //  ping'lerin kesilmesi SOKETIN oldugunu soyler. Ikisini tek sayaca
+  //  baglamak, gateway sustugunda saglam bir baglantiyi bosuna kapatirdi.
+  const lastMessageAtRef = useRef<number | null>(null);
   // Flush'a kadar biriken mesajlar. Ham liste tutuluyor (dedup YAPILMIYOR)
   // cunku grafik tuketicisi her noktayi append etmek istiyor; tablo tarafinda
   // dedup zaten applyWsMessagesToRows icinde yapiliyor.
@@ -277,7 +309,8 @@ export function useLiveValuesSocket(opts: Options): {
     explicitlyClosedRef.current = false;
 
     const connect = async () => {
-      if (explicitlyClosedRef.current) return;
+      if (explicitlyClosedRef.current || connectingRef.current) return;
+      connectingRef.current = true;
       setConnectionState("connecting");
       // Ticket akisi: WS handshake oncesi short-lived bilet al (30sn TTL,
       // tek kullanim). JWT URL'de gorunmez → nginx access log + Referer
@@ -293,6 +326,7 @@ export function useLiveValuesSocket(opts: Options): {
         try {
           url = deriveWsUrl(apiBaseUrl, { token }, deviceCodes);
         } catch {
+          connectingRef.current = false;
           setConnectionState("error");
           return;
         }
@@ -301,6 +335,7 @@ export function useLiveValuesSocket(opts: Options): {
       try {
         ws = new WebSocket(url);
       } catch {
+        connectingRef.current = false;
         setConnectionState("error");
         scheduleReconnect();
         return;
@@ -308,11 +343,23 @@ export function useLiveValuesSocket(opts: Options): {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        connectingRef.current = false;
         reconnectAttemptsRef.current = 0;
+        if (unexpectedDropRef.current) {
+          unexpectedDropRef.current = false;
+          // Kopukluk sirasinda degisen degerler icin WS yeni mesaj
+          // gondermeyebilir; cagiran taraf anlik goruntuyu tazelesin.
+          setRecoveryTick((n) => n + 1);
+        }
+        // Bekci sayaci sifirdan baslar: yeni baglantiyi "45 sn'dir sessiz"
+        // sanip aninda kapatmayalim.
+        lastMessageAtRef.current = Date.now();
         setConnectionState("open");
       };
 
       ws.onmessage = (event) => {
+        // HER mesaj (ping/hello dahil) baglantinin yasadiginin kanitidir.
+        lastMessageAtRef.current = Date.now();
         try {
           const data = JSON.parse(event.data) as WsAnyMessage;
           if (data.type === "telemetry") {
@@ -337,9 +384,12 @@ export function useLiveValuesSocket(opts: Options): {
       };
 
       ws.onclose = () => {
+        connectingRef.current = false;
         wsRef.current = null;
+        lastMessageAtRef.current = null;
         setConnectionState("closed");
         if (!explicitlyClosedRef.current) {
+          unexpectedDropRef.current = true;
           scheduleReconnect();
         }
       };
@@ -358,10 +408,85 @@ export function useLiveValuesSocket(opts: Options): {
       }, delay);
     };
 
+    /**
+     * BEKCI — sessizce olmus baglantiyi yakalar.
+     *
+     * Tarayici her kopmayi bildirmez: dizustu uykuya girdiginde, ag
+     * degistiginde ya da aradaki vekil baglantiyi dusurdugunde TCP "yari
+     * acik" kalir — `readyState` OPEN, `onclose` HIC tetiklenmez. Eski halde
+     * bu durumda yeniden baglanma yolu HIC calismiyordu: ekran son gelen
+     * degerlerde donuyor ve tek care sayfayi yenilemek oluyordu.
+     *
+     * Sunucu 30 sn'de bir ping attigi icin 45 sn sessizlik "bu soket olmus"
+     * demektir. Kapatmak `onclose` -> `scheduleReconnect` zincirini tetikler.
+     */
+    const watchdog = window.setInterval(() => {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      if (!connectionIsDead("open", lastMessageAtRef.current, Date.now())) return;
+      try {
+        ws.close(4000, "watchdog_silence");
+      } catch {
+        // ignore
+      }
+      // Bazi tarayicilarda `onclose` gecikebiliyor; durumu HEMEN dusur ki
+      // polling hizli periyoda gecsin ve rozet dogruyu soylesin.
+      wsRef.current = null;
+      lastMessageAtRef.current = null;
+      connectingRef.current = false;
+      unexpectedDropRef.current = true;
+      setConnectionState("closed");
+      scheduleReconnect();
+    }, WATCHDOG_CHECK_MS);
+
+    /**
+     * UYANMA — kullanici ekrana geri dondugunde BEKLETME.
+     *
+     * Arka plandaki sekmede tarayici zamanlayicilari kisar (Chrome 5 dakika
+     * sonra dakikada bire indirir, sekmeyi tamamen dondurabilir). Kopmus bir
+     * baglantinin backoff'u da bu yuzden 30 sn'ye kadar cikmis olabilir.
+     * Kullanici sekmeye dondugunde 30 saniye daha beklemek, "acinca hemen
+     * son degerleri gostersin" beklentisinin tam tersi.
+     *
+     * Bu yuzden geri donuste backoff SIFIRLANIR ve hemen baglanilir. Soket
+     * zaten acikken hicbir sey yapilmaz — gereksiz yeniden baglanma, akan
+     * veride bosluk demek olurdu.
+     */
+    const wakeUp = () => {
+      if (explicitlyClosedRef.current) return;
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) return;
+      if (connectingRef.current) return;
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      reconnectAttemptsRef.current = 0;
+      void connect();
+    };
+
+    const onVisibility = () => {
+      if (!document.hidden) wakeUp();
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    // `focus`: pencere baska bir UYGULAMANIN arkasindayken `document.hidden`
+    // FALSE'tur, yani gorunurluk olayi hic tetiklenmez. Kullanici baska bir
+    // programdan geri dondugunde yakalayan tek olay budur.
+    window.addEventListener("focus", wakeUp);
+    // Ag geri geldiginde backoff'un dolmasini bekleme.
+    window.addEventListener("online", wakeUp);
+
     void connect();
 
     return () => {
       explicitlyClosedRef.current = true;
+      window.clearInterval(watchdog);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", wakeUp);
+      window.removeEventListener("online", wakeUp);
+      connectingRef.current = false;
+      lastMessageAtRef.current = null;
       if (reconnectTimerRef.current !== null) {
         window.clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
@@ -382,6 +507,7 @@ export function useLiveValuesSocket(opts: Options): {
   return {
     connectionState,
     lastDataAt,
+    recoveryTick,
     applyMessages: applyWsMessagesToRows,
     registerHandler
   };

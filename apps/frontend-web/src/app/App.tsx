@@ -1286,6 +1286,27 @@ export function App() {
     immediate: false
   });
 
+  /**
+   * BAGLANTI KOPUP GERI GELDIGINDE ANLIK GORUNTUYU TAZELE.
+   *
+   * WS yalnizca BUNDAN SONRAKI degisimleri gonderir. Kopukluk sirasinda
+   * degisen degerler icin yeni bir mesaj gelmeyebilir (deger yeniden degisene
+   * kadar), yani ekranda kopmadan onceki deger asili kalirdi — kullanicinin
+   * "bayatlamis, sayfayi yenilemem gerekiyor" dedigi sey tam olarak bu.
+   *
+   * `recoveryTick` YALNIZCA beklenmedik kopus sonrasi artar; sayfa gecisinde
+   * soket bilerek kapatildigi icin orada artmaz (yoksa her sekme gecisinde
+   * kapsam efektiyle birlikte IKI istek giderdi).
+   */
+  useEffect(() => {
+    if (liveSocket.recoveryTick === 0) return;
+    void handleRefreshSignalLive();
+    // `handleRefreshSignalLive` KASITLA bagimlilik degil: kapsam degisince
+    // kimligi degisiyor ve efekt bosuna yeniden kosardi (kapsam efekti zaten
+    // kendi cekimini yapiyor).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveSocket.recoveryTick]);
+
   const reloadAlarmRules = async () => {
     if (!session) return;
     setAlarmRulesLoading(true);
@@ -2761,6 +2782,8 @@ export function App() {
               canConfig={session.role === "installer"}
               onDeviceCommand={handleDeviceCommand}
               token={session.accessToken}
+              wsState={liveSocket.connectionState}
+              wsLastDataAt={liveSocket.lastDataAt}
             />
           </main>
         ) : pageMode === "fault-detail" && activeFaultDetailId !== null ? (

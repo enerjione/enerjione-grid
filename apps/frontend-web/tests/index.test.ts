@@ -70,9 +70,11 @@ import "./heatField.test";
 
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
+  connectionIsDead,
   DEFAULT_STALE_AFTER_MS,
   sureMetni,
   veriYasi,
+  WATCHDOG_SILENCE_MS,
   wsDataStatus,
 } from "../src/shared/wsDataStatus";
 
@@ -169,6 +171,44 @@ test("esik disaridan yukseltilebilir (tarama araligi buyuk sahalar)", () => {
   const yas = 60_000;
   assert.equal(wsDataStatus("open", SIMDI - yas, SIMDI), "stale");
   assert.equal(wsDataStatus("open", SIMDI - yas, SIMDI, 120_000), "live");
+});
+
+// ---------------------------------------------------------------------------
+// connectionIsDead — sessizce olmus soketi yakalayan bekci
+//
+// Kapatilan sikayet: "cihazin sekmesi acikken bir sure sonra girdigimde
+// sinyaller bayatlamis oluyor, sayfayi yenilemem gerekiyor". Sebep yari acik
+// TCP: tarayici `readyState` OPEN diyor, `onclose` hic tetiklenmiyor, yeniden
+// baglanma yolu hic calismiyordu.
+// ---------------------------------------------------------------------------
+
+test("PING BILE gelmiyorsa soket 'acik' olsa da OLMUS sayilir", () => {
+  assert.equal(connectionIsDead("open", SIMDI - 60_000, SIMDI), true);
+});
+
+test("bekci esigi TELEMETRI yasina degil MESAJ yasina bakar", () => {
+  // Gateway sussa bile sunucu 30 sn'de bir ping atar; o ping baglantinin
+  // yasadiginin kanitidir. Saglam bir soketi "gateway sustu" diye kapatmak
+  // akan veride bosluk acardi — rozet zaten `wsDataStatus` ile "stale" der.
+  assert.equal(connectionIsDead("open", SIMDI - 20_000, SIMDI), false);
+  assert.equal(wsDataStatus("open", SIMDI - 20_000, SIMDI), "live");
+});
+
+test("bekci esigi SINIRI: tam esikte yasiyor, bir ms sonrasi olmus", () => {
+  const t0 = SIMDI - WATCHDOG_SILENCE_MS;
+  assert.equal(connectionIsDead("open", t0, SIMDI), false);
+  assert.equal(connectionIsDead("open", t0 - 1, SIMDI), true);
+});
+
+test("soket zaten kapaliysa bekci KARISMAZ (reconnect'i backoff yurutur)", () => {
+  assert.equal(connectionIsDead("closed", SIMDI - 10 * 60_000, SIMDI), false);
+  assert.equal(connectionIsDead("connecting", null, SIMDI), false);
+});
+
+test("yeni baglantida hic mesaj yokken OLMUS denmez", () => {
+  // `null` = baglantidan beri mesaj gelmedi. Bunu olum saymak, acilir acilmaz
+  // kendini kapatan bir dongu yaratirdi.
+  assert.equal(connectionIsDead("open", null, SIMDI), false);
 });
 
 test("veriYasi negatife dusmez (istemci saati ileri kayabilir)", () => {
