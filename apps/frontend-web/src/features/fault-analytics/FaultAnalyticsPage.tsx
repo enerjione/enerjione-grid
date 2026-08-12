@@ -229,12 +229,15 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
     [t]
   );
 
-  // Harita kesiti EKRANI DOLDURUR ve sayfa kaymaz; digerlerinde sayfa
-  // normal akisinda kalir. Bir haritanin sabit 460 piksele hapsedilip
-  // altinda bos beyaz alan birakmasi, ekranin en cok bakilan kartini en
-  // kucuk kart yapiyordu.
+  // TEK GRAFIKLI SEKMELER EKRANI DOLDURUR ve sayfa kaymaz.
+  //
+  // Yogunluk sekmesinin uc kesiti de, akis sekmesi de kartlarinda TEK bir
+  // grafik tasiyor. Sabit piksel yuksekligiyle bu grafikler kartin altinda
+  // yarim ekranlik bos beyaz alan birakiyordu: ekranin en cok bakilan
+  // kartlari en kucuk kartlari oluyordu. Cok kartli sekmeler (Arizalar,
+  // Cihaz Sagligi) izgarada kalir ve normal akisinda kayar.
   const [gorunum, setGorunum] = useState<Gorunum>("map");
-  const dolduran = sekme === "density" && gorunum === "map";
+  const dolduran = sekme === "density" || sekme === "flow";
 
   return (
     <section className={`tab-panel fa-page ${dolduran ? "fa-page--fill" : ""}`}>
@@ -640,9 +643,9 @@ function HatArizaYogunlugu({
   );
 
   return (
-    <div className={gorunum === "map" ? "fa-fill" : "fa-grid"}>
+    <div className="fa-fill">
       <Kart
-        genislik={gorunum === "map" ? "fill" : "wide"}
+        genislik="fill"
         Icon={secili?.Icon ?? MapIcon}
         baslik={t(`faultAnalytics.${gorunum}Title`)}
         ipucu={t(`faultAnalytics.${gorunum}Hint`)}
@@ -725,6 +728,7 @@ function Takvim({
             end={takvim.end}
             max={takvim.max}
             birim={t("faultAnalytics.alarmUnit")}
+            dolduran
           />
           <TakvimSeridi
             max={takvim.max}
@@ -771,6 +775,7 @@ function Matris({ veri }: { veri: SystemHealth }) {
           max={isi.max}
           bucket={isi.bucket}
           birim={t("faultAnalytics.alarmUnit")}
+          dolduran
         />
       ) : (
         <Bos Icon={Grid3x3}>{t("faultAnalytics.noAlarmHeatmap")}</Bos>
@@ -807,23 +812,24 @@ function ArizaAkisi({
   const sankey = analytics?.sankey;
 
   return (
-    <div className="fa-grid">
+    <div className="fa-fill">
       <Kart
-        genislik="wide"
+        genislik="fill"
         Icon={Share2}
         baslik={t("faultAnalytics.sankey")}
         ipucu={t("faultAnalytics.sankeyHint")}
       >
         {sankey && sankey.links.length ? (
-          // Kendi sekmesinde TEK BASINA: onceki duzende haritanin altinda
-          // sikisiyor ve kademe etiketleri ust uste biniyordu. Yukseklik de
-          // bu yuzden artirildi.
+          // Kendi sekmesinde TEK BASINA ve EKRANI DOLDURUYOR: onceki
+          // duzende haritanin altinda sikisiyor, kademe etiketleri ust uste
+          // biniyordu. Sankey yerden en cok kazanan grafik — dugumler
+          // dikeyde ayrildikca kenarlarin nereye aktigi okunur hale gelir.
           <SankeyGrafigi
             nodes={sankey.nodes}
             links={sankey.links}
             etiketle={dugumEtiket}
             birim={t("faultAnalytics.faultUnit")}
-            yukseklik={470}
+            dolduran
           />
         ) : (
           <Bos Icon={Share2}>{t("faultAnalytics.noSankey")}</Bos>

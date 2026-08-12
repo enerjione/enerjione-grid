@@ -40830,9 +40830,12 @@ th.event-col-category {
    kaliyordu: ekranin en cok bakilan karti en kucuk kart oluyordu. Zincir
    ustten alta kesintisiz olmali — bir halkada `min-height: auto` kalirsa
    flex cocugu icerigi kadar buyur ve `flex: 1` ise yaramaz. */
+/* Dolduran kesitte sayfa normalde KAYMAZ — icerik tam ekrana oturur.
+   `hidden` degil `auto`: cok kisa bir ekranda (ya da uyari seritleri
+   ustuste bindiginde) grafigin alt kismini SESSIZCE kirpmaktansa kaydirma
+   cubugu cikmasi dogru. Icerik sigdiginda cubuk zaten gorunmez. */
 .fa-page--fill {
-  /* Dolduran kesitte sayfa KAYMAZ; harita zaten kendi icinde kayiyor. */
-  overflow-y: hidden;
+  overflow-y: auto;
 }
 
 .fa-fill {
@@ -40857,6 +40860,38 @@ th.event-col-category {
   height: auto;
   /* Cok kisa ekranda harita bir seride donusmesin. */
   min-height: 260px;
+}
+
+/* Grafigin kendisi (echarts kabi) kalan alani alir. `echarts-for-react`
+   size-sensor ile kap degisimini zaten izliyor; burada yalnizca DEFINITE
+   bir yukseklik veriyoruz — `height: 100%` tanimsiz yukseklikli bir ebeveyn
+   icinde 0'a coker ve grafik hic gorunmez. */
+.fa-card--fill > .echarts-for-react {
+  flex: 1;
+  /* Cok kisa ekranda grafik bir seride cokmesin; bu noktadan sonra sayfa
+     kaydirmaya birakilir (bkz. .fa-page--fill). */
+  min-height: 240px;
+}
+
+/* Takvim kendi kabinda ORTALANIR. Hucreler KARE olmak zorunda oldugu icin
+   takvim kalan yuksekligi tam dolduramaz (bkz. FaultCharts useKapOlcusu);
+   artan yeri ustte ve altta esit birakmak, grafigi kartin tepesine
+   yapistirmaktan dengeli duruyor. */
+.fa-cal-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Dolduran kartta liste/uyari seritleri kendi boylarinda kalsin; yalnizca
+   grafik buyusun. */
+.fa-card--fill > .fa-inline-warn,
+.fa-card--fill > .fa-head-stats,
+.fa-card--fill > .fa-cal-legend,
+.fa-card--fill > .fa-cal-note {
+  flex: none;
 }
 
 /* ---- Kesit anahtari (harita / takvim / cihaz x zaman) ----

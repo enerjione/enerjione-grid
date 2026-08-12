@@ -10,7 +10,7 @@
  * SARMALAYICI SINIRI: bilesenler yalnizca VERIYI cizer. "Veri yok" ve
  * "guvenilmez veri" kararlari sayfaya aittir; grafik bos veriyle cagrilmaz.
  */
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ReactECharts from "echarts-for-react/lib/core";
 import * as echarts from "echarts/core";
@@ -70,6 +70,41 @@ echarts.use([
 /** Uzun hat/bolge adlari ekseni tasmasin. */
 function kisalt(s: string, n = 18): string {
   return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+}
+
+/**
+ * Kabin olculen boyutu. Takvim hucrelerini kaba gore olceklemek icin.
+ *
+ * NEDEN OLCUM GEREKIYOR: takvimin dogal yuksekligi GENISLIKTEN turer —
+ * hucreler KARE olmak zorunda ve 53 haftalik bir izgara yatayda ne kadar
+ * yer bulursa dikeyde de o kadar kaplar. "Yuksekligi %100 yap" demek
+ * hucreleri dikey dikdortgene cevirirdi; GitHub gorunumu tam da karelige
+ * dayaniyor. Bu yuzden hucre kenari iki kisittan KUCUK olanina baglanir.
+ *
+ * `size-sensor` echarts'in kendi yeniden cizimini zaten hallediyor; bu
+ * olcum yalnizca hucre kenarini secmek icin.
+ */
+function useKapOlcusu(): [React.RefObject<HTMLDivElement>, { w: number; h: number }] {
+  const ref = useRef<HTMLDivElement>(null);
+  const [olcu, setOlcu] = useState({ w: 0, h: 0 });
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const gozlemci = new ResizeObserver(([giris]) => {
+      const r = giris.contentRect;
+      // Tam sayiya yuvarla: alt piksel degisimleri sonsuz dongu uretmesin.
+      setOlcu((o) => {
+        const w = Math.round(r.width);
+        const h = Math.round(r.height);
+        return o.w === w && o.h === h ? o : { w, h };
+      });
+    });
+    gozlemci.observe(el);
+    return () => gozlemci.disconnect();
+  }, []);
+
+  return [ref, olcu];
 }
 
 type SiralamaProps = {
@@ -237,6 +272,10 @@ type SankeyProps = {
   etiketle?: (ad: string, kademe: string) => string;
   birim: string;
   yukseklik?: number;
+  /** Kart kalan dikey alani dolduruyorsa akis da doldursun. Sankey yerden
+   *  en cok kazanan grafik: dugumler dikeyde ayrildikca kenarlarin nereye
+   *  aktigi okunur hale geliyor. */
+  dolduran?: boolean;
 };
 
 /**
@@ -255,7 +294,8 @@ export function SankeyGrafigi({
   links,
   etiketle,
   birim,
-  yukseklik = 360
+  yukseklik = 360,
+  dolduran
 }: SankeyProps) {
   const option = useMemo(() => {
     const ad = (n: string, kademe: string) =>
@@ -343,7 +383,7 @@ export function SankeyGrafigi({
     <ReactECharts
       echarts={echarts}
       option={option}
-      style={{ height: yukseklik, width: "100%" }}
+      style={{ height: dolduran ? "100%" : yukseklik, width: "100%" }}
       opts={{ renderer: "canvas" }}
       notMerge
     />
@@ -441,7 +481,23 @@ type TakvimProps = {
   end: string;
   max: number;
   birim: string;
+  /** Kart kalan dikey alani dolduruyorsa hucreler o alana gore buyur. */
+  dolduran?: boolean;
 };
+
+/** Takvim yerlesim sabitleri — hucre kenari hesabinda kullanilir. */
+const TAKVIM = {
+  /** Ay etiketi (ust) + gun etiketi sutunu (sol) icin ayrilan yer. */
+  ustBosluk: 26,
+  solBosluk: 34,
+  sagBosluk: 8,
+  altBosluk: 6,
+  /** Hucre kenari sinirlari. Alt sinir okunabilirlik, ust sinir ise
+   *  "GitHub gibi" gorunumun bozulmamasi icin — 40 pikseli asan kareler
+   *  takvim degil isi matrisi gibi okunuyor. */
+  enKucuk: 11,
+  enBuyuk: 40
+} as const;
 
 /** Sayiyi 5 kademeye ayirir: 0 ayri, kalani rampanin dort adimi.
  *
@@ -476,8 +532,25 @@ function takvimKademeleri(max: number): { min: number; max?: number; color: stri
  * ETKILESIM: her kare kendi ipucunu tasir (tarih + kesin adet). Koyuluk
  * deseni verir, isaretci SAYIYI verir; goz kestirmek zorunda kalmaz.
  */
-export function AlarmTakvimi({ days, start, end, max, birim }: TakvimProps) {
+export function AlarmTakvimi({ days, start, end, max, birim, dolduran }: TakvimProps) {
   const { i18n } = useTranslation();
+  const [kapRef, kap] = useKapOlcusu();
+
+  /** Hucre kenari — KARE kalmak zorunda, bu yuzden iki kisittan kucugu.
+   *  Genislik kisiti: 53 hafta yan yana sigmali. Yukseklik kisiti: 7 gun
+   *  alt alta sigmali. Olcum daha gelmediyse eski sabit (14) kullanilir;
+   *  ilk kare sonrasi zaten yeniden cizilir. */
+  const hucre = useMemo(() => {
+    if (!dolduran || kap.w === 0 || kap.h === 0) return 14;
+    const hafta = Math.max(1, Math.ceil(days.length / 7) + 1);
+    const genislikten = (kap.w - TAKVIM.solBosluk - TAKVIM.sagBosluk) / hafta;
+    const yukseklikten = (kap.h - TAKVIM.ustBosluk - TAKVIM.altBosluk) / 7;
+    return Math.max(
+      TAKVIM.enKucuk,
+      Math.min(TAKVIM.enBuyuk, Math.floor(Math.min(genislikten, yukseklikten)))
+    );
+  }, [dolduran, kap.w, kap.h, days.length]);
+
   const option = useMemo(() => {
     const kademeler = takvimKademeleri(max);
     const tr = i18n.language?.startsWith("tr");
@@ -517,11 +590,14 @@ export function AlarmTakvimi({ days, start, end, max, birim }: TakvimProps) {
         outOfRange: { color: "transparent" }
       },
       calendar: {
-        top: 26,
-        left: 34,
-        right: 8,
-        bottom: 6,
-        cellSize: ["auto", 14],
+        top: TAKVIM.ustBosluk,
+        left: TAKVIM.solBosluk,
+        right: TAKVIM.sagBosluk,
+        bottom: TAKVIM.altBosluk,
+        // KARE hucre: iki eksende de ayni kenar. `["auto", h]` verilseydi
+        // genis kartta hucreler yatay dikdortgene uzar ve GitHub gorunumu
+        // bozulurdu.
+        cellSize: [hucre, hucre],
         range: [start, end],
         splitLine: { show: false },
         itemStyle: { color: "transparent", borderWidth: 3, borderColor: "#fff" },
@@ -549,19 +625,25 @@ export function AlarmTakvimi({ days, start, end, max, birim }: TakvimProps) {
         }
       ]
     };
-  }, [days, start, end, max, birim, i18n.language]);
+  }, [days, start, end, max, birim, i18n.language, hucre]);
 
-  // Yukseklik hafta sayisindan BAGIMSIZ: takvim yatay uzar, dikeyde her
-  // zaman 7 satirdir. Sabit yukseklik, pencere degisince grafigin
-  // ziplamasini onler.
+  // Dikeyde her zaman 7 satir; yukseklik hucre kenarindan turer. Dolduran
+  // kartta kap yuksekligini olcup hucreyi buyutuyoruz — cizim alani yine
+  // TAM olarak 7 satir kapliyor, artan yer kabin ortalamasina gidiyor.
+  const yukseklik = dolduran
+    ? hucre * 7 + TAKVIM.ustBosluk + TAKVIM.altBosluk
+    : 168;
+
   return (
-    <ReactECharts
-      echarts={echarts}
-      option={option}
-      style={{ height: 168, width: "100%" }}
-      opts={{ renderer: "canvas" }}
-      notMerge
-    />
+    <div ref={kapRef} className={dolduran ? "fa-cal-wrap" : undefined}>
+      <ReactECharts
+        echarts={echarts}
+        option={option}
+        style={{ height: yukseklik, width: "100%" }}
+        opts={{ renderer: "canvas" }}
+        notMerge
+      />
+    </div>
   );
 }
 
@@ -837,6 +919,9 @@ type AlarmIsiProps = {
   /** "day" | "hour" — eksen etiketi bicimini belirler. */
   bucket: string;
   birim: string;
+  /** Kart kalan dikey alani dolduruyorsa matris de doldursun: satirlar
+   *  yukseldikce hucreler okunur olur, bu grafik yerden KAZANIR. */
+  dolduran?: boolean;
 };
 
 /** "2026-08-07" -> "07.08" · "2026-08-07 14" -> "07.08 14:00" */
@@ -869,7 +954,8 @@ export function AlarmIsiHaritasi({
   cells,
   max,
   bucket,
-  birim
+  birim,
+  dolduran
 }: AlarmIsiProps) {
   const gunluk = bucket !== "hour";
   const option = useMemo(() => {
@@ -950,9 +1036,14 @@ export function AlarmIsiHaritasi({
     <ReactECharts
       echarts={echarts}
       option={option}
-      // Satir basina sabit yukseklik: 25 cihazda kutucuklar okunabilir
-      // kalsin, 3 cihazda grafik gereksiz uzamasin.
-      style={{ height: Math.min(560, Math.max(180, devices.length * 22 + 84)) }}
+      // Dolduran kartta kalan alanin TAMAMI: satirlar yukseldikce hucreler
+      // okunur olur. Aksi halde satir basina sabit yukseklik — 25 cihazda
+      // kutucuklar okunabilir kalsin, 3 cihazda grafik gereksiz uzamasin.
+      style={
+        dolduran
+          ? { height: "100%", width: "100%" }
+          : { height: Math.min(560, Math.max(180, devices.length * 22 + 84)) }
+      }
       opts={{ renderer: "canvas" }}
       notMerge
     />
