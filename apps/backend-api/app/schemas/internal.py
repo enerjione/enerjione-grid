@@ -33,6 +33,15 @@ class InternalAlarmIngest(BaseModel):
     # ekraninda gorunur. Eski alarm-service surumu bu alani gondermezse default
     # True devreye girer (geriye donuk uyum).
     produces_fault: bool = True
+    #: Alarm NEREDEN dogdu: "rule" (alarm kurali tetikledi) | "comm_loss"
+    #: (cihazla haberlesme koptu). Gonderilmezse "rule" varsayilir — eski
+    #: alarm-service surumleri yalnizca kural alarmi yolluyordu.
+    #:
+    #: NEDEN BASLIKTAN TURETMIYORUZ: haberlesme alarminin basligi Turkce bir
+    #: metin ("Haberleşme arızası") ve analiz katmani ("hangi cihazin
+    #: haberlesmesi sik kopuyor") bu ayrima gore calisiyor. Metne bagli bir
+    #: ayrim, baslik degistigi gun sessizce bozulurdu.
+    kind: str | None = None
 
 
 class InternalAlarmClear(BaseModel):

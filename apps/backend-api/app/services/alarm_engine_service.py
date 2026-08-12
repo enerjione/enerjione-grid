@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.alarm import AlarmComment, AlarmEvent
+from app.models.alarm_rule import AlarmRule
 from app.models.user import User
 from app.services.event_service import record_event
 from app.services.notification_service import create_notification, notify_users
@@ -484,11 +485,46 @@ def delete_alarm(db: Session, alarm_id: int, actor_username: str) -> None:
     db.commit()
 
 
+#: Kural kaydi HIC yoksa kullanilan varsayilanlar (bkz. `comm_loss_rule`).
+COMM_VARSAYILAN_BASLIK = "Haberleşme arızası"
+COMM_VARSAYILAN_SEVIYE = "critical"
+
+
+def comm_loss_rule(db: Session) -> AlarmRule | None:
+    """Haberlesme arizasinin STANDART kurali — AKTIF/PASIF ayrimi YAPMADAN.
+
+    Alarmin seviyesi, basligi ve hat arizasi uretip uretmeyecegi artik kodda
+    gomulu degil; Alarm Kurallari ekranindan yonetilir.
+
+    Donus None ise kural KAYDI YOK demektir (pasif degil). Ikisi ayni sey
+    degil ve cagiran taraf ikisini farkli ele almak zorunda:
+
+      pasif kural -> operator bilerek kapatmis, alarm URETILMEZ.
+      kayit yok   -> migration kosmamis ya da kayit elle silinmis; bu bir
+                     KURULUM hatasidir ve haberlesme alarmini susturmak
+                     cihazin saatlerce sessiz kalmasini gizlerdi (2026-08-07
+                     olayi tam olarak buydu). Varsayilanlarla devam edilir.
+    """
+    return db.scalar(
+        select(AlarmRule)
+        .where(AlarmRule.rule_kind == "comm_loss")
+        .order_by(AlarmRule.is_active.desc(), AlarmRule.id.asc())
+        .limit(1)
+    )
+
+
 def handle_telemetry_alarm_event(db: Session, payload: dict) -> None:
     quality = (payload.get("quality") or "good").lower()
     is_fault = quality in {"bad", "offline", "invalid"}
     if not is_fault:
         return
+    kural = comm_loss_rule(db)
+    if kural is not None and not kural.is_active:
+        # Operator standart kurali kapatmis — haberlesme alarmi uretilmez.
+        return
+    baslik = (kural.name if kural is not None else COMM_VARSAYILAN_BASLIK).strip()
+    seviye = (kural.level if kural is not None else None) or COMM_VARSAYILAN_SEVIYE
+    ariza_uretir = bool(kural.produces_fault) if kural is not None else False
 
     device_id = payload.get("device_id")
     device_name = payload.get("device_name") or payload.get("device_code") or "Cihaz"
@@ -510,14 +546,28 @@ def handle_telemetry_alarm_event(db: Session, payload: dict) -> None:
     # ayrintili gerekce ve tests/test_alarm_time_authority.py.
     alarm = AlarmEvent(
         device_id=device_id,
-        level="critical",
-        title=f"{device_name} haberleşme alarmı",
-        description=f"{signal_key} sinyalinde kalite '{quality}' olarak geldi.",
+        # Seviye ve baslik KURALDAN. Baslik ayrica bildirim kanali secimini
+        # de belirliyor (`_resolve_active_rule` alarm basligi ile kural adini
+        # eslestirir); cihaz adini basliga gomseydik hicbir alarm kuralla
+        # eslesmez ve kanal secimi hep fail-open kalirdi.
+        level=seviye,
+        title=baslik,
+        description=(
+            f"{device_name}: {signal_key} sinyalinde kalite '{quality}' olarak geldi."
+        ),
         created_at=datetime.now(timezone.utc),
         # Analiz katmani "hangi cihazin haberlesmesi sik kopuyor" sorusunu
         # bu alandan cevapliyor; baslik/`signal_key` guvenilir ayirt edici
         # degil (bkz. AlarmEvent.kind).
         kind="comm_loss",
+        # HAT ARIZASI URETIR MI — KURALDAN (varsayilani False).
+        #
+        # Model varsayilani True idi ve bu alan yazilmiyordu: sessiz kalan
+        # cihaz `fault_recompute_service` icin "arizayi GORDUM" diyen bir
+        # cihaz sayiliyor, kendisi ile sonraki cihaz arasindaki aralikta hat
+        # arizasi aciliyordu. Haberlesmesi kopan cihaz ariza akimi gormus
+        # DEGILDIR, sadece bilmiyoruzdur — ama karar artik operatorun.
+        produces_fault=ariza_uretir,
     )
     db.add(alarm)
     record_event(

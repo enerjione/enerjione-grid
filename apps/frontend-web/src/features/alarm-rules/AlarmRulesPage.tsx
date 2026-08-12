@@ -343,7 +343,17 @@ export function AlarmRulesPage({
     return isStepDone("behavior");
   };
 
-  const visibleWizardSteps = mode === "edit-existing" ? WIZARD_STEPS.filter((step) => step.key !== "signal") : WIZARD_STEPS;
+  /** STANDART (sistem) kural — urunle gelir, kullanici olusturmaz.
+   *  Haberlesme arizasi bir sinyalin degerine degil cihazin KALITESINE
+   *  bakar: "Sinyal" ve "Kosul" adimlarindaki alanlarin (sinyal, karsilastirma,
+   *  esik, histerezis) hicbir karsiligi yok. Gosterilseydi kullanici esik
+   *  girer ve hicbir etkisi olmadigini ancak sahada fark ederdi. */
+  const isSystemRule = (form.rule_kind ?? "simple") === "comm_loss";
+  const visibleWizardSteps = isSystemRule
+    ? WIZARD_STEPS.filter((step) => step.key !== "signal" && step.key !== "condition")
+    : mode === "edit-existing"
+      ? WIZARD_STEPS.filter((step) => step.key !== "signal")
+      : WIZARD_STEPS;
   const wizardIndex = visibleWizardSteps.findIndex((step) => step.key === wizardStep);
   const isFirstWizardStep = wizardIndex <= 0;
   const isSummaryStep = wizardStep === "summary";
@@ -427,7 +437,11 @@ export function AlarmRulesPage({
       device_code_filter: form.device_code_filter?.toString().trim() || null,
       // Bos = TUM modeller (mevcut kurallarin davranisi).
       device_model_filter: form.device_model_filter?.toString().trim() || null,
-      rule_kind: isComposite ? "composite" : "simple",
+      // STANDART KURALIN TURU KORUNUR. "simple"a dusseydi motor onu
+      // `rule_kind='comm_loss'` diye ararken bulamaz ve haberlesme alarmi
+      // ilk kaydetmede sessizce susardi. (Backend de bu alani standart
+      // kuralda yok sayar — iki taraflı koruma.)
+      rule_kind: isSystemRule ? "comm_loss" : isComposite ? "composite" : "simple",
       expression,
       threshold: isBooleanComparator(form.comparator) ? 0 : Number(form.threshold),
       threshold_high:
@@ -1069,7 +1083,15 @@ export function AlarmRulesPage({
                         </section>
                         <section className="rules-v3-summary-card">
                           <h4>Sinyal</h4>
-                          {formSignal ? (
+                          {/* STANDART KURAL bir sinyale bagli degil: cihazin
+                              KALITESINE bakar. Ozette sinyal/kosul kartlarina
+                              "—" basmak, olmayan bir alani doldurulmamis gibi
+                              gosterirdi. */}
+                          {isSystemRule ? (
+                            <span className="rules-v3-muted">
+                              {t("engineering.alarmRules.commLossSource")}
+                            </span>
+                          ) : formSignal ? (
                             <div className="rules-v3-summary-signal">
                               <span className={`badge badge-source badge-source-${formSignal.source}`}>
                                 {SOURCE_SHORT[formSignal.source] ?? formSignal.source}
@@ -1085,8 +1107,16 @@ export function AlarmRulesPage({
                         <section className="rules-v3-summary-card">
                           <h4>Koşul</h4>
                           <div className="rules-v3-condition-preview">
-                            <strong>{formSignal?.label ?? form.signal_key}</strong>
-                            <code className="rules-v3-row-condition">{formConditionText}</code>
+                            <strong>
+                              {isSystemRule
+                                ? t("engineering.alarmRules.commLossSource")
+                                : (formSignal?.label ?? form.signal_key)}
+                            </strong>
+                            <code className="rules-v3-row-condition">
+                              {isSystemRule
+                                ? t("engineering.alarmRules.commLossCondition")
+                                : formConditionText}
+                            </code>
                           </div>
                         </section>
                         <section className="rules-v3-summary-card">
@@ -1221,7 +1251,12 @@ export function AlarmRulesPage({
               {filteredRules.map((rule) => {
                 const sig = signalByKey.get(rule.signal_key);
                 const isComposite = (rule.rule_kind ?? "simple") === "composite";
-                const conditionText = isComposite && rule.expression
+                const isSystem = (rule.rule_kind ?? "simple") === "comm_loss";
+                // STANDART KURAL bir esige bakmaz: kosul sutununda
+                // "__comm_loss__ > 0" gibi anlamsiz bir ifade cikmasin.
+                const conditionText = isSystem
+                  ? t("engineering.alarmRules.commLossCondition")
+                  : isComposite && rule.expression
                   ? rule.expression.terms
                       .map((tm) => {
                         const tmSig = signalByKey.get(tm.signal_key);
@@ -1304,13 +1339,25 @@ export function AlarmRulesPage({
                     <td>
                       <div className="rules-v3-name-cell">
                         <strong>{rule.name}</strong>
+                        {/* Urunle gelen kural oldugunu SOYLE: kullanici bunu
+                            kendisinin olusturmadigini bilmeli, yoksa
+                            "bunu kim ekledi" sorusu kaliyor. */}
+                        {isSystem ? (
+                          <span className="rules-v3-id-pill" title={t("engineering.alarmRules.systemRuleHint")}>
+                            {t("engineering.alarmRules.systemRule")}
+                          </span>
+                        ) : null}
                         {rule.description ? <small>{rule.description}</small> : null}
                         <span className="rules-v3-id-pill">ID: {rule.id}</span>
                       </div>
                     </td>
                     <td>
                       <div className="rules-v3-condition-cell">
-                        <strong>{sig?.label ?? rule.signal_key}</strong>
+                        <strong>
+                          {isSystem
+                            ? t("engineering.alarmRules.commLossSource")
+                            : (sig?.label ?? rule.signal_key)}
+                        </strong>
                         <code className="rules-v3-row-condition">{conditionText}</code>
                         {isComposite ? (
                           <span
@@ -1350,22 +1397,32 @@ export function AlarmRulesPage({
                           >
                             <span className="material-symbols-outlined">edit</span>
                           </button>
-                          <button
-                            type="button"
-                            className="rules-v3-icon-btn"
-                            onClick={() => duplicateRule(rule)}
-                            title="Kopyala"
-                          >
-                            <span className="material-symbols-outlined">content_copy</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="rules-v3-icon-btn rules-v3-delete-btn"
-                            onClick={() => void handleDelete(rule.id)}
-                            title={t("common.delete")}
-                          >
-                            <span className="material-symbols-outlined">delete</span>
-                          </button>
+                          {/* STANDART KURAL kopyalanmaz ve SILINMEZ: motor onu
+                              turunden buluyor, ikinci bir kopya hangisinin
+                              gecerli oldugunu belirsizlestirir; silinirse de
+                              haberlesme alarmi tamamen susar. Kapatmak icin
+                              "Aktif" secenegi var. Backend de reddediyor
+                              (409) — buton yalnizca yolu gostermiyor. */}
+                          {(rule.rule_kind ?? "simple") !== "comm_loss" ? (
+                            <>
+                              <button
+                                type="button"
+                                className="rules-v3-icon-btn"
+                                onClick={() => duplicateRule(rule)}
+                                title="Kopyala"
+                              >
+                                <span className="material-symbols-outlined">content_copy</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="rules-v3-icon-btn rules-v3-delete-btn"
+                                onClick={() => void handleDelete(rule.id)}
+                                title={t("common.delete")}
+                              >
+                                <span className="material-symbols-outlined">delete</span>
+                              </button>
+                            </>
+                          ) : null}
                         </div>
                       </td>
                     ) : null}

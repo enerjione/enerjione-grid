@@ -22,6 +22,14 @@ from app.services.event_service import record_event
 router = APIRouter(prefix="/alarm-rules", tags=["alarm-rules"])
 _log = logging.getLogger(__name__)
 
+#: SISTEM (STANDART) KURALI — kullanicinin olusturmadigi, urunle gelen kural.
+#:
+#: Haberlesme arizasi bir sinyalin degerinden degil cihazin KALITESINDEN
+#: dogar; motor onu `rule_kind` ile bulur. Silinmesine izin verilseydi
+#: haberlesme alarmi tamamen susardi ve bunu fark etmenin yolu olmazdi —
+#: pasiflestirmek ayni ise yarar, geri alinabilir ve ekranda gorunur.
+SISTEM_KURAL_TURU = "comm_loss"
+
 
 def _row_to_read(row: AlarmRule) -> AlarmRuleRead:
     """DB satirini AlarmRuleRead'e cevirir. expression_json'i parse eder."""
@@ -139,6 +147,14 @@ def update_alarm_rule(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alarm rule not found")
     changes = payload.model_dump(exclude_none=True, exclude={"expression"})
+    if row.rule_kind == SISTEM_KURAL_TURU:
+        # STANDART KURAL: seviyesi, kapsami, kanallari ve "hat arizasi uretir
+        # mi" secenegi serbestce duzenlenir; ama kural bir SINYALE bagli
+        # degildir (cihaz kalitesine bakar) ve turu degisirse motor onu
+        # bulamaz. Bu iki alan sessizce korunur — istegi tumden reddetmek,
+        # nesnenin tamamini gonderen bir arayuzu kilitlerdi.
+        changes.pop("signal_key", None)
+        changes.pop("rule_kind", None)
     for key, value in changes.items():
         setattr(row, key, value)
     # expression payload'da explicit verilmisse uygula. exclude_none ile
@@ -173,6 +189,15 @@ def delete_alarm_rule(
     row = db.scalar(select(AlarmRule).where(AlarmRule.id == rule_id))
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alarm rule not found")
+    if row.rule_kind == SISTEM_KURAL_TURU:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Standart kural silinemez; kapatmak icin 'Aktif' secenegini "
+                "kaldirin. Silinseydi haberlesme alarmi tamamen susar ve bunu "
+                "fark etmenin yolu olmazdi."
+            ),
+        )
     name = row.name
     sig = row.signal_key
     db.delete(row)

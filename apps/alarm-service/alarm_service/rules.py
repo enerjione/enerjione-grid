@@ -113,6 +113,9 @@ class AlarmRuleCache:
         # Cihaz kodu -> model. Kural kapsamini modele gore daraltmak icin.
         # Bos kalirsa model filtreli kurallar hic uygulanmaz (bkz. rules_for).
         self._device_models: dict[str, str] = {}
+        #: Haberlesme (kalite) alarminin standart kurali — sinyal indeksinde
+        #: DEGIL, ayri durur; onu telemetri degil kalite degisimi tetikler.
+        self._comm_rule: AlarmRule | None = None
         self._ready = False
 
     def refresh(self) -> bool:
@@ -161,13 +164,19 @@ class AlarmRuleCache:
         # is_alarmable() rapor amacli dogru calisabilsin.
         alarmable = {s["key"] for s in signals_data}
         by_signal: dict[str, list[AlarmRule]] = {}
+        comm_rule: AlarmRule | None = None
         for item in rules_data:
             if not item.get("is_active", True):
                 continue
-            if item["signal_key"] not in alarmable:
+            rule_kind = item.get("rule_kind") or "simple"
+            # HABERLESME KURALI SINYALE BAGLI DEGIL: cihazin KALITESINE
+            # (comm_lost/offline/invalid) bakar ve `signal_key` alaninda
+            # katalogda karsiligi olmayan bir nisan deger tasir. Katalog
+            # suzgecine takilsaydi kural her tazelemede sessizce dusurulur,
+            # ekranda gorunen kayit motorda HIC olmazdi.
+            if rule_kind != "comm_loss" and item["signal_key"] not in alarmable:
                 # Sinyal katalogdan tamamen silinmis -> kural anlamsiz, atla.
                 continue
-            rule_kind = item.get("rule_kind") or "simple"
             expression: CompositeExpression | None = None
             composite_keys: tuple[str, ...] = ()
             if rule_kind == "composite":
@@ -223,6 +232,14 @@ class AlarmRuleCache:
                 expression=expression,
                 composite_signal_keys=composite_keys,
             )
+            if rule_kind == "comm_loss":
+                # Sinyal indeksine GIRMEZ: hicbir telemetri okumasi bu kurali
+                # tetiklemez, kalite degisimi tetikler (bkz. main.py
+                # `_process_device_comm_alarm`). Birden fazla tanimlanmissa
+                # ILKI kazanir — urunle gelen tek standart kural.
+                if comm_rule is None:
+                    comm_rule = rule
+                continue
             # Anchor signal_key + composite expression'daki tum sinyaller icin
             # rules_by_signal'a kayit at; engine herhangi biri geldiginde bu
             # kurali yeniden degerlendirir.
@@ -256,8 +273,19 @@ class AlarmRuleCache:
             self._alarmable_keys = alarmable
             self._agg_keys = agg_keys
             self._max_agg_window_sec = max_window
+            self._comm_rule = comm_rule
             self._ready = True
         return True
+
+    def comm_rule(self) -> AlarmRule | None:
+        """Haberlesme (kalite) alarminin standart kurali.
+
+        None = kural yok ya da PASIF. Uc yalnizca aktif kurallari donduruyor,
+        bu yuzden ikisi ayirt edilemez — ikisinin de anlami "haberlesme
+        alarmi uretme"dir.
+        """
+        with self._lock:
+            return self._comm_rule
 
     def needs_samples(self, signal_key: str) -> bool:
         """Bu sinyal icin gecmis ornek tutmak GEREKLI mi?
@@ -295,25 +323,34 @@ class AlarmRuleCache:
         """
         with self._lock:
             rules = list(self._rules_by_signal.get(signal_key, ()))
+        return [
+            rule
+            for rule in rules
+            if self.rule_covers_device(rule, device_code, device_model)
+        ]
 
-        def _model_uyar(rule: AlarmRule) -> bool:
-            models = rule.device_models()
-            if not models:
-                return True
-            return bool(device_model) and device_model in models
+    def rule_covers_device(
+        self,
+        rule: AlarmRule,
+        device_code: str | None,
+        device_model: str | None = None,
+    ) -> bool:
+        """Kuralin KAPSAMI bu cihazi iceriyor mu (kod + model filtreleri).
 
+        `rules_for` ile AYNI mantik — haberlesme kurali sinyal indeksinde
+        olmadigi icin kapsam kontrolunu ayrica cagirmak zorunda ve iki kopya
+        zamanla ayrisirdi.
+        """
+        models = rule.device_models()
+        if models and not (device_model and device_model in models):
+            # Cihazin modeli BILINMIYORSA model filtreli kural uygulanmaz:
+            # "bilmiyorum" durumunda daraltilmis bir kurali herkese uygulamak,
+            # operatorun bilerek sinirladigi bir esigi filoya dayatmak olurdu.
+            return False
         if not device_code:
-            return [
-                rule
-                for rule in rules
-                if not rule.device_code_filter and _model_uyar(rule)
-            ]
-        matched: list[AlarmRule] = []
-        for rule in rules:
-            codes = rule.device_codes()
-            if (not codes or device_code in codes) and _model_uyar(rule):
-                matched.append(rule)
-        return matched
+            return not rule.device_code_filter
+        codes = rule.device_codes()
+        return not codes or device_code in codes
 
     def device_model(self, device_code: str | None) -> str | None:
         """Cihazin modeli; bilinmiyorsa None."""

@@ -7,7 +7,11 @@ AlarmLevel = Literal["info", "warning", "critical"]
 AlarmComparator = Literal[
     "gt", "gte", "lt", "lte", "eq", "ne", "between", "outside", "boolean_true", "boolean_false"
 ]
-RuleKind = Literal["simple", "composite"]
+#: `comm_loss` = urunle gelen STANDART kural (haberlesme arizasi). Bir
+#: sinyalin degerine degil cihazin KALITESINE bakar; `signal_key` alaninda
+#: katalogda karsiligi olmayan bir nisan deger tasir ve esik/karsilastirma
+#: alanlari onda anlamsizdir. Kullanici olusturmaz, silemez — duzenler.
+RuleKind = Literal["simple", "composite", "comm_loss"]
 CompositeLogic = Literal["AND", "OR"]
 
 

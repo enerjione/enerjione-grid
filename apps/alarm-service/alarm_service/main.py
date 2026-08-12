@@ -466,7 +466,14 @@ def _build_alarm_from_rule(
     }
 
 
-def _build_quality_alarm(payload: dict) -> dict:
+#: Standart kural bulunamadigi durumda kullanilan varsayilanlar. Kural
+#: SILINEMEZ (backend 409 doner) ama onbellek daha hic dolmamis olabilir;
+#: o pencerede haberlesme alarmini susturmak, cihaz kopmasini gizlemek olurdu.
+COMM_VARSAYILAN_BASLIK = "Haberleşme arızası"
+COMM_VARSAYILAN_SEVIYE = "critical"
+
+
+def _build_quality_alarm(payload: dict, rule=None) -> dict:  # noqa: ANN001
     quality = str(payload.get("quality", "")).lower()
     if quality == "offline":
         description = "Cihaz çevrimdışı, veri okunamıyor."
@@ -474,10 +481,15 @@ def _build_quality_alarm(payload: dict) -> dict:
         description = "Cihazdan geçersiz veri alınıyor."
     else:
         description = "Cihaz haberleşmesinde sorun var."
-    # Title backend dedup/clear icin device_code'a bagli kalir; UI'da
-    # cihaz hucresi ayri gosterildigi icin baslikta sadece "Haberlesme arizasi"
-    # gorunecek sekilde kisa anahtar kullaniyoruz.
-    title = "Haberleşme arızası"
+    # BASLIK KURALIN ADIDIR. Iki sebeple:
+    #   1. Bildirim kanali secimi alarmin BASLIGI ile kuralin ADINI
+    #      eslestirerek calisiyor (notification_dispatch_service.
+    #      _resolve_active_rule); baslik sabit kalsaydi kural adi degistigi
+    #      an haberlesme alarmi "kuralsiz" sayilip tum kanallara duserdi.
+    #   2. Kullanici kurali yeniden adlandirabilsin diye — ekranda gordugu ad
+    #      ile alarm listesinde gordugu baslik ayni olmali.
+    title = (getattr(rule, "name", None) or COMM_VARSAYILAN_BASLIK).strip()
+    level = getattr(rule, "level", None) or COMM_VARSAYILAN_SEVIYE
     return {
         "message_id": str(uuid4()),
         "correlation_id": payload.get("correlation_id") or payload.get("message_id") or str(uuid4()),
@@ -486,9 +498,27 @@ def _build_quality_alarm(payload: dict) -> dict:
         "source_gateway": payload.get("source_gateway"),
         "title": title,
         "description": description,
-        "level": "critical",
+        "level": level,
         "source_timestamp": payload.get("source_timestamp") or datetime.now(timezone.utc).isoformat(),
         "rule_id": None,
+        # HAT ARIZASI URETIR MI — STANDART KURALDAN.
+        #
+        # Bu alan eskiden hic gonderilmiyordu ve backend semasi True
+        # varsayiyordu. Sonucu: haberlesmesi kopan cihaz
+        # `fault_recompute_service` icin "arizayi GORDUM" diyen bir cihaz
+        # sayiliyor, kendisi ile sonraki cihaz arasindaki aralikta HAT
+        # ARIZASI aciliyordu — haritada kirmizi kesim, operatore bildirim,
+        # ekibe bosuna saha cikisi. Sessiz kalan cihaz ariza akimi GORMUS
+        # DEGILDIR; sadece bilmiyoruzdur.
+        #
+        # Artik karar operatorun: Alarm Kurallari > "Haberleşme arızası" >
+        # Hat Arızası. Kural okunamadiysa VARSAYILAN FALSE — emin olmadigimiz
+        # yerde ariza uydurmayiz.
+        "produces_fault": bool(getattr(rule, "produces_fault", False)),
+        # Analiz katmani "hangi cihazin haberlesmesi sik kopuyor" sorusunu
+        # bu alandan cevapliyor. Backend gonderilmeyince "rule" yaziyordu ve
+        # haberlesme alarmlari kural alarmi gibi sayiliyordu.
+        "kind": "comm_loss",
     }
 
 
@@ -708,19 +738,39 @@ def _process_device_comm_alarm(payload: dict) -> None:
     Kalite tespiti gateway TARAFINDA zaten debounce'lu (yadnp3 adaptoru
     ancak recovery-timeout grace suresinden SONRA comm_lost basar) — burada
     ekstra bekleme eklemek operatoru bilgilendirmeyi gereksiz gecikirdi.
+
+    STANDART KURAL (2026-08-12): alarmin seviyesi, basligi, kapsami, bildirim
+    kanallari ve hat arizasi uretip uretmeyecegi artik kodda GOMULU DEGIL;
+    Alarm Kurallari'ndaki `rule_kind='comm_loss'` kaydindan okunur. Kural
+    pasiflestirilirse haberlesme alarmi hic uretilmez — operatorun kapatma
+    yolu vardi ve tek yol kod degisikligiydi.
     """
     device_code = payload.get("device_code")
     dc = str(device_code or "")
     if not dc:
         return
+    kural = _CACHE.comm_rule()
+    if kural is None and _CACHE.is_ready():
+        # Onbellek DOLU ve kural yok/pasif -> operator kapatmis demektir.
+        # Onbellek daha hic dolmadiysa (is_ready False) varsayilanlarla devam
+        # ederiz: acilistaki ilk 30 saniyede cihaz kopmasini gizlemek, kapali
+        # bir kuralin alarm uretmesinden daha kotudur.
+        return
+    if kural is not None and not _CACHE.rule_covers_device(
+        kural, dc, _CACHE.device_model(dc)
+    ):
+        return
     if _quality_is_bad(payload):
         if not _QUALITY_STATE.is_bad(dc):
             _QUALITY_STATE.mark_bad(dc)
-            _NOTIFIER.submit_raise(_build_quality_alarm(payload), rule_id=None)
+            _NOTIFIER.submit_raise(_build_quality_alarm(payload, kural), rule_id=None)
     elif _QUALITY_STATE.mark_good(dc):
         _NOTIFIER.submit_clear(
             rule_id=None,
-            rule_title="Haberleşme arızası",
+            # CLEAR BASLIGI RAISE ILE AYNI OLMALI — backend acik alarmi
+            # baslikla buluyor. Kural adi degistiginde ikisi ayrisirsa alarm
+            # normale donse bile listede acik kalirdi.
+            rule_title=(getattr(kural, "name", None) or COMM_VARSAYILAN_BASLIK).strip(),
             device_code=device_code,
             source_gateway=payload.get("source_gateway"),
             signal_key=None,

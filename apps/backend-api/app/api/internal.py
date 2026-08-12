@@ -379,9 +379,12 @@ def ingest_alarm(
         signal_key=payload.signal_key,
         produces_fault=payload.produces_fault,
         created_at=datetime.now(timezone.utc),
-        # Kural tetikledi (haberlesme kopmasi DEGIL) — analiz katmani
-        # ikisini ayirmak zorunda; bkz. AlarmEvent.kind.
-        kind="rule",
+        # Alarm NEREDEN dogdu — analiz katmani kural alarmi ile haberlesme
+        # kopmasini ayirmak zorunda (bkz. AlarmEvent.kind). Burasi eskiden
+        # KOSULSUZ "rule" yaziyordu; oysa alarm-service haberlesme alarmini
+        # da bu uctan gonderiyor ve o alarmlar "kural tetikledi" diye
+        # kaydediliyordu. Alan gelmezse eski davranis (rule) korunur.
+        kind=payload.kind or "rule",
     )
     db.add(alarm)
     db.flush()  # alarm.id'yi notification metadata'sinda kullanabilmek icin

@@ -53,6 +53,9 @@ BOZUK_CIHAZ_SAATI = datetime(2000, 1, 1, tzinfo=timezone.utc)
 def db_session():
     """Alarm yolunun dokundugu tablolarla sqlite in-memory oturum."""
     from app.models.alarm import AlarmEvent
+    # Haberlesme alarmi artik STANDART KURALDAN uretiliyor (seviye, baslik,
+    # hat arizasi uretip uretmeyecegi); tablo olmadan uc okunamaz.
+    from app.models.alarm_rule import AlarmRule
     from app.models.outbox_event import OutboxEvent
     from app.models.system_event import SystemEvent
 
@@ -65,6 +68,7 @@ def db_session():
         engine,
         tables=[
             AlarmEvent.__table__,
+            AlarmRule.__table__,
             SystemEvent.__table__,
             OutboxEvent.__table__,
         ],

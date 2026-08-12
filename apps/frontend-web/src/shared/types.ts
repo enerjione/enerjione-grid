@@ -1303,7 +1303,10 @@ export type AlarmComparator =
 
 /** Kural tipi: 'simple' = tek sinyal + tek karsilastirma (legacy/varsayilan).
  *  'composite' = AND/OR ile birden fazla terim (Faz 1). */
-export type AlarmRuleKind = "simple" | "composite";
+/** `comm_loss` = ürünle gelen STANDART kural (haberleşme arızası). Bir
+ *  sinyalin değerine değil cihazın KALİTESİNE bakar; sinyal/eşik alanları
+ *  onda anlamsızdır ve silinemez, yalnızca pasifleştirilir. */
+export type AlarmRuleKind = "simple" | "composite" | "comm_loss";
 
 /** Composite kuralda agg fonksiyonlari (Faz 2). */
 export type AlarmAggFn =
