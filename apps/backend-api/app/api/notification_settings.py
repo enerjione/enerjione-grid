@@ -54,12 +54,9 @@ def _brand_title(db: Session) -> str:
     ayni gondericiden gelmeli — aksi halde operator test'i gorup "tamam"
     derken alarm baska bir isimle geliyor.
     """
-    row = db.get(ProjectSettings, 1)
-    if row is not None:
-        for candidate in (row.site_title, row.project_name, row.customer_name):
-            if candidate and candidate.strip():
-                return candidate.strip()
-    return PRODUCT_NAME
+    from app.services.notification_settings_service import resolve_sender_name
+
+    return resolve_sender_name(db) or PRODUCT_NAME
 
 
 def _decrypted_view(row):
@@ -101,6 +98,7 @@ def update_notification_settings(
     # encrypted gelen deger re-encrypt edilmez.
     settings_row.smtp_password = encrypt_secret(payload.smtp_password)
     settings_row.smtp_from_email = payload.smtp_from_email
+    settings_row.smtp_from_name = (payload.smtp_from_name or "").strip()
     settings_row.sms_enabled = payload.sms_enabled
     settings_row.sms_provider = payload.sms_provider
     settings_row.sms_api_url = payload.sms_api_url

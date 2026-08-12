@@ -193,10 +193,11 @@ def _send_assignment_email(
     email_enabled = True if pref is None else bool(pref.email_enabled)
     if not email_enabled:
         return
-    proj = db.get(ProjectSettings, 1)
-    project_title = (
-        (proj.site_title or proj.project_name or proj.customer_name) if proj else None
-    ) or None
+    # Gonderen adi TEK KAYNAKTAN (bkz. notification_settings_service):
+    # Mail Ayarlari > Gonderen Adi doluysa o, degilse Proje Ayarlari zinciri.
+    from app.services.notification_settings_service import resolve_sender_name
+
+    project_title = resolve_sender_name(db)
     subject, html_body = render_assignment_email(
         project_title=project_title,
         kind=kind,

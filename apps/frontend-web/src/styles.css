@@ -4434,6 +4434,14 @@ main.content.engineering-content:has(.bulk-notify-panel) {
 .notif-field--full {
   grid-column: 1 / -1;
 }
+/* Alan altindaki aciklama — "bos birakirsan ne olur" gibi, degeri girmeden
+   once bilinmesi gereken seyler. Etiket tek basina soylemiyorsa buraya. */
+.notif-field-hint {
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: #94a3b8;
+}
 .notif-field--narrow input {
   text-align: center;
 }
@@ -24029,6 +24037,19 @@ th.event-col-category {
   gap: 10px;
   min-width: 0;
 }
+/* --- YER: bolge > (ana hat) > hat > aralik ---
+   Kademeler ayni ayracla ilerler ve vurgu SONA dogru artar: bolge soluk,
+   hat koyu, aralik kirmizi — cunku sahada gidilecek yer araliktir. Once
+   bolge ustte kucuk buyuk harfle, hat altta baslik olarak yaziliyordu ve
+   ikisinin ayni hiyerarsinin kademeleri oldugu gorunmuyordu. */
+.fx-head-path {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+.fx-head-path > svg { color: #cbd5e1; flex: none; }
 .fx-head-region {
   display: inline-flex;
   align-items: center;
@@ -24040,53 +24061,53 @@ th.event-col-category {
   color: #64748b;
 }
 /* Tek satira inince baslik da kuculdu: 22px bir SATIR BASLIGI olcusudur,
-   yaninda rozet duran bir seritte komsularini ezer. */
+   yaninda rozet duran bir seritte komsularini ezer. Artik kirinti yolunun
+   bir kademesi (h3 kaliyor — sayfa yapisinda hat kaydin basligidir). */
 .fx-head-line {
-  display: flex;
+  display: inline-flex;
   align-items: baseline;
-  flex-wrap: wrap;
-  gap: 2px;
   margin: 0;
   font-size: 17px;
   font-weight: 800;
   letter-spacing: -0.015em;
   color: #0f172a;
   line-height: 1.15;
+  white-space: nowrap;
 }
 /* Ayni hatta iki ariza olabilir; kartlari ayiran sey direk araligidir,
    o yuzden hat adiyla AYNI satirda ve vurgulu duruyor. */
+/* Kirinti yolunun SON kademesi: sahada gidilecek yer burasi, o yuzden en
+   vurgulu olan da bu. */
 .fx-head-range {
   display: inline-flex;
   align-items: center;
-  gap: 1px;
   font-size: 14px;
   font-weight: 700;
   color: #dc2626;
   font-variant-numeric: tabular-nums;
 }
-.fx-head-range svg { color: #cbd5e1; }
 /* Kol kaydinda ana hat adi — "BR-4" tek basina nereye ait belli degil. */
 .fx-head-parent {
   display: inline-flex;
   align-items: center;
-  gap: 1px;
   font-size: 13px;
   font-weight: 600;
   color: #94a3b8;
   letter-spacing: 0;
 }
-.fx-head-parent svg { color: #cbd5e1; }
 
 /* --- DURUM SERIDI ---
-   Ariza acik mi, ne kadardir suruyor, yeri bulundu mu, bu aralik kacinci kez
-   arizalaniyor. Artik hat adinin ALTINDA degil YANINDA: ust serit tek satir
-   (bkz. `.fx-head-id`). */
+   Seridin BASINDA: ariza acik mi ve ne kadardir. "Konum tespit edildi" ve
+   "N. kez" etiketleri kaldirildi — birincisi aralik zaten yazilirken bilgi
+   tasimiyordu, ikincisi karttaki "bu hattin gecmisi" blogunu tekrar
+   ediyordu. */
 .fx-head-state {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 0;
+  flex: none;
 }
 .fx-state {
   display: inline-flex;

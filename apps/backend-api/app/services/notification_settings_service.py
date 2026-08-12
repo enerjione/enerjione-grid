@@ -30,6 +30,41 @@ def decrypt_notification_credentials(row: NotificationSettings) -> DecryptedNoti
     )
 
 
+def resolve_sender_name(db: Session) -> str | None:
+    """Mektupta gorunecek GONDEREN ADI — tek kaynak.
+
+    Sira:
+        1. Mail Ayarlari > Gonderen Adi   (`smtp_from_name`)  <- ACIK secim
+        2. Proje Ayarlari zinciri         (site_title -> project_name ->
+                                           customer_name)      <- YEDEK
+        3. None -> cagiran taraf `PRODUCT_NAME`a duser
+
+    NEDEN TEK FONKSIYON: bu ad hem `From` basligindaki gorunen adi hem
+    mektup basligindaki markayi belirliyor ve DORT ayri yerden cagriliyordu
+    (alarm e-postasi, atama e-postasi, bildirim dagitimi, test gonderimi).
+    Her biri zinciri kendi kopyasindan hesapliyordu; biri guncellenip digeri
+    unutulsa ayni kurulum farkli mektuplarda farkli isimle gorunurdu ve bu
+    hicbir yerde hata uretmezdi.
+
+    ZINCIR NEDEN DURUYOR: alan bos olan mevcut kurulumlarda gonderen adi
+    DEGISMEMELI. Aksi halde bu surumle birlikte musteriye giden mektuplarin
+    adi kimse istemeden degisirdi.
+    """
+    row = db.get(NotificationSettings, 1)
+    acik = (getattr(row, "smtp_from_name", "") or "").strip() if row else ""
+    if acik:
+        return acik
+
+    # Yedek: Proje Ayarlari. Import BURADA — modul seviyesinde yapilirsa
+    # project_settings <-> notification_settings dairesel importu olusur.
+    from app.models.project_settings import ProjectSettings
+
+    proj = db.get(ProjectSettings, 1)
+    if proj is None:
+        return None
+    return (proj.site_title or proj.project_name or proj.customer_name) or None
+
+
 def get_or_create_notification_settings(db: Session) -> NotificationSettings:
     settings_row = db.get(NotificationSettings, 1)
     if settings_row is not None:

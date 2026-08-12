@@ -8,6 +8,7 @@ class NotificationSettingsRead(BaseModel):
     smtp_username: str
     smtp_password: str
     smtp_from_email: str
+    smtp_from_name: str = ""
     sms_enabled: bool
     sms_provider: str
     sms_api_url: str
@@ -33,6 +34,8 @@ class NotificationSettingsUpdate(BaseModel):
     smtp_username: str
     smtp_password: str
     smtp_from_email: EmailStr
+    #: Bos birakilabilir — o zaman Proje Ayarlari zinciri yedek olarak calisir.
+    smtp_from_name: str = ""
     sms_enabled: bool
     sms_provider: str
     sms_api_url: str

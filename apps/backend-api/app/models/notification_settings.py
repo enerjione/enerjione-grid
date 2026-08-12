@@ -14,6 +14,18 @@ class NotificationSettings(Base):
     smtp_username: Mapped[str] = mapped_column(String(255), default="")
     smtp_password: Mapped[str] = mapped_column(String(255), default="")
     smtp_from_email: Mapped[str] = mapped_column(String(255), default="")
+    # GONDEREN ADI — mektupta gorunen isim.
+    #
+    # Onceden bu ad Proje Ayarlari'ndan TURETILIYORDU
+    # (site_title -> project_name -> customer_name). Alanin arayuzdeki adi
+    # "Tarayici Sekme Basligi" oldugu icin kullanici oraya sekme basligi
+    # yaziyor, o metin sessizce musteriye giden mektubun markasi oluyordu;
+    # nereden geldigi hicbir ekranda yazmiyordu. Artik mail ayarlarinda
+    # ACIK bir alan var ve doluysa HER ZAMAN o kazanir.
+    #
+    # Bos birakilirsa eski zincir yedek olarak calismaya devam eder —
+    # mevcut kurulumlarda gonderen adi bu surumle DEGISMEZ.
+    smtp_from_name: Mapped[str] = mapped_column(String(200), default="")
     sms_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     # 'mock' | 'netgsm' | 'twilio' | 'generic' — UI'da seclir.
     sms_provider: Mapped[str] = mapped_column(String(80), default="mock")

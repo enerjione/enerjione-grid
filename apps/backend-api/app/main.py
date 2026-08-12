@@ -418,6 +418,10 @@ def _legacy_bootstrap_ddl():
                 "sms_api_key VARCHAR(255) NOT NULL DEFAULT '')"
             )
         )
+        # Gonderen adi — mektupta gorunen isim (bkz. migration 0056).
+        connection.execute(
+            text("ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS smtp_from_name VARCHAR(200) NOT NULL DEFAULT ''")
+        )
         # Telegram bot ayarlari (mevcut deploylar icin migration).
         connection.execute(
             text("ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE")

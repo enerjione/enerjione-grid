@@ -1047,6 +1047,8 @@ export type NotificationSettings = {
   smtp_username: string;
   smtp_password: string;
   smtp_from_email: string;
+  /** Mektupta gorunen GONDEREN ADI. Bos ise Proje Ayarlari zinciri yedek. */
+  smtp_from_name?: string;
   sms_enabled: boolean;
   sms_provider: string;
   sms_api_url: string;

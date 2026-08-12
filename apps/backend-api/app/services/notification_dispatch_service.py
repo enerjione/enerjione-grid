@@ -85,10 +85,14 @@ def _resolve_active_rule(db: Session, alarm: AlarmEvent) -> AlarmRule | None:
 
 
 def _project_title(db: Session) -> str | None:
-    row = db.get(ProjectSettings, 1)
-    if row is None:
-        return None
-    return (row.site_title or row.project_name or row.customer_name) or None
+    """Gonderen adi — TEK KAYNAK: resolve_sender_name.
+
+    Zincir burada da kopyalanmisti; Mail Ayarlari'na acik alan eklenince iki
+    kopyadan biri guncellenip digeri unutulsaydi ayni kurulum alarm
+    mektubunda baska, atama mektubunda baska isimle gorunurdu."""
+    from app.services.notification_settings_service import resolve_sender_name
+
+    return resolve_sender_name(db)
 
 
 def _alarm_metadata(alarm: AlarmEvent) -> dict:

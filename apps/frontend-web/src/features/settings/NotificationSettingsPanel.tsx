@@ -48,6 +48,7 @@ const EMPTY_SETTINGS: NotificationSettings = {
   smtp_username: "",
   smtp_password: "",
   smtp_from_email: "",
+  smtp_from_name: "",
   sms_enabled: false,
   sms_provider: "netgsm",
   sms_api_url: "",
@@ -473,6 +474,24 @@ export function NotificationSettingsPanel({
               onChange={(event) => setForm((prev) => ({ ...prev, smtp_from_email: event.target.value }))}
               placeholder={t("notifications.settings.fields.smtpFromPlaceholder")}
             />
+          </label>
+          {/* GONDEREN ADI — alicinin gelen kutusunda gordugu isim.
+              Onceden Proje Ayarlari'ndaki "Tarayici Sekme Basligi"ndan
+              turetiliyordu; kullanici oraya sekme basligi yaziyor, o metin
+              sessizce musteriye giden mektubun markasi oluyordu. Artik
+              kendi alani; bos birakilirsa eski zincir yedek kalir. */}
+          <label className="notif-field">
+            <span>{t("notifications.settings.fields.smtpFromName")}</span>
+            <input
+              type="text"
+              value={form.smtp_from_name ?? ""}
+              onChange={(event) => setForm((prev) => ({ ...prev, smtp_from_name: event.target.value }))}
+              placeholder={t("notifications.settings.fields.smtpFromNamePlaceholder")}
+              maxLength={200}
+            />
+            <small className="notif-field-hint">
+              {t("notifications.settings.fields.smtpFromNameHint")}
+            </small>
           </label>
         </div>
       </div>
