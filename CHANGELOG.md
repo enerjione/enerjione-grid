@@ -14,6 +14,33 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.75.0] — 2026-08-12
+
+### Düzeltildi
+
+- **Arıza yoğunluğu haritasında hat hiç çizilmiyordu.** Çizgiler
+  `line_segments` kayıtlarından üretiliyordu; oysa `LineSegment` bir **cihaz
+  yerleşimi** kaydıdır — cihaz atanmamış bir açıklık için satır hiç oluşmaz.
+  Yani harita telin nerede olduğunu değil cihazın nereye takıldığını
+  gösteriyor, cihazsız hatlarda boş kalıyordu. Şebeke artık anasayfa
+  haritasıyla **aynı kaynaktan** çiziliyor: hat başına direkler
+  `sequence_no` ile sıralanıp ardışık direkler birleştiriliyor, branşmanlar
+  da bağlandıkları ana direğe. İki ekranın aynı şebekeyi farklı çizmesi,
+  operatörün hangisine inanacağını bilememesi demekti.
+
+### Değişti
+
+- **Aylık eğilim kartı, veri yetmiyorken hiç çizilmiyor.** Tek aylık veriyle
+  kart ekranın en üstünde tam genişlikte bir açıklama şeridi kaplayıp asıl
+  kartları aşağı itiyordu. İki aylık veri birikince kendiliğinden geri
+  gelir.
+- **Aynı satırdaki kartlar artık aynı boyda.** Sebep/faz dağılımı ile
+  tekrarlayan açıklıklar/aralık risk puanı çiftleri içerikleri farklı
+  olduğu için farklı boyda kalıyor, ızgara kırık görünüyordu. Uzun liste
+  artık kartın **içinde** kayıyor.
+
+---
+
 ## [2.74.0] — 2026-08-12
 
 ### Değişti
