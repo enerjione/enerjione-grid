@@ -110,15 +110,10 @@ export const ENGINEERING_NAV_GROUPS: NavGroup[] = [
         descKey: "engineering.navDesc.liveValues",
         canSee: isInstallerOrEngineer,
       },
-      {
-        // Ariza analizi: "hangi hat en cok ariza cikariyor, neden, ne kadar
-        // surede". Bakim planlama isi oldugu icin sorumlu yonetici de gorur;
-        // backend sorguyu gorunur hatlarla zaten sinirliyor.
-        page: "fault-analytics",
-        labelKey: "engineering.nav.faultAnalytics",
-        descKey: "engineering.navDesc.faultAnalytics",
-        canSee: isTeamManager,
-      },
+      // ARIZA ANALIZI BURADAN CIKTI (2026-08-12): artik ust menude, herkese
+      // acik bir sayfa. "Hangi hat en cok ariza cikariyor, hangi aralik elden
+      // gecmeli" sorusu once sahayi izleyen kisinin sorusu; muhendislik
+      // menusunun altinda operator ve ops_manager'a kapali kaliyordu.
       {
         // Sistem durumu servis/baglanti sagligini IZLEME isidir.
         page: "system-status",

@@ -1090,38 +1090,130 @@ def sankey_akisi(
     olcum eksikligini akisin bir kolu gibi gosterirdi; Sankey'de kalinlik
     "gercekten oraya giden miktar" demektir.
 
-    Dugum adlari benzersiz olmali (echarts dugumleri ADA gore eslestirir);
-    bu yuzden kademe oneki tasirlar: "B:Merkez", "H:ANA HAT", "F:A".
+    HIYERARSI GERCEK TOPOLOJIDIR: bolge -> ANA HAT -> (kol -> kolun kolu ...)
+    -> faz. Bransman kolu ayri bir `Line` kaydidir ama hattin KARDESI degil,
+    COCUGUDUR (`Line.branched_from_pole_id` ana hattin bir diregini gosterir).
+    Onceki surum tum hatlari bolgenin altina duz diziyordu: "BR-4" ile "ANA
+    HAT" ayni kademede duruyor, kolun hangi hattan ciktigi kayboluyordu —
+    oysa sahada BR-4'e giden ekip once ANA HAT'tan geciyor.
+
+    KALINLIK GECISLIDIR: bir hattin bolgeden aldigi akis, KENDI arizalari +
+    TUM alt kollarininkidir. Aksi halde ana hattin girisi cikisindan kucuk
+    kalir ve Sankey'in temel okumasi ("giren = cikan") bozulur. Arizasi
+    olmayan bir ana hat da, altindaki kolun arizasi varsa GECIS dugumu olarak
+    gorunur; zincir kopmaz.
+
+    KAPSAM SIZINTISI YOK: operatorun goremedigi bir ust hat zincire
+    EKLENMEZ; kol o durumda dogrudan bolgeye baglanir. Aksi halde hiyerarsi,
+    kapsam disindaki bir hattin ADINI ekrana tasirdi.
+
+    Dugum adlari benzersiz olmali (echarts dugumleri ADA gore eslestirir).
+    Onek + KIMLIK tasirlar ("H12:ANA HAT"): iki bolgede ayni adli iki hat
+    varsa isimden eslesip tek dugume cokerlerdi. Arayuz ilk ":" oncesini
+    kirpar, yani ekranda yalnizca ad gorunur.
     """
     base = _temel_sorgu(days, visible_line_ids).subquery()
     f = base.c
     rows = db.execute(
-        select(
-            Region.name.label("bolge"),
-            Line.name.label("hat"),
-            f.phase,
-            func.count().label("adet"),
-        )
+        select(f.line_id, f.phase, func.count().label("adet"))
         .select_from(base)
-        .join(Line, Line.id == f.line_id)
-        .join(Region, Region.id == f.region_id)
         .where(f.phase.is_not(None))
-        .group_by(Region.name, Line.name, f.phase)
+        .group_by(f.line_id, f.phase)
     ).all()
+    if not rows:
+        return {"nodes": [], "links": []}
+
+    # --- Hat hiyerarsisi: kol -> ust hat ---------------------------------
+    # `branched_from_pole_id` UST HATTIN diregidir; ustun kimligi o direkten
+    # okunur. Tek sorgu: hat sayisi zaten kucuk (yuzler), ariza sayisi degil.
+    hatlar = {
+        satir.id: satir
+        for satir in db.scalars(select(Line)).all()
+    }
+    direk_hatti = {
+        pid: lid
+        for pid, lid in db.execute(select(Pole.id, Pole.line_id)).all()
+    }
+    bolge_adi = {
+        rid: ad for rid, ad in db.execute(select(Region.id, Region.name)).all()
+    }
+
+    def ust_hat(line_id: int) -> int | None:
+        hat = hatlar.get(line_id)
+        if hat is None or hat.branched_from_pole_id is None:
+            return None
+        ust = direk_hatti.get(hat.branched_from_pole_id)
+        if ust is None or ust == line_id:
+            return None
+        # KAPSAM: gorunmeyen ust hat zincire girmez (adi bile sizmamali).
+        if visible_line_ids is not None and ust not in visible_line_ids:
+            return None
+        return ust
+
+    # --- Kendi arizalari + alt kollarin toplami ---------------------------
+    kendi: dict[int, int] = {}
+    faz_dagilimi: dict[tuple[int, str], int] = {}
+    for line_id, faz, adet in rows:
+        kendi[line_id] = kendi.get(line_id, 0) + int(adet)
+        anahtar = (line_id, str(faz).upper())
+        faz_dagilimi[anahtar] = faz_dagilimi.get(anahtar, 0) + int(adet)
+
+    # Zincirdeki TUM hatlar (arizasi olmayan gecis hatlari dahil).
+    zincir: dict[int, int | None] = {}
+    for line_id in list(kendi):
+        gecerli = line_id
+        # DONGU KORUMASI: bozuk topolojide (A'nin kolu B, B'nin kolu A) sonsuz
+        # donguye girmek analiz ekranini tamamen dusururdu.
+        gorulen: set[int] = set()
+        while gecerli is not None and gecerli not in gorulen:
+            gorulen.add(gecerli)
+            ust = ust_hat(gecerli)
+            zincir[gecerli] = ust
+            gecerli = ust
+
+    def toplam(line_id: int, gorulen: frozenset[int] = frozenset()) -> int:
+        """Hattin KENDI + tum alt kollarinin ariza sayisi."""
+        if line_id in gorulen:
+            return 0
+        alt = frozenset({*gorulen, line_id})
+        return kendi.get(line_id, 0) + sum(
+            toplam(c, alt) for c, u in zincir.items() if u == line_id
+        )
 
     dugumler: dict[str, str] = {}   # ad -> kademe
     baglar: dict[tuple[str, str], int] = {}
 
     def ekle(kaynak: str, hedef: str, adet: int) -> None:
+        if adet <= 0:
+            return
         baglar[(kaynak, hedef)] = baglar.get((kaynak, hedef), 0) + adet
 
-    for bolge, hat, faz, adet in rows:
-        b, h, fz = f"B:{bolge}", f"H:{hat}", f"F:{str(faz).upper()}"
-        dugumler[b] = "region"
-        dugumler[h] = "line"
-        dugumler[fz] = "phase"
-        ekle(b, h, int(adet))
-        ekle(h, fz, int(adet))
+    def hat_dugumu(line_id: int) -> str:
+        hat = hatlar.get(line_id)
+        ad = f"H{line_id}:{hat.name if hat else f'#{line_id}'}"
+        dugumler[ad] = "line"
+        return ad
+
+    for line_id, ust in zincir.items():
+        dugum = hat_dugumu(line_id)
+        # Hattin KENDI arizalari faza akar; kollarinkiler kolun kendi
+        # dugumunden akar (yoksa ayni ariza iki kez sayilirdi).
+        for (lid, faz), adet in faz_dagilimi.items():
+            if lid != line_id:
+                continue
+            faz_dugum = f"F:{faz}"
+            dugumler[faz_dugum] = "phase"
+            ekle(dugum, faz_dugum, adet)
+        if ust is not None:
+            ekle(hat_dugumu(ust), dugum, toplam(line_id))
+            continue
+        # KOK HAT: bolgeye baglanir ve tum alt kollarini da tasir.
+        hat = hatlar.get(line_id)
+        if hat is None:
+            continue
+        bolge = f"B{hat.region_id}:{bolge_adi.get(hat.region_id, '—')}"
+        dugumler[bolge] = "region"
+        ekle(bolge, dugum, toplam(line_id))
 
     return {
         "nodes": [{"name": ad, "tier": kademe} for ad, kademe in dugumler.items()],

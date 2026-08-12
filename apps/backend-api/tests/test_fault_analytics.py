@@ -563,11 +563,16 @@ def test_sankey_UC_KADEME_akis_uretir(db):
     akis = analiz.sankey_akisi(db, days=365, visible_line_ids=None)
     adlar = {n["name"] for n in akis["nodes"]}
 
-    assert "B:Merkez" in adlar and "H:HAT-A" in adlar and "F:A" in adlar
+    # Dugum adi ONEK + KIMLIK tasir ("H12:HAT-A"): iki bolgede ayni adli iki
+    # hat varsa isimden eslesip tek dugume cokerlerdi.
+    b = f"B{s.bolge.id}:Merkez"
+    ha = f"H{s.hat('HAT-A').id}:HAT-A"
+    hb = f"H{s.hat('HAT-B').id}:HAT-B"
+    assert b in adlar and ha in adlar and "F:A" in adlar
     baglar = {(l["source"], l["target"]): l["value"] for l in akis["links"]}
-    assert baglar[("B:Merkez", "H:HAT-A")] == 2
-    assert baglar[("H:HAT-A", "F:A")] == 2
-    assert baglar[("H:HAT-B", "F:C")] == 1
+    assert baglar[(b, ha)] == 2
+    assert baglar[(ha, "F:A")] == 2
+    assert baglar[(hb, "F:C")] == 1
 
 
 def test_sankey_bolge_bagi_hatlari_TOPLAR(db):
@@ -577,10 +582,97 @@ def test_sankey_bolge_bagi_hatlari_TOPLAR(db):
     s.ariza("HAT-B", faz="b")
 
     akis = analiz.sankey_akisi(db, days=365, visible_line_ids=None)
-    bolgeden = sum(l["value"] for l in akis["links"] if l["source"] == "B:Merkez")
+    onek = f"B{s.bolge.id}:"
+    bolgeden = sum(l["value"] for l in akis["links"] if l["source"].startswith(onek))
     faza = sum(l["value"] for l in akis["links"] if l["target"].startswith("F:"))
 
     assert bolgeden == faza == 2
+
+
+def _kol_yap(s: "Saha", ana_ad: str, kol_ad: str, *, seq: int = 2) -> Line:
+    """`kol_ad` hattini `ana_ad` hattinin `seq` nolu diregine BAGLAR.
+
+    Bransman kolu ayri bir Line kaydidir ama hattin KARDESI degil COCUGUDUR;
+    baglanti `branched_from_pole_id` ile kurulur.
+    """
+    ana = s.hat(ana_ad)
+    kol = s.hat(kol_ad)
+    kol.branched_from_pole_id = s.direk(ana, seq).id
+    s.db.flush()
+    return kol
+
+
+def test_sankey_KOL_ana_hattin_ALTINDA_akar(db):
+    """BR-4 bolgenin degil ANA HAT'in cocugudur — sahada ekip once oradan gecer."""
+    s = Saha(db)
+    s.ariza("ANA HAT", faz="a")
+    _kol_yap(s, "ANA HAT", "BR-4")
+    s.ariza("BR-4", faz="b")
+
+    akis = analiz.sankey_akisi(db, days=365, visible_line_ids=None)
+    baglar = {(l["source"], l["target"]): l["value"] for l in akis["links"]}
+    b = f"B{s.bolge.id}:Merkez"
+    ana = f"H{s.hat('ANA HAT').id}:ANA HAT"
+    kol = f"H{s.hat('BR-4').id}:BR-4"
+
+    assert (b, kol) not in baglar, "kol bolgeye DOGRUDAN baglanmamali"
+    assert baglar[(ana, kol)] == 1, "kol ana hattin altinda"
+    assert baglar[(b, ana)] == 2, "ana hattin girisi kendi + kol arizasi"
+    assert baglar[(ana, "F:A")] == 1
+    assert baglar[(kol, "F:B")] == 1
+
+
+def test_sankey_KOLUN_KOLU_zinciri_korunur(db):
+    """Kolun altinda baska bir dal varsa baglanti orada da gorunmeli."""
+    s = Saha(db)
+    _kol_yap(s, "ANA HAT", "BR-4")
+    _kol_yap(s, "BR-4", "BR-4-1")
+    s.ariza("BR-4-1", faz="c")
+
+    akis = analiz.sankey_akisi(db, days=365, visible_line_ids=None)
+    baglar = {(l["source"], l["target"]): l["value"] for l in akis["links"]}
+    b = f"B{s.bolge.id}:Merkez"
+    ana = f"H{s.hat('ANA HAT').id}:ANA HAT"
+    kol = f"H{s.hat('BR-4').id}:BR-4"
+    torun = f"H{s.hat('BR-4-1').id}:BR-4-1"
+
+    # ARIZASI OLMAYAN ana hat ve kol GECIS dugumu olarak durur; zincir kopmaz.
+    assert baglar[(b, ana)] == 1
+    assert baglar[(ana, kol)] == 1
+    assert baglar[(kol, torun)] == 1
+    assert baglar[(torun, "F:C")] == 1
+    assert (ana, "F:C") not in baglar, "ariza torunun, ana hattin degil"
+
+
+def test_sankey_KAPSAM_DISI_ust_hat_zincire_girmez(db):
+    """Gorunmeyen bir ust hattin ADI bile ekrana sizmamali."""
+    s = Saha(db)
+    _kol_yap(s, "ANA HAT", "BR-4")
+    s.ariza("BR-4", faz="a")
+    yalniz_kol = {s.hat("BR-4").id}
+
+    akis = analiz.sankey_akisi(db, days=365, visible_line_ids=yalniz_kol)
+    adlar = {n["name"] for n in akis["nodes"]}
+    baglar = {(l["source"], l["target"]): l["value"] for l in akis["links"]}
+    b = f"B{s.bolge.id}:Merkez"
+    kol = f"H{s.hat('BR-4').id}:BR-4"
+
+    assert not any("ANA HAT" in ad for ad in adlar)
+    assert baglar[(b, kol)] == 1, "ust gorunmuyorsa kol dogrudan bolgeye baglanir"
+
+
+def test_sankey_DONGULU_topoloji_cokmez(db):
+    """Bozuk veri (A'nin kolu B, B'nin kolu A) analiz ekranini dusurmemeli."""
+    s = Saha(db)
+    a = _kol_yap(s, "HAT-B", "HAT-A")
+    b = s.hat("HAT-B")
+    b.branched_from_pole_id = s.direk(a, 3).id
+    s.db.flush()
+    s.ariza("HAT-A", faz="a")
+
+    akis = analiz.sankey_akisi(db, days=365, visible_line_ids=None)
+
+    assert akis["links"], "dongu yuzunden akis tamamen bosalmamali"
 
 
 def test_sankey_FAZSIZ_kayit_akisa_girmez(db):

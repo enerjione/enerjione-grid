@@ -69,13 +69,14 @@ export const ENGINEERING_PAGE_ICON: Record<EngineeringPage, LucideIcon> = {
   "field-tools": Wrench,
   // Kendi profili — menude gorunmez, kullanici menusunden acilir.
   profile: UserCog,
-  "fault-analytics": ChartColumn,
 };
 
 const PAGE_ICON: Record<Exclude<PageMode, "engineering">, LucideIcon> = {
   home: Home,
   alarms: Bell,
   faults: TriangleAlert,
+  // Ariza analizi muhendislik altindan cikip ust menuye tasindi.
+  "fault-analytics": ChartColumn,
   events: FileText,
 };
 

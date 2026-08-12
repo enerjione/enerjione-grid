@@ -214,7 +214,19 @@ def test_sankey_dugum_onekleri_ARAYUZUN_bekledigi_bicimde(db):
 
     akis = fas.sankey_akisi(db, days=365, visible_line_ids=None)
     adlar = {n["name"]: n["tier"] for n in akis["nodes"]}
-    assert adlar == {"B:Merkez": "region", "H:HAT-1": "line", "F:A": "phase"}
+
+    # ONEK: arayuz ilk ':' oncesini kirpar. Onek KIMLIK de tasiyabilir
+    # ("H12:HAT-1") — iki bolgede ayni adli iki hat tek dugume cokmesin diye.
+    # Kilitlenen sey oneklerin HARFI ve ':' sonrasinin EKRANDA GORUNEN AD
+    # olmasi; sabit bir dizi degil.
+    etiket = {ad.split(":", 1)[1]: (ad.split(":", 1)[0], kademe)
+              for ad, kademe in adlar.items()}
+    assert set(etiket) == {"Merkez", "HAT-1", "A"}
+    assert etiket["Merkez"][1] == "region" and etiket["Merkez"][0].startswith("B")
+    assert etiket["HAT-1"][1] == "line" and etiket["HAT-1"][0].startswith("H")
+    # Faz onegi CIPLAK "F" kalir: arayuz faz kodunu (A/B/C) etiketten okuyup
+    # L1/L2/L3'e ve renge esliyor.
+    assert etiket["A"] == ("F", "phase")
     # Kenarlar dugum ADIYLA eslesir; onek dusurulurse baglar kopar.
     for l in akis["links"]:
         assert l["source"] in adlar and l["target"] in adlar

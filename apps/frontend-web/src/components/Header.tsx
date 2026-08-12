@@ -5,7 +5,7 @@ import {
   Bell,
   TriangleAlert,
   FileText,
-  ChartLine,
+  ChartColumn,
   Settings,
   LockOpen,
   type LucideIcon
@@ -16,7 +16,13 @@ import { HeaderSearch } from "./HeaderSearch";
 import { useProjectSettings } from "./ProjectSettingsProvider";
 import type { DeviceRow, Line, Pole, Region, UserRole } from "../shared/types";
 
-type NavPage = "home" | "alarms" | "faults" | "events" | "engineering";
+type NavPage =
+  | "home"
+  | "alarms"
+  | "faults"
+  | "fault-analytics"
+  | "events"
+  | "engineering";
 type DeviceTopology = Map<number, { regionId: number; regionName: string; lineId: number; lineName: string }>;
 
 type Props = {
@@ -39,11 +45,6 @@ type Props = {
   onOpenRemoteAccess?: () => void;
   activePage: NavPage;
   onChangePage: (page: NavPage) => void;
-  /** "Ariza Analizi" sayfasini acar. Sayfa muhendislik agacinda yasiyor ama
-   *  gunluk kullanilan bir ekran; ust menude olmasi isteniyor. */
-  onOpenFaultAnalytics?: () => void;
-  /** Analiz sekmesi su an acik mi (ust menude vurgulanir). */
-  faultAnalyticsActive?: boolean;
   // Global arama (cihaz + direk + hat + bolge).
   devices: DeviceRow[];
   regions: Region[];
@@ -61,6 +62,12 @@ const NAV_ITEMS: { page: Exclude<NavPage, "engineering">; key: string; Icon: Luc
   { page: "home", key: "header.home", Icon: Home },
   { page: "alarms", key: "header.alarms", Icon: Bell },
   { page: "faults", key: "header.faults", Icon: TriangleAlert },
+  // ARIZA ANALIZI: arizalarin HEMEN YANINDA. Muhendislik menusunun altindayken
+  // operator ve ops_manager'a kapali bir kapinin arkasindaydi; oysa "hangi hat
+  // en cok ariza cikariyor, hangi aralik elden gecmeli" sorusu once sahayi
+  // izleyen kisinin sorusu. Backend ucu zaten herkese acik ve sonucu KAPSAMLA
+  // sinirliyor — operator yalnizca kendi hatlarini gorur.
+  { page: "fault-analytics", key: "header.faultAnalytics", Icon: ChartColumn },
   { page: "events", key: "header.events", Icon: FileText },
 ];
 
@@ -78,8 +85,6 @@ export function Header({
   remoteAccessLabel,
   onOpenRemoteAccess,
   activePage,
-  onOpenFaultAnalytics,
-  faultAnalyticsActive,
   onChangePage,
   devices,
   regions,
@@ -165,18 +170,10 @@ export function Header({
               <span>{t(key)}</span>
             </button>
           ))}
-          {/* Ariza Analizi muhendislik agacinda yasiyor ama gunluk bakilan
-              bir ekran; menu icinde aramak yerine ust seride alindi.
-              Yetkisi olmayan (operator) rolde geri cagri gecilmez. */}
-          {onOpenFaultAnalytics ? (
-            <button
-              className={`header-nav-btn${faultAnalyticsActive ? " active" : ""}`}
-              onClick={onOpenFaultAnalytics}
-            >
-              <ChartLine size={17} strokeWidth={2} />
-              <span>{t("engineering.nav.faultAnalytics")}</span>
-            </button>
-          ) : null}
+          {/* Ariza Analizi icin AYRI kisayol dugmesi KALDIRILDI: sayfa artik
+              muhendislik agacinda degil, NAV_ITEMS icinde normal bir ust menu
+              sekmesi. Iki giris kapisi (biri nav, biri yanindaki dugme) ayni
+              sayfayi acan iki farkli gorunum demekti. */}
         </nav>
       </div>
 
