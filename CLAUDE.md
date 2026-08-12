@@ -137,6 +137,32 @@ cd apps/frontend-web && npx tsc -b          # type check (--noEmit DEGIL: kok
 Conventional commit, Türkçe açıklama: `feat(scope): ...`, `fix(dashboard): ...`.
 Kullanıcı istemeden commit/push yapma. İş dalı aç (`feat/...`, `fix/...`), `main`'e PR ile gir.
 
+### Paralel oturumlar — AYNI AĞAÇTA ÇALIŞMA
+
+Bu depoda aynı anda birden fazla oturum (Claude Code penceresi, IDE, terminal)
+çalışıyor. **Aynı çalışma ağacını paylaşmak veri kaybettiriyor** — 2026-08-12'de
+20 dakika içinde üç kaza oldu: `commit -a` başka oturumun dosyalarını aldı,
+editörde kalmış eski tampon 246 satırlık bir düzeltmeyi commit ile geri aldı,
+`git reset` iki commit'i daldan düşürdü.
+
+**Kural: her iş kendi worktree'sinde.**
+
+```powershell
+.\tools\oturum-ac.ps1   -Konu analiz     # worktree + dal + .env + ayrı port
+.\tools\oturum-kapat.ps1 -Konu analiz    # güvenli kapatma (junction'a dikkat)
+```
+
+Worktree'ler `.claude/worktrees/` altında (gitignore'da, Docker bağlamına
+girmez). Claude Code oturumu `EnterWorktree` ile o yola geçebilir.
+
+Tek ağaçta kalmak zorundaysan üç kural:
+
+1. **`git add -A` / `git commit -a` YOK** — her zaman açık dosya yolu ver.
+2. `reset` / `checkout --` öncesi `git log --oneline -5` ile ne düşeceğine bak;
+   düşen commit başkasının olabilir (reflog'dan kurtarılır ama önce fark et).
+3. `types.ts`, `App.tsx`, i18n dosyaları gibi **ortak dosyalara** dokunan
+   oturum işini hemen commit'lesin; çarpışmaların hepsi bu dosyalarda oldu.
+
 ---
 
 ## Kurulu Skill'ler (`.claude/skills/`)
