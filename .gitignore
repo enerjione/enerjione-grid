@@ -32,6 +32,11 @@ memory/
 # Claude Code — ekip ayarlari (.claude/settings.json, commands/, CLAUDE.md) commit edilir.
 # Kisiye ozel local override ve gecici dosyalar commit edilmez.
 .claude/settings.local.json
+# Oturum defteri ve onbellegi (tools/oturum-*.ps1 uretir): MAKINEYE OZEL.
+# Icinde mutlak Windows yollari, port atamalari ve acilis zamanlari var —
+# baska bir makinede anlamsiz, commit edilirse her oturumda catisir.
+.claude/oturumlar.json
+.claude/oturumlar.cache.json
 
 # Firebase Admin SDK service account dosyalari — ASLA commit edilmemeli
 # (private key icerir). Backend runtime'da yerel dosyadan veya env ile okur.
