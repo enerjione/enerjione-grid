@@ -535,7 +535,6 @@ export function DeviceDetailPage({
         device={device}
         parentDevice={parentDevice}
         topologyInfo={topologyInfo}
-        rssi={rtuNum("master.modem_rssi")}
         ip={sidebarIp}
         partNo={sidebarPartNo}
         firmware={sidebarFirmware}

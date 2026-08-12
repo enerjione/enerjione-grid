@@ -2,8 +2,8 @@
  * DeviceSidebar — cihaz detay sol sabit panel.
  *
  * Cihaz kimlik (kod solunda online/offline nokta) + birlesik BILGILER (bolge/
- * hat/IP/pil/RSSI/kalite/seri no'lar) + mini harita (topoloji konumu) + kanal
- * secimi (seri no'lu). activeSource sidebar'dan kontrol edilir.
+ * hat/IP/pil) + mini harita (topoloji konumu) + kanal secimi.
+ * activeSource sidebar'dan kontrol edilir.
  */
 
 import { useTranslation } from "react-i18next";
@@ -39,8 +39,6 @@ type Props = {
    *  "set cevrimici ama kit degil" gibi imkansiz durumlar gosteriyordu. */
   parentDevice?: DeviceRow;
   topologyInfo?: TopologyInfo;
-  /** RSSI (master.modem_rssi). */
-  rssi?: number;
   /** Master IP (master.ipv4_address). */
   ip?: string;
   /** Part No (master.info_part_no). */
@@ -82,20 +80,8 @@ function channelsFor(device: DeviceRow): { key: SignalSource; label: string; ton
   return keys.map((key) => ({ key, label: sourceLabel(key), tone: sourceTone(key) }));
 }
 
-// RSSI -> sebeke sinyali (dBm). -70 ust iyi, -85 ust orta, alti zayif.
-// bars: 4 kademeli sinyal cubugu (0..4).
-function rssiQuality(rssi: number | undefined): {
-  key: "good" | "fair" | "poor" | "none";
-  dbm: string;
-  bars: number;
-} {
-  if (rssi == null) return { key: "none", dbm: "—", bars: 0 };
-  const dbm = `${Math.round(rssi)} dBm`;
-  if (rssi >= -70) return { key: "good", dbm, bars: 4 };
-  if (rssi >= -85) return { key: "fair", dbm, bars: 3 };
-  if (rssi >= -100) return { key: "poor", dbm, bars: 2 };
-  return { key: "poor", dbm, bars: 1 };
-}
+// `rssiQuality` KALDIRILDI — sebeke sinyali satiriyla birlikte. Modem
+// olculeri "Pole Master" sekmesinde duruyor.
 
 // Pil % -> renk sinifi (ana sayfa ile ayni esikler).
 function batteryClass(pct: number): string {
@@ -108,7 +94,6 @@ export function DeviceSidebar({
   device,
   parentDevice,
   topologyInfo,
-  rssi,
   ip,
   partNo,
   firmware,
@@ -124,7 +109,6 @@ export function DeviceSidebar({
   // Haberlesme/pil/sinyal SAHIBI cihaz: sette kit, sade cihazda kendisi.
   const health = parentDevice ?? device;
   const online = health.communicationStatus === "online";
-  const quality = rssiQuality(rssi);
   // Konum: cihazin kendi lat/lon'u yoksa topoloji (hat/segment) konumu.
   const validSelf =
     Number.isFinite(device.latitude) &&
@@ -228,19 +212,10 @@ export function DeviceSidebar({
             </span>
           </li>
 
-          {/* Sebeke sinyali — renkli sinyal cubugu */}
-          <li className="device-sidebar-info-row">
-            <span className="material-symbols-outlined">signal_cellular_alt</span>
-            <span className="device-sidebar-info-label">{t("deviceDetail.sidebar.networkSignal")}</span>
-            <span className={`device-sidebar-signal sig-${quality.key}`}>
-              <span className="device-sidebar-signal-bars" aria-hidden="true">
-                {[1, 2, 3, 4].map((b) => (
-                  <span key={b} className={`bar${b <= quality.bars ? " on" : ""}`} />
-                ))}
-              </span>
-              <span className="device-sidebar-signal-text">{quality.dbm}</span>
-            </span>
-          </li>
+          {/* SEBEKE SINYALI KALDIRILDI (kullanici karari): modem/sebeke
+              olculeri kitin RTU'suna ait ve hepsi zaten "Pole Master"
+              sekmesinde duruyor. Sol panelde ikinci bir kopya olarak durmasi,
+              set sayfasinda "setin kendi sinyali" gibi okunuyordu. */}
         </ul>
       </section>
 
@@ -261,10 +236,18 @@ export function DeviceSidebar({
                   className={`device-channel tone-${ch.tone}${active ? " active" : ""}`}
                   onClick={() => onSourceChange(ch.key)}
                   disabled={n === 0}
+                  /* Seri no satirdan kalkti ama KAYBOLMADI: ipucunda duruyor
+                     (bir cihazi RMA'ya gonderirken ya da sahayla telefonda
+                     dogrularken gereken tek yer orasi). */
                   title={
-                    uyduNo != null
-                      ? t("deviceDetail.sidebar.satelliteNo", { no: uyduNo })
-                      : undefined
+                    [
+                      uyduNo != null
+                        ? t("deviceDetail.sidebar.satelliteNo", { no: uyduNo })
+                        : null,
+                      sn ? `SN ${sn}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || undefined
                   }
                 >
                   {batt != null ? (
@@ -282,7 +265,11 @@ export function DeviceSidebar({
                   {uyduNo != null ? (
                     <span className="device-channel-satno">U{uyduNo}</span>
                   ) : null}
-                  <span className="device-channel-serial">{sn ?? (n === 0 ? "—" : "")}</span>
+                  {/* SERI NO KALDIRILDI (kullanici karari): kanal secerken
+                      sorulan sey "hangi unite", seri no degil. Numara
+                      etiketle ayni satirda durunca ikisi tek bir kimlik gibi
+                      okunuyordu; uydunun fiziksel karsiligi zaten "U3"
+                      rozetinde ve tam seri no ipucunda (title) duruyor. */}
                 </button>
               </li>
             );
