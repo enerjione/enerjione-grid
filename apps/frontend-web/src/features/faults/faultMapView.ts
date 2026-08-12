@@ -24,6 +24,8 @@
  * arizanin yerini daraltmanin tek dogru yoludur.
  */
 
+import { bolgeSiniriCoz } from "./faultZone";
+
 export type Nokta = { latitude: number; longitude: number };
 export type LatLon = [number, number];
 
@@ -255,38 +257,17 @@ export function buildFaultMapView(input: {
 
   // Son ariza ALGILAYAN ve ondan sonraki ilk ALGILAMAYAN cihaz.
   //
-  // ONCE KAYIT, SONRA CANLI ALARM: kaydin `last_red_device_id` /
-  // `first_green_device_id` alanlari arizanin acildigi andaki gercektir ve
-  // degismez. Canli alarmdan turetmek yalnizca ariza ACIKKEN dogru sonuc
-  // veriyordu; alarm normale donunce kirmizi parca kayboluyor, gecmis bir
-  // kaydin haritasi hattin tamamini yesil gosteriyordu (bolge odagi da tum
-  // hatta zoom yapiyordu). Kayitta cihaz yoksa ya da o cihaz artik bu hatta
-  // degilse (topoloji duzenlendi) eski alarm tabanli yola dusuyoruz.
-  let lastRedIdx =
-    kayitliKirmizi != null
-      ? lineDevices.findIndex((d) => d.deviceId === kayitliKirmizi)
-      : -1;
-  let firstGreenAfterRedIdx = -1;
-  if (lastRedIdx >= 0) {
-    const yesilId = fault.first_green_device_id ?? null;
-    const yesilIdx =
-      yesilId != null ? lineDevices.findIndex((d) => d.deviceId === yesilId) : -1;
-    // Yesil cihaz kirmizidan SONRA olmali; degilse yok say — ters siralanmis
-    // bir parca hattin uzerine yanlis yerde kirmizi cizerdi.
-    if (yesilIdx > lastRedIdx) firstGreenAfterRedIdx = yesilIdx;
-  } else {
-    for (let i = 0; i < lineDevices.length; i += 1) {
-      if (lineDevices[i].isRed) lastRedIdx = i;
-    }
-    if (lastRedIdx >= 0) {
-      for (let i = lastRedIdx + 1; i < lineDevices.length; i += 1) {
-        if (!lineDevices[i].isRed) {
-          firstGreenAfterRedIdx = i;
-          break;
-        }
-      }
-    }
-  }
+  // KARAR ARTIK PAYLASILAN KURALDA (`faultZone.bolgeSiniriCoz`). Ayni hesap
+  // burada, sematik cizimde ve aday kol taramasinda AYRI AYRI yaziliydi;
+  // kopyalar ayrisinca ayni ariza icin harita bir yeri, sema baska yeri
+  // isaretliyordu (bkz. faultZone dosya basligi).
+  const sinir = bolgeSiniriCoz<number>({
+    cihazlar: lineDevices.map((d) => ({ key: d.deviceId, canliAlarm: d.isRed })),
+    kayitliKirmizi,
+    kayitliYesil: fault.first_green_device_id ?? null,
+  });
+  const lastRedIdx = sinir ? sinir.redIndex : -1;
+  const firstGreenAfterRedIdx = sinir && sinir.greenIndex != null ? sinir.greenIndex : -1;
 
   const fullLine: LatLon[] = linePoles.map((p) => [p.latitude, p.longitude]);
 

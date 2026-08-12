@@ -36,6 +36,8 @@
  * geometrisine sahiptir ve kol, asili oldugu direge dikey bir bagla baglanir.
  */
 
+import { bolgeSiniriCoz, ilkGormeyenIndeksi } from "./faultZone";
+
 /** Cizimdeki bir direk. `seq` zorunlu; ad/rol varsa etiket ve ipucu zenginlesir. */
 export type StripPole = {
   seq: number;
@@ -413,43 +415,61 @@ export function buildStripGeometry({
   }
   devices.sort((x, y) => x.pos - y.pos);
 
-  // ARIZALI PARCA: son "gordum" cihazindan ilk "gormedim" cihazina kadar.
+  // ---- ARIZALI PARCA ----------------------------------------------------
+  //
+  // KARAR PAYLASILAN KURALDA (`faultZone.bolgeSiniriCoz`) — haritanin
+  // kullandigi kuralin AYNISI. Burada ayri bir kopya vardi ve kopyalar
+  // ayrisinca ayni ariza icin harita bir yeri, sema baska yeri
+  // isaretliyordu: kolun giris cihazi "gormedim" dedigi halde sema kolu o
+  // cihazdan HAT UCUNA kadar boyuyordu. Ekip cihazin altini geziyordu,
+  // oysa aranacak yer ustuydu.
+  //
+  // Bransman girisindeki cihazlar ANA HAT uzerinde sinir tanimlamaz
+  // (`sinirTanimlar: false`): gordukleri ariza kolun asagisindadir.
   let span: StripSpan | null = null;
-  // Bransman girisindeki cihazlar ana hat uzerinde parca TANIMLAMAZ.
-  const red = devices.find((d) => d.tone === "red" && !d.onBranch);
-  const green = devices.find((d) => d.tone === "green" && !d.onBranch);
-  if (red) {
-    // Yesil cihaz yoksa ariza hat ucuna kadar suruyor demektir.
-    const end = green ? green.pos : count - 1;
-    if (end > red.pos) span = { a: red.pos, b: end, byDevice: true };
+  const sinir = bolgeSiniriCoz<string>({
+    cihazlar: devices.map((d) => ({
+      key: d.code,
+      // Sema canli alarm listesi ALMAZ; "gordu" bilgisi kayittan gelen
+      // tondadir. Kayit yolu zaten once denendigi icin sonuc ayni.
+      canliAlarm: d.tone === "red",
+      sinirTanimlar: !d.onBranch,
+    })),
+    kayitliKirmizi: lastRedDeviceCode ?? null,
+    kayitliYesil: firstGreenDeviceCode ?? null,
+  });
+  if (sinir) {
+    const bas = devices[sinir.redIndex].pos;
+    const son = sinir.greenIndex != null ? devices[sinir.greenIndex].pos : count - 1;
+    if (son > bas) span = { a: bas, b: son, byDevice: true };
   }
-  // "GORDUM" DIYEN YOK AMA "GORMEDIM" DIYEN VAR.
+
+  // "GORDUM" DIYEN YOK AMA "GORMEDIM" DIYEN VAR — aday kolun tipik durumu.
   //
-  // Aday bir bransman kolunda tipik durum budur: kolun kendi ariza kaydi
-  // yoktur ama uzerinde alarm vermeyen bir cihaz durur. O cihazdan fault
-  // akimi GECMEDIGI icin arizanin ondan asagida olmasi mumkun degildir —
-  // supheli alan hat basi ile o cihaz arasidir.
-  //
-  // Bu kural olmadan kol bastan sona kirmizi ciziliyordu: cihazin
-  // "gormedim" demesi yok sayiliyor, kesinlikle saglam olan alt kisim da
-  // aday gosteriliyordu.
-  //
-  // Yalnizca direk araligi VERILMEMISSE devreye girer; verilmisse (ana hat
-  // kaydi) o sinirlar baglayicidir.
-  if (span === null && green && (fromSeq == null || toSeq == null) && green.pos > 0) {
-    span = { a: 0, b: green.pos, byDevice: true };
+  // O cihazdan fault akimi GECMEDIGI icin arizanin ondan asagida olmasi
+  // mumkun degildir; supheli alan hat basi ile o cihaz arasidir. Yalnizca
+  // direk araligi VERILMEMISSE devreye girer; verilmisse (ana hat kaydi) o
+  // sinirlar baglayicidir.
+  if (span === null && (fromSeq == null || toSeq == null)) {
+    const gi = ilkGormeyenIndeksi(
+      devices.map((d) => ({
+        key: d.code,
+        canliAlarm: d.tone === "red",
+        sinirTanimlar: !d.onBranch,
+      }))
+    );
+    if (gi != null && devices[gi].pos > 0) {
+      span = { a: 0, b: devices[gi].pos, byDevice: true };
+    }
   }
+
   // ARIZAYI GOREN CIHAZ BRANSMAN GIRISINDEYSE ANA HAT BOYANMAZ.
   //
   // Boyle bir cihaz ana hattin uzerinde degil, dallanma diregi ile kolun ilk
   // diregi ARASINDAKI telin uzerindedir. "Gordum" demesi arizanin O KOLDA
-  // (kendisinden asagida) oldugu anlamina gelir — ana hatta degil.
-  //
-  // Kod bu cihazi bolge hesabindan disliyordu ama hemen ardindan kaba direk
-  // araligina (`from_pole_seq`..`to_pole_seq`) dusup ANA HATTI bastan sona
-  // kirmiziya boyuyordu. Harita ayni arizayi kolun uzerinde tek bir kirmizi
-  // kesik olarak gosterirken sema koca bir ana hat parcasini isaretliyordu;
-  // ekip yanlis yere gidiyordu.
+  // oldugu anlamina gelir. Kod bu cihazi bolge hesabindan disliyordu ama
+  // hemen ardindan kaba direk araligina dusup ANA HATTI bastan sona
+  // kirmiziya boyuyordu.
   const redOnBranch = lastRedDeviceCode
     ? devices.find((d) => d.code === lastRedDeviceCode && d.onBranch) ?? null
     : null;
