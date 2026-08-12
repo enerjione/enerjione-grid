@@ -152,14 +152,38 @@ bağlı değil (`.claude/settings.json` > `hooks`).
 
 ```powershell
 .\tools\oturum-kayit.ps1                         # kim ne yapıyor, nerede çarpışıyoruz
-.\tools\oturum-panel.ps1 -Ac                     # aynısının canlı görsel hâli (:7373)
+.\tools\oturum-panel.ps1 -Ac                     # canlı görsel panel (:7373)
 .\tools\oturum-ac.ps1  -Konu analiz -VSCode      # worktree + dal + .env + port + AYRI pencere
+.\tools\oturum-mesaj.ps1 -Kime analiz -Mesaj "types.ts bende, 10 dk"
 .\tools\oturum-birlestir.ps1 -Hepsi              # dallar main'e göre nerede
 .\tools\oturum-birlestir.ps1 -Konu analiz -Uygula  # güncel main üstüne rebase
 .\tools\oturum-kapat.ps1 -Konu analiz            # güvenli kapatma (junction'a dikkat)
 ```
 
-Claude içinden hepsi tek komut: **`/oturum`** (durum · ac · birlestir · panel · kapat).
+Claude içinden hepsi tek komut: **`/oturum`** (durum · ac · mesaj · birlestir · panel · kapat).
+
+### Oturumlar arası mesajlaşma
+
+Posta kutusu `.claude/oturum-mesajlar.json`. Hedef `-Kime <oturum-adı>` ya da
+herkes için `-Kime *`. **Mesaj anlık değildir**: bir Claude oturumu ancak sırası
+geldiğinde bağlam alır, mesaj hedefin *bir sonraki adımında* `UserPromptSubmit`
+hook'uyla bağlamına düşer. Oturum boş bekliyorsa posta kutusunda kalır — panel
+okunmamışları sarı kenarla gösterir, "ulaştı mı" sorusu ortada kalmaz.
+
+Paylaşımlı bir dosyada geniş değişikliğe **başlarken** ilgili oturuma bir satır
+yaz; çarpışma hook'u zaten kimin orada olduğunu söylüyor.
+
+### Panel ne gösterir
+
+Her oturum bir pixel-art coworker: dalı, portu, **son isteği**, **şu an hangi
+aracı hangi dosyada** çalıştırdığı, **görev ilerleme çubuğu** (`3/7 · 4 kaldı` +
+o an yürüyen görev), son hareketten bu yana geçen süre, `+ileride/-geride`,
+açık dosya sayısı. Altta mesaj akışı ve çarpışma tahtası; her karttan o oturuma
+mesaj yollanabiliyor.
+
+Veri kaynağı iki katmanlı: defter (hook'lar yazar) **ve** Claude'un kendi
+transkriptleri (`~/.claude/projects/<slug>/*.jsonl`). İkincisi hook'lardan
+bağımsız çalışır — panel hiçbir ayar yüklenmemiş bir oturumu bile görebilir.
 
 ### Ortak defter
 
@@ -174,7 +198,7 @@ verilir — bir oturum kapanınca portu serbest kalır.
 | Olay | Script | Ne yapar |
 | --- | --- | --- |
 | SessionStart | `oturum-durum.ps1` | Nerede olduğun, **açık oturumlar + ne yaptıkları**, dalların kaç commit geride kaldığı, aynı dosyada birden fazla oturum, migration zinciri çakışma riski |
-| UserPromptSubmit | `oturum-baslik.ps1` | İlk isteği oturumun "işi" olarak deftere yazar (diğer oturumlar bunu görür) |
+| UserPromptSubmit | `oturum-baslik.ps1` | İlk isteği oturumun "işi" olarak deftere yazar; **diğer oturumlardan gelen mesajları bağlama düşürür** |
 | PreToolUse `Bash(git *)` | `oturum-koruma.ps1` | Ana ağaçta `add -A`, `commit -a`, `reset --hard`, `clean -f`, `checkout -- .`, `stash` **engellenir**. Kendi worktree'nde serbest |
 | PreToolUse `Edit/Write` | `oturum-carpisma.ps1` | Paylaşımlı dosyalarda (`src/shared/`, `src/app/`, `styles.css`, `app/models/`, `alembic_migrations/versions/`) "bu dosyada 2 oturum daha var" uyarısı. Engellemez |
 | SessionEnd | `oturum-bitis.ps1` | Defterden düşer; commit'lenmemiş iş varsa ekrana yazar |

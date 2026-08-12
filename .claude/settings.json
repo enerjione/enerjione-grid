@@ -68,8 +68,7 @@
           {
             "type": "command",
             "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-baslik.ps1",
-            "timeout": 15,
-            "async": true
+            "timeout": 15
           }
         ]
       }

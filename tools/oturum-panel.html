@@ -12,62 +12,100 @@
    bulaniklasmiyor.
 --------------------------------------------------------------------------- */
 :root{
-  --zemin:#0f1020; --zemin2:#171a33; --cerceve:#2b2f57;
-  --metin:#d7dcff; --sonuk:#7d84b8;
+  --zemin:#0d0f1e; --panel:#151933; --panel2:#10132a; --cerceve:#2b3160;
+  --metin:#dce1ff; --sonuk:#7b83bd; --cok-sonuk:#4d5488;
   --yesil:#6bff8e; --sari:#ffd166; --kirmizi:#ff5c7a; --mor:#b98bff; --mavi:#5cc8ff;
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%}
+html,body{margin:0;min-height:100%}
 body{
   background:
-    repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0 2px, rgba(0,0,0,0) 2px 4px),
-    radial-gradient(120% 90% at 50% 0%, #1b1f3d 0%, var(--zemin) 70%);
+    repeating-linear-gradient(0deg, rgba(0,0,0,.20) 0 2px, rgba(0,0,0,0) 2px 4px),
+    radial-gradient(130% 90% at 50% -10%, #1d2247 0%, var(--zemin) 68%);
   color:var(--metin);
   font-family:ui-monospace,"Cascadia Mono",Consolas,"Courier New",monospace;
-  font-size:13px; letter-spacing:.04em;
-  padding:18px 18px 40px;
+  font-size:13px; letter-spacing:.03em; padding:16px 16px 48px;
 }
-h1{font-size:15px;margin:0;letter-spacing:.22em;text-transform:uppercase}
+h1{font-size:15px;margin:0;letter-spacing:.24em;text-transform:uppercase}
 .ust{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
-     border-bottom:2px solid var(--cerceve);padding-bottom:10px;margin-bottom:18px}
+     border-bottom:2px solid var(--cerceve);padding-bottom:10px;margin-bottom:16px}
 .ust .alt{color:var(--sonuk);font-size:11px}
 .imlec{display:inline-block;width:8px;height:13px;background:var(--yesil);
        vertical-align:-2px;animation:yanip 1s steps(2,end) infinite}
 @keyframes yanip{50%{opacity:0}}
 
 /* --- masalar --- */
-.oda{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
-.masa{background:linear-gradient(180deg,var(--zemin2),#12142a);
-      border:2px solid var(--cerceve);padding:12px;position:relative;
-      box-shadow:0 0 0 2px #0b0c18, 0 6px 0 0 #0b0c18}
-.masa.carpisan{border-color:var(--kirmizi);box-shadow:0 0 0 2px #0b0c18,0 6px 0 0 #0b0c18,0 0 18px rgba(255,92,122,.35)}
-.masa.uykuda{opacity:.62}
-.masa .ad{font-weight:700;text-transform:uppercase;letter-spacing:.12em;
-          font-size:12px;display:flex;align-items:center;gap:6px}
-.masa .dal{color:var(--sonuk);font-size:10.5px;margin-top:2px;
-           overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sprite{display:block;margin:10px auto 8px;width:128px;height:128px;
-        image-rendering:pixelated;shape-rendering:crispEdges}
-.is{font-size:11px;line-height:1.45;min-height:2.9em;color:var(--metin);
-    background:#0b0c18;border-left:3px solid var(--cerceve);padding:5px 7px;margin:6px 0}
-.is.bos{color:var(--sonuk)}
-.rozetler{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
-.rz{font-size:10px;padding:2px 6px;border:1px solid currentColor;text-transform:uppercase;letter-spacing:.08em}
+.oda{display:grid;gap:13px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.masa{background:linear-gradient(180deg,var(--panel),var(--panel2));
+      border:2px solid var(--cerceve);padding:11px 12px 12px;position:relative;
+      box-shadow:0 0 0 2px #090a16, 0 6px 0 0 #090a16;display:flex;flex-direction:column}
+.masa.carpisan{border-color:var(--kirmizi)}
+.masa.uykuda{opacity:.55}
+.basSatir{display:flex;align-items:flex-start;gap:10px}
+.sprite{flex:0 0 auto;width:72px;height:72px;image-rendering:pixelated;shape-rendering:crispEdges}
+.kimlik{min-width:0;flex:1}
+.ad{font-weight:700;text-transform:uppercase;letter-spacing:.1em;font-size:12.5px;
+    display:flex;align-items:center;gap:6px}
+.nokta{width:7px;height:7px;flex:0 0 auto}
+.nokta.yaziyor{background:var(--yesil);animation:nabiz 1.1s ease-in-out infinite}
+.nokta.bekliyor{background:var(--sari)} .nokta.uykuda{background:var(--cok-sonuk)}
+@keyframes nabiz{50%{opacity:.25}}
+.dal{color:var(--sonuk);font-size:10.5px;margin-top:2px;
+     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gecen{color:var(--cok-sonuk);font-size:10px;margin-top:3px}
+
+.is{font-size:11px;line-height:1.45;color:var(--metin);background:#090b18;
+    border-left:3px solid var(--cerceve);padding:6px 8px;margin:9px 0 0}
+.is.bos{color:var(--cok-sonuk)}
+.suan{font-size:10.5px;color:var(--mavi);margin-top:6px;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.suan b{color:var(--mor);font-weight:400}
+
+/* --- ilerleme --- */
+.ilerleme{margin-top:9px}
+.ilerleme .ust2{display:flex;justify-content:space-between;font-size:10px;color:var(--sonuk)}
+.cubuk{height:9px;background:#090b18;border:1px solid var(--cerceve);margin-top:3px;
+       display:flex;gap:1px;padding:1px}
+.cubuk i{flex:1;background:#232a52}
+.cubuk i.dolu{background:var(--yesil)}
+.cubuk i.suan{background:var(--sari);animation:nabiz 1.1s ease-in-out infinite}
+.gorev{font-size:10px;color:var(--sari);margin-top:4px;line-height:1.4}
+
+.rozetler{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+.rz{font-size:9.5px;padding:2px 6px;border:1px solid currentColor;
+    text-transform:uppercase;letter-spacing:.07em}
 .rz.yesil{color:var(--yesil)} .rz.sari{color:var(--sari)}
-.rz.kirmizi{color:var(--kirmizi)} .rz.mavi{color:var(--mavi)} .rz.sonuk{color:var(--sonuk)}
+.rz.kirmizi{color:var(--kirmizi)} .rz.mavi{color:var(--mavi)} .rz.sonuk{color:var(--cok-sonuk)}
 .dosyalar{margin-top:8px;font-size:10px;color:var(--sonuk);line-height:1.5;
-          max-height:64px;overflow:auto}
+          max-height:60px;overflow:auto}
 .dosyalar b{color:var(--sari);font-weight:400}
 
-/* --- carpisma bolumu --- */
-.bolum{margin-top:26px;border-top:2px solid var(--cerceve);padding-top:14px}
-.bolum h2{font-size:12px;letter-spacing:.2em;text-transform:uppercase;margin:0 0 10px}
+.gonderKutu{margin-top:auto;padding-top:10px;display:flex;gap:5px}
+.gonderKutu input{flex:1;min-width:0;background:#090b18;border:1px solid var(--cerceve);
+  color:var(--metin);font-family:inherit;font-size:10.5px;padding:5px 7px}
+.gonderKutu input:focus{outline:none;border-color:var(--mavi)}
+.gonderKutu button{background:var(--cerceve);border:1px solid var(--cerceve);color:var(--metin);
+  font-family:inherit;font-size:10px;padding:5px 9px;cursor:pointer;text-transform:uppercase}
+.gonderKutu button:hover{background:var(--mavi);border-color:var(--mavi);color:#090b18}
+
+/* --- alt bolumler --- */
+.ikili{display:grid;gap:16px;grid-template-columns:1fr 1fr;margin-top:24px}
+@media (max-width:860px){.ikili{grid-template-columns:1fr}}
+.bolum{border-top:2px solid var(--cerceve);padding-top:13px}
+.bolum h2{font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;margin:0 0 10px}
 .cakis{border:2px solid var(--kirmizi);background:rgba(255,92,122,.07);
-       padding:8px 10px;margin-bottom:7px;font-size:11px}
+       padding:7px 9px;margin-bottom:6px;font-size:10.5px}
 .cakis .yol{color:var(--kirmizi);word-break:break-all}
-.cakis .kim{color:var(--sonuk);font-size:10.5px;margin-top:3px}
-.temiz{color:var(--yesil);font-size:11.5px}
-.aciklama{color:var(--sonuk);font-size:10.5px;margin-top:8px;line-height:1.6}
+.cakis .kim{color:var(--sonuk);font-size:10px;margin-top:3px}
+.temiz{color:var(--yesil);font-size:11px}
+.akis{max-height:260px;overflow:auto;font-size:11px;line-height:1.5}
+.msj{border-left:3px solid var(--cerceve);padding:4px 8px;margin-bottom:5px;background:#090b18}
+.msj.okunmadi{border-left-color:var(--sari)}
+.msj .kim{color:var(--mor);font-size:10px}
+.msj .kim .ok{color:var(--cok-sonuk)}
+.msj .kim .bekliyor{color:var(--sari)}
+.aciklama{color:var(--cok-sonuk);font-size:10px;margin-top:10px;line-height:1.65}
+.aciklama code{color:var(--sonuk)}
 .hata{color:var(--kirmizi)}
 </style>
 </head>
@@ -80,20 +118,35 @@ h1{font-size:15px;margin:0;letter-spacing:.22em;text-transform:uppercase}
 
 <div class="oda" id="oda"></div>
 
-<div class="bolum">
-  <h2>Carpisma Tahtasi</h2>
-  <div id="carpismalar"></div>
-  <div class="aciklama">
-    Ayni dosyaya birden fazla oturum dokunmus demek. Engel degil, uyari:
-    degisikligi dar tutun ya da once biri main'e girsin.<br>
-    <b>-N</b> = dal main'in N commit gerisinde. Buyudukce merge kavgasi buyur:
-    <code>tools\oturum-birlestir.ps1 -Konu &lt;ad&gt; -Uygula</code>
+<div class="ikili">
+  <div class="bolum">
+    <h2>Mesajlar</h2>
+    <div class="akis" id="akis"></div>
+    <div class="gonderKutu">
+      <input id="genelMetin" placeholder="herkese mesaj..." maxlength="300">
+      <button onclick="gonder('*','genelMetin')">Gonder</button>
+    </div>
+    <div class="aciklama">
+      Mesaj <b>anlik degil</b>: hedef oturumun bir sonraki adiminda baglamina
+      duser. Oturum bos bekliyorsa orada bir istek gonderilene kadar posta
+      kutusunda kalir. Sari kenarli mesajlar henuz okunmadi.
+    </div>
+  </div>
+
+  <div class="bolum">
+    <h2>Carpisma Tahtasi</h2>
+    <div id="carpismalar"></div>
+    <div class="aciklama">
+      Ayni dosyaya birden fazla oturum dokunmus demek. Engel degil, uyari.<br>
+      <b>-N</b> = dal main'in N commit gerisinde; buyudukce merge kavgasi buyur:
+      <code>tools\oturum-birlestir.ps1 -Konu &lt;ad&gt; -Uygula</code>
+    </div>
   </div>
 </div>
 
 <script>
 /* Sprite izgarasi: 16x16. Harfler renk anahtari.
-   .=bos  M=cerceve  E=ekran  K=kod satiri  S=stand  H=sac  T=ten  G=govde  Z=uyku */
+   .=bos M=cerceve E=ekran K=kod S=stand H=sac T=ten G=govde */
 const SPRITE = [
   "................",
   ".MMMMMMMMMMMMMM.",
@@ -112,16 +165,12 @@ const SPRITE = [
   "..GGGGGGGGGGGG..",
   ".GGGGGGGGGGGGGG."
 ];
-
-/* Retro palet. Durum ekranin rengini belirler: yesil=yaziyor, sari=bekliyor,
-   mavi-sonuk=uykuda. Govde rengi ajan adindan turer ki masalar birbirinden
-   bir bakista ayrilsin. */
 const DURUM_RENK = {
   yaziyor:  { ekran:"#0b2a16", kod:"#6bff8e", cerceve:"#3a7f52" },
   bekliyor: { ekran:"#2a2409", kod:"#ffd166", cerceve:"#7f6a33" },
-  uykuda:   { ekran:"#111528", kod:"#3b4370", cerceve:"#333a63" }
+  uykuda:   { ekran:"#101426", kod:"#333a63", cerceve:"#2b3160" }
 };
-const GOVDE = ["#b98bff","#5cc8ff","#ff9f6b","#6bffd5","#ff8bc8","#9fd45c"];
+const GOVDE = ["#b98bff","#5cc8ff","#ff9f6b","#6bffd5","#ff8bc8","#9fd45c","#ffb45c"];
 
 function govdeRengi(ad){
   let h = 0;
@@ -129,36 +178,33 @@ function govdeRengi(ad){
   return GOVDE[h % GOVDE.length];
 }
 
-function spriteSVG(ajan){
-  const r = DURUM_RENK[ajan.durum] || DURUM_RENK.uykuda;
-  const govde = govdeRengi(ajan.konu);
-  const renk = { M:r.cerceve, E:r.ekran, K:r.kod, S:"#4a5285", H:"#2b2f57", T:"#e8c39e", G:govde };
-
+function spriteSVG(a){
+  const r = DURUM_RENK[a.durum] || DURUM_RENK.uykuda;
+  const renk = { M:r.cerceve, E:r.ekran, K:r.kod, S:"#3d4472",
+                 H:"#242a52", T:"#e8c39e", G:govdeRengi(a.konu) };
   let p = "";
-  for (let y = 0; y < SPRITE.length; y++){
-    for (let x = 0; x < SPRITE[y].length; x++){
+  for (let y = 0; y < 16; y++){
+    for (let x = 0; x < 16; x++){
       const c = SPRITE[y][x];
       if (c === "." || !renk[c]) continue;
-      /* Kod pikselleri sirayla yanip soner: "yaziliyor" hissi. Gecikme
-         konuma bagli, boylece satirlar dalga gibi akar. */
-      const anim = (c === "K" && ajan.durum === "yaziyor")
-        ? ` class="kod" style="animation-delay:${((x * 7 + y * 13) % 9) * 0.11}s"` : "";
+      /* Kod pikselleri dalga hâlinde yanip soner: "yaziyor" hissi. */
+      const anim = (c === "K" && a.durum === "yaziyor")
+        ? ` class="kod" style="animation-delay:${((x*7+y*13)%9)*0.11}s"` : "";
       p += `<rect x="${x}" y="${y}" width="1" height="1" fill="${renk[c]}"${anim}/>`;
     }
   }
-  /* Uykuda: bas ustunde tuten Z'ler. */
-  if (ajan.durum === "uykuda"){
-    p += `<text x="12.4" y="11.4" font-size="3.2" fill="#5cc8ff" opacity=".75"
+  if (a.durum === "uykuda"){
+    p += `<text x="12.4" y="11.4" font-size="3.2" fill="#5cc8ff" opacity=".7"
             font-family="monospace" class="zzz">z</text>`;
   }
   return `<svg class="sprite" viewBox="0 0 16 16" role="img"
-     aria-label="${ajan.konu} — ${ajan.durum}">
+     aria-label="${kacar(a.konu)} — ${a.durum}">
      <style>
        .kod{animation:kodyan .9s steps(2,end) infinite}
        @keyframes kodyan{50%{opacity:.25}}
        .zzz{animation:yuz 2.4s ease-in-out infinite}
        @keyframes yuz{0%{opacity:0;transform:translateY(1px)}
-                      35%{opacity:.9}100%{opacity:0;transform:translateY(-2.5px)}}
+                      35%{opacity:.85}100%{opacity:0;transform:translateY(-2.5px)}}
      </style>${p}</svg>`;
 }
 
@@ -167,41 +213,78 @@ function kacar(s){
     ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
 }
 
+function sureMetni(sn){
+  if (sn == null || sn < 0) return "hic hareket yok";
+  if (sn < 60) return "az once";
+  if (sn < 3600) return Math.floor(sn/60) + " dk once";
+  if (sn < 86400) return Math.floor(sn/3600) + " saat once";
+  return Math.floor(sn/86400) + " gun once";
+}
+
+function ilerlemeHTML(a){
+  if (!a.todoToplam) return "";
+  const kalan = a.todoToplam - a.todoTamam;
+  let hucre = "";
+  for (let i = 0; i < a.todoToplam; i++){
+    const sinif = i < a.todoTamam ? "dolu" : (i === a.todoTamam ? "suan" : "");
+    hucre += `<i class="${sinif}"></i>`;
+  }
+  return `<div class="ilerleme">
+    <div class="ust2"><span>gorevler</span><span>${a.todoTamam}/${a.todoToplam} · ${kalan} kaldi</span></div>
+    <div class="cubuk">${hucre}</div>
+    ${a.todoSuAn ? `<div class="gorev">&#9654; ${kacar(a.todoSuAn)}</div>` : ""}
+  </div>`;
+}
+
 function ciz(veri){
   const cakisanlar = new Set();
   for (const c of veri.carpismalar) for (const k of c.kimler) cakisanlar.add(k);
 
-  const oda = document.getElementById("oda");
-  oda.innerHTML = veri.ajanlar.map(a => {
+  document.getElementById("oda").innerHTML = veri.ajanlar.map(a => {
     const rozet = [];
     if (a.anaMi) rozet.push(`<span class="rz mavi">ana agac</span>`);
+    if (a.oturumSayisi > 1) rozet.push(`<span class="rz mavi">${a.oturumSayisi} claude oturumu</span>`);
     if (a.port)  rozet.push(`<span class="rz sonuk">:${a.port}</span>`);
     if (a.kirli) rozet.push(`<span class="rz sari">${a.kirli} dosya acik</span>`);
     if (a.ileride) rozet.push(`<span class="rz yesil">+${a.ileride}</span>`);
-    if (a.geride)  rozet.push(`<span class="rz ${a.geride > 10 ? "kirmizi" : "sonuk"}">-${a.geride}</span>`);
+    if (a.geride)  rozet.push(`<span class="rz ${a.geride>10?"kirmizi":"sonuk"}">-${a.geride}</span>`);
     if (cakisanlar.has(a.konu)) rozet.push(`<span class="rz kirmizi">carpisma</span>`);
-    if (!a.canli) rozet.push(`<span class="rz sonuk">oturum kapali</span>`);
+    if (a.okunmamis) rozet.push(`<span class="rz sari">${a.okunmamis} yeni mesaj</span>`);
 
-    const is = a.baslik
-      ? `<div class="is">${kacar(a.baslik)}</div>`
-      : `<div class="is bos">${a.canli ? "henuz istek gelmedi" : "acik Claude oturumu yok"}</div>`;
-
-    const dosyalar = a.dosyalar.length
-      ? `<div class="dosyalar">${a.dosyalar.map(f => `<b>&#9679;</b> ${kacar(f)}`).join("<br>")}</div>`
-      : "";
-
-    return `<div class="masa ${cakisanlar.has(a.konu) ? "carpisan" : ""} ${a.durum === "uykuda" ? "uykuda" : ""}">
-      <div class="ad">${kacar(a.konu)}</div>
-      <div class="dal">${kacar(a.dal || "-")}</div>
-      ${spriteSVG(a)}
-      ${is}
+    return `<div class="masa ${cakisanlar.has(a.konu)?"carpisan":""} ${a.durum==="uykuda"?"uykuda":""}">
+      <div class="basSatir">
+        ${spriteSVG(a)}
+        <div class="kimlik">
+          <div class="ad"><span class="nokta ${a.durum}"></span>${kacar(a.konu)}</div>
+          <div class="dal">${kacar(a.dal || "-")}</div>
+          <div class="gecen">${sureMetni(a.saniye)}</div>
+        </div>
+      </div>
+      ${a.baslik ? `<div class="is">${kacar(a.baslik)}</div>`
+                 : `<div class="is bos">kayitli istek yok</div>`}
+      ${a.suAnArac ? `<div class="suan">&#9679; <b>${kacar(a.suAnArac)}</b> ${kacar(a.suAnHedef)}</div>` : ""}
+      ${ilerlemeHTML(a)}
       <div class="rozetler">${rozet.join("")}</div>
-      ${dosyalar}
+      ${a.dosyalar.length ? `<div class="dosyalar">${a.dosyalar.map(f=>`<b>&#9679;</b> ${kacar(f)}`).join("<br>")}</div>` : ""}
+      <div class="gonderKutu">
+        <input id="m-${kacar(a.konu)}" placeholder="${kacar(a.konu)} oturumuna..." maxlength="300">
+        <button onclick="gonder('${kacar(a.konu)}','m-${kacar(a.konu)}')">Yolla</button>
+      </div>
     </div>`;
   }).join("");
 
-  const c = document.getElementById("carpismalar");
-  c.innerHTML = veri.carpismalar.length
+  document.getElementById("akis").innerHTML = veri.mesajlar.length
+    ? veri.mesajlar.slice().reverse().map(m => {
+        const okundu = m.okuyan && m.okuyan.length;
+        return `<div class="msj ${okundu?"":"okunmadi"}">
+          <div class="kim">${m.saat} · ${kacar(m.kimden)} &#8594; ${kacar(m.kime)}
+            ${okundu ? `<span class="ok">okudu: ${m.okuyan.map(kacar).join(", ")}</span>`
+                     : `<span class="bekliyor">bekliyor</span>`}</div>
+          ${kacar(m.metin)}</div>`;
+      }).join("")
+    : `<div class="aciklama">Henuz mesaj yok.</div>`;
+
+  document.getElementById("carpismalar").innerHTML = veri.carpismalar.length
     ? veri.carpismalar.map(x => `<div class="cakis">
         <div class="yol">${kacar(x.dosya)}</div>
         <div class="kim">${x.kimler.map(kacar).join("  &#8596;  ")}</div>
@@ -209,14 +292,42 @@ function ciz(veri){
     : `<div class="temiz">Carpisma yok — hicbir dosyada iki oturum birden calismiyor.</div>`;
 
   const calisan = veri.ajanlar.filter(a => a.durum === "yaziyor").length;
+  const bekleyen = veri.mesajlar.filter(m => !m.okuyan || !m.okuyan.length).length;
   document.getElementById("ozet").textContent =
-    `${veri.ajanlar.length} agac · ${calisan} calisiyor · ${veri.carpismalar.length} carpisma · ${veri.guncelleme}`;
+    `${veri.ajanlar.length} oturum · ${calisan} calisiyor · ${veri.carpismalar.length} carpisma`
+    + ` · ${bekleyen} mesaj bekliyor · ${veri.guncelleme}`;
+}
+
+async function gonder(kime, girdiId){
+  const el = document.getElementById(girdiId);
+  const metin = (el.value || "").trim();
+  if (!metin) return;
+  el.value = "";
+  el.disabled = true;
+  try{
+    await fetch(`/gonder?kime=${encodeURIComponent(kime)}&metin=${encodeURIComponent(metin)}`,
+                { cache:"no-store" });
+    await tazele();
+  }catch(e){ /* tazeleme zaten hatayi gosterir */ }
+  el.disabled = false;
+}
+
+/* Yazarken yenileme kutuyu sifirlamasin. */
+function yazilanlar(){
+  const d = {};
+  document.querySelectorAll(".gonderKutu input").forEach(i => { if (i.value) d[i.id] = i.value; });
+  return d;
+}
+function geriYaz(d){
+  for (const id in d){ const el = document.getElementById(id); if (el) el.value = d[id]; }
 }
 
 async function tazele(){
   try{
     const cevap = await fetch("/durum", { cache:"no-store" });
+    const saklanan = yazilanlar();
     ciz(await cevap.json());
+    geriYaz(saklanan);
   }catch(e){
     document.getElementById("ozet").innerHTML =
       `<span class="hata">panel sunucusuna ulasilamiyor — oturum-panel.ps1 kapanmis olabilir</span>`;

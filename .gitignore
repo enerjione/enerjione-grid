@@ -50,6 +50,13 @@ OTURUM.md
 .claude/oturumlar.json.tmp
 .claude/oturumlar.cache.json
 .claude/oturumlar.cache.json.tmp
+.claude/oturumlar.iz.json
+.claude/oturumlar.iz.json.tmp
+
+# Oturumlar arasi posta kutusu — yerel, commit edilmez.
+.claude/oturum-mesajlar.json
+.claude/oturum-mesajlar.json.lock
+.claude/oturum-mesajlar.json.tmp
 
 # Firebase Admin SDK service account dosyalari — ASLA commit edilmemeli
 # (private key icerir). Backend runtime'da yerel dosyadan veya env ile okur.

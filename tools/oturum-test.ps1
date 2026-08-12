@@ -207,6 +207,72 @@ Sina "oturum-carpisma.ps1 GERCEK carpismayi bildirir" {
   ($c | ConvertFrom-Json).hookSpecificOutput.additionalContext -match "CARPISMA UYARISI"
 }
 
+# --- Mesajlasma -------------------------------------------------------------
+Write-Host ""
+Write-Host "oturumlar arasi mesajlasma" -ForegroundColor Cyan
+$mA = "test-ajan-a"; $mB = "test-ajan-b"
+$temizle = {
+  $idler = @(Read-Posta | Where-Object { $_.kimden -like "test-ajan-*" } | ForEach-Object { $_.id })
+  if ($idler.Count -gt 0) {
+    Invoke-PostaKilitli { param($l) return @(@($l) | Where-Object { $idler -notcontains $_.id }) } | Out-Null
+  }
+}
+& $temizle
+try {
+  Sina "mesaj gonderilir ve hedefe dusor" {
+    Send-OturumMesaji -Kime $mB -Metin "types.ts'e dokunuyorum" -Kimden $mA | Out-Null
+    $g = @(Receive-OturumMesajlari -Oturum $mB -SadeceBak)
+    @($g | Where-Object { $_.metin -eq "types.ts'e dokunuyorum" }).Count -eq 1
+  }
+  Sina "okununca BIR DAHA teslim edilmez" {
+    Receive-OturumMesajlari -Oturum $mB | Out-Null
+    @(Receive-OturumMesajlari -Oturum $mB -SadeceBak).Count -eq 0
+  }
+  Sina "gonderen kendi mesajini almaz" {
+    Send-OturumMesaji -Kime "*" -Metin "herkese duyuru" -Kimden $mA | Out-Null
+    @(Receive-OturumMesajlari -Oturum $mA -SadeceBak | Where-Object { $_.metin -eq "herkese duyuru" }).Count -eq 0
+  }
+  Sina "'*' mesaji BASKA oturuma dusor" {
+    @(Receive-OturumMesajlari -Oturum $mB -SadeceBak | Where-Object { $_.metin -eq "herkese duyuru" }).Count -eq 1
+  }
+  Sina "bir oturumun okumasi digerini etkilemez" {
+    Receive-OturumMesajlari -Oturum $mB | Out-Null
+    @(Receive-OturumMesajlari -Oturum "test-ajan-c" -SadeceBak | Where-Object { $_.metin -eq "herkese duyuru" }).Count -eq 1
+  }
+  Sina "hook mesaji baglama enjekte eder" {
+    Send-OturumMesaji -Kime (Get-BuOturumAdi) -Metin "hook teslim denemesi" -Kimden $mA | Out-Null
+    $c = Hook-Calistir "oturum-baslik.ps1" ('{"session_id":"test-teslim","prompt":"devam","cwd":"' +
+         ((Get-Location).Path -replace '\\', '\\') + '"}')
+    ($c | ConvertFrom-Json).hookSpecificOutput.additionalContext -match "hook teslim denemesi"
+  }
+} finally {
+  & $temizle
+  Remove-Pencere -Id "test-teslim"
+}
+
+# --- Transkript izi ---------------------------------------------------------
+Write-Host ""
+Write-Host "oturum izi (transkript)" -ForegroundColor Cyan
+Sina "bu oturumun transkripti bulunur" {
+  $b = Get-TranskriptBilgisi -CalismaDizini (Get-Location).Path
+  $b.Yol -and (Test-Path $b.Yol)
+}
+Sina "olmayan dizin icin bos doner" {
+  (Get-TranskriptBilgisi -CalismaDizini "C:\boyle-bir-yer-yok-98765").Yol -eq $null
+}
+Sina "ozet bu oturumun son istegini okur" {
+  $b = Get-TranskriptBilgisi -CalismaDizini (Get-Location).Path
+  $o = Read-TranskriptOzeti -Yol $b.Yol
+  -not [string]::IsNullOrWhiteSpace($o.sonIstek)
+}
+Sina "izler onbellekten hizli doner (<2sn)" {
+  Get-OturumIzleri | Out-Null
+  $s = [System.Diagnostics.Stopwatch]::StartNew()
+  $iz = Get-OturumIzleri
+  $s.Stop()
+  ($s.Elapsed.TotalSeconds -lt 2) -and (@($iz.Keys).Count -ge 1)
+}
+
 # --- settings.json tutarliligi ---------------------------------------------
 Write-Host ""
 Write-Host "yapilandirma" -ForegroundColor Cyan

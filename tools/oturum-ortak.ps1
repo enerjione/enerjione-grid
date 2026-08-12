@@ -634,6 +634,426 @@ function Get-KirliHarita {
 }
 
 # ---------------------------------------------------------------------------
+# Oturumlar arasi mesajlasma
+# ---------------------------------------------------------------------------
+
+<#
+  POSTA KUTUSU: <ana-agac>\.claude\oturum-mesajlar.json (gitignore'da)
+
+  NEDEN VAR
+  ---------
+  Oturumlar ortak bir amaca calisiyor ama birbirlerine tek kelime
+  edemiyorlardi. "types.ts'e dokunuyorum, 10 dakika bekle" ya da "migration'i
+  once ben alayim" demenin yolu, kullanicinin dort sekme arasinda mesaji elle
+  tasimasiydi.
+
+  TESLIM MODELI -- dogrudan sunu bilerek soyluyoruz: bu ANLIK bir bildirim
+  DEGIL. Bir Claude oturumu yalnizca sirasi geldiginde (kullanici bir istek
+  gonderdiginde) baglam alir. Mesaj, hedef oturumun BIR SONRAKI adiminda
+  UserPromptSubmit hook'u ile baglamina duser. Oturum bos bekliyorsa mesaj
+  posta kutusunda durur.
+
+  Bu sinir teknik bir eksiklik degil, mimarinin kendisi: disaridan bir
+  oturumun dusunce akisina girmek mumkun degil. Panel okunmamis mesajlari
+  gosterir, boylece kullanici "ulasmadi mi" diye merak etmez.
+#>
+
+$script:MESAJ_SURUM = 1
+# Posta kutusu sinirsiz buyumesin: en son bu kadar mesaj tutulur.
+$script:MESAJ_TAVAN = 200
+
+function Get-PostaYolu {
+  $kok = Get-AnaAgacKok
+  if (-not $kok) { return $null }
+  return (Join-Path $kok ".claude\oturum-mesajlar.json")
+}
+
+function Read-Posta {
+  $yol = Get-PostaYolu
+  if (-not $yol -or -not (Test-Path $yol)) { return @() }
+  try {
+    $ham = Get-Content $yol -Raw -Encoding UTF8
+    if ([string]::IsNullOrWhiteSpace($ham)) { return @() }
+    $veri = $ham | ConvertFrom-Json
+    if ($veri.surum -ne $script:MESAJ_SURUM) { return @() }
+    return @($veri.mesajlar | Where-Object { $_ })
+  } catch { return @() }
+}
+
+function Write-Posta {
+  param([object[]]$Mesajlar)
+  $yol = Get-PostaYolu
+  if (-not $yol) { return }
+  $dizin = Split-Path -Parent $yol
+  if (-not (Test-Path $dizin)) { New-Item -ItemType Directory -Path $dizin -Force | Out-Null }
+
+  $liste = @($Mesajlar)
+  if ($liste.Count -gt $script:MESAJ_TAVAN) {
+    $liste = $liste[($liste.Count - $script:MESAJ_TAVAN)..($liste.Count - 1)]
+  }
+  $veri = [pscustomobject]@{ surum = $script:MESAJ_SURUM; mesajlar = @($liste) }
+  $gecici = "$yol.tmp"
+  ($veri | ConvertTo-Json -Depth 6) | Set-Content -Path $gecici -Encoding UTF8
+  Move-Item -Path $gecici -Destination $yol -Force
+}
+
+<#
+.SYNOPSIS
+  Posta kutusunu kilitleyip $Blok ile gunceller (defter kilidiyle ayni desen).
+#>
+function Invoke-PostaKilitli {
+  param([Parameter(Mandatory = $true)][scriptblock]$Blok)
+  $yol = Get-PostaYolu
+  if (-not $yol) { return $null }
+  $kilit = "$yol.lock"
+  $akis = $null
+  for ($i = 0; $i -lt 40; $i++) {
+    try {
+      $akis = New-Object System.IO.FileStream(
+        $kilit, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write,
+        [System.IO.FileShare]::None, 8, [System.IO.FileOptions]::DeleteOnClose)
+      break
+    } catch { Start-Sleep -Milliseconds 50 }
+  }
+  try {
+    $yeni = & $Blok (Read-Posta)
+    if ($null -ne $yeni) { Write-Posta @($yeni) }
+    return $yeni
+  } finally { if ($akis) { $akis.Dispose() } }
+}
+
+<#
+.SYNOPSIS
+  Bir oturumdan digerine mesaj birakir.
+.PARAMETER Kime
+  Hedef oturum adi (worktree klasor adi), ya da herkese icin "*".
+.PARAMETER Kimden
+  Gonderen oturum adi. Bos birakilirsa bulundugun dizinden turer.
+#>
+function Send-OturumMesaji {
+  param(
+    [Parameter(Mandatory = $true)][string]$Kime,
+    [Parameter(Mandatory = $true)][string]$Metin,
+    [string]$Kimden = ""
+  )
+  if ([string]::IsNullOrWhiteSpace($Kimden)) { $Kimden = Get-BuOturumAdi }
+  $mesaj = [pscustomobject]@{
+    id      = [System.Guid]::NewGuid().ToString("N").Substring(0, 12)
+    kimden  = $Kimden
+    kime    = $Kime.Trim()
+    metin   = $Metin.Trim()
+    zaman   = (Get-Date).ToUniversalTime().ToString("s") + "Z"
+    okuyan  = @()
+  }
+  Invoke-PostaKilitli { param($liste) return @(@($liste) + $mesaj) } | Out-Null
+  return $mesaj
+}
+
+<#
+.SYNOPSIS
+  Bu calisma agacinin oturum adi (worktree klasor adi; ana agacta "ana").
+#>
+function Get-BuOturumAdi {
+  param([string]$Dizin = "")
+  if ([string]::IsNullOrWhiteSpace($Dizin)) {
+    $k = Invoke-GitOku rev-parse --show-toplevel
+    if (-not $k) { return "bilinmiyor" }
+    $Dizin = ($k -join "")
+  }
+  $Dizin = ConvertTo-WindowsYol $Dizin
+  $ana = Get-AnaAgacKok
+  if ($ana -and $Dizin -eq $ana) { return "ana" }
+  return (Split-Path -Leaf $Dizin)
+}
+
+<#
+.SYNOPSIS
+  Bu oturuma gelmis OKUNMAMIS mesajlari dondurur ve okundu isaretler.
+.PARAMETER SadeceBak
+  Okundu isaretleme (panel icin).
+#>
+function Receive-OturumMesajlari {
+  param(
+    [string]$Oturum = "",
+    [switch]$SadeceBak
+  )
+  if ([string]::IsNullOrWhiteSpace($Oturum)) { $Oturum = Get-BuOturumAdi }
+
+  $benim = @(Read-Posta | Where-Object {
+    $_ -and ($_.kime -eq $Oturum -or $_.kime -eq "*") -and
+    ($_.kimden -ne $Oturum) -and (@($_.okuyan) -notcontains $Oturum)
+  })
+  if ($SadeceBak -or $benim.Count -eq 0) { return $benim }
+
+  $idler = @($benim | ForEach-Object { $_.id })
+  Invoke-PostaKilitli {
+    param($liste)
+    foreach ($m in @($liste)) {
+      if ($idler -contains $m.id) { $m.okuyan = @(@($m.okuyan) + $Oturum | Sort-Object -Unique) }
+    }
+    return $liste
+  } | Out-Null
+
+  return $benim
+}
+
+# ---------------------------------------------------------------------------
+# Oturum izi: Claude transkriptinden "ne yapiyor, ne kadar kaldi"
+# ---------------------------------------------------------------------------
+
+<#
+.SYNOPSIS
+  Bir calisma dizinine ait Claude transkript dosyasini (.jsonl) bulur.
+.DESCRIPTION
+  Claude Code her oturumun kaydini `~/.claude/projects/<slug>/<id>.jsonl`
+  altinda tutar. Slug, calisma dizininin yolundan turer: `:`, `\`, bosluk ve
+  `.` karakterleri `-` olur, surucu harfi kucuktur.
+
+  NEDEN TRANSKRIPT: defterdeki "ne isle mesgul" bilgisini UserPromptSubmit
+  hook'u yaziyor -- ama hook yalnizca AYARLAR YUKLENDIKTEN sonra calisir ve
+  ayarlar main'e girene kadar diger oturumlarda yok. Transkript ise zaten
+  diskte: panel hicbir sey merge edilmeden, bugun, dort sekmenin de ne
+  yaptigini gosterebiliyor. Hook ile transkript birbirinin yedegi.
+#>
+function Get-TranskriptBilgisi {
+  param([Parameter(Mandatory = $true)][string]$CalismaDizini)
+
+  $bos = [pscustomobject]@{ Yol = $null; OturumSayisi = 0 }
+  $kok = Join-Path $env:USERPROFILE ".claude\projects"
+  if (-not (Test-Path $kok)) { return $bos }
+
+  $slug = (ConvertTo-WindowsYol $CalismaDizini) -replace '[:\\ .]', '-'
+  if ($slug.Length -gt 0) { $slug = $slug.Substring(0, 1).ToLowerInvariant() + $slug.Substring(1) }
+  $aday = Join-Path $kok $slug
+
+  if (-not (Test-Path $aday)) {
+    # Slug kurali surumle degisebilir. Yedek: dizin adinin SONU worktree
+    # klasoru ile bitsin. Tahmin etmektense diskte arariz.
+    $yaprak = Split-Path -Leaf $CalismaDizini
+    $bulunan = Get-ChildItem $kok -Directory -ErrorAction SilentlyContinue |
+      Where-Object { $_.Name -like "*worktrees-$yaprak" } | Select-Object -First 1
+    if (-not $bulunan) { return $bos }
+    $aday = $bulunan.FullName
+  }
+
+  $dosyalar = @(Get-ChildItem $aday -Filter *.jsonl -File -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending)
+  if ($dosyalar.Count -eq 0) { return $bos }
+
+  # Bir dizinde BIRDEN FAZLA oturum acik olabilir (kullanicinin kurulumunda
+  # VSCode sekmeleri ayni klasoru paylasiyor). Her .jsonl bir oturum; son 24
+  # saatte yazilmis olanlari sayariz, ayrintiyi en yenisinden okuruz.
+  $esik = (Get-Date).AddHours(-24)
+  $taze = @($dosyalar | Where-Object { $_.LastWriteTime -gt $esik })
+
+  return [pscustomobject]@{
+    Yol          = $dosyalar[0].FullName
+    OturumSayisi = [Math]::Max(1, $taze.Count)
+  }
+}
+
+<#
+.SYNOPSIS
+  Transkriptin SONUNDAN oturumun guncel durumunu cikarir.
+.OUTPUTS
+  @{ sonIstek; suAnArac; suAnHedef; todoTamam; todoToplam; todoSuAn; sonHareket }
+.DESCRIPTION
+  Dosyanin tamami okunmaz -- transkriptler 50 MB'a cikiyor ve panel her birkac
+  saniyede bir yenileniyor. Yalnizca SON parca (varsayilan 900 KB) okunur ve
+  satirlar SONDAN basa taranir; aranan uc sey bulununca durulur.
+
+  Dosya, Claude o anda yaziyorken acilir; bu yuzden FileShare.ReadWrite sart
+  (aksi halde "another process" hatasi alinir ve panel canli oturumu tam da
+  en aktif oldugu anda gosteremez).
+#>
+function Read-TranskriptOzeti {
+  param(
+    [Parameter(Mandatory = $true)][string]$Yol,
+    [int]$KacBayt = 921600
+  )
+
+  $bos = [pscustomobject]@{
+    sonIstek = ""; suAnArac = ""; suAnHedef = ""
+    todoTamam = 0; todoToplam = 0; todoSuAn = ""; sonHareket = $null
+  }
+  if (-not (Test-Path $Yol)) { return $bos }
+
+  try { $bos.sonHareket = (Get-Item $Yol).LastWriteTimeUtc } catch { }
+
+  $metin = ""
+  try {
+    $fs = [System.IO.File]::Open($Yol, [System.IO.FileMode]::Open,
+      [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+    try {
+      $uzunluk = $fs.Length
+      $oku = [Math]::Min($KacBayt, $uzunluk)
+      [void]$fs.Seek($uzunluk - $oku, [System.IO.SeekOrigin]::Begin)
+      $tampon = New-Object byte[] $oku
+      $alindi = $fs.Read($tampon, 0, $oku)
+      $metin = [System.Text.Encoding]::UTF8.GetString($tampon, 0, $alindi)
+    } finally { $fs.Dispose() }
+  } catch {
+    return $bos
+  }
+
+  $satirlar = $metin -split "`n"
+  # Ilk satir yarim kalmis olabilir (parcanin ortasindan basladik).
+  if ($satirlar.Count -gt 1) { $satirlar = $satirlar[1..($satirlar.Count - 1)] }
+
+  $istekTamam = $false; $aracTamam = $false; $todoTamam = $false
+  for ($i = $satirlar.Count - 1; $i -ge 0; $i--) {
+    if ($istekTamam -and $aracTamam -and $todoTamam) { break }
+    $s = $satirlar[$i]
+    if ([string]::IsNullOrWhiteSpace($s) -or $s.Length -lt 20) { continue }
+
+    # Once UCUZ metin kontrolu; ConvertFrom-Json yalnizca aday satirlarda
+    # calisir. Satirlar 100 KB'a cikabiliyor, hepsini cozmek panel'i durdurur.
+    $todoAdayi = (-not $todoTamam) -and $s.Contains('"TodoWrite"') -and $s.Contains('"tool_use"')
+    $aracAdayi = (-not $aracTamam) -and $s.Contains('"type":"assistant"') -and $s.Contains('"tool_use"')
+    $istekAdayi = (-not $istekTamam) -and $s.Contains('"type":"user"') -and (-not $s.Contains('"tool_use_id"'))
+    if (-not ($todoAdayi -or $aracAdayi -or $istekAdayi)) { continue }
+
+    $o = $null
+    try { $o = $s | ConvertFrom-Json } catch { continue }
+    if (-not $o -or -not $o.message) { continue }
+
+    if ($istekAdayi -and $o.type -eq "user") {
+      $icerik = $o.message.content
+      $yazi = ""
+      if ($icerik -is [string]) {
+        $yazi = $icerik
+      } else {
+        foreach ($p in @($icerik)) { if ($p.type -eq "text" -and $p.text) { $yazi = [string]$p.text; break } }
+      }
+      $yazi = $yazi.Trim()
+      # Sistem enjeksiyonlarini ele: <system-reminder>, <command-name>,
+      # "Caveat:" ile baslayan girisler kullanicinin istegi DEGIL.
+      if ($yazi -and -not $yazi.StartsWith("<") -and -not $yazi.StartsWith("Caveat:")) {
+        $ilk = ($yazi -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -First 1)
+        if ($ilk) {
+          $ilk = $ilk.Trim()
+          if ($ilk.Length -gt 110) { $ilk = $ilk.Substring(0, 107) + "..." }
+          $bos.sonIstek = $ilk
+          $istekTamam = $true
+        }
+      }
+      continue
+    }
+
+    if ($o.type -ne "assistant") { continue }
+    foreach ($p in @($o.message.content)) {
+      if ($p.type -ne "tool_use") { continue }
+
+      if ((-not $todoTamam) -and $p.name -eq "TodoWrite" -and $p.input.todos) {
+        $liste = @($p.input.todos)
+        $bos.todoToplam = $liste.Count
+        $bos.todoTamam = @($liste | Where-Object { $_.status -eq "completed" }).Count
+        $suan = $liste | Where-Object { $_.status -eq "in_progress" } | Select-Object -First 1
+        if ($suan) { $bos.todoSuAn = [string]$suan.content }
+        $todoTamam = $true
+      }
+
+      if (-not $aracTamam) {
+        $bos.suAnArac = [string]$p.name
+        $hedef = ""
+        foreach ($alan in @("file_path", "command", "pattern", "description", "prompt")) {
+          $d = $p.input.$alan
+          if ($d) { $hedef = [string]$d; break }
+        }
+        if ($hedef) {
+          $hedef = ($hedef -split "`r?`n")[0].Trim()
+          # Dosya yollarini kisalt: tam yol karti tasirir, son iki parca yeter.
+          if ($hedef -match '[\\/]') {
+            $parca = $hedef -split '[\\/]'
+            if ($parca.Count -gt 2) { $hedef = ".../" + ($parca[-2..-1] -join "/") }
+          }
+          if ($hedef.Length -gt 60) { $hedef = $hedef.Substring(0, 57) + "..." }
+        }
+        $bos.suAnHedef = $hedef
+        $aracTamam = $true
+      }
+    }
+  }
+
+  return $bos
+}
+
+<#
+.SYNOPSIS
+  Tum agaclar icin transkript ozetini dondurur (onbellekli).
+.DESCRIPTION
+  Onbellek anahtari dosya UZUNLUGU: transkript buyumediyse yeniden taranmaz.
+  Panel dort saniyede bir yenileniyor; her yenilemede alti dosyayi bastan
+  taramanin anlami yok, hicbiri degismemis olabilir.
+#>
+function Get-OturumIzleri {
+  $onbellekYolu = $null
+  $kok = Get-AnaAgacKok
+  if ($kok) { $onbellekYolu = Join-Path $kok ".claude\oturumlar.iz.json" }
+
+  $eski = @{}
+  if ($onbellekYolu -and (Test-Path $onbellekYolu)) {
+    try {
+      $ham = Get-Content $onbellekYolu -Raw -Encoding UTF8
+      if (-not [string]::IsNullOrWhiteSpace($ham)) {
+        foreach ($k in ($ham | ConvertFrom-Json).PSObject.Properties) { $eski[$k.Name] = $k.Value }
+      }
+    } catch { }
+  }
+
+  $yeni = @{}
+  foreach ($w in Get-WorktreeListesi) {
+    $bilgi = Get-TranskriptBilgisi -CalismaDizini $w.Yol
+    if (-not $bilgi.Yol) { continue }
+    $uzunluk = 0
+    try { $uzunluk = (Get-Item $bilgi.Yol).Length } catch { continue }
+
+    $anahtar = $w.Yol
+    $onceki = $eski[$anahtar]
+    if ($onceki -and [int64]$onceki.uzunluk -eq $uzunluk) {
+      # Onbellekteki kaydin USTUNE YAZMA, YENIDEN KUR. Eski surumden kalmis
+      # bir onbellek dosyasinda yeni alan bulunmuyor ve `$onceki.yeniAlan = x`
+      # "property cannot be found" ile patliyor -- panel de sessizce durup
+      # eski veriyi gostermeye devam ediyordu.
+      $yeni[$anahtar] = [pscustomobject]@{
+        uzunluk      = $uzunluk
+        oturumSayisi = $bilgi.OturumSayisi   # transkript buyumeden de degisir
+        sonIstek     = [string]$onceki.sonIstek
+        suAnArac     = [string]$onceki.suAnArac
+        suAnHedef    = [string]$onceki.suAnHedef
+        todoTamam    = [int]$onceki.todoTamam
+        todoToplam   = [int]$onceki.todoToplam
+        todoSuAn     = [string]$onceki.todoSuAn
+        sonHareket   = $onceki.sonHareket
+      }
+      continue
+    }
+
+    $ozet = Read-TranskriptOzeti -Yol $bilgi.Yol
+    $yeni[$anahtar] = [pscustomobject]@{
+      uzunluk      = $uzunluk
+      oturumSayisi = $bilgi.OturumSayisi
+      sonIstek     = $ozet.sonIstek
+      suAnArac     = $ozet.suAnArac
+      suAnHedef    = $ozet.suAnHedef
+      todoTamam    = $ozet.todoTamam
+      todoToplam   = $ozet.todoToplam
+      todoSuAn     = $ozet.todoSuAn
+      sonHareket   = $(if ($ozet.sonHareket) { $ozet.sonHareket.ToString("o") } else { $null })
+    }
+  }
+
+  if ($onbellekYolu) {
+    try {
+      $gecici = "$onbellekYolu.tmp"
+      ([pscustomobject]$yeni | ConvertTo-Json -Depth 6) | Set-Content -Path $gecici -Encoding UTF8
+      Move-Item -Path $gecici -Destination $onbellekYolu -Force
+    } catch { }
+  }
+  return $yeni
+}
+
+# ---------------------------------------------------------------------------
 # Worktree kurulumu
 # ---------------------------------------------------------------------------
 

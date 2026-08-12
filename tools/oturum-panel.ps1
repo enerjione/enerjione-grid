@@ -51,37 +51,55 @@ if (-not (Test-Path $sayfaYolu)) { throw "Panel sayfasi bulunamadi: $sayfaYolu" 
 #>
 function Get-PanelVerisi {
   $oturumlar = Get-Oturumlar
-  $pencereler = Get-Pencereler
   $harita = Get-KirliHarita -Tazele
+  $izler = Get-OturumIzleri
+  $posta = @(Read-Posta)
+  $simdi = (Get-Date).ToUniversalTime()
 
   $ajanlar = New-Object System.Collections.ArrayList
   foreach ($a in $harita) {
-    $kayit = $oturumlar | Where-Object { (ConvertTo-WindowsYol $_.yol) -eq (ConvertTo-WindowsYol $a.yol) } | Select-Object -First 1
-    $pencere = $pencereler | Where-Object { (ConvertTo-WindowsYol $_.cwd) -eq (ConvertTo-WindowsYol $a.yol) } | Select-Object -First 1
+    $yol = ConvertTo-WindowsYol $a.yol
+    $kayit = $oturumlar | Where-Object { (ConvertTo-WindowsYol $_.yol) -eq $yol } | Select-Object -First 1
+    $iz = $izler[$yol]
 
-    $canli = [bool]$pencere
+    # CANLILIK OLCUSU: transkriptin son yazilma zamani. Defterdeki pencere
+    # kaydi da var ama o yalnizca hook'lar yuklendiginde doluyor; transkript
+    # her oturumda, hemen, kosulsuz var. Ikisinden GERCEK olani bu.
+    $saniye = -1
+    if ($iz -and $iz.sonHareket) {
+      try { $saniye = [int]($simdi - [datetime]::Parse($iz.sonHareket).ToUniversalTime()).TotalSeconds } catch { }
+    }
     $kirli = @($a.dosyalar).Count
-    if ($canli -and $kirli -gt 0) { $durum = "yaziyor" }
-    elseif ($canli) { $durum = "bekliyor" }
+    if ($saniye -ge 0 -and $saniye -lt 90) { $durum = "yaziyor" }
+    elseif ($saniye -ge 0 -and $saniye -lt 1800) { $durum = "bekliyor" }
     else { $durum = "uykuda" }
 
-    $baslik = ""
-    if ($pencere -and $pencere.baslik) { $baslik = [string]$pencere.baslik }
-    elseif ($kayit -and $kayit.aciklama) { $baslik = [string]$kayit.aciklama }
+    $ad = [string]$a.konu
+    if ($a.anaMi) { $ad = "ana" }
 
     [void]$ajanlar.Add([pscustomobject]@{
-      konu      = [string]$a.konu
-      dal       = [string]$a.dal
-      anaMi     = [bool]$a.anaMi
-      port      = $(if ($kayit) { [int]$kayit.backendPort } else { 0 })
-      frontPort = $(if ($kayit) { [int]$kayit.frontendPort } else { 0 })
-      baslik    = $baslik
-      durum     = $durum
-      canli     = $canli
-      ileride   = [int]$a.ileride
-      geride    = [int]$a.geride
-      kirli     = $kirli
-      dosyalar  = @(@($a.dosyalar) | Select-Object -First 8)
+      konu       = $ad
+      dal        = [string]$a.dal
+      anaMi      = [bool]$a.anaMi
+      port       = $(if ($kayit) { [int]$kayit.backendPort } else { 0 })
+      frontPort  = $(if ($kayit) { [int]$kayit.frontendPort } else { 0 })
+      baslik     = $(if ($iz) { [string]$iz.sonIstek } else { "" })
+      suAnArac   = $(if ($iz) { [string]$iz.suAnArac } else { "" })
+      suAnHedef  = $(if ($iz) { [string]$iz.suAnHedef } else { "" })
+      todoTamam  = $(if ($iz) { [int]$iz.todoTamam } else { 0 })
+      todoToplam = $(if ($iz) { [int]$iz.todoToplam } else { 0 })
+      todoSuAn   = $(if ($iz) { [string]$iz.todoSuAn } else { "" })
+      saniye     = $saniye
+      durum      = $durum
+      oturumSayisi = $(if ($iz) { [int]$iz.oturumSayisi } else { 0 })
+      ileride    = [int]$a.ileride
+      geride     = [int]$a.geride
+      kirli      = $kirli
+      dosyalar   = @(@($a.dosyalar) | Select-Object -First 8)
+      okunmamis  = @($posta | Where-Object {
+                      ($_.kime -eq $ad -or $_.kime -eq "*") -and
+                      ($_.kimden -ne $ad) -and (@($_.okuyan) -notcontains $ad)
+                    }).Count
     })
   }
 
@@ -101,11 +119,47 @@ function Get-PanelVerisi {
     [void]$carpismalar.Add([pscustomobject]@{ dosya = $f; kimler = $kimler })
   }
 
+  # Son mesajlar: panelin sohbet akisi.
+  $mesajlar = New-Object System.Collections.ArrayList
+  foreach ($m in (@($posta) | Select-Object -Last 30)) {
+    [void]$mesajlar.Add([pscustomobject]@{
+      kimden  = [string]$m.kimden
+      kime    = [string]$m.kime
+      metin   = [string]$m.metin
+      saat    = $(try { [datetime]::Parse($m.zaman).ToLocalTime().ToString("HH:mm") } catch { "" })
+      okuyan  = @($m.okuyan)
+    })
+  }
+
   return [pscustomobject]@{
     guncelleme  = (Get-Date).ToString("HH:mm:ss")
     ajanlar     = @($ajanlar)
     carpismalar = @($carpismalar)
+    mesajlar    = @($mesajlar)
   }
+}
+
+<#
+  Panelden mesaj gonderme. Gonderen "panel" olarak kaydedilir -- kullanicinin
+  kendisi yaziyor, bir oturum degil; alici tarafta bunun ayirt edilmesi onemli.
+#>
+function Invoke-PanelGonder {
+  param([string]$Sorgu)
+  $ayrik = @{}
+  foreach ($p in ($Sorgu -split "&")) {
+    $es = $p.IndexOf("=")
+    if ($es -lt 1) { continue }
+    $ad = $p.Substring(0, $es)
+    $deger = [System.Uri]::UnescapeDataString($p.Substring($es + 1).Replace("+", " "))
+    $ayrik[$ad] = $deger
+  }
+  $kime = [string]$ayrik["kime"]
+  $metin = [string]$ayrik["metin"]
+  if ([string]::IsNullOrWhiteSpace($kime) -or [string]::IsNullOrWhiteSpace($metin)) {
+    return [pscustomobject]@{ tamam = $false; hata = "kime/metin bos" }
+  }
+  Send-OturumMesaji -Kime $kime -Metin $metin -Kimden "panel" | Out-Null
+  return [pscustomobject]@{ tamam = $true }
 }
 
 # --- Minimal HTTP -----------------------------------------------------------
@@ -157,6 +211,10 @@ try {
 
       if ($yol -like "/durum*") {
         $json = (Get-PanelVerisi | ConvertTo-Json -Depth 6 -Compress)
+        Send-Cevap $akis "application/json; charset=utf-8" ([System.Text.Encoding]::UTF8.GetBytes($json))
+      } elseif ($yol -like "/gonder?*") {
+        $sonuc = Invoke-PanelGonder -Sorgu ($yol.Substring($yol.IndexOf("?") + 1))
+        $json = ($sonuc | ConvertTo-Json -Compress)
         Send-Cevap $akis "application/json; charset=utf-8" ([System.Text.Encoding]::UTF8.GetBytes($json))
       } elseif ($yol -eq "/" -or $yol -like "/index*") {
         $html = Get-Content $sayfaYolu -Raw -Encoding UTF8

@@ -40,6 +40,17 @@ Prova cakisma gosteriyorsa once cakisan dosyalari ozetle.
 Sonra kullaniciya `http://localhost:7373/` adresini ver. Panel calisirken bu
 oturum bloke olmamali.
 
+## mesaj <oturum> <metin>
+`tools\oturum-mesaj.ps1 -Kime <oturum> -Mesaj "<metin>"`.
+Herkese icin `-Kime *`. Mesaj hedef oturumun BIR SONRAKI adiminda baglamina
+duser -- anlik degil; kullaniciya bunu soyle.
+Gelen mesajlari gormek icin `tools\oturum-mesaj.ps1 -Tumu`.
+
+Ne zaman kendiligindenden mesaj gonder: paylasimli bir dosyada (`types.ts`,
+`App.tsx`, i18n, `app/models/`, yeni migration) genis bir degisiklige
+BASLARKEN ilgili oturuma haber ver. Carpisma hook'u sana kimin ayni dosyada
+oldugunu zaten soyluyor; oraya bir satir yaz.
+
 ## kapat <ad>
 `tools\oturum-kapat.ps1 -Konu <ad>`. Commit'lenmemis is varsa script durur —
 `-Zorla` ONERME, once isin commit'lenmesini soyle.

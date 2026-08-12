@@ -101,6 +101,22 @@ try {
     Ekle "Commit'lerini acik dosya yoluyla yap: git add <dosya1> <dosya2>"
   }
 
+  # --- 1b) Bekleyen mesajlar ----------------------------------------------
+  # Oturum kapaliyken gelen mesajlar posta kutusunda birikir; acilista
+  # teslim edilmezse kullanici "gonderdim ama gormedi" der.
+  $ben = Get-BuOturumAdi -Dizin $buKok
+  $gelen = @(Receive-OturumMesajlari -Oturum $ben)
+  if ($gelen.Count -gt 0) {
+    Ekle ""
+    Ekle "DIGER OTURUMLARDAN MESAJ ($($gelen.Count)) -- sen: $ben"
+    foreach ($m in $gelen) {
+      $kimden = $m.kimden
+      if ($m.kime -eq "*") { $kimden = "$kimden (herkese)" }
+      Ekle "  [$kimden] $($m.metin)"
+    }
+    Ekle "  Cevap: tools\oturum-mesaj.ps1 -Kime <oturum> -Mesaj `"...`""
+  }
+
   # --- 2) Acik oturumlar --------------------------------------------------
   $digerAgac = @($harita | Where-Object { (ConvertTo-WindowsYol $_.yol) -ne $buKok })
   if ($digerAgac.Count -gt 0) {
