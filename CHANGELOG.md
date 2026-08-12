@@ -14,6 +14,39 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.75.1] — 2026-08-12
+
+### Düzeltildi
+
+- **Haberleşme arızası alarmı, cihaz geri geldiğinde kapanmıyordu.** Yedi
+  cihazın alarmı saatlerce açık kaldı; cihazlar sorunsuz haberleşiyordu.
+  Alarmı kapatma kararı yalnızca alarm servisinin **süreç içi belleğinden**
+  veriliyordu ve servis her güncellemede yeniden başlayıp bu belleği
+  kaybediyordu. Bu sapmayı temizlemek için yazılmış olan `reconciliation`
+  işçisi ise alarmı **kuralına** göre çözüyor; haberleşme alarmının kuralı ve
+  sinyali olmadığı için onu hiç görmüyordu. Artık karar veriye bakıyor: son
+  iki dakikada cihazdan telemetri geldiyse ve o pencerede bozuk kaliteli
+  okuma yoksa alarm kendiliğinden kapanır. Cihaz gerçekten sessizse alarm
+  **açık kalır** — "veri yok"u "sorun yok" diye göstermeyiz.
+- **Hat arızası detayı açılırken arayüz tamamen kilitleniyordu.** Kayıt
+  listede yokken (sekme yenilenmiş, kapanmış ya da silinmiş arıza) sayfa
+  React'in hook kuralını çiğniyor ve render sırasında hata fırlatıyordu.
+  Hata kök hata sınırına kadar çıkıp tüm uygulamayı düşürüyordu: sekme
+  şeridi dahil hiçbir şey tıklanmıyor, tek çare sayfayı yenilemekti.
+  Kusur giderildi; ayrıca bir sayfanın çökmesi artık **tek sekmede kalıyor**
+  — diğer sekmeler çalışmaya devam ediyor, başka sekmeye geçip dönünce ekran
+  kendiliğinden toparlanıyor. Hata ekranında "Yeniden dene" ve (kapalı
+  gelen) teknik detay var; teşhis için artık tarayıcı konsolu gerekmiyor.
+- **Güncelleme sonrası eski arayüz yüklenip "Beklenmeyen bir hata"
+  verebiliyordu.** `index.html` önbellek başlığı olmadan servis ediliyordu;
+  tarayıcı onu yeniden doğrulamadan kullanınca eski arayüz **yeni backend**
+  ile konuşuyordu. Alanlar sürümler arasında yer değiştirdiğinde ekran
+  düşüyordu. Artık `no-store` ile servis ediliyor.
+- **PDF arıza raporunda** durum rozeti sayfanın sağ ucunu kaplayan kocaman
+  bir bloktu; artık yazı kadar. "KONUM" başlığındaki gereksiz ipucu kaldırıldı.
+
+---
+
 ## [2.75.0] — 2026-08-12
 
 ### Düzeltildi
