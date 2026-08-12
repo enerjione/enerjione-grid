@@ -35,7 +35,8 @@ import {
   Timer,
   TriangleAlert,
   UserPlus,
-  User as UserIcon
+  User as UserIcon,
+  UsersRound
 } from "lucide-react";
 
 import type { FaultEvent, FaultTriggerAlarm } from "../../shared/types";
@@ -133,7 +134,11 @@ export function ActiveFaultCard({
   onAssignClick
 }: Props) {
   const { t } = useTranslation();
-  const assignee = f.assigned_to_full_name ?? f.assigned_to_username ?? null;
+  // EKIP ATAMASI kisi atamasindan ONCE okunur: ikisi ayni anda dolu olmaz
+  // (backend 400 doner) ama eski bir kayit iki alani da tasiyorsa ekip
+  // kazanir — sorumluluk kurumsaldir, kisi degisebilir.
+  const ekipAdi = f.assigned_to_area_name ?? null;
+  const assignee = ekipAdi ?? f.assigned_to_full_name ?? f.assigned_to_username ?? null;
   const alarms: FaultTriggerAlarm[] = f.trigger_alarms ?? [];
 
   /** SAYAC ARIZA NORMALE DONUNCE DURUR.
@@ -344,9 +349,23 @@ export function ActiveFaultCard({
             "burada bir eksik var" der. */}
         <div className="fx-head-facts">
           <div className={`fx-assignee ${assignee ? "" : "fx-assignee--empty"}`}>
-            <span className="fx-assignee-avatar" aria-hidden="true">
-              {assignee ? bashafler(assignee) : <UserIcon size={14} strokeWidth={2.2} />}
-            </span>
+            {/* KISIYE atandiysa YUZ (varsa fotograf, yoksa bas harf), EKIBE
+                atandiysa ekip ikonu — ekibin yuzu olmaz. */}
+            {ekipAdi ? (
+              <span className="fx-assignee-avatar" aria-hidden="true">
+                <UsersRound size={14} strokeWidth={2.2} />
+              </span>
+            ) : f.assigned_to_avatar_url ? (
+              <img
+                className="fx-assignee-avatar fx-assignee-avatar--photo"
+                src={f.assigned_to_avatar_url}
+                alt=""
+              />
+            ) : (
+              <span className="fx-assignee-avatar" aria-hidden="true">
+                {assignee ? bashafler(assignee) : <UserIcon size={14} strokeWidth={2.2} />}
+              </span>
+            )}
             <span className="fx-assignee-body">
               <span className="fx-assignee-key">{t("faults.card.assignedTo")}</span>
               <span className="fx-assignee-val">

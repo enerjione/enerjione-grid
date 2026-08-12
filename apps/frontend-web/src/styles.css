@@ -24263,6 +24263,11 @@ th.event-col-category {
   font-weight: 800;
   letter-spacing: 0.02em;
 }
+/* Kisinin fotografi — bas harf yerine yuz (bkz. `.fd-avatar--photo`). */
+.fx-assignee-avatar--photo {
+  object-fit: cover;
+  background: #eff6ff;
+}
 .fx-assignee--empty .fx-assignee-avatar {
   background: #eef2f7;
   color: #94a3b8;
@@ -25522,6 +25527,22 @@ th.event-col-category {
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.02em;
+}
+
+/* KISININ FOTOGRAFI. Bas harf rozeti kimligi ancak okununca veriyor; yuz
+   bir bakista veriyor — sahayla telsizde konusan kisi "kim gidiyor"u once
+   yuzden cozuyor. Kirpma `cover`: dikdortgen bir yukleme daire icinde
+   ezilmesin. */
+.fd-avatar--photo {
+  object-fit: cover;
+  background: var(--fd-surface);
+}
+
+/* EKIBIN YUZU OLMAZ: ikon + ad. Renk de kisiden ayri (mor), listede iki
+   atama turu birbirine karismasin. */
+.fd-avatar--team {
+  background: linear-gradient(135deg, #ede9fe, #f5f3ff);
+  color: #6d28d9;
 }
 
 /* Atanmamis: dolu bir avatar "birisi var" izlenimi verir. */
