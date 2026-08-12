@@ -150,61 +150,101 @@ test("bozuk zoom degeri yaricapi kirmaz", () => {
 // hat cizilince "su fiderin ortasinda" olur. Sahaya ekip gonderme karari bu
 // ikinci cumleyle verilir.
 
-const D = (id: number, lat: number, lon: number) => ({ id, latitude: lat, longitude: lon });
+/** Direk: artik `line_id` + `sequence_no` tasiyor — cizgiler
+ *  `line_segments`ten degil DIREKLERDEN kuruluyor (bkz. heatField.ts). */
+const D = (
+  id: number,
+  lat: number,
+  lon: number,
+  line_id = 1,
+  sequence_no = id
+) => ({ id, latitude: lat, longitude: lon, line_id, sequence_no });
 
-test("her segment AYRI parca — zincir kurulmaz", () => {
-  // Topoloji tek bir zincir degil: dallanma diregindan cikan kol AYRI bir
-  // hattir. Noktalari ucuca eklemek olmayan bir teli cizerdi.
-  const parcalar = sebekeCizgileri(
-    [D(1, 39, 35), D(2, 39.1, 35.1), D(3, 39.2, 35.0)],
-    [
-      { from_pole_id: 1, to_pole_id: 2 },
-      { from_pole_id: 2, to_pole_id: 3 }
-    ]
-  );
-  assert.equal(parcalar.length, 2);
+test("hat govdesi ardisik direklerden kurulur", () => {
+  // ONCEKI HATA: cizgiler `line_segments` kayitlarindan uretiliyordu.
+  // `LineSegment` bir CIHAZ YERLESIMI kaydidir; cihaz atanmamis aciklik
+  // icin satir hic olusmaz ve saha haritasi BOS cikiyordu. Tek bir
+  // segment kaydi olmadan da hat cizilebilmeli.
+  const parcalar = sebekeCizgileri([
+    D(1, 39.0, 35.0),
+    D(2, 39.1, 35.1),
+    D(3, 39.2, 35.2)
+  ]);
+  assert.equal(parcalar.length, 2, "iki aciklik cizilmeliydi");
   parcalar.forEach((p) => assert.equal(p.length, 2, "parca iki noktali olmali"));
+});
+
+test("direkler SEQUENCE_NO sirasina gore baglanir", () => {
+  // Dizideki sira degil hattaki sira onemli; API sirayi garanti etmiyor.
+  // Yanlis sirada baglamak teli ileri geri zikzak cizdirirdi.
+  const parcalar = sebekeCizgileri([
+    D(3, 39.2, 35.2, 1, 3),
+    D(1, 39.0, 35.0, 1, 1),
+    D(2, 39.1, 35.1, 1, 2)
+  ]);
+  assert.deepEqual(parcalar[0], [[39.0, 35.0], [39.1, 35.1]]);
+  assert.deepEqual(parcalar[1], [[39.1, 35.1], [39.2, 35.2]]);
+});
+
+test("AYRI hatlar birbirine baglanmaz", () => {
+  // Iki hattin direklerini ucuca eklemek, olmayan bir teli cizerdi.
+  const parcalar = sebekeCizgileri([
+    D(1, 39.0, 35.0, 1, 1),
+    D(2, 39.1, 35.1, 1, 2),
+    D(3, 41.0, 29.0, 2, 1),
+    D(4, 41.1, 29.1, 2, 2)
+  ]);
+  assert.equal(parcalar.length, 2, "her hat kendi icinde tek aciklik");
+});
+
+test("BRANSMAN ana direge baglanir", () => {
+  // Bag cizilmezse kol havada asili durur ve "kopuk hat" gibi okunur.
+  const parcalar = sebekeCizgileri(
+    [
+      D(1, 39.0, 35.0, 1, 1),
+      D(2, 39.1, 35.1, 1, 2),
+      D(9, 39.15, 35.3, 2, 1)
+    ],
+    [{ id: 2, branched_from_pole_id: 2 }]
+  );
+  // 1 govde aciklik (hat 1) + 1 bransman bagi.
+  assert.equal(parcalar.length, 2);
+  assert.deepEqual(parcalar[1], [[39.1, 35.1], [39.15, 35.3]]);
+});
+
+test("bransmanin ana diregi YOKSA bag atlanir", () => {
+  const parcalar = sebekeCizgileri(
+    [D(9, 39.15, 35.3, 2, 1)],
+    [{ id: 2, branched_from_pole_id: 404 }]
+  );
+  assert.deepEqual(parcalar, []);
 });
 
 test("kordinatlar [lat, lon] sirasinda", () => {
   // Ters cevrilirse Leaflet cizgiyi denizin ortasina koyar ve kimse
   // koordinati okuyup fark etmez.
-  const [parca] = sebekeCizgileri([D(1, 39, 35), D(2, 40, 36)], [
-    { from_pole_id: 1, to_pole_id: 2 }
-  ]);
+  const [parca] = sebekeCizgileri([D(1, 39, 35), D(2, 40, 36)]);
   assert.deepEqual(parca, [
     [39, 35],
     [40, 36]
   ]);
 });
 
-test("direksiz segment ATLANIR", () => {
-  // Direk silinmis ama segment kalmis olabilir; `undefined.latitude`
-  // tum haritayi patlatirdi.
-  const parcalar = sebekeCizgileri([D(1, 39, 35)], [
-    { from_pole_id: 1, to_pole_id: 999 },
-    { from_pole_id: 404, to_pole_id: 1 }
-  ]);
-  assert.deepEqual(parcalar, []);
-});
-
 test("BOZUK koordinat cizgiyi sizdirmaz", () => {
   // Tek bir NaN, Leaflet'in TUM katmanini sessizce cizilmez yapar —
   // sadece o parca degil, hepsi kaybolur.
-  const parcalar = sebekeCizgileri(
-    [D(1, Number.NaN, 35), D(2, 39.1, 35.1), D(3, 39.2, 35.2)],
-    [
-      { from_pole_id: 1, to_pole_id: 2 },
-      { from_pole_id: 2, to_pole_id: 3 }
-    ]
-  );
+  const parcalar = sebekeCizgileri([
+    D(1, Number.NaN, 35),
+    D(2, 39.1, 35.1),
+    D(3, 39.2, 35.2)
+  ]);
   assert.equal(parcalar.length, 1, "bozuk parca disarida kalmali");
   parcalar.flat().forEach(([lat, lon]) => {
     assert.ok(Number.isFinite(lat) && Number.isFinite(lon));
   });
 });
 
-test("segment yoksa bos dizi — patlamaz", () => {
-  assert.deepEqual(sebekeCizgileri([], []), []);
-  assert.deepEqual(sebekeCizgileri([D(1, 39, 35)], []), []);
+test("tek direk ya da bos veri — patlamaz", () => {
+  assert.deepEqual(sebekeCizgileri([]), []);
+  assert.deepEqual(sebekeCizgileri([D(1, 39, 35)]), []);
 });

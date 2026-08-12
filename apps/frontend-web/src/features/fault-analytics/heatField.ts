@@ -147,30 +147,77 @@ function karistir(a: string, b: string, t: number): string {
  * hemen oncesinde" olur. Sahaya ekip gonderme karari bu ikinci cumleyle
  * verilir.
  *
- * Her segment AYRI bir parca olarak doner (zincir kurulmaz): topoloji tek
- * bir zincir degil — dallanma direginden cikan kol ayri bir hattir ve
- * noktalari ucuca eklemek olmayan bir teli cizerdi.
+ * TOPOLOJI DIREKLERDEN KURULUR, `line_segments`TEN DEGIL
+ * ------------------------------------------------------
+ * Onceki surum cizgileri `line_segments` kayitlarindan uretiyordu ve saha
+ * haritasi BOS cikiyordu. Sebep: `LineSegment` bir CIHAZ YERLESIMI kaydidir
+ * (bkz. models/grid_topology.py) — cihaz atanmamis bir aciklik icin satir
+ * HIC olusmaz. Yani cizim, telin nerede oldugunu degil cihazin nereye
+ * takildigini gosteriyordu.
+ *
+ * Dogru kaynak, anasayfa haritasinin kullandigi kaynakla AYNI olmali
+ * (features/map/DeviceMapTab.tsx): hat basina direkler `sequence_no` ile
+ * siralanir ve ardisik direkler birlestirilir. Iki ekranin ayni sebekeyi
+ * farkli cizmesi, operatorun hangisine inanacagini bilememesi demekti.
+ *
+ * BRANSMANLAR da baglanir: `branched_from_pole_id` dolu bir hat o ana
+ * direkten baslar. Bag cizilmezse kol havada asili durur ve "kopuk hat"
+ * gibi okunur.
+ *
+ * Her aciklik AYRI bir parca olarak doner (zincir kurulmaz): tek bir
+ * polyline yapmak, dallanma direginde olmayan bir teli cizerdi.
  */
 export type GeoNokta = { latitude: number; longitude: number };
 
+export type CizgiDirek = GeoNokta & {
+  id: number;
+  line_id: number;
+  sequence_no: number;
+};
+
+export type CizgiHat = {
+  id: number;
+  branched_from_pole_id?: number | null;
+};
+
 export function sebekeCizgileri(
-  poles: readonly (GeoNokta & { id: number })[],
-  segments: readonly { from_pole_id: number; to_pole_id: number }[]
+  poles: readonly CizgiDirek[],
+  lines: readonly CizgiHat[] = []
 ): [number, number][][] {
-  const direk = new Map(poles.map((p) => [p.id, p]));
   const parcalar: [number, number][][] = [];
-  for (const s of segments) {
-    const a = direk.get(s.from_pole_id);
-    const b = direk.get(s.to_pole_id);
-    // Direksiz segment ya da bozuk koordinat: tek bir NaN, Leaflet'in tum
-    // katmanini sessizce cizilmez yapar.
-    if (!a || !b) continue;
-    if (!kordinatGecerli(a) || !kordinatGecerli(b)) continue;
+  const direk = new Map(poles.map((p) => [p.id, p]));
+
+  /** Bozuk koordinat parcayi DUSURUR: tek bir NaN, Leaflet'in TUM
+   *  katmanini sessizce cizilmez yapar — sadece o parca degil, hepsi. */
+  const ekle = (a: GeoNokta | undefined, b: GeoNokta | undefined) => {
+    if (!a || !b) return;
+    if (!kordinatGecerli(a) || !kordinatGecerli(b)) return;
     parcalar.push([
       [a.latitude, a.longitude],
       [b.latitude, b.longitude]
     ]);
+  };
+
+  // 1) Hat govdeleri: ardisik direkler (sequence_no sirali).
+  const hattaGore = new Map<number, CizgiDirek[]>();
+  for (const p of poles) {
+    const arr = hattaGore.get(p.line_id);
+    if (arr) arr.push(p);
+    else hattaGore.set(p.line_id, [p]);
   }
+  for (const arr of hattaGore.values()) {
+    arr.sort((a, b) => a.sequence_no - b.sequence_no);
+    for (let i = 0; i < arr.length - 1; i += 1) ekle(arr[i], arr[i + 1]);
+  }
+
+  // 2) Bransman baglantilari: ana direk -> kolun ILK diregi.
+  for (const hat of lines) {
+    if (!hat.branched_from_pole_id) continue;
+    const ilk = hattaGore.get(hat.id)?.[0];
+    if (!ilk) continue;
+    ekle(direk.get(hat.branched_from_pole_id), ilk);
+  }
+
   return parcalar;
 }
 

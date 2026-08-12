@@ -40769,11 +40769,21 @@ th.event-col-category {
 /* ---- Kart izgarasi ----
    12 sutun. Kart genisligi ICERIGE gore secilir, "sigdigi kadar"a gore
    degil (bkz. bolum basi notu). */
+/* ---- Kart izgarasi ----
+   12 sutun. Kart genisligi ICERIGE gore secilir, "sigdigi kadar"a gore
+   degil (bkz. bolum basi notu).
+
+   SATIRDAKI KARTLAR AYNI BOYDA. Eskiden `align-items: start` ile her kart
+   kendi icerigi kadar uzuyordu; yan yana duran iki kart (sebep/faz
+   dagilimi, tekrarlayan aciklikar/aralik puani) farkli boyda kaliyor ve
+   izgara kirik gorunuyordu. Fark ICERIKTEN geliyordu — birinde uc cubuk,
+   digerinde on satir — yani "duzeltilecek" bir sey degil, HIZALANACAK bir
+   sey. Uzun olan icerik artik kartin ICINDE kayar (asagida). */
 .fa-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
 }
 
 /* KART — hafif yukselti + baslik seridi.
@@ -41101,6 +41111,20 @@ th.event-col-category {
   padding: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* Satirdaki kartlar ayni boyda oldugu icin (bkz. `.fa-grid`) uzun liste
+   kartin ICINDE kayar. Alternatif kartlari icerige gore uzatmakti; o
+   zaman on satirlik bir liste yanindaki uc cubukluk grafigi de uzatiyor
+   ve izgarada kocaman bos alanlar aciliyordu.
+   `min-height: 0` SART: flex cocugu varsayilan olarak icerigi kadar
+   buyur ve `overflow` hic devreye girmez. */
+.fa-grid .fa-card > .fa-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* Kaydirma cubugu icerigin uzerine binmesin. */
+  scrollbar-gutter: stable;
 }
 
 .fa-list li {

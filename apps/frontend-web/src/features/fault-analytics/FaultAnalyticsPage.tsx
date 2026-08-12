@@ -340,33 +340,27 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
         <div className="fa-grid">
           {/* ---- Aylik egilim — EN USTTE ve tam genislikte.
                Once zaman baglami: "artiyor mu, azaliyor mu, mevsimsel mi".
-               Alttaki siralama kartlari o baglamin icinde okunur. ---- */}
-          <Kart
-            genislik="wide"
-            Icon={TrendingUp}
-            baslik={t("faultAnalytics.monthlyTrend")}
-            ipucu={t("faultAnalytics.monthlyHint")}
-          >
-            {/* TEK NOKTA EGILIM DEGILDIR. Bir onceki surumde bu, genis ve
-                bos bir alanin ortasinda asili duran tek bir noktaydi:
-                grafik "bozuk" gorunuyordu, oysa veri yetersizdi. Neyin
-                eksik oldugunu SOYLEMEK, cizmekten dogru. */}
-            {(data?.monthly_trend.length ?? 0) >= 2 ? (
+               Alttaki siralama kartlari o baglamin icinde okunur.
+
+               VERI YETMIYORSA KART HIC CIZILMEZ. Once tek nokta cizilip
+               "bozuk grafik" gorunuyordu; sonra yerine aciklama konuldu ama
+               o da ekranin en ustunde tam genislikte bir serit kaplayip
+               ASIL kartlari asagi itiyordu. Iki aylik veri birikince
+               kendiliginden geri gelir; o zamana kadar yer kaplamasinin
+               bir karsiligi yok. ---- */}
+          {(data?.monthly_trend.length ?? 0) >= 2 ? (
+            <Kart
+              genislik="wide"
+              Icon={TrendingUp}
+              baslik={t("faultAnalytics.monthlyTrend")}
+              ipucu={t("faultAnalytics.monthlyHint")}
+            >
               <EgilimGrafigi
                 points={data!.monthly_trend}
                 labelToplam={t("faultAnalytics.faultUnit")}
               />
-            ) : (
-              <Bos Icon={TrendingUp}>
-                {data?.monthly_trend.length
-                  ? t("faultAnalytics.trendNeedsTwoMonths", {
-                      month: data.monthly_trend[0].month,
-                      count: data.monthly_trend[0].count
-                    })
-                  : t("faultAnalytics.noData")}
-              </Bos>
-            )}
-          </Kart>
+            </Kart>
+          ) : null}
 
           <Kart
             Icon={GitBranch}
@@ -610,7 +604,11 @@ function HatArizaYogunlugu({
 
   const cizgiler = useMemo(
     () =>
-      topoloji.veri ? sebekeCizgileri(topoloji.veri.poles, topoloji.veri.segments) : [],
+      // Cizgiler DIREKLERDEN kuruluyor, `segments`ten degil: `LineSegment`
+      // bir cihaz yerlesimi kaydi ve cihazsiz acikliklar icin satir hic
+      // olusmuyor — harita bos cikiyordu. Anasayfa haritasiyla ayni kaynak
+      // (bkz. heatField.sebekeCizgileri).
+      topoloji.veri ? sebekeCizgileri(topoloji.veri.poles, topoloji.veri.lines) : [],
     [topoloji.veri]
   );
 
