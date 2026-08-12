@@ -24221,50 +24221,77 @@ th.event-col-category {
 }
 .fx-branch-tag--check { background: #f3e8ff; color: #7e22ce; }
 
-/* --- olcu/zaman bilgileri: yatay, ayracli --- */
+/* --- ATANAN KARTI ---
+   Onceden burada "anahtar deger" ciftleri yan yana duz metin olarak
+   yaziliyordu (`.fx-fact`). Tek kalan cift ATANAN'di ve duz metin olunca
+   yanindaki "Arizayi Ata" dugmesinin etiketi gibi okunuyordu. Artik
+   cerceveli bir KART: bas harf rozeti + etiket/ad. */
 .fx-head-facts {
   display: flex;
   align-items: stretch;
   gap: 18px;
 }
-/* Anahtar/deger YAN YANA: ust serit tek satira indi, iki satirlik kutucuklar
-   seridi yeniden iki katina cikariyordu. */
-.fx-fact {
+.fx-assignee {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
-  padding-left: 18px;
-  border-left: 1px solid #eef2f7;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 12px 6px 7px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
-.fx-head-facts > .fx-fact:first-child { padding-left: 0; border-left: 0; }
-.fx-fact-key {
+/* Bos hal SESSIZ DEGIL: kesikli cerceve ve soluk zemin, "atanmamis"i bir
+   eksik olarak gosterir — duz metinken gozden kaciyordu. */
+.fx-assignee--empty {
+  border-style: dashed;
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  box-shadow: none;
+}
+.fx-assignee-avatar {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.fx-assignee--empty .fx-assignee-avatar {
+  background: #eef2f7;
+  color: #94a3b8;
+}
+.fx-assignee-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.fx-assignee-key {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: #94a3b8;
   white-space: nowrap;
 }
-.fx-fact-val {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.fx-assignee-val {
   font-size: 13px;
   font-weight: 700;
   color: #1e293b;
-  font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.fx-fact--live .fx-fact-val { color: #dc2626; }
-.fx-live-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #ef4444;
-  animation: fx-pulse 1.6s ease-in-out infinite;
+.fx-assignee--empty .fx-assignee-val {
+  font-weight: 600;
+  color: #94a3b8;
 }
 @keyframes fx-pulse {
   0%, 100% { opacity: 1; }
@@ -24632,6 +24659,10 @@ th.event-col-category {
   font-weight: 600;
   color: #64748b;
 }
+/* SAYAC DURDU: ariza normale dondu, sayi artik ARTMIYOR. Ayni koyu
+   renkte kalirsa "hala isliyor" gibi okunuyor; kapanmis bir olcum
+   olarak daha sakin bir tonda duruyor. */
+.fx-elapsed--done strong { color: #0f766e; }
 .fx-elapsed-start {
   display: flex;
   align-items: baseline;

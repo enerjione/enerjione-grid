@@ -476,7 +476,8 @@ export function FaultDetailPage({
     // YON GOSTERILMIYOR — kart kunyesiyle ayni karar (bkz. ActiveFaultCard):
     // "ileri/geri" bayragi kelepcenin takilis yonune gore anlam degistiriyor.
     // Alan DB'de duruyor, yalnizca kunyede yazilmiyor.
-    ekle("zone", t("faults.card.specZoneCode"), fault.zone_code ?? null);
+    // ARALIK KODU da yazilmiyor: "L13/D21>D10" bir ic anahtar, ayni bilgi
+    // sayfa basliginda okunur haliyle duruyor. Alan DB'de kaliyor.
     if (fault.fault_current_a != null) {
       ekle("ia", t("faults.card.specFaultCurrent"), `${fault.fault_current_a.toFixed(1)} A`, "red");
     }
