@@ -54,12 +54,19 @@ def _ozet_var_mi(db: Session) -> bool:
     Timescale extension olmayan bir kurulumda (dev / SQLite test) ozet
     olusturulmaz. Sorguyu kosturup hata yakalamak yerine ONCEDEN bakiyoruz:
     yakalanan bir hata, gercek bir sorgu hatasini da yutardi.
+
+    SAVEPOINT ICINDE: eskiden basarisizlikta `db.rollback()` cagriliyordu ve
+    bu, CAGIRANIN oturumundaki bekleyen isi de siliyordu. Bu bir olasilik
+    degil olculmus bir davranis: ayni oturumda flush edilmis kayitlar,
+    yalnizca "ozet tablosu var mi" diye bakildigi icin yok oluyordu. Bir
+    VARLIK YOKLAMASI cagiranin islemini bozmamali; savepoint geri alinir,
+    dis islem ayakta kalir.
     """
     try:
-        db.execute(text("SELECT 1 FROM telemetry_history_1h LIMIT 1"))
+        with db.begin_nested():
+            db.execute(text("SELECT 1 FROM telemetry_history_1h LIMIT 1"))
         return True
     except Exception:  # noqa: BLE001
-        db.rollback()
         return False
 
 
@@ -275,6 +282,97 @@ def sinyal_saat_profili(
         }
         for r in rows
     ]
+
+
+#: Karsilastirma tablosunda dondurulen EN FAZLA cihaz. 600 cihazlik hedef
+#: filonun tamami sigar (bkz. kapasite varsayimlari); tavan yalnizca kazara
+#: buyuyen bir kurulumda yaniti sinirsiz buyutmemek icin var.
+COMPARE_MAX_DEVICES = 600
+
+
+def cihaz_karsilastirmasi(
+    db: Session,
+    *,
+    days: int,
+    visible_device_ids: set[int] | None,
+    alarm_sayilari: dict[int, dict],
+    ariza_sayilari: dict[int, int],
+    battery_low: float | None = None,
+) -> list[dict]:
+    """Cihaz basina TEK SATIR: haberlesme, alarm, ariza, sinyal, batarya.
+
+    NEDEN TEK TABLO
+    ---------------
+    Ekranda su an dort ayri "en kotu 10" listesi var ve her biri kendi
+    olcusunde en kotuleri gosteriyor. Bu listelerden CAPRAZ bir soru
+    sorulamiyor: "sinyali zayif olan cihazlar ayni zamanda cok mu alarm
+    uretiyor?" Cevap evetse sorun esikte degil ANTENDE; hayirsa iki ayri
+    is emri gerekir. Tek satirda birlesince bu sacilim grafiginde bakista
+    okunur.
+
+    HIC SORUN CIKARMAMIS CIHAZ DA GELIR. Satirlar `devices` tablosundan
+    uretilir, alarm ya da olcum kayitlarindan degil. Aksi halde dagilim
+    yalnizca sorunlu cihazlardan olusur ve "filo nasil" sorusu
+    sistematik olarak kotu tarafa kayardi.
+
+    EKSIK OLCU UYDURULMAZ: telemetri ozeti olmayan (ya da Timescale'siz)
+    kurulumda `avg_dbm` / `drop_per_day_v` None doner — 0 degil. 0 dBm
+    "mukemmel sinyal" demektir ve tam ters okunurdu.
+    """
+    from sqlalchemy import select
+
+    from app.models.device import Device
+
+    stmt = select(
+        Device.id, Device.code, Device.name, Device.communication_status
+    ).where(Device.parent_device_id.is_(None))
+    if visible_device_ids is not None:
+        if not visible_device_ids:
+            return []
+        stmt = stmt.where(Device.id.in_(visible_device_ids))
+    cihazlar = db.execute(stmt.order_by(Device.code).limit(COMPARE_MAX_DEVICES)).all()
+    if not cihazlar:
+        return []
+
+    # Mevcut "en kotu N" fonksiyonlari TUM filo icin cagrilir ve device_id ile
+    # indekslenir. Ayri bir sorgu yazmak, ayni olcunun iki farkli yerde iki
+    # farkli sekilde hesaplanmasi riskini dogururdu.
+    sinyal = {
+        int(r["device_id"]): r
+        for r in sinyal_kalitesi(
+            db, days=days, visible_device_ids=visible_device_ids,
+            limit=COMPARE_MAX_DEVICES,
+        )
+    }
+    batarya = {
+        int(r["device_id"]): r
+        for r in batarya_tukenme(
+            db, days=days, visible_device_ids=visible_device_ids,
+            limit=COMPARE_MAX_DEVICES, battery_low=battery_low,
+        )
+    }
+
+    out: list[dict] = []
+    for dev_id, kod, ad, durum in cihazlar:
+        alarm = alarm_sayilari.get(int(dev_id), {})
+        s = sinyal.get(int(dev_id))
+        b = batarya.get(int(dev_id))
+        out.append(
+            {
+                "device_id": int(dev_id),
+                "code": kod,
+                "name": ad,
+                "comm_status": str(getattr(durum, "value", durum) or "unknown"),
+                "alarms": int(alarm.get("alarms", 0)),
+                "outages": int(alarm.get("outages", 0)),
+                "faults": int(ariza_sayilari.get(int(dev_id), 0)),
+                "avg_dbm": s["avg_dbm"] if s else None,
+                "worst_dbm": s["worst_dbm"] if s else None,
+                "drop_per_day_v": b["drop_per_day_v"] if b else None,
+                "days_to_low": b["days_to_low"] if b else None,
+            }
+        )
+    return out
 
 
 def ariza_yogunlugu(

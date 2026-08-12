@@ -15,11 +15,20 @@
  * 3. HER SAYI TIKLANABILIR BIR OLCUYE DAYANIR. Isi haritasindaki leke deseni
  *    gosterir, ustundeki isaretci KESIN adedi verir.
  *
- * NEDEN SEKMELI
- * -------------
- * Once tek bir kart izgarasiydi; ustune sistem sagligi, cihaz sagligi, isi
- * haritasi ve akis diyagrami gelince 15+ kartlik bir duvara donusuyordu.
- * Sekmeler yalnizca duzen tercihi degil, PERFORMANS karari: harita ve akis
+ * SEKME DUZENI — HER SEKME TEK SORU
+ * ---------------------------------
+ * Onceki duzende "Harita & Akis" iki bambaska soruyu tek sekmeye koyuyordu
+ * (NEREDE ve NEREYE AKIYOR) ve ikisi de yariya kirpiliyordu; sistem sagligi
+ * ise dort kartla "hangi kural / hangi cihaz / ne zaman"i ayni anda
+ * soruyordu. Simdi her sekme tek soruya bakiyor:
+ *
+ *   Arizalar       -> ne oldu, nerede yogunlasti
+ *   Harita         -> cografyada NEREDE
+ *   Ariza Akisi    -> bolge -> hat -> faz, NEREYE akiyor
+ *   Sistem Sagligi -> saha NE ZAMAN gurultuluydu (tek takvim)
+ *   Cihaz Sagligi  -> hangi cihaz, ve cihazlar BIRBIRINE GORE nasil
+ *
+ * Sekmeler yalnizca duzen tercihi degil PERFORMANS karari: harita ve akis
  * yalnizca kendi sekmesi acilinca MONTE EDILIR, sistem/cihaz sagligi da
  * yalnizca o an CEKILIR. 600 cihazli bir sahada bu sorgular ucuz degil ve
  * kimse hepsine ayni anda bakmiyor.
@@ -27,15 +36,17 @@
  * CIZIM: echarts. Onceden inline SVG ile ciziliyordu ve gerekcesi "kutuphane
  * eklemek paket boyutunu buyutur"du. O gerekce artik gecerli degil — echarts
  * ZATEN bagimlilik (cihaz detay grafikleri kullaniyor) ve bu sayfa lazy
- * yukleniyor. Sankey de echarts'in icinde: yeni kutuphane gerekmedi.
+ * yukleniyor. Sankey ve takvim de echarts'in icinde: yeni kutuphane gerekmedi.
  */
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Activity,
   AlertTriangle,
+  ArrowDownUp,
   BatteryLow,
   BellRing,
+  CalendarDays,
   CalendarRange,
   Gauge,
   GitBranch,
@@ -50,17 +61,24 @@ import {
   Tags,
   TrendingUp,
   Unplug,
+  Wifi,
   Zap
 } from "lucide-react";
 
 import {
   AlarmIsiHaritasi,
+  AlarmTakvimi,
+  DagilimGrafigi,
   EgilimGrafigi,
   FazGrafigi,
+  HalkaGrafigi,
+  SacilimGrafigi,
   SaatProfiliGrafigi,
   SankeyGrafigi,
-  SiralamaGrafigi
+  SiralamaGrafigi,
+  TakvimSeridi
 } from "./FaultCharts";
+import { HABERLESME_RENK } from "./faultChartTheme";
 import { sebekeCizgileri } from "./heatField";
 
 import {
@@ -96,12 +114,13 @@ const WINDOWS = [30, 90, 365, 1095] as const;
  *  Kesin bir esik yok; amac "bu grafige dayanip karar verme" demek. */
 const LOW_LABEL_RATIO = 0.4;
 
-type Sekme = "faults" | "map" | "system" | "devices";
+type Sekme = "faults" | "map" | "flow" | "system" | "devices";
 
 const SEKMELER: { key: Sekme; labelKey: string; Icon: typeof TrendingUp }[] = [
   { key: "faults", labelKey: "faultAnalytics.tabFaults", Icon: TrendingUp },
   { key: "map", labelKey: "faultAnalytics.tabMap", Icon: MapIcon },
-  { key: "system", labelKey: "faultAnalytics.tabSystem", Icon: Activity },
+  { key: "flow", labelKey: "faultAnalytics.tabFlow", Icon: Share2 },
+  { key: "system", labelKey: "faultAnalytics.tabSystem", Icon: CalendarDays },
   { key: "devices", labelKey: "faultAnalytics.tabDevices", Icon: Radio }
 ];
 
@@ -198,14 +217,18 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
 
   return (
     <section className="tab-panel fa-page">
-      {/* ---- Ust serit: pencere secimi + dort ozet olcu ---- */}
+      {/* ---- Ust serit: pencere secimi + uc ozet olcu ----
+           KOMPAKT: bu serit ekranin baglami, ana icerigi degil. Onceki
+           surumde 34px ikon kutusu + 1.35rem sayi ile serit 64px'e cikiyor
+           ve asil grafikleri kati asagi itiyordu. Ikon artik etiketin
+           icinde (12px), sayi ile serh AYNI satirda. */}
       <div className="fa-kpis">
-        <div className="fa-kpi">
-          <span className="fa-kpi-icon">
-            <CalendarRange size={17} />
-          </span>
+        <div className="fa-kpi fa-kpi--window">
           <span className="fa-kpi-body">
-            <span className="fa-kpi-label">{t("faultAnalytics.window")}</span>
+            <span className="fa-kpi-label">
+              <CalendarRange size={12} />
+              {t("faultAnalytics.window")}
+            </span>
             <select
               className="fa-window-select"
               value={days}
@@ -294,14 +317,12 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
           {/* ---- Aylik egilim — EN USTTE ve tam genislikte.
                Once zaman baglami: "artiyor mu, azaliyor mu, mevsimsel mi".
                Alttaki siralama kartlari o baglamin icinde okunur. ---- */}
-          <section className="fa-card fa-card--wide">
-            <header className="fa-card-head">
-              <h3>
-                <TrendingUp size={16} />
-                {t("faultAnalytics.monthlyTrend")}
-              </h3>
-              <small>{t("faultAnalytics.monthlyHint")}</small>
-            </header>
+          <Kart
+            genislik="wide"
+            Icon={TrendingUp}
+            baslik={t("faultAnalytics.monthlyTrend")}
+            ipucu={t("faultAnalytics.monthlyHint")}
+          >
             {/* TEK NOKTA EGILIM DEGILDIR. Bir onceki surumde bu, genis ve
                 bos bir alanin ortasinda asili duran tek bir noktaydi:
                 grafik "bozuk" gorunuyordu, oysa veri yetersizdi. Neyin
@@ -321,14 +342,13 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
                   : t("faultAnalytics.noData")}
               </Bos>
             )}
-          </section>
+          </Kart>
 
-          {/* ---- En cok ariza cikaran hatlar ---- */}
-          <section className="fa-card">
-            <header className="fa-card-head">
-              <h3>{t("faultAnalytics.topLines")}</h3>
-              <small>{t("faultAnalytics.topLinesHint")}</small>
-            </header>
+          <Kart
+            Icon={GitBranch}
+            baslik={t("faultAnalytics.topLines")}
+            ipucu={t("faultAnalytics.topLinesHint")}
+          >
             {data?.top_lines.length ? (
               <SiralamaGrafigi
                 items={data.top_lines.map((l) => ({ label: l.name, value: l.count }))}
@@ -337,20 +357,15 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
             ) : (
               <Bos Icon={GitBranch}>{t("faultAnalytics.noData")}</Bos>
             )}
-          </section>
+          </Kart>
 
-          {/* ---- Bolge dagilimi.
-               Backend bunu zaten uretiyordu ama ekran GOSTERMIYORDU. Hat
-               siralamasi "hangi hat" der; bolge siralamasi "hangi ekibin
-               sahasi" der — bakim planlamasinda ikisi ayri sorudur. ---- */}
-          <section className="fa-card">
-            <header className="fa-card-head">
-              <h3>
-                <MapIcon size={16} />
-                {t("faultAnalytics.topRegions")}
-              </h3>
-              <small>{t("faultAnalytics.topRegionsHint")}</small>
-            </header>
+          {/* Hat siralamasi "hangi hat" der; bolge siralamasi "hangi ekibin
+              sahasi" der — bakim planlamasinda ikisi ayri sorudur. */}
+          <Kart
+            Icon={MapIcon}
+            baslik={t("faultAnalytics.topRegions")}
+            ipucu={t("faultAnalytics.topRegionsHint")}
+          >
             {data?.top_regions.length ? (
               <SiralamaGrafigi
                 items={data.top_regions.map((r) => ({ label: r.name, value: r.count }))}
@@ -359,16 +374,16 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
             ) : (
               <Bos Icon={MapIcon}>{t("faultAnalytics.noData")}</Bos>
             )}
-          </section>
+          </Kart>
 
-          {/* ---- Sebep dagilimi ---- */}
-          <section className="fa-card fa-card--third">
-            <header className="fa-card-head">
-              <h3>{t("faultAnalytics.causeDistribution")}</h3>
-              {ozet ? (
-                <small>{t("faultAnalytics.ofLabeled", { count: ozet.labeled })}</small>
-              ) : null}
-            </header>
+          <Kart
+            genislik="half"
+            Icon={Tags}
+            baslik={t("faultAnalytics.causeDistribution")}
+            ipucu={
+              ozet ? t("faultAnalytics.ofLabeled", { count: ozet.labeled }) : undefined
+            }
+          >
             {data?.cause_distribution.length ? (
               <>
                 {/* Etiketlenme dusukse grafigin YANINDA soylenir; kart tek
@@ -392,14 +407,14 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
             ) : (
               <Bos Icon={Tags}>{t("faultAnalytics.noCauses")}</Bos>
             )}
-          </section>
+          </Kart>
 
-          {/* ---- Faz dagilimi ---- */}
-          <section className="fa-card fa-card--third">
-            <header className="fa-card-head">
-              <h3>{t("faultAnalytics.phaseDistribution")}</h3>
-              <small>{t("faultAnalytics.phaseHint")}</small>
-            </header>
+          <Kart
+            genislik="half"
+            Icon={Zap}
+            baslik={t("faultAnalytics.phaseDistribution")}
+            ipucu={t("faultAnalytics.phaseHint")}
+          >
             {data?.phase_distribution.length ? (
               <FazGrafigi
                 items={data.phase_distribution.map((p) => ({
@@ -412,19 +427,16 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
             ) : (
               <Bos Icon={Zap}>{t("faultAnalytics.noData")}</Bos>
             )}
-          </section>
+          </Kart>
 
-          {/* ---- Tekrarlayan aciklikar — bakim onceliklendirmesinin
-               en dogrudan girdisi. Grafik DEGIL liste: burada aranan sey
-               "hangi aciklik" ve "kac kez", ikisi de metin. ---- */}
-          <section className="fa-card">
-            <header className="fa-card-head">
-              <h3>
-                <Repeat size={16} />
-                {t("faultAnalytics.repeatSpans")}
-              </h3>
-              <small>{t("faultAnalytics.repeatSpansHint")}</small>
-            </header>
+          {/* Tekrarlayan aciklikar — bakim onceliklendirmesinin en dogrudan
+              girdisi. Grafik DEGIL liste: burada aranan sey "hangi aciklik"
+              ve "kac kez", ikisi de metin. */}
+          <Kart
+            Icon={Repeat}
+            baslik={t("faultAnalytics.repeatSpans")}
+            ipucu={t("faultAnalytics.repeatSpansHint")}
+          >
             {data?.repeat_spans.length ? (
               <ul className="fa-list">
                 {data.repeat_spans.map((s) => (
@@ -445,7 +457,7 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
             ) : (
               <Bos Icon={Repeat}>{t("faultAnalytics.noRepeats")}</Bos>
             )}
-          </section>
+          </Kart>
 
           {/* ---- ARALIK RISK PUANI ---------------------------------------
                "Tekrarlayan aciklikar" SAYAR; bu liste TARTAR. Bir aralikta
@@ -458,14 +470,11 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
                Anahtar CIHAZ ARALIGI (zone_code): ariza bir hattin degil,
                iki cihaz arasindaki araligin olayidir; bakim ekibi de hatta
                degil o araliga gider. ---- */}
-          <section className="fa-card">
-            <header className="fa-card-head">
-              <h3>
-                <Gauge size={16} />
-                {t("faultAnalytics.zoneScores")}
-              </h3>
-              <small>{t("faultAnalytics.zoneScoresHint")}</small>
-            </header>
+          <Kart
+            Icon={Gauge}
+            baslik={t("faultAnalytics.zoneScores")}
+            ipucu={t("faultAnalytics.zoneScoresHint")}
+          >
             {data?.zone_scores.length ? (
               <ul className="fa-list">
                 {data.zone_scores.map((z) => (
@@ -494,57 +503,13 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
             ) : (
               <Bos Icon={Gauge}>{t("faultAnalytics.noData")}</Bos>
             )}
-          </section>
-
-          {/* ---- Kural isabeti — cikarim katmanina guvenmeden ONCE
-               bakilmasi gereken sayi ---- */}
-          <section className="fa-card fa-card--third">
-            <header className="fa-card-head">
-              <h3>
-                <Gauge size={16} />
-                {t("faultAnalytics.ruleAccuracy")}
-              </h3>
-              <small>{t("faultAnalytics.ruleAccuracyHint")}</small>
-            </header>
-            {data && data.rule_accuracy.accuracy !== null ? (
-              <>
-                <div className="fa-accuracy">
-                  <strong>{yuzde(data.rule_accuracy.accuracy)}</strong>
-                  <span>
-                    {t("faultAnalytics.accuracyOf", {
-                      agreed: data.rule_accuracy.agreed,
-                      total: data.rule_accuracy.comparable
-                    })}
-                  </span>
-                </div>
-                {data.rule_accuracy.top_mismatches.length ? (
-                  <ul className="fa-mismatch">
-                    {data.rule_accuracy.top_mismatches.map((m) => (
-                      <li key={`${m.suggested}->${m.actual}`}>
-                        <span className="fa-mismatch-from">{causeLabel(m.suggested)}</span>
-                        <span aria-hidden="true">-&gt;</span>
-                        <span className="fa-mismatch-to">{causeLabel(m.actual)}</span>
-                        <strong>{m.count}</strong>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </>
-            ) : (
-              <Bos Icon={Gauge}>{t("faultAnalytics.noComparable")}</Bos>
-            )}
-          </section>
+          </Kart>
         </div>
       ) : null}
 
-      {sekme === "map" ? (
-        <HaritaVeAkis
-          accessToken={accessToken}
-          days={days}
-          analytics={data}
-          fazLabel={fazLabel}
-        />
-      ) : null}
+      {sekme === "map" ? <Harita accessToken={accessToken} analytics={data} /> : null}
+
+      {sekme === "flow" ? <ArizaAkisi analytics={data} fazLabel={fazLabel} /> : null}
 
       {sekme === "system" ? <SistemSagligi accessToken={accessToken} days={days} /> : null}
 
@@ -554,24 +519,17 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
 }
 
 // ---------------------------------------------------------------------------
-// Harita & Akis
+// Harita — TEK SORU: cografyada nerede
 // ---------------------------------------------------------------------------
 
-function HaritaVeAkis({
+function Harita({
   accessToken,
-  days,
-  analytics,
-  fazLabel
+  analytics
 }: {
   accessToken: string;
-  days: number;
   analytics: FaultAnalytics | null;
-  fazLabel: (kod: string) => string;
 }) {
   const { t } = useTranslation();
-  const { veri, hata, yukleniyor } = useBolumVerisi(
-    useCallback(() => fetchDeviceHealth(accessToken, days), [accessToken, days])
-  );
 
   /**
    * Sebeke topolojisi — isi haritasinin ZEMINI.
@@ -591,6 +549,50 @@ function HaritaVeAkis({
     [topoloji.veri]
   );
 
+  // Isi noktalari ARIZA ANALIZI yanitindan geliyor (eskiden cihaz sagligi
+  // ucundan cekiliyordu). Harita artik yalnizca topoloji icin istek atiyor;
+  // 600 cihazlik karsilastirma tablosunu ve iki agir telemetri sorgusunu
+  // bosuna odemiyor.
+  const noktalar = analytics?.fault_heatmap ?? [];
+  const haritaGosterilir = noktalar.length > 0 || cizgiler.length > 0;
+
+  return (
+    <div className="fa-grid">
+      <Kart
+        genislik="wide"
+        Icon={MapIcon}
+        baslik={t("faultAnalytics.heatmap")}
+        ipucu={t("faultAnalytics.heatmapHint")}
+      >
+        {topoloji.yukleniyor ? (
+          <Bos Icon={Loader}>{t("faultAnalytics.loading")}</Bos>
+        ) : topoloji.hata ? (
+          <p className="net-banner net-banner--bad">{topoloji.hata}</p>
+        ) : haritaGosterilir ? (
+          <Suspense fallback={<Bos Icon={Loader}>{t("faultAnalytics.loading")}</Bos>}>
+            <FaultHeatMap points={noktalar} lines={cizgiler} />
+          </Suspense>
+        ) : (
+          <Bos Icon={MapPin}>{t("faultAnalytics.noHeat")}</Bos>
+        )}
+      </Kart>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Ariza Akisi — TEK SORU: bolge -> hat -> faz, nereye akiyor
+// ---------------------------------------------------------------------------
+
+function ArizaAkisi({
+  analytics,
+  fazLabel
+}: {
+  analytics: FaultAnalytics | null;
+  fazLabel: (kod: string) => string;
+}) {
+  const { t } = useTranslation();
+
   /** Sankey dugum adi -> ekran metni. Faz dugumleri sayfanin geri kalaniyla
    *  ayni dili konussun: faz dagilimi grafigi "L1" diyorsa akis da "L1"
    *  demeli, "A" degil. */
@@ -603,68 +605,42 @@ function HaritaVeAkis({
     [fazLabel]
   );
 
-  const noktalar = veri?.fault_heatmap ?? [];
   const sankey = analytics?.sankey;
-  // Topoloji istegi hala ucuyorsa haritayi ciz-sil yapmayalim: cizgisiz
-  // acilip bir saniye sonra cizgi eklenmesi "harita atladi" gibi gorunur.
-  const haritaHazir = !yukleniyor && !topoloji.yukleniyor;
-  // Ariza yoksa bile sebeke varsa harita GOSTERILIR: "arama alani bu,
-  // burada ariza olmamis" bilgisi bos bir kutudan degerlidir.
-  const haritaGosterilir = noktalar.length > 0 || cizgiler.length > 0;
 
   return (
     <div className="fa-grid">
-      <section className="fa-card fa-card--wide">
-        <header className="fa-card-head">
-          <h3>
-            <MapIcon size={16} />
-            {t("faultAnalytics.heatmap")}
-          </h3>
-          <small>{t("faultAnalytics.heatmapHint")}</small>
-        </header>
-        {!haritaHazir ? (
-          <Bos Icon={Loader}>{t("faultAnalytics.loading")}</Bos>
-        ) : hata ? (
-          <p className="net-banner net-banner--bad">{hata}</p>
-        ) : haritaGosterilir ? (
-          <Suspense fallback={<Bos Icon={Loader}>{t("faultAnalytics.loading")}</Bos>}>
-            <FaultHeatMap points={noktalar} lines={cizgiler} />
-          </Suspense>
-        ) : (
-          <Bos Icon={MapPin}>{t("faultAnalytics.noHeat")}</Bos>
-        )}
-      </section>
-
-      <section className="fa-card fa-card--wide">
-        <header className="fa-card-head">
-          <h3>
-            <Share2 size={16} />
-            {t("faultAnalytics.sankey")}
-          </h3>
-          <small>{t("faultAnalytics.sankeyHint")}</small>
-        </header>
+      <Kart
+        genislik="wide"
+        Icon={Share2}
+        baslik={t("faultAnalytics.sankey")}
+        ipucu={t("faultAnalytics.sankeyHint")}
+      >
         {sankey && sankey.links.length ? (
+          // Kendi sekmesinde TEK BASINA: onceki duzende haritanin altinda
+          // sikisiyor ve kademe etiketleri ust uste biniyordu. Yukseklik de
+          // bu yuzden artirildi.
           <SankeyGrafigi
             nodes={sankey.nodes}
             links={sankey.links}
             etiketle={dugumEtiket}
             birim={t("faultAnalytics.faultUnit")}
+            yukseklik={470}
           />
         ) : (
           <Bos Icon={Share2}>{t("faultAnalytics.noSankey")}</Bos>
         )}
-      </section>
+      </Kart>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Sistem Sagligi
+// Sistem Sagligi — TEK SORU: saha ne zaman gurultuluydu
 // ---------------------------------------------------------------------------
 
 function SistemSagligi({ accessToken, days }: { accessToken: string; days: number }) {
-  const { t, i18n } = useTranslation();
-  const { veri, hata, yukleniyor } = useBolumVerisi(
+  const { t } = useTranslation();
+  const { veri, hata, yukleniyor } = useBolumVerisi<SystemHealth>(
     useCallback(() => fetchSystemHealth(accessToken, days), [accessToken, days])
   );
 
@@ -673,165 +649,195 @@ function SistemSagligi({ accessToken, days }: { accessToken: string; days: numbe
   if (!veri) return null;
 
   const a = veri.alarm_summary;
-  const isi = veri.alarm_heatmap;
+  const takvim = veri.alarm_calendar;
 
   return (
-    <>
-      <div className="fa-kpis">
-        <Kpi Icon={BellRing} label={t("faultAnalytics.alarmTotal")} value={a.total} />
-        <Kpi
-          Icon={Gauge}
-          label={t("faultAnalytics.alarmAck")}
-          value={a.acknowledged}
-          note={a.total > 0 ? yuzde(a.ack_ratio) : undefined}
-        />
-        <Kpi Icon={Unplug} label={t("faultAnalytics.commOutages")} value={a.comm_outages} />
+    <div className="fa-grid">
+      <Kart
+        genislik="wide"
+        Icon={CalendarDays}
+        baslik={t("faultAnalytics.alarmCalendar")}
+        ipucu={t("faultAnalytics.alarmCalendarHint")}
+        /* Alarm ozeti AYRI KART DEGIL, basligin sagindaki serh. Uc ayri KPI
+           kutusu, tek grafikli bir sekmede grafikten cok yer kapliyordu ve
+           bu sayilar zaten takvimin BAGLAMI — basrol degil. */
+        sag={
+          <span className="fa-head-stats">
+            <b>{a.total}</b> {t("faultAnalytics.alarmUnit")}
+            <i aria-hidden="true">·</i>
+            <b>{a.total > 0 ? yuzde(a.ack_ratio) : "—"}</b> {t("faultAnalytics.ackShort")}
+            <i aria-hidden="true">·</i>
+            <b>{a.comm_outages}</b> {t("faultAnalytics.outageUnit")}
+          </span>
+        }
+      >
         {/* Siniflandirilmamis kayitlar HABERLESME sayisini eksik gosterir.
             Sifirsa gosterilmez; sifir degilse SUSULMAZ. */}
         {a.unclassified > 0 ? (
-          <>
-                <Kpi
-              Icon={AlertTriangle}
-              label={t("faultAnalytics.unclassified")}
-              value={a.unclassified}
-              uyari
-            />
-          </>
+          <p className="fa-inline-warn">
+            <AlertTriangle size={13} />
+            {t("faultAnalytics.unclassifiedHint")}
+          </p>
         ) : null}
-      </div>
 
-      {a.unclassified > 0 ? (
-        <p className="net-banner net-banner--info">
-          <AlertTriangle size={16} />
-          {t("faultAnalytics.unclassifiedHint")}
-        </p>
-      ) : null}
+        {takvim.truncated ? (
+          <p className="fa-inline-warn">
+            <AlertTriangle size={13} />
+            {t("faultAnalytics.calendarTruncated", { days: takvim.days.length })}
+          </p>
+        ) : null}
 
-      <div className="fa-grid">
-        <section className="fa-card">
-          <header className="fa-card-head">
-            <h3>
-              <BellRing size={16} />
-              {t("faultAnalytics.topRules")}
-            </h3>
-            <small>{t("faultAnalytics.topRulesHint")}</small>
-          </header>
-          {veri.top_rules.length ? (
-            <ul className="fa-list">
-              {veri.top_rules.map((r) => (
-                <li key={`${r.rule_name}-${r.level}`}>
-                  <span className="fa-list-label">
-                    {r.rule_name}
-                    <em>
-                      {/* Hic onaylanmamis kural, "cok tetikliyor" kadar
-                          onemli bir sinyal — ayri bir dille soylenir. */}
-                      {r.acknowledged === 0
-                        ? t("faultAnalytics.neverAcked")
-                        : t("faultAnalytics.ackOf", {
-                            acknowledged: r.acknowledged,
-                            count: r.count
-                          })}
-                      {r.last_at ? ` · ${t("faultAnalytics.lastAt", { value: kisaTarih(r.last_at, i18n.language) })}` : ""}
-                    </em>
-                  </span>
-                  <strong
-                    className={`fa-list-count ${r.acknowledged === 0 ? "fa-list-count--hot" : ""}`}
-                  >
-                    {r.count}
-                  </strong>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <Bos Icon={BellRing}>{t("faultAnalytics.noRules")}</Bos>
-          )}
-        </section>
-
-        <section className="fa-card">
-          <header className="fa-card-head">
-            <h3>
-              <Unplug size={16} />
-              {t("faultAnalytics.flapping")}
-            </h3>
-            <small>{t("faultAnalytics.flappingHint")}</small>
-          </header>
-          {veri.flapping_devices.length ? (
-            <ul className="fa-list">
-              {veri.flapping_devices.map((d) => (
-                <li key={d.device_id}>
-                  <span className="fa-list-label">
-                    {d.name}
-                    <em>
-                      {d.code}
-                      {d.last_at
-                        ? ` · ${t("faultAnalytics.lastAt", { value: kisaTarih(d.last_at, i18n.language) })}`
-                        : ""}
-                    </em>
-                  </span>
-                  <strong className="fa-list-count fa-list-count--hot">
-                    {d.outages}
-                    <em>{t("faultAnalytics.outageUnit")}</em>
-                  </strong>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <Bos Icon={Unplug}>{t("faultAnalytics.noFlapping")}</Bos>
-          )}
-        </section>
-
-        {/* ---- Cihaz x zaman alarm yogunlugu ----
-             Ustteki iki liste "kim" der; bu matris "NE ZAMAN" der. Ikisi
-             ayri sorudur: uc ay her gun 2 alarm ile tek gunde 180 alarm
-             listede AYNI sayiya duser, burada bakista ayrilir. ---- */}
-        <section className="fa-card fa-card--wide">
-          <header className="fa-card-head">
-            <h3>
-              <Grid3x3 size={16} />
-              {t("faultAnalytics.alarmHeatmap")}
-            </h3>
-            <small>{t("faultAnalytics.alarmHeatmapHint")}</small>
-          </header>
-          {isi.cells.length ? (
-            <>
-              {/* Kesilen satirlar SESSIZCE atilmaz: "listede yok" ile
-                  "alarm uretmemis" karistirilmasin. */}
-              {isi.truncated ? (
-                <p className="fa-inline-warn">
-                  <AlertTriangle size={13} />
-                  {t("faultAnalytics.alarmHeatmapTruncated", {
-                    shown: isi.devices.length,
-                    total: isi.device_total
-                  })}
-                </p>
-              ) : null}
-              <AlarmIsiHaritasi
-                buckets={isi.buckets}
-                devices={isi.devices}
-                cells={isi.cells}
-                max={isi.max}
-                bucket={isi.bucket}
-                birim={t("faultAnalytics.alarmUnit")}
-              />
-            </>
-          ) : (
-            <Bos Icon={Grid3x3}>{t("faultAnalytics.noAlarmHeatmap")}</Bos>
-          )}
-        </section>
-      </div>
-    </>
+        {takvim.days.length ? (
+          <>
+            <AlarmTakvimi
+              days={takvim.days}
+              start={takvim.start}
+              end={takvim.end}
+              max={takvim.max}
+              birim={t("faultAnalytics.alarmUnit")}
+            />
+            <TakvimSeridi
+              max={takvim.max}
+              azLabel={t("faultAnalytics.calendarLess")}
+              cokLabel={t("faultAnalytics.calendarMore")}
+            />
+            {/* Pencerede HIC alarm yoksa bos bir takvim "her sey yolunda"
+                gibi de okunabilir, "veri gelmiyor" gibi de. Ayrimi
+                SOYLUYORUZ. */}
+            {takvim.total === 0 ? (
+              <p className="fa-cal-note">{t("faultAnalytics.calendarAllQuiet")}</p>
+            ) : null}
+          </>
+        ) : (
+          <Bos Icon={CalendarDays}>{t("faultAnalytics.noData")}</Bos>
+        )}
+      </Kart>
+    </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Cihaz Sagligi
+// Cihaz Sagligi — hangi cihaz, ve cihazlar BIRBIRINE GORE nasil
 // ---------------------------------------------------------------------------
 
+/** RSSI kovalari (dBm). SABIT ve anlamli: otomatik kova, filo daraldiginda
+ *  esikleri kaydirir ve iki pencere arasindaki grafik karsilastirilamaz
+ *  olurdu. Sinirlar modem kalite esiklerinden geliyor. */
+const RSSI_KOVALARI: { alt: number; ust: number; label: string }[] = [
+  { alt: -Infinity, ust: -105, label: "≤ -105" },
+  { alt: -105, ust: -95, label: "-105…-95" },
+  { alt: -95, ust: -85, label: "-95…-85" },
+  { alt: -85, ust: -75, label: "-85…-75" },
+  { alt: -75, ust: -65, label: "-75…-65" },
+  { alt: -65, ust: Infinity, label: "> -65" }
+];
+
+/** Batarya dusus hizi kovalari (mV/gun). `drop_per_day_v` V/gun geliyor;
+ *  sahadaki konusma dili milivolt: "gunde 4 milivolt dusuyor". */
+const BATARYA_KOVALARI: { alt: number; ust: number; label: string }[] = [
+  { alt: -Infinity, ust: 0, label: "≤ 0" },
+  { alt: 0, ust: 1, label: "0–1" },
+  { alt: 1, ust: 3, label: "1–3" },
+  { alt: 3, ust: 5, label: "3–5" },
+  { alt: 5, ust: 10, label: "5–10" },
+  { alt: 10, ust: Infinity, label: "> 10" }
+];
+
+function kovala(
+  degerler: number[],
+  kovalar: { alt: number; ust: number; label: string }[]
+): { label: string; count: number }[] {
+  return kovalar.map((k) => ({
+    label: k.label,
+    count: degerler.filter((v) => v > k.alt && v <= k.ust).length
+  }));
+}
+
+type Siralama = "alarms" | "outages" | "faults" | "avg_dbm" | "drop_per_day_v";
+
+/** Tabloda gosterilen satir sayisi. Tamami (600'e kadar) grafiklerde ve
+ *  dagilimlarda zaten var; tablo KARAR icin, tarama icin degil. */
+const TABLO_SATIR = 20;
+
 function CihazSagligi({ accessToken, days }: { accessToken: string; days: number }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const kayma = useMemo(utcKaymasiSaat, []);
-  const { veri, hata, yukleniyor } = useBolumVerisi(
+  const [sirala, setSirala] = useState<Siralama>("alarms");
+  const { veri, hata, yukleniyor } = useBolumVerisi<DeviceHealth>(
     useCallback(() => fetchDeviceHealth(accessToken, days), [accessToken, days])
+  );
+
+  const durumLabel = useCallback(
+    (kod: string) => t(`faultAnalytics.comm_${kod}`, { defaultValue: kod }),
+    [t]
+  );
+
+  const kiyas = useMemo(() => veri?.device_comparison ?? [], [veri]);
+
+  const rssiKovalari = useMemo(
+    () =>
+      kovala(
+        kiyas.map((c) => c.avg_dbm).filter((v): v is number => v != null),
+        RSSI_KOVALARI
+      ),
+    [kiyas]
+  );
+
+  const bataryaKovalari = useMemo(
+    () =>
+      kovala(
+        kiyas
+          .map((c) => c.drop_per_day_v)
+          .filter((v): v is number => v != null)
+          .map((v) => v * 1000),
+        BATARYA_KOVALARI
+      ),
+    [kiyas]
+  );
+
+  const sacilim = useMemo(
+    () =>
+      kiyas
+        .filter((c) => c.avg_dbm != null)
+        .map((c) => ({
+          code: c.code,
+          name: c.name,
+          x: c.avg_dbm as number,
+          y: c.alarms,
+          status: c.comm_status
+        })),
+    [kiyas]
+  );
+
+  const siraliKiyas = useMemo(() => {
+    // dBm'de KUCUK olan kotudur; digerlerinde BUYUK olan kotu. Tablo her
+    // zaman "en kotu ustte" okunmali, yoksa sutun degistikce anlam terse
+    // doner.
+    const yon = sirala === "avg_dbm" ? 1 : -1;
+    return [...kiyas]
+      .sort((a, b) => {
+        const av = a[sirala];
+        const bv = b[sirala];
+        // Olcusu olmayan cihaz listenin SONUNA duser; basa koymak "en kotu"
+        // sutununu bilinmeyenlerle doldururdu.
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        return (av - bv) * yon;
+      })
+      .slice(0, TABLO_SATIR);
+  }, [kiyas, sirala]);
+
+  const durumlar = useMemo(
+    () =>
+      (veri?.comm_status ?? [])
+        .map((d) => ({
+          label: durumLabel(d.status),
+          value: d.count,
+          color: HABERLESME_RENK[d.status] ?? "#94a3b8"
+        }))
+        .sort((a, b) => b.value - a.value),
+    [veri, durumLabel]
   );
 
   if (yukleniyor) return <Bos Icon={Loader}>{t("faultAnalytics.loading")}</Bos>;
@@ -840,14 +846,275 @@ function CihazSagligi({ accessToken, days }: { accessToken: string; days: number
 
   return (
     <div className="fa-grid">
-      <section className="fa-card">
-        <header className="fa-card-head">
-          <h3>
-            <BatteryLow size={16} />
-            {t("faultAnalytics.battery")}
-          </h3>
-          <small>{t("faultAnalytics.batteryHint")}</small>
-        </header>
+      {/* ---- 1) FILO SU AN NASIL ---- */}
+      <Kart
+        genislik="third"
+        Icon={Wifi}
+        baslik={t("faultAnalytics.commStatus")}
+        ipucu={t("faultAnalytics.commStatusHint")}
+      >
+        {durumlar.length ? (
+          <HalkaGrafigi
+            items={durumlar}
+            birim={t("faultAnalytics.deviceUnit")}
+            toplamLabel={t("faultAnalytics.deviceUnit")}
+          />
+        ) : (
+          <Bos Icon={Wifi}>{t("faultAnalytics.noData")}</Bos>
+        )}
+      </Kart>
+
+      {/* ---- 2) CAPRAZ SORU: zayif sinyal cok alarm uretiyor mu ---- */}
+      <Kart
+        genislik="twothird"
+        Icon={Activity}
+        baslik={t("faultAnalytics.scatter")}
+        ipucu={t("faultAnalytics.scatterHint")}
+      >
+        {sacilim.length ? (
+          <SacilimGrafigi
+            points={sacilim}
+            xLabel={t("faultAnalytics.rssiAxis")}
+            yLabel={t("faultAnalytics.alarmUnit")}
+            durumLabel={durumLabel}
+          />
+        ) : (
+          <Bos Icon={Activity}>{t("faultAnalytics.noSignalData")}</Bos>
+        )}
+      </Kart>
+
+      {/* ---- 3) FILO DAGILIMLARI — "bu cihaz mi kotu, filo mu" ---- */}
+      <Kart
+        genislik="half"
+        Icon={SignalLow}
+        baslik={t("faultAnalytics.signalDistribution")}
+        ipucu={t("faultAnalytics.signalDistributionHint")}
+      >
+        {rssiKovalari.some((k) => k.count > 0) ? (
+          <DagilimGrafigi
+            bins={rssiKovalari}
+            eksenLabel={t("faultAnalytics.rssiAxis")}
+            birim={t("faultAnalytics.deviceUnit")}
+          />
+        ) : (
+          <Bos Icon={SignalLow}>{t("faultAnalytics.noSignalData")}</Bos>
+        )}
+      </Kart>
+
+      <Kart
+        genislik="half"
+        Icon={BatteryLow}
+        baslik={t("faultAnalytics.batteryDistribution")}
+        ipucu={t("faultAnalytics.batteryDistributionHint")}
+      >
+        {bataryaKovalari.some((k) => k.count > 0) ? (
+          <DagilimGrafigi
+            bins={bataryaKovalari}
+            eksenLabel={t("faultAnalytics.batteryAxis")}
+            birim={t("faultAnalytics.deviceUnit")}
+          />
+        ) : (
+          <Bos Icon={BatteryLow}>{t("faultAnalytics.noBattery")}</Bos>
+        )}
+      </Kart>
+
+      {/* ---- 4) KARSILASTIRMA TABLOSU ----
+           Grafikler deseni verir; karar icin gereken KESIN sayilar burada.
+           Ayni zamanda grafiklerin tablo karsiligi (erisilebilirlik: renkle
+           kodlanan her sey burada metin olarak da var). */}
+      <Kart
+        genislik="wide"
+        Icon={ArrowDownUp}
+        baslik={t("faultAnalytics.comparison")}
+        ipucu={t("faultAnalytics.comparisonHint")}
+      >
+        {kiyas.length ? (
+          <div className="fa-table-wrap">
+            <table className="fa-table">
+              <thead>
+                <tr>
+                  <th scope="col">{t("faultAnalytics.colDevice")}</th>
+                  <th scope="col">{t("faultAnalytics.colStatus")}</th>
+                  {(
+                    [
+                      ["alarms", t("faultAnalytics.colAlarms")],
+                      ["outages", t("faultAnalytics.colOutages")],
+                      ["faults", t("faultAnalytics.colFaults")],
+                      ["avg_dbm", t("faultAnalytics.colRssi")],
+                      ["drop_per_day_v", t("faultAnalytics.colDrain")]
+                    ] as [Siralama, string][]
+                  ).map(([anahtar, baslik]) => (
+                    <th key={anahtar} scope="col" className="fa-th-num">
+                      <button
+                        type="button"
+                        className={`fa-sort ${sirala === anahtar ? "is-active" : ""}`}
+                        onClick={() => setSirala(anahtar)}
+                        aria-pressed={sirala === anahtar}
+                      >
+                        {baslik}
+                        <ArrowDownUp size={11} aria-hidden="true" />
+                      </button>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {siraliKiyas.map((c) => (
+                  <tr key={c.device_id}>
+                    <td>
+                      <span className="fa-td-name">{c.name}</span>
+                      <em className="fa-td-sub">{c.code}</em>
+                    </td>
+                    <td>
+                      {/* Kimlik renge TEK BASINA birakilmaz: nokta + metin. */}
+                      <span className="fa-chip">
+                        <i style={{ background: HABERLESME_RENK[c.comm_status] }} />
+                        {durumLabel(c.comm_status)}
+                      </span>
+                    </td>
+                    <td className="fa-td-num">{c.alarms}</td>
+                    <td className="fa-td-num">{c.outages}</td>
+                    <td className="fa-td-num">{c.faults}</td>
+                    {/* Olcu yoksa "—": 0 dBm "mukemmel sinyal" demektir ve
+                        tam ters okunurdu. */}
+                    <td className="fa-td-num">{c.avg_dbm ?? "—"}</td>
+                    <td className="fa-td-num">
+                      {c.drop_per_day_v != null
+                        ? `${Math.round(c.drop_per_day_v * 1000)} mV`
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {/* Kesilen satir SESSIZCE atilmaz. */}
+            {kiyas.length > siraliKiyas.length ? (
+              <p className="fa-cal-note">
+                {t("faultAnalytics.comparisonShown", {
+                  shown: siraliKiyas.length,
+                  total: kiyas.length
+                })}
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <Bos Icon={ArrowDownUp}>{t("faultAnalytics.noData")}</Bos>
+        )}
+      </Kart>
+
+      {/* ---- 5) KIM: kural ve cihaz listeleri (sistem sagligindan tasindi) ---- */}
+      <Kart
+        Icon={BellRing}
+        baslik={t("faultAnalytics.topRules")}
+        ipucu={t("faultAnalytics.topRulesHint")}
+      >
+        {veri.top_rules.length ? (
+          <ul className="fa-list">
+            {veri.top_rules.map((r) => (
+              <li key={`${r.rule_name}-${r.level}`}>
+                <span className="fa-list-label">
+                  {r.rule_name}
+                  <em>
+                    {/* Hic onaylanmamis kural, "cok tetikliyor" kadar onemli
+                        bir sinyal — ayri bir dille soylenir. */}
+                    {r.acknowledged === 0
+                      ? t("faultAnalytics.neverAcked")
+                      : t("faultAnalytics.ackOf", {
+                          acknowledged: r.acknowledged,
+                          count: r.count
+                        })}
+                    {r.last_at
+                      ? ` · ${t("faultAnalytics.lastAt", { value: kisaTarih(r.last_at, i18n.language) })}`
+                      : ""}
+                  </em>
+                </span>
+                <strong
+                  className={`fa-list-count ${r.acknowledged === 0 ? "fa-list-count--hot" : ""}`}
+                >
+                  {r.count}
+                </strong>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <Bos Icon={BellRing}>{t("faultAnalytics.noRules")}</Bos>
+        )}
+      </Kart>
+
+      <Kart
+        Icon={Unplug}
+        baslik={t("faultAnalytics.flapping")}
+        ipucu={t("faultAnalytics.flappingHint")}
+      >
+        {veri.flapping_devices.length ? (
+          <ul className="fa-list">
+            {veri.flapping_devices.map((d) => (
+              <li key={d.device_id}>
+                <span className="fa-list-label">
+                  {d.name}
+                  <em>
+                    {d.code}
+                    {d.last_at
+                      ? ` · ${t("faultAnalytics.lastAt", { value: kisaTarih(d.last_at, i18n.language) })}`
+                      : ""}
+                  </em>
+                </span>
+                <strong className="fa-list-count fa-list-count--hot">
+                  {d.outages}
+                  <em>{t("faultAnalytics.outageUnit")}</em>
+                </strong>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <Bos Icon={Unplug}>{t("faultAnalytics.noFlapping")}</Bos>
+        )}
+      </Kart>
+
+      {/* ---- 6) NE ZAMAN: cihaz x zaman alarm yogunlugu ----
+           Ustteki listeler "kim" der; bu matris "NE ZAMAN" der. Uc ay her
+           gun 2 alarm ile tek gunde 180 alarm listede AYNI sayiya duser,
+           burada bakista ayrilir. Ustelik AYNI sutunda birden cok cihaz
+           kararmissa sorun cihazlarda degil o gun yasanan ortak olaydadir. */}
+      <Kart
+        genislik="wide"
+        Icon={Grid3x3}
+        baslik={t("faultAnalytics.alarmHeatmap")}
+        ipucu={t("faultAnalytics.alarmHeatmapHint")}
+      >
+        {veri.alarm_heatmap.cells.length ? (
+          <>
+            {/* Kesilen satirlar SESSIZCE atilmaz: "listede yok" ile "alarm
+                uretmemis" karistirilmasin. */}
+            {veri.alarm_heatmap.truncated ? (
+              <p className="fa-inline-warn">
+                <AlertTriangle size={13} />
+                {t("faultAnalytics.alarmHeatmapTruncated", {
+                  shown: veri.alarm_heatmap.devices.length,
+                  total: veri.alarm_heatmap.device_total
+                })}
+              </p>
+            ) : null}
+            <AlarmIsiHaritasi
+              buckets={veri.alarm_heatmap.buckets}
+              devices={veri.alarm_heatmap.devices}
+              cells={veri.alarm_heatmap.cells}
+              max={veri.alarm_heatmap.max}
+              bucket={veri.alarm_heatmap.bucket}
+              birim={t("faultAnalytics.alarmUnit")}
+            />
+          </>
+        ) : (
+          <Bos Icon={Grid3x3}>{t("faultAnalytics.noAlarmHeatmap")}</Bos>
+        )}
+      </Kart>
+
+      {/* ---- 7) OLCUM AYRINTISI ---- */}
+      <Kart
+        Icon={BatteryLow}
+        baslik={t("faultAnalytics.battery")}
+        ipucu={t("faultAnalytics.batteryHint")}
+      >
         {veri.battery_drain.length ? (
           <ul className="fa-list">
             {veri.battery_drain.map((b) => (
@@ -878,16 +1145,13 @@ function CihazSagligi({ accessToken, days }: { accessToken: string; days: number
         ) : (
           <Bos Icon={BatteryLow}>{t("faultAnalytics.noBattery")}</Bos>
         )}
-      </section>
+      </Kart>
 
-      <section className="fa-card">
-        <header className="fa-card-head">
-          <h3>
-            <SignalLow size={16} />
-            {t("faultAnalytics.weakSignal")}
-          </h3>
-          <small>{t("faultAnalytics.weakSignalHint")}</small>
-        </header>
+      <Kart
+        Icon={SignalLow}
+        baslik={t("faultAnalytics.weakSignal")}
+        ipucu={t("faultAnalytics.weakSignalHint")}
+      >
         {veri.weak_signal.length ? (
           <ul className="fa-list">
             {veri.weak_signal.map((s) => (
@@ -908,22 +1172,20 @@ function CihazSagligi({ accessToken, days }: { accessToken: string; days: number
         ) : (
           <Bos Icon={SignalLow}>{t("faultAnalytics.noWeakSignal")}</Bos>
         )}
-      </section>
+      </Kart>
 
-      <section className="fa-card fa-card--wide">
-        <header className="fa-card-head">
-          <h3>
-            <Activity size={16} />
-            {t("faultAnalytics.hourProfile")}
-          </h3>
-          <small>{t("faultAnalytics.hourProfileHint")}</small>
-        </header>
+      <Kart
+        genislik="wide"
+        Icon={Activity}
+        baslik={t("faultAnalytics.hourProfile")}
+        ipucu={t("faultAnalytics.hourProfileHint")}
+      >
         {veri.signal_by_hour.length ? (
           <SaatProfiliGrafigi points={veri.signal_by_hour} utcOffsetHours={kayma} />
         ) : (
           <Bos Icon={Activity}>{t("faultAnalytics.noHourProfile")}</Bos>
         )}
-      </section>
+      </Kart>
     </div>
   );
 }
@@ -932,8 +1194,51 @@ function CihazSagligi({ accessToken, days }: { accessToken: string; days: number
 // Ortak parcalar
 // ---------------------------------------------------------------------------
 
-/** Tek olcu kutusu. Sayi buyuk ve tabular, etiket kucuk ve sessiz — bakis
- *  once olcuye gitsin; serh (`note`) ondan gorsel olarak ayri dursun. */
+/**
+ * Kart kabugu — baslik seridi + govde.
+ *
+ * NEDEN BILESEN: on ucten fazla kart ayni basligi ELLE kuruyordu ve zamanla
+ * ayrisiyorlardi (kiminde ikon vardi kiminde yoktu, ipucu kiminde vardi).
+ * Baslik cizgisi, ikon kutusu ve bosluklar tek yerde tanimli olunca ekran
+ * "tek sistem" gibi okunuyor — ve yeni bir kart eklemek bir satir.
+ */
+function Kart({
+  Icon,
+  baslik,
+  ipucu,
+  genislik,
+  sag,
+  children
+}: {
+  Icon: typeof TrendingUp;
+  baslik: string;
+  ipucu?: string;
+  /** Izgara genisligi. Varsayilan yarim (6/12). */
+  genislik?: "wide" | "twothird" | "half" | "third";
+  /** Basligin sagindaki serh — sayi seridi gibi. */
+  sag?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const sinif = genislik ? ` fa-card--${genislik}` : "";
+  return (
+    <section className={`fa-card${sinif}`}>
+      <header className="fa-card-head">
+        <span className="fa-card-icon" aria-hidden="true">
+          <Icon size={15} />
+        </span>
+        <span className="fa-card-titles">
+          <h3>{baslik}</h3>
+          {ipucu ? <small>{ipucu}</small> : null}
+        </span>
+        {sag ?? null}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+/** Tek olcu kutusu. Sayi tabular, etiket kucuk ve sessiz — bakis once
+ *  olcuye gitsin; serh (`note`) ondan gorsel olarak ayri dursun. */
 function Kpi({
   Icon,
   label,
@@ -949,13 +1254,17 @@ function Kpi({
 }) {
   return (
     <div className={`fa-kpi ${uyari ? "fa-kpi--warn" : ""}`}>
-      <span className="fa-kpi-icon">
-        <Icon size={17} />
-      </span>
       <span className="fa-kpi-body">
-        <span className="fa-kpi-label">{label}</span>
-        <strong className="fa-kpi-value">{value}</strong>
-        {note ? <em className="fa-kpi-note">{note}</em> : null}
+        <span className="fa-kpi-label">
+          <Icon size={12} />
+          {label}
+        </span>
+        {/* Sayi ile serh AYNI satirda: alt alta olduklarinda serit iki kat
+            yer kapliyordu ve serh sayiyla ayni agirlikta okunuyordu. */}
+        <span className="fa-kpi-line">
+          <strong className="fa-kpi-value">{value}</strong>
+          {note ? <em className="fa-kpi-note">{note}</em> : null}
+        </span>
       </span>
     </div>
   );

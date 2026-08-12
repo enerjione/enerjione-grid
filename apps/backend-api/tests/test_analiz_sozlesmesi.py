@@ -118,8 +118,12 @@ def _ust_duzey_alanlar(govde: str) -> set[str]:
     return alanlar
 
 
-def _alt_blok_alanlari(govde: str, alan: str) -> set[str]:
-    """`alan: { ... }` ya da `alan: { ... }[]` blogunun alan adlari."""
+def _alt_blok_metni(govde: str, alan: str) -> str:
+    """`alan: { ... }` ya da `alan: { ... }[]` blogunun HAM govdesi.
+
+    Ic ice bloklarda (`alarm_calendar.days[]`) once dis blok metni alinip
+    sonra icinden alt blok cikarilabilsin diye ayri duruyor.
+    """
     m = re.search(rf"(?m)^\s*{alan}\??\s*:\s*\{{", govde)
     assert m, f"alt blok bulunamadi: {alan}"
     basla = m.end() - 1
@@ -130,8 +134,13 @@ def _alt_blok_alanlari(govde: str, alan: str) -> set[str]:
         elif govde[i] == "}":
             derinlik -= 1
             if derinlik == 0:
-                return _ust_duzey_alanlar(govde[basla + 1 : i])
+                return govde[basla + 1 : i]
     raise AssertionError(f"`{alan}` blogu kapanmiyor")
+
+
+def _alt_blok_alanlari(govde: str, alan: str) -> set[str]:
+    """`alan: { ... }` ya da `alan: { ... }[]` blogunun alan adlari."""
+    return _ust_duzey_alanlar(_alt_blok_metni(govde, alan))
 
 
 def _esitle(ad: str, gelen: dict, beklenen: set[str]) -> None:
@@ -225,17 +234,33 @@ def test_sistem_sagligi_yaniti_TS_TIPIYLE_ayni_alanlari_tasir(db):
         gelen["alarm_summary"],
         _alt_blok_alanlari(govde, "alarm_summary"),
     )
-    # Isi matrisi bos veride de TAM bicimde doner; arayuz `cells.length`
-    # kontrolunden once `buckets`/`truncated` okuyor.
+    # Takvim bos veride de TAM bicimde doner; arayuz `days.length`
+    # kontrolunden once `max`/`truncated` okuyor.
     _esitle(
-        "SystemHealth.alarm_heatmap",
-        gelen["alarm_heatmap"],
-        _alt_blok_alanlari(govde, "alarm_heatmap"),
+        "SystemHealth.alarm_calendar",
+        gelen["alarm_calendar"],
+        _alt_blok_alanlari(govde, "alarm_calendar"),
     )
 
 
-def test_sistem_sagligi_liste_ogeleri_TS_ile_ayni(db):
-    """Bos veride liste ogesi cikmaz; ogenin BICIMI yine de kilitlenmeli."""
+def test_takvim_gunu_TS_ile_ayni(db):
+    govde = _tip_govdesi("SystemHealth")
+    gelen = fault_system_health(days=90, current_user=_muhendis(db), db=db)
+    gunler = gelen["alarm_calendar"]["days"]
+    assert gunler, "takvim bos veride de gun uretmeli (bos gun = 0'li kare)"
+    _esitle(
+        "SystemHealth.alarm_calendar.days[]",
+        gunler[0],
+        _alt_blok_alanlari(_alt_blok_metni(govde, "alarm_calendar"), "days"),
+    )
+
+
+def test_cihaz_sagligi_liste_ogeleri_TS_ile_ayni(db):
+    """Bos veride liste ogesi cikmaz; ogenin BICIMI yine de kilitlenmeli.
+
+    Kural siralamasi ve kopan cihazlar SISTEM SAGLIGINDAN cihaz sagligina
+    tasindi; test de onlarin yeni evinde durur.
+    """
     from datetime import datetime, timedelta, timezone
 
     from app.models.alarm import AlarmEvent
@@ -268,17 +293,41 @@ def test_sistem_sagligi_liste_ogeleri_TS_ile_ayni(db):
     )
     db.flush()
 
-    govde = _tip_govdesi("SystemHealth")
-    gelen = fault_system_health(days=90, current_user=_muhendis(db), db=db)
+    govde = _tip_govdesi("DeviceHealth")
+    gelen = fault_device_health(days=90, current_user=_muhendis(db), db=db)
 
     assert gelen["top_rules"], "kural alarmi eklendi ama listeye girmedi"
-    _esitle("SystemHealth.top_rules[]", gelen["top_rules"][0], _alt_blok_alanlari(govde, "top_rules"))
+    _esitle("DeviceHealth.top_rules[]", gelen["top_rules"][0], _alt_blok_alanlari(govde, "top_rules"))
 
     assert gelen["flapping_devices"], "haberlesme alarmi eklendi ama listeye girmedi"
     _esitle(
-        "SystemHealth.flapping_devices[]",
+        "DeviceHealth.flapping_devices[]",
         gelen["flapping_devices"][0],
         _alt_blok_alanlari(govde, "flapping_devices"),
+    )
+
+    # Karsilastirma satiri: HIC alarm uretmemis cihaz da gelmeli, yoksa
+    # dagilim yalnizca sorunlulardan olusur ve filo oldugundan kotu gorunur.
+    assert gelen["device_comparison"], "cihaz eklendi ama karsilastirmaya girmedi"
+    _esitle(
+        "DeviceHealth.device_comparison[]",
+        gelen["device_comparison"][0],
+        _alt_blok_alanlari(govde, "device_comparison"),
+    )
+
+    assert gelen["comm_status"], "cihaz var ama haberlesme dagilimi bos"
+    _esitle(
+        "DeviceHealth.comm_status[]",
+        gelen["comm_status"][0],
+        _alt_blok_alanlari(govde, "comm_status"),
+    )
+
+    # `alarm_heatmap` ayri bir TS tipine (AlarmHeatmap) baglandi; bos veride
+    # de TAM bicimde doner.
+    _esitle(
+        "DeviceHealth.alarm_heatmap",
+        gelen["alarm_heatmap"],
+        _ust_duzey_alanlar(_tip_govdesi("AlarmHeatmap")),
     )
 
 
@@ -327,11 +376,14 @@ def test_isi_haritasi_ogesi_TS_ile_ayni(db):
     )
     db.flush()
 
-    govde = _tip_govdesi("DeviceHealth")
+    # Islev kendi modulunde kaldi; yaniti artik ARIZA ANALIZI ucundan
+    # (`FaultAnalytics.fault_heatmap`) doner — cihaz sagligindan degil.
+    # Harita sekmesi boylece ikinci bir istek atmiyor.
+    govde = _tip_govdesi("FaultAnalytics")
     noktalar = dsa.ariza_yogunlugu(db, days=365, visible_line_ids=None)
     assert noktalar, "konumlu ariza eklendi ama isi haritasina girmedi"
     _esitle(
-        "DeviceHealth.fault_heatmap[]",
+        "FaultAnalytics.fault_heatmap[]",
         noktalar[0],
         _alt_blok_alanlari(govde, "fault_heatmap"),
     )

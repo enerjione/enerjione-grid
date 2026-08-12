@@ -545,7 +545,27 @@ def tum_analiz(
         # Bolge -> Hat -> Faz akisi. Uc ayri cubuk grafiginin gostermedigi
         # sey: arizalarin NEREDE toplandigi.
         "sankey": sankey_akisi(db, days=days, visible_line_ids=visible_line_ids),
+        # Cografi isi katmani. CIHAZ SAGLIGINDAN BURAYA TASINDI: bu bir ariza
+        # cografyasi (FaultEvent + Pole), cihaz olcumu degil. Yanlis uctayken
+        # harita sekmesi yalnizca bu alan icin cihaz sagligini cagiriyor ve
+        # 600 cihazlik karsilastirma tablosunu, iki agir telemetri sorgusunu
+        # bosuna odetiyordu. Islev kendi modulunde kaldi; yalnizca baglanti
+        # tasindi.
+        "fault_heatmap": _ariza_cografyasi(db, days=days, visible_line_ids=visible_line_ids),
     }
+
+
+def _ariza_cografyasi(
+    db: Session, *, days: int, visible_line_ids: set[int] | None
+) -> list[dict]:
+    """`device_health_analytics.ariza_yogunlugu` sarmalayicisi.
+
+    Modul-seviyesi import DONGU yaratirdi (o modul de bu moduldeki alarm
+    sayimlarini cagiriyor); bu yuzden cagri anindadir.
+    """
+    from app.services.device_health_analytics import ariza_yogunlugu
+
+    return ariza_yogunlugu(db, days=days, visible_line_ids=visible_line_ids)
 
 
 # ===========================================================================
@@ -792,6 +812,91 @@ def haberlesme_kararsizligi(
     ]
 
 
+def haberlesme_durumu_dagilimi(
+    db: Session, *, visible_device_ids: set[int] | None
+) -> list[dict]:
+    """Filonun ANLIK haberlesme durumu dagilimi (online / offline / unknown).
+
+    Pencereden BAGIMSIZ: bu bir gecmis sayimi degil, su ANDAKI durum.
+    "Son 365 gunde 12 kesinti oldu" ile "su an 12 cihaz kopuk" bambaska iki
+    sey; ikincisi vardiya baslangicinda bakilan sayidir.
+
+    Alarm uretmemis cihazlar da SAYILIR — sayim `devices` tablosundan gelir,
+    alarm kayitlarindan degil. Alarmdan turetilseydi hic sorun cikarmamis
+    (yani en saglikli) cihazlar dagilimda hic gorunmezdi.
+    """
+    stmt = select(Device.communication_status, func.count()).group_by(
+        Device.communication_status
+    )
+    if visible_device_ids is not None:
+        if not visible_device_ids:
+            return []
+        stmt = stmt.where(Device.id.in_(visible_device_ids))
+    # Sanal set kayitlari FIZIKSEL cihaz degildir (bkz. device_kit_service);
+    # filo sayimina girerlerse ayni donanim iki kez sayilir.
+    stmt = stmt.where(Device.parent_device_id.is_(None))
+    rows = db.execute(stmt).all()
+    return [
+        {"status": str(getattr(r[0], "value", r[0]) or "unknown"), "count": int(r[1])}
+        for r in rows
+    ]
+
+
+def cihaz_alarm_sayilari(
+    db: Session, *, days: int, visible_device_ids: set[int] | None
+) -> dict[int, dict]:
+    """Cihaz basina alarm ve kesinti sayisi — karsilastirma tablosunun girdisi.
+
+    Kural alarmi ile haberlesme kesintisi AYRI sayilir: ikisini toplamak
+    "cok alarm ureten cihaz" ile "cok kopan cihaz"i tek sayida eritirdi ve
+    bunlar farkli mudahale gerektirir (esik ayari vs. anten/modem).
+    """
+    base = _alarm_temel(days, visible_device_ids).subquery()
+    a = base.c
+    rows = db.execute(
+        select(
+            a.device_id,
+            func.sum(case((func.coalesce(a.kind, "rule") != "comm_loss", 1), else_=0)),
+            func.sum(case((a.kind == "comm_loss", 1), else_=0)),
+            func.max(a.created_at),
+        )
+        .select_from(base)
+        .where(a.device_id.is_not(None))
+        .group_by(a.device_id)
+    ).all()
+    return {
+        int(r[0]): {
+            "alarms": int(r[1] or 0),
+            "outages": int(r[2] or 0),
+            "last_alarm_at": r[3],
+        }
+        for r in rows
+    }
+
+
+def cihaz_ariza_sayilari(
+    db: Session, *, days: int, visible_line_ids: set[int] | None
+) -> dict[int, int]:
+    """Cihaz basina ariza sayisi — `last_red_device_id` uzerinden.
+
+    NEDEN "SON KIRMIZI": bir ariza bir ARALIKTIR ve iki cihaz arasinda
+    kalir. Aralikin baslangicini belirleyen cihaz son kirmizi goren
+    cihazdir; ariza o cihazin ASAGISINDADIR. Iki uca birden yazmak her
+    arizayi iki kez saydirirdi.
+    """
+    stmt = (
+        select(FaultEvent.last_red_device_id, func.count())
+        .where(FaultEvent.opened_at >= _window_start(days))
+        .where(FaultEvent.last_red_device_id.is_not(None))
+        .group_by(FaultEvent.last_red_device_id)
+    )
+    if visible_line_ids is not None:
+        if not visible_line_ids:
+            return {}
+        stmt = stmt.where(FaultEvent.line_id.in_(visible_line_ids))
+    return {int(r[0]): int(r[1]) for r in db.execute(stmt).all()}
+
+
 def alarm_ozeti(
     db: Session, *, days: int, visible_device_ids: set[int] | None
 ) -> dict:
@@ -827,21 +932,92 @@ def alarm_ozeti(
     }
 
 
+#: Takvimde cizilecek EN FAZLA gun. Uc yillik pencere 1095 kare demek;
+#: GitHub'in yillik gorunumu 53 sutundur ve okunabilirligin siniri oradadir.
+#: Tavan asilirsa pencerenin SON gunleri gosterilir (eskisi degil) —
+#: operatorun sordugu sey her zaman "son donemde ne oldu".
+CALENDAR_MAX_DAYS = 371
+
+
+def alarm_takvimi(
+    db: Session, *, days: int, visible_device_ids: set[int] | None
+) -> dict:
+    """Gun gun alarm sikligi — GitHub katki takvimi bicimi.
+
+    NEDEN CIHAZ x ZAMAN MATRISI DEGIL
+    ---------------------------------
+    Matris "hangi cihaz" ve "ne zaman" sorularini AYNI ANDA cevaplar ve
+    ikisini de yariya kirpar: 25 satirlik tavan yuzunden filonun geri kalani
+    gorunmez, sutunlar da yalnizca VERI OLAN gunlerde acildigi icin iki
+    gunluk bir veri sonsuza kadar "iki sutunluk" bir grafik uretir. Ekranda
+    sahanin ritmi degil, veri tabaninin sekli gorunur.
+
+    Takvim tek bir soruyu tam cevaplar: SAHA NE ZAMAN GURULTULUYDU. Bos gun
+    de kare acar — sessiz gecen bir hafta, grafikte gercekten bir hafta
+    genisligindedir. Yogunluk koyulukla okunur, tarih hizasi haftalarla.
+
+    BOS GUN ILE VERI OLMAYAN GUN AYNI DEGIL: pencere basi kurulumun
+    oncesine dusuyorsa o gunler de 0 gorunur. Bunu ayirmak icin yanit
+    `first_alarm_at` tasir; arayuz oncesini soluk cizer.
+    """
+    base = _alarm_temel(days, visible_device_ids).subquery()
+    a = base.c
+
+    kova = _kova_ifadesi(db, a.created_at, True)
+    satirlar = db.execute(
+        select(kova.label("gun"), func.count().label("adet"))
+        .select_from(base)
+        .group_by(kova)
+    ).all()
+    sayim = {str(r[0]): int(r[1]) for r in satirlar}
+
+    # Kovalar VERIDEN degil TAKVIMDEN uretilir — bos gunler de sutun acsin.
+    # `_window_start` ile ayni pencere; gun sinirina yuvarlanir ki "bugun"
+    # her zaman son kare olsun.
+    bugun = datetime.now(timezone.utc).date()
+    uzunluk = min(max(1, days), CALENDAR_MAX_DAYS)
+    ilk_gun = bugun - timedelta(days=uzunluk - 1)
+
+    gunler: list[dict] = []
+    en_cok = 0
+    toplam = 0
+    for i in range(uzunluk):
+        g = ilk_gun + timedelta(days=i)
+        adet = sayim.get(g.isoformat(), 0)
+        en_cok = max(en_cok, adet)
+        toplam += adet
+        gunler.append({"date": g.isoformat(), "count": adet})
+
+    ilk_alarm = db.scalar(select(func.min(a.created_at)).select_from(base))
+    return {
+        "start": ilk_gun.isoformat(),
+        "end": bugun.isoformat(),
+        "days": gunler,
+        "max": en_cok,
+        "total": toplam,
+        # Pencere kurulumun oncesine uzaniyorsa "0 alarm" ile "veri yok"
+        # ayrilabilsin diye. None = pencerede hic alarm yok.
+        "first_alarm_at": ilk_alarm,
+        # Pencere tavana takildiysa arayuz bunu SOYLEMELI; aksi halde
+        # "365 gun sectim ama 371 kare var" gibi sessiz bir sapma olurdu.
+        "truncated": days > CALENDAR_MAX_DAYS,
+    }
+
+
 def sistem_sagligi(
     db: Session, *, days: int = DEFAULT_WINDOW_DAYS, visible_device_ids: set[int] | None
 ) -> dict:
-    """Alarm sikligi + haberlesme kararliligi + cihaz x zaman yogunlugu."""
+    """Alarm ozeti + gun gun alarm sikligi (takvim).
+
+    KURAL SIRALAMASI VE KOPAN CIHAZLAR BURADAN CIKTI: ikisi de CIHAZ
+    duzeyinde sorular ve artik cihaz sagligi ucundan doner
+    (`/faults/device-health`). Burada kalmalari, ayni ekranin iki sekmesinin
+    ayni sorguyu iki kez kosturmasi demekti.
+    """
     return {
         "window_days": days,
         "alarm_summary": alarm_ozeti(db, days=days, visible_device_ids=visible_device_ids),
-        "top_rules": alarm_sikligi(db, days=days, visible_device_ids=visible_device_ids),
-        "flapping_devices": haberlesme_kararsizligi(
-            db, days=days, visible_device_ids=visible_device_ids
-        ),
-        # Ayni uctan doner: ucu de AYNI pencere ve AYNI kapsam uzerinde
-        # hesaplaniyor; ayri istek olsaydi ekranin bir parcasi digerinden
-        # farkli bir donemi gosterebilirdi.
-        "alarm_heatmap": alarm_isi_haritasi(
+        "alarm_calendar": alarm_takvimi(
             db, days=days, visible_device_ids=visible_device_ids
         ),
     }

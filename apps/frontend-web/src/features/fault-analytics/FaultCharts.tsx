@@ -14,14 +14,30 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import ReactECharts from "echarts-for-react/lib/core";
 import * as echarts from "echarts/core";
-import { BarChart, HeatmapChart, LineChart, SankeyChart } from "echarts/charts";
-import { GridComponent, TooltipComponent, VisualMapComponent } from "echarts/components";
+import {
+  BarChart,
+  HeatmapChart,
+  LineChart,
+  PieChart,
+  SankeyChart,
+  ScatterChart
+} from "echarts/charts";
+import {
+  CalendarComponent,
+  GridComponent,
+  LegendComponent,
+  TooltipComponent,
+  VisualMapComponent
+} from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 
 import {
   DURUM,
   FAZ_RENK,
+  HABERLESME_RENK,
   KATEGORIK,
+  TAKVIM_BOS,
+  TAKVIM_RAMPA,
   TEK_SERI,
   cubuk,
   degerEkseni,
@@ -38,7 +54,14 @@ echarts.use([
   // Cihaz x zaman alarm yogunlugu; cografi isi haritasi (Leaflet canvas)
   // ile karistirilmasin — bu matris, o cografya.
   HeatmapChart,
+  // Filo dagilimlari: haberlesme durumu (halka) ve sinyal/alarm sacilimi.
+  PieChart,
+  ScatterChart,
   GridComponent,
+  // Takvim yerlesimi (GitHub katki gorunumu) echarts'in kendi bileseni;
+  // hafta/gun izgarasini elle hesaplamak gerekmiyor.
+  CalendarComponent,
+  LegendComponent,
   TooltipComponent,
   VisualMapComponent,
   CanvasRenderer
@@ -400,6 +423,403 @@ export function SaatProfiliGrafigi({
       echarts={echarts}
       option={option}
       style={{ height: yukseklik, width: "100%" }}
+      opts={{ renderer: "canvas" }}
+      notMerge
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Alarm takvimi — GitHub katki gorunumu
+// ---------------------------------------------------------------------------
+
+type TakvimProps = {
+  /** Kronolojik ve KESINTISIZ gunler; bos gun de 0 ile gelir. */
+  days: { date: string; count: number }[];
+  /** `YYYY-MM-DD` — takvim araligi. */
+  start: string;
+  end: string;
+  max: number;
+  birim: string;
+};
+
+/** Sayiyi 5 kademeye ayirir: 0 ayri, kalani rampanin dort adimi.
+ *
+ *  Esikler MAKSIMUMA gore orantili; sabit esik (1/3/5/10) bir sahada tum
+ *  kareleri en koyu, digerinde hepsini en acik yapardi. Orantili esik
+ *  "bu sahanin kendi olceginde yogun mu" sorusunu cevaplar. */
+function takvimKademeleri(max: number): { min: number; max?: number; color: string }[] {
+  const t = Math.max(1, max);
+  const k1 = Math.max(1, Math.ceil(t * 0.25));
+  const k2 = Math.max(k1 + 1, Math.ceil(t * 0.5));
+  const k3 = Math.max(k2 + 1, Math.ceil(t * 0.75));
+  return [
+    // "Alarm yok" rampanin en acik adimi DEGIL, ayri bir notr renk:
+    // sessiz bir gun ile "en az alarmli" gun ayni gorunmemeli.
+    { min: 0, max: 0, color: TAKVIM_BOS },
+    { min: 1, max: k1, color: TAKVIM_RAMPA[0] },
+    { min: k1 + 1, max: k2, color: TAKVIM_RAMPA[1] },
+    { min: k2 + 1, max: k3, color: TAKVIM_RAMPA[2] },
+    { min: k3 + 1, color: TAKVIM_RAMPA[3] }
+  ];
+}
+
+/**
+ * Gun gun alarm sikligi — GitHub'in katki takvimi bicimi.
+ *
+ * NEDEN BU BICIM: sorulan sey "SAHA NE ZAMAN GURULTULUYDU". Cubuk grafigi
+ * bunu gune indirir ama haftalik/aylik ritmi (her pazartesi, her ayin ilk
+ * haftasi) gostermez; takvim izgarasi ritmi konumdan okutur. Bos gun de
+ * kare acar — sessiz gecen bir hafta grafikte gercekten bir hafta
+ * genisligindedir, veri olmadigi icin kaybolmaz.
+ *
+ * ETKILESIM: her kare kendi ipucunu tasir (tarih + kesin adet). Koyuluk
+ * deseni verir, isaretci SAYIYI verir; goz kestirmek zorunda kalmaz.
+ */
+export function AlarmTakvimi({ days, start, end, max, birim }: TakvimProps) {
+  const { i18n } = useTranslation();
+  const option = useMemo(() => {
+    const kademeler = takvimKademeleri(max);
+    const tr = i18n.language?.startsWith("tr");
+    // echarts `nameMap` dizileri PAZAR'dan baslar; `firstDay: 1` yalnizca
+    // cizim sirasini kaydirir, dizinin sirasini degil.
+    const gunAdlari = tr
+      ? ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"]
+      : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const ayAdlari = tr
+      ? ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"]
+      : ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return {
+      tooltip: {
+        ...ipucu,
+        trigger: "item",
+        formatter: (p: { value: [string, number] }) => {
+          const [tarih, adet] = p.value;
+          const d = new Date(`${tarih}T00:00:00`);
+          const bicim = Number.isNaN(d.getTime())
+            ? tarih
+            : d.toLocaleDateString(i18n.language, {
+                day: "2-digit",
+                month: "short",
+                year: "numeric"
+              });
+          return `<b>${bicim}</b><br/>${adet} ${birim}`;
+        }
+      },
+      visualMap: {
+        type: "piecewise",
+        // Kendi seridimizi HTML'de ciziyoruz (GitHub'daki "az -> cok"
+        // serridi gibi); echarts'inki dikey yer kapliyor ve takvimi
+        // daraltiyor.
+        show: false,
+        pieces: kademeler,
+        // Veride olmayan gun (aralik disi) hic boyanmaz.
+        outOfRange: { color: "transparent" }
+      },
+      calendar: {
+        top: 26,
+        left: 34,
+        right: 8,
+        bottom: 6,
+        cellSize: ["auto", 14],
+        range: [start, end],
+        splitLine: { show: false },
+        itemStyle: { color: "transparent", borderWidth: 3, borderColor: "#fff" },
+        yearLabel: { show: false },
+        dayLabel: {
+          nameMap: gunAdlari,
+          color: "#94a3b8",
+          fontSize: 10,
+          // Hafta PAZARTESI baslar — saha vardiyasi da oyle.
+          firstDay: 1
+        },
+        monthLabel: {
+          nameMap: ayAdlari,
+          color: "#94a3b8",
+          fontSize: 10.5
+        }
+      },
+      series: [
+        {
+          type: "heatmap",
+          coordinateSystem: "calendar",
+          data: days.map((g) => [g.date, g.count]),
+          itemStyle: { borderRadius: 2, borderColor: "#fff", borderWidth: 2 },
+          emphasis: { itemStyle: { borderColor: "#0f172a", borderWidth: 1.5 } }
+        }
+      ]
+    };
+  }, [days, start, end, max, birim, i18n.language]);
+
+  // Yukseklik hafta sayisindan BAGIMSIZ: takvim yatay uzar, dikeyde her
+  // zaman 7 satirdir. Sabit yukseklik, pencere degisince grafigin
+  // ziplamasini onler.
+  return (
+    <ReactECharts
+      echarts={echarts}
+      option={option}
+      style={{ height: 168, width: "100%" }}
+      opts={{ renderer: "canvas" }}
+      notMerge
+    />
+  );
+}
+
+/** Takvimin altindaki "az -> cok" seridi. GitHub'daki ile ayni is: koyuluk
+ *  olceginin ne anlama geldigini renk kodunu ezberletmeden soyler. */
+export function TakvimSeridi({ max, azLabel, cokLabel }: {
+  max: number;
+  azLabel: string;
+  cokLabel: string;
+}) {
+  const kademeler = takvimKademeleri(max);
+  return (
+    <div className="fa-cal-legend">
+      <span>{azLabel}</span>
+      {kademeler.map((k) => (
+        <i key={k.color} style={{ background: k.color }} aria-hidden="true" />
+      ))}
+      <span>{cokLabel}</span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Filo dagilimlari
+// ---------------------------------------------------------------------------
+
+type HalkaProps = {
+  items: { label: string; value: number; color: string }[];
+  birim: string;
+  /** Ortada gosterilecek toplam. */
+  toplamLabel: string;
+};
+
+/**
+ * Haberlesme durumu dagilimi — halka.
+ *
+ * NEDEN HALKA, CUBUK DEGIL: burada sorulan sey siralama degil PAY. "Filonun
+ * ne kadari su an ayakta" bir butun-parca sorusudur ve uc dilimde halka bunu
+ * cubuktan daha dogrudan okutur. Uc kategoriyi asmaz — asaydi cubuga
+ * gecmek gerekirdi.
+ *
+ * Kimlik renge TEK BASINA birakilmaz: her dilimin adi ve adedi lejantta
+ * yazili (bkz. HABERLESME_RENK notu).
+ */
+export function HalkaGrafigi({ items, birim, toplamLabel }: HalkaProps) {
+  const option = useMemo(() => {
+    const toplam = items.reduce((s, x) => s + x.value, 0);
+    return {
+      tooltip: {
+        ...ipucu,
+        trigger: "item",
+        formatter: (p: { name: string; value: number; percent: number }) =>
+          `<b>${p.name}</b><br/>${p.value} ${birim} · %${p.percent}`
+      },
+      legend: {
+        orient: "vertical",
+        right: 4,
+        top: "middle",
+        itemWidth: 9,
+        itemHeight: 9,
+        icon: "circle",
+        textStyle: { color: "#475569", fontSize: 11.5 },
+        formatter: (ad: string) => {
+          const x = items.find((i) => i.label === ad);
+          return x ? `${ad}  ${x.value}` : ad;
+        }
+      },
+      series: [
+        {
+          type: "pie",
+          radius: ["58%", "82%"],
+          center: ["32%", "50%"],
+          avoidLabelOverlap: true,
+          // Dilim etiketleri halkanin ORTASINDA toplaniyor: kucuk dilimlerde
+          // disari tasan etiket cizgileri kartin yarisini yerdi.
+          label: {
+            show: true,
+            position: "center",
+            formatter: () => `{a|${toplam}}\n{b|${toplamLabel}}`,
+            rich: {
+              a: { fontSize: 22, fontWeight: 700, color: "#0f172a" },
+              b: { fontSize: 10.5, color: "#94a3b8", padding: [3, 0, 0, 0] }
+            }
+          },
+          emphasis: { label: { show: true }, scaleSize: 4 },
+          labelLine: { show: false },
+          // 2px zemin bosugu: bitisik dilimler birbirine yapismasin.
+          itemStyle: { borderColor: "#fff", borderWidth: 2 },
+          data: items.map((x) => ({
+            name: x.label,
+            value: x.value,
+            itemStyle: { color: x.color }
+          }))
+        }
+      ]
+    };
+  }, [items, birim, toplamLabel]);
+
+  return (
+    <ReactECharts
+      echarts={echarts}
+      option={option}
+      style={{ height: 190, width: "100%" }}
+      opts={{ renderer: "canvas" }}
+      notMerge
+    />
+  );
+}
+
+type DagilimProps = {
+  /** Kova etiketi + o kovaya dusen cihaz sayisi. */
+  bins: { label: string; count: number }[];
+  eksenLabel: string;
+  birim: string;
+};
+
+/**
+ * Filo dagilimi — histogram.
+ *
+ * NEDEN LISTE YETMIYOR: "en zayif 10 cihaz" listesi her zaman doludur; saha
+ * mukemmel olsa bile bir "en kotu 10" vardir. Bu liste tek basina okundugunda
+ * her kurulum sorunlu gorunur. Histogram sorunun SEKLINI verir: filo tek
+ * tepede mi toplanmis (tekil arizali cihazlar), yoksa iki tepeye mi ayrilmis
+ * (sistematik bir bolge sorunu).
+ */
+export function DagilimGrafigi({ bins, eksenLabel, birim }: DagilimProps) {
+  const option = useMemo(
+    () => ({
+      grid: izgara(40, 14, 14, 40),
+      tooltip: {
+        ...ipucu,
+        trigger: "axis",
+        axisPointer: { type: "shadow" },
+        formatter: (ps: { name: string; value: number }[]) =>
+          `<b>${ps[0]?.name}</b> ${eksenLabel}<br/>${ps[0]?.value} ${birim}`
+      },
+      xAxis: {
+        ...kategoriEkseni,
+        data: bins.map((b) => b.label),
+        axisLabel: { color: "#94a3b8", fontSize: 10, hideOverlap: true }
+      },
+      yAxis: { ...degerEkseni, minInterval: 1 },
+      series: [
+        {
+          type: "bar",
+          data: bins.map((b) => b.count),
+          barMaxWidth: 44,
+          // Histogramda kovalar BITISIKTIR (araliklar sureklidir); 2px'lik
+          // zemin bosugu ayrimi verir, buyuk bosluk "kategorik" yalani soyler.
+          barCategoryGap: "2%",
+          itemStyle: { color: TEK_SERI, borderRadius: [4, 4, 0, 0] }
+        }
+      ]
+    }),
+    [bins, eksenLabel, birim]
+  );
+
+  return (
+    <ReactECharts
+      echarts={echarts}
+      option={option}
+      style={{ height: 200, width: "100%" }}
+      opts={{ renderer: "canvas" }}
+      notMerge
+    />
+  );
+}
+
+type SacilimProps = {
+  points: {
+    code: string;
+    name: string;
+    x: number;
+    y: number;
+    status: string;
+  }[];
+  xLabel: string;
+  yLabel: string;
+  /** Durum kodu -> ekran metni (lejant ve ipucu icin). */
+  durumLabel: (kod: string) => string;
+};
+
+/**
+ * Sinyal x alarm sacilimi — CAPRAZ soru.
+ *
+ * Ekrandaki listeler tek olcude "en kotu"yu verir ve aralarinda baglanti
+ * kurdurmaz. Asil karar ise capraz sorudan cikar: sinyali zayif cihazlar
+ * ayni zamanda cok mu alarm uretiyor?
+ *   * Evet (sol ust yogunlasma) -> sorun ESIKTE degil ANTEN/MODEMDE.
+ *   * Hayir (dagimik)           -> iki ayri is emri gerekir.
+ * Bu deseni iki ayri siralama listesi HIC gostermez.
+ *
+ * X ekseni RSSI: negatif ve 0'a yakini iyi. Sola gidildikce kotulesir,
+ * yani "sol ust" en sorunlu koseyi verir.
+ */
+export function SacilimGrafigi({ points, xLabel, yLabel, durumLabel }: SacilimProps) {
+  const option = useMemo(() => {
+    const durumlar = [...new Set(points.map((p) => p.status))].sort();
+    return {
+      grid: izgara(44, 14, 18, 44),
+      tooltip: {
+        ...ipucu,
+        trigger: "item",
+        formatter: (p: { data: { d: SacilimProps["points"][number] } }) => {
+          const d = p.data.d;
+          return `<b>${d.name}</b><br/>${d.code} · ${durumLabel(d.status)}<br/>${
+            d.x
+          } dBm · ${d.y} ${yLabel}`;
+        }
+      },
+      legend: {
+        top: 0,
+        right: 0,
+        itemWidth: 9,
+        itemHeight: 9,
+        icon: "circle",
+        textStyle: { color: "#475569", fontSize: 11 }
+      },
+      xAxis: {
+        ...degerEkseni,
+        name: xLabel,
+        nameLocation: "middle",
+        nameGap: 26,
+        nameTextStyle: { color: "#94a3b8", fontSize: 10.5 },
+        scale: true
+      },
+      yAxis: {
+        ...degerEkseni,
+        name: yLabel,
+        nameLocation: "middle",
+        nameGap: 30,
+        nameTextStyle: { color: "#94a3b8", fontSize: 10.5 },
+        minInterval: 1
+      },
+      series: durumlar.map((durum) => ({
+        type: "scatter",
+        name: durumLabel(durum),
+        // >=8px isaretci: daha kucugu dokunmatikte hedeflenemiyor.
+        symbolSize: 10,
+        data: points
+          .filter((p) => p.status === durum)
+          .map((p) => ({ value: [p.x, p.y], d: p })),
+        itemStyle: {
+          color: HABERLESME_RENK[durum] ?? "#94a3b8",
+          // 2px zemin halkasi: ust uste binen noktalar birbirinden ayrilsin.
+          borderColor: "#fff",
+          borderWidth: 1.5,
+          opacity: 0.92
+        }
+      }))
+    };
+  }, [points, xLabel, yLabel, durumLabel]);
+
+  return (
+    <ReactECharts
+      echarts={echarts}
+      option={option}
+      style={{ height: 260, width: "100%" }}
       opts={{ renderer: "canvas" }}
       notMerge
     />

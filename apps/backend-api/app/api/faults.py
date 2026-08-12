@@ -590,14 +590,24 @@ def fault_device_health(
     """
     from app.models.project_settings import ProjectSettings
     from app.services import device_health_analytics as saglik
+    from app.services import fault_analytics_service as analiz
 
     line_scope = get_visible_line_ids(db, current_user)
     device_scope = _device_scope_from_lines(db, line_scope)
+    lines = set(line_scope) if line_scope is not None else None
 
     # Batarya esigi kuruluma gore degisir (Proje Ayarlari); sabit varsaymak
     # "kac gun kaldi" tahminini yanlis kalibre ederdi.
     proj = db.get(ProjectSettings, 1)
     esik = getattr(proj, "battery_voltage_low", None) if proj else None
+
+    # Alarm/ariza sayilari BIR KEZ cekilir ve hem karsilastirma tablosunu hem
+    # de listeleri besler. Karsilastirma icinde ayrica cekilseydi ayni pencere
+    # iki kez taranir, ustelik iki sonuc zamanla ayrisabilirdi.
+    alarm_sayilari = analiz.cihaz_alarm_sayilari(
+        db, days=days, visible_device_ids=device_scope
+    )
+    ariza_sayilari = analiz.cihaz_ariza_sayilari(db, days=days, visible_line_ids=lines)
 
     return {
         "window_days": days,
@@ -610,10 +620,30 @@ def fault_device_health(
         "signal_by_hour": saglik.sinyal_saat_profili(
             db, days=days, visible_device_ids=device_scope
         ),
-        "fault_heatmap": saglik.ariza_yogunlugu(
+        # --- Sistem sagligindan BURAYA tasindi ---
+        # Ikisi de CIHAZ duzeyinde sorular. Sistem sagligi sekmesi artik tek
+        # bir takvim gosteriyor; bu listeler cihaz karsilastirmasinin yaninda
+        # okunmali, ayri bir sekmede degil.
+        "top_rules": analiz.alarm_sikligi(
+            db, days=days, visible_device_ids=device_scope
+        ),
+        "flapping_devices": analiz.haberlesme_kararsizligi(
+            db, days=days, visible_device_ids=device_scope
+        ),
+        "alarm_heatmap": analiz.alarm_isi_haritasi(
+            db, days=days, visible_device_ids=device_scope
+        ),
+        # --- Filo karsilastirmasi (yeni) ---
+        "comm_status": analiz.haberlesme_durumu_dagilimi(
+            db, visible_device_ids=device_scope
+        ),
+        "device_comparison": saglik.cihaz_karsilastirmasi(
             db,
             days=days,
-            visible_line_ids=set(line_scope) if line_scope is not None else None,
+            visible_device_ids=device_scope,
+            alarm_sayilari=alarm_sayilari,
+            ariza_sayilari=ariza_sayilari,
+            battery_low=esik,
         ),
     }
 

@@ -438,9 +438,32 @@ export type FaultAnalytics = {
     nodes: { name: string; tier: "region" | "line" | "phase" | string }[];
     links: { source: string; target: string; value: number }[];
   };
+  /** Harita ısı katmanı: arızanın BAŞLANGIÇ direği + o noktadaki adet.
+   *  Cihaz sağlığından buraya taşındı — bu arıza coğrafyası, cihaz ölçümü
+   *  değil; harita sekmesi artık ikinci bir istek atmıyor. */
+  fault_heatmap: { latitude: number; longitude: number; weight: number }[];
 };
 
-/** Sistem sağlığı — `/faults/system-health`. */
+/** Cihaz × zaman alarm yoğunluğu. "Kronik mi, tek günlük olay mı" sorusunu
+ *  bir listenin cevaplayamadığı biçimde ayırır. */
+export type AlarmHeatmap = {
+  /** "day" | "hour" — pencereye göre seçilir. */
+  bucket: string;
+  /** Kronolojik kova etiketleri (sütunlar). */
+  buckets: string[];
+  /** Satırlar — en çok alarm üretenden aza. */
+  devices: { device_id: number; code: string; name: string; total: number }[];
+  /** `[sütun, satır, adet]` üçlüsü. Boş kovalar HİÇ gönderilmez. */
+  cells: number[][];
+  max: number;
+  /** Pencerede alarm üretmiş TOPLAM cihaz sayısı. */
+  device_total: number;
+  /** true ise `devices` kesildi — "listede yok" ≠ "alarm üretmemiş". */
+  truncated: boolean;
+};
+
+/** Sistem sağlığı — `/faults/system-health`. Tek soru: saha ne zaman
+ *  gürültülüydü. Kural/cihaz listeleri `DeviceHealth`e taşındı. */
 export type SystemHealth = {
   window_days: number;
   alarm_summary: {
@@ -452,6 +475,46 @@ export type SystemHealth = {
     unclassified: number;
     ack_ratio: number;
   };
+  /** Gün gün alarm sıklığı — GitHub katkı takvimi biçimi. Boş gün de kare
+   *  açar: sessiz geçen bir hafta grafikte gerçekten bir hafta genişliğinde. */
+  alarm_calendar: {
+    /** `YYYY-MM-DD` — ilk kare. */
+    start: string;
+    /** `YYYY-MM-DD` — son kare (bugün). */
+    end: string;
+    days: { date: string; count: number }[];
+    max: number;
+    total: number;
+    /** Pencere kurulumun öncesine uzanıyorsa "0 alarm" ile "veri yok"
+     *  ayrılabilsin diye. null = pencerede hiç alarm yok. */
+    first_alarm_at: string | null;
+    /** Pencere takvim tavanını (371 gün) aştıysa true. */
+    truncated: boolean;
+  };
+};
+
+/** Cihaz sağlığı — `/faults/device-health`. */
+export type DeviceHealth = {
+  window_days: number;
+  /** Filonun ANLIK haberleşme durumu — pencereden bağımsız. */
+  comm_status: { status: string; count: number }[];
+  /** Cihaz başına tek satır: haberleşme, alarm, arıza, sinyal, batarya.
+   *  Çapraz soru buradan okunur: "sinyali zayıf olan çok mu alarm üretiyor?"
+   *  Ölçüsü olmayan alan null'dur — 0 değil (0 dBm "mükemmel" demektir). */
+  device_comparison: {
+    device_id: number;
+    code: string;
+    name: string;
+    /** "online" | "offline" | "unknown" */
+    comm_status: string;
+    alarms: number;
+    outages: number;
+    faults: number;
+    avg_dbm: number | null;
+    worst_dbm: number | null;
+    drop_per_day_v: number | null;
+    days_to_low: number | null;
+  }[];
   top_rules: {
     rule_name: string;
     level: string;
@@ -468,28 +531,7 @@ export type SystemHealth = {
     outages: number;
     last_at: string | null;
   }[];
-  /** Cihaz × zaman alarm yoğunluğu. "Kronik mi, tek günlük olay mı"
-   *  sorusunu bir listenin cevaplayamadığı biçimde ayırır. */
-  alarm_heatmap: {
-    /** "day" | "hour" — pencereye göre seçilir. */
-    bucket: string;
-    /** Kronolojik kova etiketleri (sütunlar). */
-    buckets: string[];
-    /** Satırlar — en çok alarm üretenden aza. */
-    devices: { device_id: number; code: string; name: string; total: number }[];
-    /** `[sütun, satır, adet]` üçlüsü. Boş kovalar HİÇ gönderilmez. */
-    cells: number[][];
-    max: number;
-    /** Pencerede alarm üretmiş TOPLAM cihaz sayısı. */
-    device_total: number;
-    /** true ise `devices` kesildi — "listede yok" ≠ "alarm üretmemiş". */
-    truncated: boolean;
-  };
-};
-
-/** Cihaz sağlığı — `/faults/device-health`. */
-export type DeviceHealth = {
-  window_days: number;
+  alarm_heatmap: AlarmHeatmap;
   battery_drain: {
     device_id: number;
     code: string;
@@ -518,7 +560,6 @@ export type DeviceHealth = {
     worst_dbm: number | null;
     samples: number;
   }[];
-  fault_heatmap: { latitude: number; longitude: number; weight: number }[];
 };
 
 export type FaultCauseCatalog = {

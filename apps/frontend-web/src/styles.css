@@ -40557,60 +40557,68 @@ th.event-col-category {
    `net-access-bar`dan ayrildi. O serit ag ayarlari ekraninin bilesenidir;
    burada tasidigi sey OLCUM. Sayilar tabular-nums ve buyuk punto ile,
    etiketler kucuk ve sessiz — bakis once sayiya gitsin. */
+/* KOMPAKT SERIT. Onceki surumde her olcu 34px'lik bir ikon kutusu tasiyor,
+   sayi 1.35rem'de duruyor ve etiket/sayi/serh UC SATIRA yayiliyordu; serit
+   64px'e cikip asil grafikleri kati asagi itiyordu. Bu serit ekranin
+   BAGLAMI, ana icerigi degil — ikon etiketin icine girdi (12px), sayi ile
+   serh ayni satira alindi. Sonuc ~38px. */
 .fa-kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
   gap: 1px;
   flex-shrink: 0;
   background: var(--fa-line);
   border: 1px solid var(--fa-line);
-  border-radius: var(--fa-radius);
+  border-radius: 11px;
   overflow: hidden;
 }
 
 .fa-kpi {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
+  padding: 8px 14px;
   background: var(--fa-surface);
-}
-
-.fa-kpi-icon {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  flex-shrink: 0;
-  border-radius: 10px;
-  background: #eff4ff;
-  color: var(--fa-brand);
-}
-
-.fa-kpi--warn .fa-kpi-icon {
-  background: #fef3c7;
-  color: var(--fa-warn);
 }
 
 .fa-kpi-body {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
 }
 
 .fa-kpi-label {
-  font-size: 10.5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.055em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--fa-faint);
 }
 
+.fa-kpi-label svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.fa-kpi--warn .fa-kpi-label {
+  color: var(--fa-warn);
+}
+
+/* Sayi ve serh AYNI satirda; taban cizgisinde hizali. */
+.fa-kpi-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
 .fa-kpi-value {
-  font-size: 1.35rem;
+  font-size: 1.05rem;
   font-weight: 700;
-  line-height: 1.15;
+  line-height: 1.2;
   color: var(--fa-ink);
   font-variant-numeric: tabular-nums;
 }
@@ -40618,10 +40626,13 @@ th.event-col-category {
 /* Sayinin yanindaki baglam ("yalnizca kapanmislar", "%0"). Sayidan gorsel
    olarak AYRI durur; ikisi ayni agirlikta olsa olcu ile serh karisirdi. */
 .fa-kpi-note {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 500;
   font-style: normal;
   color: var(--fa-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fa-kpi--warn .fa-kpi-note {
@@ -40710,19 +40721,39 @@ th.event-col-category {
   align-items: start;
 }
 
+/* KART — hafif yukselti + baslik seridi.
+   Onceki kart duz bir cerceveydi ve on ucten fazla kart alt alta gelince
+   ekran "form" gibi okunuyordu. Yumusak golge kartlari zeminden ayirir,
+   ust kenardaki ince vurgu cizgisi de baslik seridini govdeden ayirir —
+   ikisi de icerige yer kaybettirmeden. */
 .fa-card {
   grid-column: span 6;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 16px 18px;
+  gap: 13px;
+  padding: 15px 17px 17px;
   background: var(--fa-surface);
   border: 1px solid var(--fa-line);
   border-radius: var(--fa-radius);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.fa-card:hover {
+  border-color: #dbe3ee;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.07);
 }
 
 .fa-card--wide {
   grid-column: span 12;
+}
+
+.fa-card--twothird {
+  grid-column: span 8;
+}
+
+.fa-card--half {
+  grid-column: span 6;
 }
 
 .fa-card--third {
@@ -40732,41 +40763,91 @@ th.event-col-category {
 /* Dar ekranda sutun bolmenin anlami kalmaz: grafik yine sikisir. */
 @media (max-width: 1180px) {
   .fa-card,
+  .fa-card--twothird,
+  .fa-card--half,
   .fa-card--third {
     grid-column: span 12;
   }
 }
 
 /* ---- Kart basligi ----
-   Baslik ve ipucu ALT ALTA. Yan yanayken (eski `rad-card-head`, `flex` +
+   Ikon SOLDA kendi kutusunda, baslik ve ipucu onun sagında ALT ALTA.
+   Baslik ile ipucu yan yanayken (eski `rad-card-head`, `flex` +
    `space-between`) ipucu basligi sikistirip ikisini de yariya kirpiyordu;
-   ekran goruntusunde "En Cok Ariza Cikaran Hatlar" uc satira boluniyordu. */
+   ekran goruntusunde "En Cok Ariza Cikaran Hatlar" uc satira boluniyordu.
+   Ikonu basligin ICINDEN cikarmak da bilincli: satir ici ikon, baslik iki
+   satira dustugunde metinle birlikte kayiyordu. */
 .fa-card-head {
   display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.fa-card-icon {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  border-radius: 8px;
+  background: #eff4ff;
+  color: var(--fa-brand);
+}
+
+.fa-card-titles {
+  display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
 }
 
 .fa-card-head h3 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   margin: 0;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: -0.005em;
   color: var(--fa-ink);
 }
 
-.fa-card-head h3 svg {
-  flex-shrink: 0;
+.fa-card-head small {
+  font-size: 11px;
+  line-height: 1.45;
   color: var(--fa-faint);
 }
 
-.fa-card-head small {
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--fa-faint);
+/* Basligin sagindaki sayi seridi (sistem sagligi: toplam / onay / kesinti).
+   Ayri KPI kartlari olsaydi tek grafikli bir sekmede grafikten cok yer
+   kaplardi; burada baglam olarak durur, basrol olmaz. */
+.fa-head-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding-top: 2px;
+  font-size: 11px;
+  color: var(--fa-muted);
+  white-space: nowrap;
+}
+
+.fa-head-stats b {
+  font-size: 12.5px;
+  color: var(--fa-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.fa-head-stats i {
+  font-style: normal;
+  color: #cbd5e1;
+}
+
+@media (max-width: 720px) {
+  .fa-head-stats {
+    display: none;
+  }
 }
 
 /* ---- Bos durum ----
@@ -40890,64 +40971,170 @@ th.event-col-category {
   color: var(--fa-hot);
 }
 
-/* ---- Kural isabeti ---- */
-.fa-accuracy {
+/* ---- Alarm takvimi (GitHub katki gorunumu) ----
+   Serit takvimin ALTINDA, saga yaslı — GitHub'daki gibi. echarts'in kendi
+   `visualMap` seridi dikey yer kapiyor ve takvimi daraltiyordu. */
+.fa-cal-legend {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: -6px;
+  font-size: 10.5px;
+  color: var(--fa-faint);
 }
 
-.fa-accuracy strong {
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--fa-ink);
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
+.fa-cal-legend i {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  /* 1px zemin cercevesi: en acik kademe beyaz zeminde kaybolmasin. */
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.06);
 }
 
-.fa-accuracy span {
-  font-size: 12px;
-  color: var(--fa-muted);
-  line-height: 1.45;
+.fa-cal-legend span:first-child {
+  margin-right: 2px;
 }
 
-/* Kurali NEREDE duzeltecegini soyleyen liste. */
-.fa-mismatch {
-  list-style: none;
+.fa-cal-legend span:last-child {
+  margin-left: 2px;
+}
+
+/* "Bu pencerede hic alarm yok" / "20 / 143 gosteriliyor" gibi serhler.
+   Bos bir takvim "her sey yolunda" gibi de okunabilir, "veri gelmiyor"
+   gibi de — ayrimi SOYLEMEK gerekiyor. */
+.fa-cal-note {
   margin: 0;
-  padding: 10px 0 0;
+  font-size: 11px;
+  color: var(--fa-faint);
+  text-align: center;
+}
+
+/* ---- Cihaz karsilastirma tablosu ----
+   Grafikler deseni verir; karar icin gereken KESIN sayilar burada. Ayni
+   zamanda grafiklerin tablo karsiligi: renkle kodlanan her sey burada
+   metin olarak da var. */
+.fa-table-wrap {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  border-top: 1px solid var(--fa-line);
+  gap: 10px;
+  /* Dar ekranda tablo KENDI icinde kayar; sayfa govdesi yatay kaymaz. */
+  overflow-x: auto;
 }
 
-.fa-mismatch li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 14px minmax(0, 1fr) 32px;
-  align-items: center;
-  gap: 7px;
-  font-size: 11.5px;
+.fa-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
 }
 
-.fa-mismatch-from {
-  color: var(--fa-warn);
-  overflow: hidden;
-  text-overflow: ellipsis;
+.fa-table th,
+.fa-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid #f1f5f9;
   white-space: nowrap;
 }
 
-.fa-mismatch-to {
-  color: #15803d;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.fa-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--fa-surface);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fa-faint);
+  border-bottom: 1px solid var(--fa-line);
 }
 
-.fa-mismatch strong {
-  text-align: right;
-  color: var(--fa-ink);
+.fa-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.fa-table tbody tr:hover {
+  background: var(--fa-sunken);
+}
+
+.fa-th-num,
+.fa-td-num {
+  text-align: right !important;
   font-variant-numeric: tabular-nums;
+}
+
+.fa-td-num {
+  color: #334155;
+  font-weight: 600;
+}
+
+.fa-td-name {
+  display: block;
+  font-weight: 600;
+  color: #334155;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fa-td-sub {
+  display: block;
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--fa-faint);
+}
+
+/* Siralama dugmesi. Hangi sutuna gore siralandigi GORUNUR olmali; aksi
+   halde tablo "rastgele sirali" gibi okunur. */
+.fa-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 2px 5px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.fa-sort:hover {
+  background: var(--fa-sunken);
+  color: var(--fa-ink);
+}
+
+.fa-sort.is-active {
+  background: #eff4ff;
+  color: var(--fa-brand);
+}
+
+.fa-sort svg {
+  opacity: 0.55;
+}
+
+.fa-sort.is-active svg {
+  opacity: 1;
+}
+
+/* Durum rozeti — renk TEK BASINA kimlik tasimaz, yaninda metin var. */
+.fa-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #475569;
+}
+
+.fa-chip i {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.12);
 }
 
 /* ---- Ariza yogunluk haritasi ---- */

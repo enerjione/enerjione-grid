@@ -491,14 +491,65 @@ def test_sistem_sagligi_sozlesmesi(db):
     s = Saha(db)
     _alarm(db, s.dev.id)
     sonuc = analiz.sistem_sagligi(db, days=365, visible_device_ids=None)
-    assert {"window_days", "alarm_summary", "top_rules", "flapping_devices"} <= set(sonuc)
+    assert {"window_days", "alarm_summary", "alarm_calendar"} <= set(sonuc)
 
 
 def test_bos_veride_sistem_sagligi_COKMEZ(db):
     sonuc = analiz.sistem_sagligi(db, days=365, visible_device_ids=None)
     assert sonuc["alarm_summary"]["total"] == 0
-    assert sonuc["top_rules"] == []
-    assert sonuc["flapping_devices"] == []
+    assert sonuc["alarm_calendar"]["total"] == 0
+    assert sonuc["alarm_calendar"]["max"] == 0
+
+
+# ---- Alarm takvimi (GitHub katki gorunumu) ---------------------------------
+#
+# Takvimin tek isi "saha ne zaman gurultuluydu"yu gostermek. O yuzden burada
+# olculen sey SAYILAR degil TAKVIMIN SUREKLILIGI: veri olmayan gun de kare
+# acmali, yoksa iki gunluk veri sonsuza kadar iki sutunluk bir grafik uretir
+# ve ekranda sahanin ritmi degil veri tabaninin sekli gorunur.
+
+
+def test_takvim_BOS_gunleri_de_kare_acar(db):
+    s = Saha(db)
+    _alarm(db, s.dev.id)
+    takvim = analiz.alarm_takvimi(db, days=30, visible_device_ids=None)
+    assert len(takvim["days"]) == 30, "bos gunler atlandi — takvim kisaldi"
+    assert takvim["days"][-1]["date"] == takvim["end"]
+    assert takvim["days"][0]["date"] == takvim["start"]
+
+
+def test_takvim_gunleri_KRONOLOJIK_ve_KESINTISIZ(db):
+    from datetime import date
+
+    takvim = analiz.alarm_takvimi(db, days=14, visible_device_ids=None)
+    gunler = [date.fromisoformat(g["date"]) for g in takvim["days"]]
+    assert gunler == sorted(gunler), "takvim kronolojik degil"
+    farklar = {(b - a).days for a, b in zip(gunler, gunler[1:])}
+    assert farklar == {1}, f"takvimde delik var: {sorted(farklar)}"
+
+
+def test_takvim_alarmi_DOGRU_gune_yazar(db):
+    s = Saha(db)
+    _alarm(db, s.dev.id, gun_once=0)  # bugun
+    takvim = analiz.alarm_takvimi(db, days=30, visible_device_ids=None)
+    bugun = takvim["days"][-1]
+    assert bugun["count"] == 1, "bugunku alarm son kareye dusmedi"
+    assert takvim["max"] == 1
+    assert takvim["total"] == 1
+
+
+def test_takvim_pencere_TAVANINDA_kesilir(db):
+    """Uc yillik pencere 1095 kare demek; okunabilirligin siniri asilir."""
+    takvim = analiz.alarm_takvimi(db, days=1095, visible_device_ids=None)
+    assert len(takvim["days"]) == analiz.CALENDAR_MAX_DAYS
+    assert takvim["truncated"] is True, "kesilme SESSIZ kaldi"
+
+
+def test_takvim_kapsam_DISI_cihazi_saymaz(db):
+    s = Saha(db)
+    _alarm(db, s.dev.id)
+    takvim = analiz.alarm_takvimi(db, days=30, visible_device_ids=set())
+    assert takvim["total"] == 0, "bos kapsam alarm sizdirdi"
 
 
 # ---- Sankey: Bolge -> Hat -> Faz akisi -------------------------------------

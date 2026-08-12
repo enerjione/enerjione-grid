@@ -40,6 +40,43 @@ export const FAZ_RENK: Record<string, string> = {
   abc: "#7c3aed",
 };
 
+/**
+ * Alarm sikligi takviminin SIRALI (sequential) rampasi — tek hue, acik -> koyu.
+ *
+ * NEDEN TEK HUE: buyukluk gosteren bir olcek gokkusagi olmaz; okuyucu
+ * "sari mi turuncudan cok" diye durup dusunmek zorunda kalir. Tek hue'da
+ * siralama ACIKLIKTAN okunur ve renk korlugunde de bozulmaz — aciklik
+ * sirasi butun CVD turlerinde korunur.
+ *
+ * NEDEN KIRMIZI, GITHUB GIBI YESIL DEGIL: GitHub'da cok = iyi (katki).
+ * Burada cok = KOTU (alarm). Ustelik bu projede yesil "sorun yok" demek;
+ * yogun alarmi yesille boyamak kodu tersine cevirirdi.
+ *
+ * `0` ayri bir renktir, rampanin en acik adimi DEGIL: "alarm yok" ile
+ * "en az alarm" ayni gorunmemeli.
+ */
+export const TAKVIM_BOS = "#eef2f7";
+export const TAKVIM_RAMPA = ["#fee2e2", "#fca5a5", "#ef4444", "#b91c1c"] as const;
+
+/**
+ * Haberlesme durumu renkleri — DURUM paleti, kategorik paletle karistirilmaz.
+ *
+ * DOGRULANDI (scripts/validate_palette.js): en kotu komsu cift deutan
+ * dE 26.8, normal gorus dE 32.5. Ilk denenen #16a34a/#dc2626 ciftinde
+ * deutan dE 5.0 idi — deuteranopia'da online ile offline AYIRT EDILEMIYORDU.
+ * Ayrimi saglayan sey hue degil ACIKLIK farki (parlak yesil vs. koyu kirmizi).
+ *
+ * `unknown` bilincli olarak NOTRDUR ve dogrulayicinin "chroma floor"
+ * uyarisini alir: "bilinmiyor" bir durum degil, durumun YOKLUGUDUR; renkli
+ * olsaydi ucuncu bir durum gibi okunurdu. Kimlik hicbir yerde renge tek
+ * basina birakilmaz — halka grafiginde etiket ve sayi da yazilir.
+ */
+export const HABERLESME_RENK: Record<string, string> = {
+  online: "#22c55e",
+  offline: "#991b1b",
+  unknown: "#94a3b8",
+};
+
 const INK = "#334155";
 const MUTED = "#94a3b8";
 const GRID = "#eef2f7";
