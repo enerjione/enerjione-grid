@@ -14,6 +14,7 @@ import L from "leaflet";
 
 import { formatRelative } from "../../shared/format";
 import { sourceLabel, sourceTone } from "../signals/signalCatalogConstants";
+import { sinyalKalitesi } from "./modemStatus";
 import type { DeviceRow, SignalSource } from "../../shared/types";
 
 // Cihaz pin ikonu (Leaflet divIcon).
@@ -39,6 +40,11 @@ type Props = {
    *  "set cevrimici ama kit degil" gibi imkansiz durumlar gosteriyordu. */
   parentDevice?: DeviceRow;
   topologyInfo?: TopologyInfo;
+  /** Sebeke alim seviyesi (dBm) - modemin ham yanitindan cozulur
+   *  (`master.info_network_rf_status_information`; bkz. modemStatus.ts). */
+  rssi?: number;
+  /** Operator adi - ayni ham yanittan; `info_network_operator` bos geliyor. */
+  networkOperator?: string;
   /** Master IP (master.ipv4_address). */
   ip?: string;
   /** Part No (master.info_part_no). */
@@ -93,6 +99,8 @@ function batteryClass(pct: number): string {
 export function DeviceSidebar({
   device,
   parentDevice,
+  rssi,
+  networkOperator,
   topologyInfo,
   ip,
   partNo,
@@ -109,6 +117,7 @@ export function DeviceSidebar({
   // Haberlesme/pil/sinyal SAHIBI cihaz: sette kit, sade cihazda kendisi.
   const health = parentDevice ?? device;
   const online = health.communicationStatus === "online";
+  const quality = sinyalKalitesi(rssi);
   // Konum: cihazin kendi lat/lon'u yoksa topoloji (hat/segment) konumu.
   const validSelf =
     Number.isFinite(device.latitude) &&
@@ -212,10 +221,36 @@ export function DeviceSidebar({
             </span>
           </li>
 
-          {/* SEBEKE SINYALI KALDIRILDI (kullanici karari): modem/sebeke
-              olculeri kitin RTU'suna ait ve hepsi zaten "Pole Master"
-              sekmesinde duruyor. Sol panelde ikinci bir kopya olarak durmasi,
-              set sayfasinda "setin kendi sinyali" gibi okunuyordu. */}
+          {/* SEBEKE SINYALI — modemin ham yanitindan cozulur.
+              Once sayisal bir `master.modem_rssi` araniyordu; cihaz oyle bir
+              nokta YAYINLAMIYOR, seviye `info_network_rf_status_information`
+              metninin icinde geliyor (bkz. modemStatus.ts). Bu yuzden satir
+              hep bostu. Cozulemezse cubuk cizilmez ve "—" yazar; uydurma bir
+              cubuk, zayif sinyali "iyi" gostermekten kotudur. */}
+          <li className="device-sidebar-info-row">
+            <span className="material-symbols-outlined">signal_cellular_alt</span>
+            <span className="device-sidebar-info-label">{t("deviceDetail.sidebar.networkSignal")}</span>
+            <span className={`device-sidebar-signal sig-${quality.key}`}>
+              <span className="device-sidebar-signal-bars" aria-hidden="true">
+                {[1, 2, 3, 4].map((b) => (
+                  <span key={b} className={`bar${b <= quality.bars ? " on" : ""}`} />
+                ))}
+              </span>
+              <span className="device-sidebar-signal-text">
+                {rssi != null ? `${Math.round(rssi)} dBm` : "—"}
+              </span>
+            </span>
+          </li>
+
+          {/* OPERATOR — `info_network_operator` sahada BOS geliyor; ad modemin
+              ham yanitinda duruyor ve orada gercekten var. */}
+          {networkOperator ? (
+            <InfoRow
+              icon="cell_tower"
+              label={t("deviceDetail.sidebar.networkOperator")}
+              value={networkOperator}
+            />
+          ) : null}
         </ul>
       </section>
 
@@ -236,19 +271,7 @@ export function DeviceSidebar({
                   className={`device-channel tone-${ch.tone}${active ? " active" : ""}`}
                   onClick={() => onSourceChange(ch.key)}
                   disabled={n === 0}
-                  /* Seri no satirdan kalkti ama KAYBOLMADI: ipucunda duruyor
-                     (bir cihazi RMA'ya gonderirken ya da sahayla telefonda
-                     dogrularken gereken tek yer orasi). */
-                  title={
-                    [
-                      uyduNo != null
-                        ? t("deviceDetail.sidebar.satelliteNo", { no: uyduNo })
-                        : null,
-                      sn ? `SN ${sn}` : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ") || undefined
-                  }
+                  title={sn ? `SN ${sn}` : undefined}
                 >
                   {batt != null ? (
                     <span className={`device-channel-batt ${batteryClass(batt)}`} title={`%${Math.round(batt)}`}>
@@ -262,14 +285,12 @@ export function DeviceSidebar({
                     </span>
                   ) : null}
                   <span className="device-channel-label">{ch.label}</span>
-                  {uyduNo != null ? (
-                    <span className="device-channel-satno">U{uyduNo}</span>
-                  ) : null}
-                  {/* SERI NO KALDIRILDI (kullanici karari): kanal secerken
-                      sorulan sey "hangi unite", seri no degil. Numara
-                      etiketle ayni satirda durunca ikisi tek bir kimlik gibi
-                      okunuyordu; uydunun fiziksel karsiligi zaten "U3"
-                      rozetinde ve tam seri no ipucunda (title) duruyor. */}
+                  {/* UYDU NUMARASI ROZETI (U1/U2/U3) KALDIRILDI — kullanici
+                      karari. Kanal secerken sorulan sey "hangi unite"; ayni
+                      satirda hem etiket, hem numara, hem seri no durunca uc
+                      ayri kimlik gibi okunuyordu. Fiziksel uydu atamasi
+                      Cihaz Ayarlari'nda duruyor. */}
+                  <span className="device-channel-serial">{sn ?? (n === 0 ? "—" : "")}</span>
                 </button>
               </li>
             );

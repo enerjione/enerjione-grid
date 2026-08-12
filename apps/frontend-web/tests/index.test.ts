@@ -72,6 +72,12 @@ import "./faultChartTheme.test";
 // yalanlarinin ikisi de bakim butcesini yanlis yonlendirir.
 import "./heatField.test";
 
+// Modem/sebeke metninin cozumu: sol paneldeki sinyal satiri sayisal bir
+// nokta bekliyordu, cihaz onu STRING icinde gonderiyor. Konum yerine BICIME
+// dayali cozum — modem degisip alan sirasi kayarsa yanlis sayi gostermek,
+// bos gostermekten kotudur.
+import "./modemStatus.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   connectionIsDead,
