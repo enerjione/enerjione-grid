@@ -1051,15 +1051,27 @@ export async function fetchFaultStats(
   return (await response.json()) as import("./types").FaultStats;
 }
 
+/** Arıza ataması — KİŞİYE ya da EKİBE.
+ *
+ *  İkisi tek çağrıda gönderilmez (backend 400 döner): atama tek bir sorunun
+ *  cevabıdır ("sorumlu kim") ve her istek o cevabın tamamını yazar. `null`
+ *  hedef = atamayı kaldır. */
+export type FaultAssignTarget =
+  | { username: string | null; areaId?: null }
+  | { areaId: number | null; username?: null };
+
 export async function assignFault(
   token: string,
   faultId: number,
-  username: string | null
+  target: FaultAssignTarget
 ): Promise<import("./types").FaultEvent> {
   const response = await apiFetch(`${API_BASE_URL}/faults/${faultId}/assign`, {
     method: "PATCH",
     headers: authHeaders(token),
-    body: JSON.stringify({ assigned_to_username: username })
+    body: JSON.stringify({
+      assigned_to_username: target.username ?? null,
+      assigned_to_area_id: target.areaId ?? null
+    })
   });
   if (!response.ok) throw await buildApiError(response, "Arıza ataması yapılamadı.");
   return (await response.json()) as import("./types").FaultEvent;

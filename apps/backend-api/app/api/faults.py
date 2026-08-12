@@ -99,6 +99,7 @@ class _FaultRefs:
         "regions",
         "devices",
         "users",
+        "areas",
         "comment_counts",
         "alarms",
         "branch_lines",
@@ -111,6 +112,8 @@ class _FaultRefs:
         self.regions: dict[int, Region] = {}
         self.devices: dict[int, Device] = {}
         self.users: dict[str, User] = {}
+        #: EKIBE ATANMIS arizalar icin: area_id -> ekip adi.
+        self.areas: dict[int, str] = {}
         self.comment_counts: dict[int, int] = {}
         #: device_id -> o cihazin ACIK alarmlari (en yeni once).
         self.alarms: dict[int, list[AlarmEvent]] = {}
@@ -155,6 +158,19 @@ def _load_fault_refs(db: Session, faults: list[FaultEvent]) -> _FaultRefs:
         refs.users = {
             row.username: row
             for row in db.scalars(select(User).where(User.username.in_(usernames))).all()
+        }
+    # Ekibe atanmis arizalarin ekip ADI — liste basina TEK sorgu.
+    area_ids = {f.assigned_to_area_id for f in faults if f.assigned_to_area_id}
+    if area_ids:
+        from app.models.responsibility_area import ResponsibilityArea
+
+        refs.areas = {
+            aid: ad
+            for aid, ad in db.execute(
+                select(ResponsibilityArea.id, ResponsibilityArea.name).where(
+                    ResponsibilityArea.id.in_(area_ids)
+                )
+            ).all()
         }
     # Yorum sayilari: satir basina COUNT yerine tek GROUP BY.
     if fault_ids:
@@ -358,6 +374,14 @@ def _serialize_fault(db: Session, f: FaultEvent, refs: _FaultRefs | None = None)
         assigned_to_username=f.assigned_to_username,
         assigned_at=f.assigned_at,
         assigned_to_full_name=assigned_user.full_name if assigned_user else None,
+        # Bas harf rozeti yerine YUZ: sahayla telefonda konusan kisi "kim
+        # gidiyor" sorusunu isimden once yuzden cevapliyor. Yoksa arayuz
+        # bas harflere duser.
+        assigned_to_avatar_url=assigned_user.avatar_url if assigned_user else None,
+        assigned_to_area_id=f.assigned_to_area_id,
+        assigned_to_area_name=(
+            refs.areas.get(f.assigned_to_area_id) if f.assigned_to_area_id else None
+        ),
         comment_count=int(comment_count),
         trigger_alarms=triggers,
         affected_branches=affected,
@@ -836,30 +860,81 @@ def assign_fault(
     f = db.get(FaultEvent, fault_id)
     if f is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ariza bulunamadi.")
+    from app.models.responsibility_area import (
+        ResponsibilityArea,
+        responsibility_area_users,
+    )
+
     previous_assignee = f.assigned_to_username
+    previous_area_id = f.assigned_to_area_id
     target_username = payload.assigned_to_username or None
+    target_area_id = payload.assigned_to_area_id or None
+
+    # KISI ILE EKIP AYNI ANDA OLMAZ: ikisi de doluyken "sorumlu kim"
+    # sorusunun iki cevabi olurdu ve sahada bu, iki ekibin ayni arizaya
+    # gitmesi ya da ikisinin de digerini beklemesi demek.
+    if target_username and target_area_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ariza ya bir kisiye ya bir ekibe atanir; ikisi birden olmaz.",
+        )
     if target_username:
         target = db.scalar(select(User).where(User.username == target_username))
         if target is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Atanan kullanici bulunamadi.")
+    hedef_ekip: ResponsibilityArea | None = None
+    if target_area_id:
+        hedef_ekip = db.get(ResponsibilityArea, target_area_id)
+        if hedef_ekip is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Atanan ekip bulunamadi."
+            )
+
     f.assigned_to_username = target_username
-    f.assigned_at = datetime.now(timezone.utc) if target_username else None
-    if target_username and f.status == "open":
+    f.assigned_to_area_id = target_area_id
+    atandi = bool(target_username or target_area_id)
+    f.assigned_at = datetime.now(timezone.utc) if atandi else None
+    if atandi and f.status == "open":
         f.status = "assigned"
+    hedef_etiket = target_username or (hedef_ekip.name if hedef_ekip else None)
     record_event(
         db,
         category="fault",
         event_type="fault_assigned",
         severity="info",
         actor_username=current_user.username,
-        message=f"Fault assigned: fault {fault_id} -> {target_username or '(none)'}",
-        metadata={"fault_id": fault_id, "assigned_to": target_username},
+        message=f"Fault assigned: fault {fault_id} -> {hedef_etiket or '(none)'}",
+        metadata={
+            "fault_id": fault_id,
+            "assigned_to": target_username,
+            "assigned_to_area_id": target_area_id,
+        },
         i18n_key="fault_assigned",
-        i18n_params={"fault_id": fault_id, "user": target_username or "—"},
+        i18n_params={"fault_id": fault_id, "user": hedef_etiket or "—"},
     )
-    # Atanan kisi degistiyse (yeni kisi varsa) web bildirim + email gonder.
-    # Aynı kisiye yeniden atama bildirim spam'i olusturmasin.
+
+    # BILDIRIM ALICILARI: kisiye atandiysa o kisi, ekibe atandiysa ekibin TUM
+    # uyeleri. Ekip atamasinda kimse tek tek secilmedigi icin haber vermezsek
+    # atama ekranda durur ama kimse bilmez — atamanin amaci tam tersi.
+    #
+    # AYNI HEDEFE yeniden atama bildirim uretmez (spam).
+    alicilar: list[str] = []
     if target_username and target_username != previous_assignee:
+        alicilar = [target_username]
+    elif hedef_ekip is not None and target_area_id != previous_area_id:
+        alicilar = [
+            row[0]
+            for row in db.execute(
+                select(User.username)
+                .join(
+                    responsibility_area_users,
+                    responsibility_area_users.c.user_id == User.id,
+                )
+                .where(responsibility_area_users.c.area_id == target_area_id)
+            ).all()
+            if row[0]
+        ]
+    for target_username in alicilar:
         # Ariza bilgisini topla — bildirim metnini guzellestirir.
         from app.models.grid_topology import Line, Pole, Region
         from app.services.notification_service import create_notification
@@ -867,7 +942,12 @@ def assign_fault(
         region_row = db.get(Region, f.region_id) if f.region_id else None
         line_name = line_row.name if line_row else f"#{f.line_id}"
         region_name = region_row.name if region_row else None
-        if current_user.username == target_username:
+        if hedef_ekip is not None:
+            # EKIP ATAMASI: "size atandi" demek yaniltici olurdu — is kisiye
+            # degil ekibe verildi, uyeler arasinda paylasilacak.
+            notif_title = f"{hedef_ekip.name} ekibine yeni bir arıza atandı: {line_name}"
+            title_i18n_key = "fault_assignment_team"
+        elif current_user.username == target_username:
             notif_title = f"Bu arızayı kendi üstünüze aldınız: {line_name}"
             title_i18n_key = "fault_assignment_self"
         else:

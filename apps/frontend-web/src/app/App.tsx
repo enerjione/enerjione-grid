@@ -56,6 +56,7 @@ import {
   fetchFaults,
   fetchFaultStats,
   assignFault,
+  type FaultAssignTarget,
   updateFaultStatus,
   updateFaultCause,
   updateFaultNote,
@@ -1443,14 +1444,15 @@ export function App() {
   };
 
   // ===== Hat Arizalari (Fault) ticket handlers =====
-  const handleAssignFault = async (faultId: number, username: string | null) => {
+  const handleAssignFault = async (faultId: number, target: FaultAssignTarget) => {
     if (!session) return;
-    const updated = await assignFault(session.accessToken, faultId, username);
+    const updated = await assignFault(session.accessToken, faultId, target);
     setFaults((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+    // Bildirim, ATANANIN adiyla konusur: ekip atamasinda kullanici adi degil
+    // ekip adi gorunmeli, yoksa "atandi" mesaji kime atandigini soylemez.
+    const ad = updated.assigned_to_area_name ?? updated.assigned_to_username;
     toast.success(
-      username
-        ? t("toasts.faultAssigned", { username })
-        : t("toasts.faultAssignCleared")
+      ad ? t("toasts.faultAssigned", { username: ad }) : t("toasts.faultAssignCleared")
     );
   };
   const handleUpdateFaultStatus = async (
@@ -2796,6 +2798,8 @@ export function App() {
               faultId={activeFaultDetailId}
               faults={faults}
               users={users}
+              // Ekip = sorumluluk alani; ariza kisiye de ekibe de atanabilir.
+              areas={responsibilityAreas}
               currentUsername={session.username}
               canAssign={session.role === "engineer" || session.role === "installer"}
               accessToken={session.accessToken}

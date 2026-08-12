@@ -120,6 +120,25 @@ class FaultEvent(Base):
     assigned_to_username: Mapped[str | None] = mapped_column(
         String(120), nullable=True, index=True
     )
+
+    #: EKIBE ATAMA — kisi yerine bir sorumluluk alani (ekip) sorumlu olabilir.
+    #:
+    #: NEDEN GEREKLI: gece vardiyasinda ya da nobet devrinde isi USTLENECEK
+    #: kisi belli degildir; ariza yine de sahipsiz kalmamali. Kisiye atama
+    #: zorunlu oldugunda operator "birine" atiyor ve o kisi izinliyse kayit
+    #: sessizce bekliyordu.
+    #:
+    #: KISI ILE EKIP AYNI ANDA DOLU OLMAZ (bkz. faults API `assign` ucu):
+    #: ikisi de doluyken "sorumlu kim" sorusunun iki cevabi olurdu. Ekibe
+    #: atanan bir ariza sonra bir kisiye atanabilir (devralma) ve tersi.
+    #:
+    #: Alan silinirse atama DUSER (SET NULL): ekip kaldirildi diye ariza
+    #: kaydinin silinmesi ya da olmayan bir ekibe asili kalmasi kabul edilemez.
+    assigned_to_area_id: Mapped[int | None] = mapped_column(
+        ForeignKey("responsibility_areas.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     assigned_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

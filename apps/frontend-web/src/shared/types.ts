@@ -330,6 +330,12 @@ export type FaultEvent = {
   resolution_note?: string | null;
   assigned_to_username?: string | null;
   assigned_to_full_name?: string | null;
+  /** Atanan KİŞİNİN profil fotoğrafı. Yoksa arayüz baş harflere düşer. */
+  assigned_to_avatar_url?: string | null;
+  /** EKİBE ATAMA — kişi yerine bir sorumluluk alanı (ekip) sorumlu olabilir.
+   *  Kişi ile ekip AYNI ANDA dolu olmaz (backend 400 döner). */
+  assigned_to_area_id?: number | null;
+  assigned_to_area_name?: string | null;
   assigned_at?: string | null;
   comment_count: number;
   /** Arızayı açan alarmlar (son "gördüm" diyen cihazdan), en yeni önce. */

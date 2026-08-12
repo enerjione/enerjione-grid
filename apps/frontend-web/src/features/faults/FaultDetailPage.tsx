@@ -84,6 +84,7 @@ import {
   Timer,
   TriangleAlert,
   UserRound,
+  UsersRound,
   Wrench,
   Zap
 } from "lucide-react";
@@ -102,6 +103,7 @@ import {
   downloadFaultReport,
   fetchFault,
   fetchFaultCauses,
+  type FaultAssignTarget,
   type GridSnapshot
 } from "../../shared/api";
 import { formatDistanceM, formatDistanceRange } from "../../shared/lineDistance";
@@ -113,6 +115,7 @@ import type {
   FaultComment,
   FaultEvent,
   FaultTriggerAlarm,
+  ResponsibilityAreaRow,
   UserRead
 } from "../../shared/types";
 
@@ -127,7 +130,9 @@ type Props = {
   gridSnapshot?: GridSnapshot | null;
   devices?: DeviceRow[];
   alarms?: AlarmEvent[];
-  onAssign: (faultId: number, username: string | null) => Promise<void>;
+  /** Ekipler (sorumluluk alanlari) — ariza kisiye de ekibe de atanabilir. */
+  areas?: ResponsibilityAreaRow[];
+  onAssign: (faultId: number, target: FaultAssignTarget) => Promise<void>;
   /** `closed` icin `resolutionNote` ZORUNLU (backend de dogrular). */
   onUpdateStatus: (
     faultId: number,
@@ -193,6 +198,7 @@ export function FaultDetailPage({
   faultId,
   faults,
   users,
+  areas,
   currentUsername,
   canAssign,
   accessToken,
@@ -551,6 +557,10 @@ export function FaultDetailPage({
 
   const statusColor = STATUS_COLOR[fault.status] ?? "#64748b";
   const assigneeName = fault.assigned_to_full_name ?? fault.assigned_to_username ?? null;
+  // EKIP ATAMASI kisi atamasindan ONCE okunur: ikisi ayni anda dolu olmaz
+  // (backend 400 doner) ama eski bir kayit iki alani da tasiyorsa ekip
+  // kazanir — sorumluluk kurumsaldir, kisi degisebilir.
+  const ekipAdi = fault.assigned_to_area_name ?? null;
   const distanceText = formatDistanceRange(fault.zone_start_m, fault.zone_end_m);
   // `tahminiMesafe` YUKARIDA, erken return'den ONCE hesaplaniyor (hook
   // sirasi sabit kalsin diye); burada yeniden tanimlanmaz.
@@ -954,18 +964,38 @@ export function FaultDetailPage({
             </header>
 
             <div className="fd-assignee">
-              <span
-                className={`fd-avatar ${assigneeName ? "" : "fd-avatar--empty"}`}
-                aria-hidden="true"
-              >
-                {assigneeName ? bashafler(assigneeName) : "—"}
-              </span>
+              {/* KISIYE ATANDIYSA YUZ: sahayla telsizde konusan kisi "kim
+                  gidiyor" sorusunu isimden once yuzden cevapliyor. Fotograf
+                  yoksa bas harflere duser. EKIBE atandiysa fotograf yok —
+                  ekibin yuzu olmaz, ikon + ad dogru olan. */}
+              {ekipAdi ? (
+                <span className="fd-avatar fd-avatar--team" aria-hidden="true">
+                  <UsersRound size={18} strokeWidth={2.1} />
+                </span>
+              ) : fault.assigned_to_avatar_url ? (
+                <img
+                  className="fd-avatar fd-avatar--photo"
+                  src={fault.assigned_to_avatar_url}
+                  alt=""
+                />
+              ) : (
+                <span
+                  className={`fd-avatar ${assigneeName ? "" : "fd-avatar--empty"}`}
+                  aria-hidden="true"
+                >
+                  {assigneeName ? bashafler(assigneeName) : "—"}
+                </span>
+              )}
               <div className="fd-assignee-body">
-                <strong>{assigneeName ?? t("faults.detail.assigneeEmpty")}</strong>
+                <strong>
+                  {ekipAdi ?? assigneeName ?? t("faults.detail.assigneeEmpty")}
+                </strong>
                 {/* Alt satir: adi VARSA kullanici adi (telsizde soylenen sey o),
-                    atanmamissa uyari. Atanma zamani asagida kunyede duruyor —
-                    burada tekrar edilmez. */}
-                {fault.assigned_to_full_name && fault.assigned_to_username ? (
+                    ekipte "Ekip" etiketi, atanmamissa uyari. Atanma zamani
+                    asagida kunyede duruyor — burada tekrar edilmez. */}
+                {ekipAdi ? (
+                  <small>{t("faults.detail.assigneeTeam")}</small>
+                ) : fault.assigned_to_full_name && fault.assigned_to_username ? (
                   <small>{fault.assigned_to_username}</small>
                 ) : assigneeName ? null : (
                   <small>{t("faults.detail.assignHint")}</small>
@@ -979,24 +1009,54 @@ export function FaultDetailPage({
                   {t("faults.detail.changeAssignee")}
                 </label>
                 <div className="fd-assign-row">
+                  {/* TEK LISTE, IKI GRUP. Ayri "kisi" ve "ekip" secicileri
+                      koymak "ikisi birden secilirse ne olur" sorusunu ekrana
+                      tasirdi; oysa sorumlu TEKTIR. Deger onekle kodlanir
+                      ("u:" kullanici, "t:" ekip) — id ile kullanici adi ayni
+                      dizede karisamaz. */}
                   <select
                     id="fd-assignee"
                     className="fd-select"
-                    value={fault.assigned_to_username ?? ""}
-                    onChange={(e) =>
-                      void calistir(
-                        () => onAssign(fault.id, e.target.value || null),
-                        "alarms.errors.assignFailed"
-                      )
+                    value={
+                      fault.assigned_to_area_id
+                        ? `t:${fault.assigned_to_area_id}`
+                        : fault.assigned_to_username
+                          ? `u:${fault.assigned_to_username}`
+                          : ""
                     }
+                    onChange={(e) => {
+                      const secim = e.target.value;
+                      const hedef: FaultAssignTarget = secim.startsWith("t:")
+                        ? { areaId: Number(secim.slice(2)) }
+                        : { username: secim.startsWith("u:") ? secim.slice(2) : null };
+                      void calistir(
+                        () => onAssign(fault.id, hedef),
+                        "alarms.errors.assignFailed"
+                      );
+                    }}
                     disabled={saving}
                   >
                     <option value="">{t("faults.detail.assigneeUnset")}</option>
-                    {userOptions.map((u) => (
-                      <option key={u.id} value={u.username}>
-                        {u.full_name} ({u.username})
-                      </option>
-                    ))}
+                    <optgroup label={t("faults.detail.assignGroupPeople")}>
+                      {userOptions.map((u) => (
+                        <option key={u.id} value={`u:${u.username}`}>
+                          {u.full_name} ({u.username})
+                        </option>
+                      ))}
+                    </optgroup>
+                    {/* Pasif ekip listelenmez: kapatilmis bir ekibe atama,
+                        kimsenin bakmadigi bir kuyruga is birakmaktir. */}
+                    {(areas ?? []).filter((a) => a.is_active !== false).length > 0 ? (
+                      <optgroup label={t("faults.detail.assignGroupTeams")}>
+                        {(areas ?? [])
+                          .filter((a) => a.is_active !== false)
+                          .map((a) => (
+                            <option key={a.id} value={`t:${a.id}`}>
+                              {a.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    ) : null}
                   </select>
                   {/* Sahadaki kisi arizayi kendi ustlenebilsin — listede kendi
                       adini aramak gereksiz bir adim. */}
@@ -1006,7 +1066,7 @@ export function FaultDetailPage({
                       className="fd-ghost-btn"
                       onClick={() =>
                         void calistir(
-                          () => onAssign(fault.id, currentUsername),
+                          () => onAssign(fault.id, { username: currentUsername }),
                           "alarms.errors.assignFailed"
                         )
                       }

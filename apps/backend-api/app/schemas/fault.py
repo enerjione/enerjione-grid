@@ -94,6 +94,14 @@ class FaultEventRead(BaseModel):
     assigned_to_username: str | None = None
     assigned_at: datetime | None = None
     assigned_to_full_name: str | None = None
+    #: Atanan KISININ profil fotografi. Bas harf rozeti yerine yuz gosterilir:
+    #: sahayla telefonda konusan kisi "kim gidiyor" sorusunu isimden once
+    #: yuzden cevapliyor. Yoksa arayuz bas harflere duser.
+    assigned_to_avatar_url: str | None = None
+    #: EKIBE ATAMA — kisi yerine bir sorumluluk alani (ekip) sorumlu olabilir.
+    #: Kisi ile ekip AYNI ANDA dolu olmaz (bkz. assign ucu).
+    assigned_to_area_id: int | None = None
+    assigned_to_area_name: str | None = None
 
     comment_count: int = 0
 
@@ -153,7 +161,15 @@ class FaultEventNoteUpdate(BaseModel):
 
 
 class FaultEventAssignUpdate(BaseModel):
+    """Atama: KISI ya da EKIP. Ikisi birden gonderilirse uc 400 doner.
+
+    Ikisi de bos (None) = atamayi KALDIR. Alanlardan yalnizca birini
+    gondermek digerini "degistirme" anlamina GELMEZ; atama tek bir sorunun
+    cevabidir ("sorumlu kim") ve her istek o cevabin tamamini yazar.
+    """
+
     assigned_to_username: str | None = None
+    assigned_to_area_id: int | None = None
 
 
 class FaultEventStatusUpdate(BaseModel):
