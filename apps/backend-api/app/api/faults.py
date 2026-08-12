@@ -348,6 +348,7 @@ def _serialize_fault(db: Session, f: FaultEvent, refs: _FaultRefs | None = None)
         zone_start_m=f.zone_start_m,
         zone_end_m=f.zone_end_m,
         zone_length_m=f.zone_length_m,
+        zone_code=f.zone_code,
         status=f.status,
         opened_at=f.opened_at,
         resolved_at=f.resolved_at,

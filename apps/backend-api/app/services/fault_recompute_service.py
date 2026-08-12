@@ -29,6 +29,15 @@ Algoritma:
        eslesmeyen bolge icin YENI kayit acilir, karsiligi kalmayan kayit
        "resolved" edilir.
 
+ARIZANIN KIMLIGI = BOLGE (hat DEGIL):
+  Bir kayit "su hattin arizasi" degil, "su iki cihaz arasindaki aralikta
+  olusan ariza"dir; kimligi `zone_code` uretir (son goren cihaz -> ilk
+  gormeyen cihaz). Ayni hatta baska bir aralikta olusan ariza AYRI bir
+  kayittir ve araya cihaz eklenip aralik daralirsa kod degisir, yani yeni
+  bir kayit acilir — eskisi karsiliksiz kalip "resolved" olur. Tek istisna
+  `fault_display_delay_sec` yerlesme penceresidir: kayit henuz listede
+  gorunmezken gec gelen alarmlarla aralik netlesebilir.
+
 COKLU BOLGE (surum notu):
   Onceki surum hat basina yalnizca EN SON RED cihazi buluyordu ve
   `open_by_line` sozlugu ile hat basina tek aktif kayit zorluyordu; fazla
@@ -259,19 +268,67 @@ def _seq_overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
     return a[0] <= b[1] and b[0] <= a[1]
 
 
+def zone_code(
+    line_id: int, last_red_device_id: int | None, first_green_device_id: int | None
+) -> str:
+    """ARIZA BOLGESININ KIMLIGI — hat degil, IKI CIHAZ ARASI aralik.
+
+    Bir ariza "su hatta" degil, "arizayi goren SON cihaz ile gormeyen ILK
+    cihaz arasindaki aralikta"dir. Kimlik bu yuzden o iki cihazdan uretilir:
+
+        L12/D34>D35     -> 34 nolu cihaz gordu, 35 gormedi
+        L12/D34>END     -> hat ucuna kadar (ilerisinde cihaz yok)
+
+    ARAYA CIHAZ GIRERSE KOD DEGISIR: yeni cihaz araligin bir ucu olur
+    (gorduyse yeni `last_red`, gormediyse yeni `first_green`), yani artik
+    BASKA bir bolgeden bahsediyoruzdur. Kod ayni kalsaydi, daralmis bir
+    aralik eski arizanin ustune yazilir ve "ariza nerede" sorusunun cevabi
+    kaydin gecmisinde sessizce degisirdi.
+    """
+    hedef = f"D{first_green_device_id}" if first_green_device_id else "END"
+    return f"L{line_id}/D{last_red_device_id}>{hedef}"
+
+
+def _fault_zone_code(fault: FaultEvent) -> str:
+    return zone_code(fault.line_id, fault.last_red_device_id, fault.first_green_device_id)
+
+
+def _yas_sn(fault: FaultEvent, now: datetime) -> float:
+    """Kaydin yasi (saniye). Naive `opened_at` UTC kabul edilir — SQLite
+    testlerinde saat dilimi bilgisi geri gelmez ve ciplak cikarma patlar."""
+    acilis = fault.opened_at
+    if acilis is None:
+        return float("inf")
+    if acilis.tzinfo is None:
+        acilis = acilis.replace(tzinfo=timezone.utc)
+    return (now - acilis).total_seconds()
+
+
 def _match_zones_to_faults(
     zones: list[_FaultZone],
     existing: list[FaultEvent],
+    line_id: int,
+    now: datetime,
+    settle_sec: int,
 ) -> tuple[list[tuple[_FaultZone, FaultEvent]], list[_FaultZone], list[FaultEvent]]:
     """Hesaplanan bolgeleri mevcut aktif kayitlarla esle.
 
-    Amac: her recompute'ta ayni ariza icin YENI satir acmamak (duplicate) ama
-    gercekten yeni bir bolge olustugunda da onu kacirmamak.
+    KIMLIK BOLGEDIR, HAT DEGIL
+    --------------------------
+    Eslesmenin olcusu `zone_code` — yani (son goren cihaz, ilk gormeyen
+    cihaz) cifti. Ayni hatta bir baska aralikta olusan ariza AYRI bir
+    kayittir; araya cihaz eklenip aralik daralirsa da kod degisir ve yeni
+    kayit acilir (eskisi karsiliksiz kalir ve `resolved` olur).
 
-    Eslestirme sirasi (once en guclu sinyal):
-      1. `last_red_device_id` ayni  — ariza ayni cihazin arkasinda duruyor.
-      2. Direk araliklari kesisiyor — ariza bolgesi buyudu/kaydi (cihaz
-         degisti ama ayni fiziksel bolge).
+    YERLESME PENCERESI (`settle_sec`)
+    ---------------------------------
+    Ariza olusurken alarmlar hep birlikte gelmez: haberlesme gecikirse
+    ikinci/ucuncu cihazin "ben de gordum"u saniyeler sonra duser ve aralik
+    daralir. Bu pencere icinde (kayit zaten listede GORUNMUYOR, bkz.
+    `fault_display_delay_sec`) aralik sinirlarinin oynamasi ayni arizanin
+    netlesmesidir — direk araligi kesisiyorsa mevcut kayit guncellenir.
+    Pencere kapandiktan sonra ayni esneklik, gercekten YENI bir bolgede
+    olusan arizayi eskisinin ustune yazmak anlamina gelirdi.
 
     Returns: (eslesenler, yeni_bolgeler, karsiligi_kalmayan_kayitlar)
     """
@@ -279,26 +336,27 @@ def _match_zones_to_faults(
     unmatched_faults = list(existing)
     pairs: list[tuple[_FaultZone, FaultEvent]] = []
 
-    # 1) last_red_device_id tam eslesme
+    # 1) BOLGE KODU tam eslesme — ayni iki cihaz arasindaki ayni aralik.
     for zone in list(unmatched_zones):
-        hit = next(
-            (f for f in unmatched_faults if f.last_red_device_id == zone.last_red_device_id),
-            None,
-        )
+        kod = zone_code(line_id, zone.last_red_device_id, zone.first_green_device_id)
+        hit = next((f for f in unmatched_faults if _fault_zone_code(f) == kod), None)
         if hit is not None:
             pairs.append((zone, hit))
             unmatched_zones.remove(zone)
             unmatched_faults.remove(hit)
 
-    # 2) Direk araligi kesisimi. Komsu bolgeler bir direk PAYLASIR (orn.
-    #    1-3 ve 3-5), o yuzden "ilk kesisen"i almak yanlis kayda yazabilir;
-    #    en BUYUK kesisime sahip kaydi seciyoruz.
+    # 2) Yerlesme penceresi: yalnizca HENUZ GORUNUR OLMAMIS kayitlar aralik
+    #    kesisimiyle eslesebilir. Komsu bolgeler bir direk PAYLASIR (orn. 1-3
+    #    ve 3-5), o yuzden "ilk kesisen"i almak yanlis kayda yazabilir; en
+    #    BUYUK kesisime sahip kaydi seciyoruz.
     for zone in list(unmatched_zones):
         zr = zone.seq_range
         best: FaultEvent | None = None
         best_overlap = 0
         for f in unmatched_faults:
             if f.from_pole_seq is None or f.to_pole_seq is None:
+                continue
+            if _yas_sn(f, now) > settle_sec:
                 continue
             fr = (
                 (f.from_pole_seq, f.to_pole_seq)
@@ -442,6 +500,10 @@ def recompute_faults(db: Session) -> None:
         arr.sort(key=lambda t: (t[0], t[1], t[2]))
 
     now = datetime.now(timezone.utc)
+    # YERLESME PENCERESI — bkz. `_match_zones_to_faults`. Kayit listede
+    # gorunene kadar (fault_display_delay_sec) aralik sinirlari oynayabilir;
+    # sonrasinda her bolge kendi kaydidir.
+    settle_sec = max(0, int(settings.fault_display_delay_sec))
     # line_id -> mevcut AKTIF FaultEvent listesi. "Aktif" = closed olmayan
     # tum statusler (open/assigned/in_progress/resolved). Ayni hatta birden
     # fazla bagimsiz ariza bolgesi olabilir; her bolge kendi kaydini tutar.
@@ -473,7 +535,9 @@ def recompute_faults(db: Session) -> None:
             line_devices, active_alarm_device_ids, poles_by_id, dist_index, line.id
         )
         existing_faults = faults_by_line.get(line.id, [])
-        pairs, fresh_zones, orphan_faults = _match_zones_to_faults(zones, existing_faults)
+        pairs, fresh_zones, orphan_faults = _match_zones_to_faults(
+            zones, existing_faults, line.id, now, settle_sec
+        )
 
         if len(zones) > 1:
             logger.info(
@@ -483,8 +547,18 @@ def recompute_faults(db: Session) -> None:
 
         # --- Eslesen bolgeler: mevcut kaydi guncelle ---
         for zone, existing in pairs:
+            # Aralik SINIRI degistiyse (yerlesme penceresinde gec gelen alarm)
+            # kunye de degismelidir: faz/akim/sicaklik "arizayi goren SON
+            # cihaz"in degerleridir ve o cihaz artik baskasi. Tazelenmezse
+            # kart, bolgeyi bir cihazdan, olcumleri baska cihazdan gosterir.
+            sinir_degisti = existing.last_red_device_id != zone.last_red_device_id
             existing.last_red_device_id = zone.last_red_device_id
             existing.first_green_device_id = zone.first_green_device_id
+            # Kod sinirlardan turer: yerlesme penceresinde sinir oynadiysa
+            # kayit ARTIK baska bir araligi anlatiyor, kimligi de oyle olmali.
+            existing.zone_code = zone_code(
+                line.id, zone.last_red_device_id, zone.first_green_device_id
+            )
             existing.from_pole_id = zone.from_pole.id
             existing.to_pole_id = zone.to_pole.id
             existing.from_pole_seq = zone.from_pole.sequence_no
@@ -499,12 +573,17 @@ def recompute_faults(db: Session) -> None:
             # Ariza tekrar aktif hale geldiyse (resolved iken yeniden alarm)
             # yeniden "open" yapmayiz — operator akisini bozmamak icin
             # mevcut status korunur; sadece resolved ise geri alinir.
-            if existing.status == "resolved":
+            yeniden_acildi = existing.status == "resolved"
+            if yeniden_acildi:
                 existing.status = "open"
                 existing.resolved_at = None
                 logger.info(
                     "fault_reopened fault_id=%d line_id=%d", existing.id, line.id
                 )
+            if sinir_degisti or yeniden_acildi:
+                from app.services.fault_snapshot import apply_snapshot
+
+                apply_snapshot(db, existing)
             still_active.add(existing.id)
 
         # --- Yeni bolgeler: yeni FaultEvent ac ---
@@ -534,6 +613,9 @@ def recompute_faults(db: Session) -> None:
                 zone_start_m=zone_start_m,
                 zone_end_m=zone_end_m,
                 zone_length_m=zone_length_m,
+                zone_code=zone_code(
+                    line.id, zone.last_red_device_id, zone.first_green_device_id
+                ),
                 status="open",
                 opened_at=now,
                 assigned_to_username=None,
@@ -550,7 +632,8 @@ def recompute_faults(db: Session) -> None:
             apply_snapshot(db, fault)
             newly_created.append(fault)
             logger.info(
-                "fault_opened line_id=%d from_pole_seq=%s to_pole_seq=%s last_red_dev=%s first_green_dev=%s assigned=None",
+                "fault_opened zone=%s line_id=%d from_pole_seq=%s to_pole_seq=%s last_red_dev=%s first_green_dev=%s assigned=None",
+                zone_code(line.id, zone.last_red_device_id, zone.first_green_device_id),
                 line.id, fault.from_pole_seq, fault.to_pole_seq,
                 last_red_dev.code if last_red_dev else None,
                 first_green_dev.code if first_green_dev else None,

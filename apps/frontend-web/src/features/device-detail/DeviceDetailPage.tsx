@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 
 import { useDeviceModelSettings } from "../../components/DeviceModelSettingsProvider";
 import { voltageToPercent } from "../../shared/battery";
+import { fizikselUydular, setMi, uyduKaynagi } from "../../shared/deviceKit";
 
 import { fetchAlarmEvents } from "../../shared/api";
 import { SOURCES, sourceLabel } from "../signals/signalCatalogConstants";
@@ -409,22 +410,51 @@ export function DeviceDetailPage({
       voltageToPercent(v, thresholdsFor(device?.model)),
     [thresholdsFor, device?.model]
   );
+  /** Setin sat01/sat02/sat03 kanallarinin FIZIKSEL uydu karsiligi.
+   *
+   *  Kurulumcu bu atamayi cihaz ayarlarindan degistirebilir; varsayilan
+   *  yerlesim (set 2 -> 4/5/6) yalnizca baslangic noktasidir. */
+  const setUydulari = useMemo(
+    () => (device && setMi(device) ? fizikselUydular(device) : []),
+    [device]
+  );
+
   const channelBattery = useMemo<Partial<Record<SignalSource, number>>>(() => {
     const out: Partial<Record<SignalSource, number>> = {};
-    for (const src of measuringSources) {
+    measuringSources.forEach((src, i) => {
       // `master` kanalinin pili cihaz kaydindan gelir (hesaplanmis yuzde);
       // uydularinki kendi batarya gerilimlerinden turetilir. Kit setinde
       // `master` bir olcum unitesi DEGIL, o yuzden listede de yok.
       if (src === "master") {
         if (device && Number.isFinite(device.batteryPercent)) out.master = device.batteryPercent;
-        continue;
+        return;
       }
-      const pct = voltToPct(numVal(`${src}.battery_voltage_satellite`));
+      // SETTE PIL FIZIKSEL UYDUDAN OKUNUR.
+      //
+      // Setin kaydindaki `sat01..sat03` telemetri bolmesinin URETTIGI sanal
+      // adlardir; batarya gerilimi orada bos/sifir kalabiliyor. Uydunun
+      // kendisi ise KIT kaydinda gercek numarasiyla durur (set 2 -> sat04..06,
+      // atama degistirildiyse ne secildiyse o). Once oradan okunur; kit
+      // erisilemezse setin kendi degerine dusulur.
+      let pct: number | undefined;
+      if (setUydulari.length > i) {
+        pct = voltToPct(rtuNum(`${uyduKaynagi(setUydulari[i])}.battery_voltage_satellite`));
+      }
+      if (pct == null) pct = voltToPct(numVal(`${src}.battery_voltage_satellite`));
       if (pct != null) out[src] = pct;
-    }
+    });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [valueByKey, device, measuringSources]);
+  }, [valueByKey, rtuValueByKey, device, measuringSources, setUydulari]);
+
+  /** Kanal -> fiziksel uydu numarasi. Sade cihazda (SN 2.0) bos. */
+  const channelSatelliteNo = useMemo<Partial<Record<SignalSource, number>>>(() => {
+    const out: Partial<Record<SignalSource, number>> = {};
+    measuringSources.forEach((src, i) => {
+      if (setUydulari.length > i) out[src] = setUydulari[i];
+    });
+    return out;
+  }, [measuringSources, setUydulari]);
 
   const sourceCounts = useMemo<Record<SignalSource, number>>(() => {
     const c = Object.fromEntries(
@@ -502,6 +532,7 @@ export function DeviceDetailPage({
         hasAlarm={hasActiveAlarm}
         channelSerials={channelSerials}
         channelBattery={channelBattery}
+        channelSatelliteNo={channelSatelliteNo}
         activeSource={activeSource}
         onSourceChange={setActiveSource}
         sourceCounts={sourceCounts}

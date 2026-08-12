@@ -4266,6 +4266,7 @@
       "channel": "DEVICES",
       "lastComm": "Last comm",
       "lastCommShort": "Last Comm",
+      "satelliteNo": "Physical satellite: {{no}}",
       "otherActions": "Other Actions",
       "deviceStatus": "Device Status",
       "batteryStatus": "Battery Status",

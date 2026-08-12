@@ -158,11 +158,31 @@ def _en_buyuk(degerler: list[float]) -> float | None:
     return max(degerler) if degerler else None
 
 
+def active_alarm_signal_keys(db: Session, device_id: int) -> list[str]:
+    """Cihazin AKTIF ve ariza ureten alarmlarinin sinyal anahtarlari.
+
+    `telemetry_latest` "son deger" tablosudur: bir ariza bayragi orada
+    KALKAR ama DUSMEZ — eski bir denemeden kalan `master.permanent_fault`
+    hala 1 gorunur. Alarm kaydinin reset semantigi vardir, bu yuzden "hangi
+    unite SU AN arizayi goruyor" sorusunun tek dogru kaynagi budur.
+    """
+    from app.models.alarm import AlarmEvent
+
+    rows = db.execute(
+        select(AlarmEvent.signal_key)
+        .where(AlarmEvent.device_id == device_id)
+        .where(AlarmEvent.reset.is_(False))
+        .where(AlarmEvent.produces_fault.is_(True))
+    ).all()
+    return [row[0] for row in rows if row[0]]
+
+
 def build_snapshot(
     db: Session,
     *,
     device_id: int,
     source_phase: dict[str, str] | None = None,
+    alarm_signal_keys: list[str] | None = None,
 ) -> dict:
     """Cihazin su anki durumundan ariza alanlarini uretir.
 
@@ -208,6 +228,10 @@ def build_snapshot(
         fault_current_a=_en_buyuk(ariza_akimlari),
         load_current_before_a=_en_buyuk(yuk_akimlari),
         source_phase=source_phase,
+        # FAZ ALARMDAN: bkz. `active_alarm_signal_keys`. Alarm imzasi varsa
+        # faz ORADAN cikar — son deger tablosundaki dusmeyen bayraklar
+        # yuzunden tek fazli ariza "A-B-C" gorunuyordu.
+        phase_signals=alarm_signal_keys,
     )
 
     alanlar: dict = {
@@ -273,7 +297,11 @@ def apply_snapshot(
                 db, device_id=fault.last_red_device_id
             )
         alanlar = build_snapshot(
-            db, device_id=fault.last_red_device_id, source_phase=source_phase
+            db,
+            device_id=fault.last_red_device_id,
+            source_phase=source_phase,
+            alarm_signal_keys=active_alarm_signal_keys(db, fault.last_red_device_id)
+            or None,
         )
     except Exception:  # noqa: BLE001
         logger.exception("fault_snapshot_failed device_id=%s", fault.last_red_device_id)

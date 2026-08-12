@@ -32423,6 +32423,22 @@ th.event-col-category {
   color: #94a3b8;
   font-variant-numeric: tabular-nums;
 }
+/* FIZIKSEL UYDU NUMARASI — set 2'nin "Satellite 01"i kitin 4. uydusudur.
+   Atamayi kurulumcu degistirebiliyor; hangi kanalin hangi uyduya bagli
+   oldugu ekranda gorunmezse yanlis atama ancak sahada fark edilir. */
+.device-channel-satno {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.device-channel.active .device-channel-satno { background: #dbeafe; color: #1d4ed8; }
 /* Kanal butonu pil gostergesi (her cihazin ayri pil seviyesi) */
 .device-channel-batt {
   display: inline-flex;

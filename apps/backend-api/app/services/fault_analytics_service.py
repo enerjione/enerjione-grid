@@ -239,6 +239,172 @@ def tekrarlayan_acikliklar(
     ]
 
 
+# ---------------------------------------------------------------------------
+# BOLGE RISK PUANI
+# ---------------------------------------------------------------------------
+#
+# NEDEN SAYMAK YETMIYOR
+# ---------------------
+# "Bu aralik 4 kez arizalandi" tek basina siralama yapmaz: dort arizasi da
+# 11 ay once olmus bir aralik ile ucu son iki haftada olan bir aralik ayni
+# sayiyi verir, ama ikincisi SU AN sorunludur. Ayni sekilde kendiliginden
+# duzelen (gecici) bir ariza ile ekip cikaran kalici bir ariza ayni agirlikta
+# degildir.
+#
+# PUAN = agirlikli tekrar. Her ariza iki carpanla katkida bulunur:
+#
+#   tur agirligi     kalici 1.0 | gecici 0.5 | bilinmiyor 0.75
+#   tazelik          0.5 ** (yas_gun / YARI_OMUR_GUN)
+#
+# Toplam ham agirlik `hw`, doyuma giden bir egriyle 0-100'e tasinir:
+#
+#   puan = 100 * (1 - 0.5 ** hw)     -> 1 taze kalici ariza = 50
+#                                       2 = 75, 3 = 87.5 ...
+#
+# Doyum BILINCLI: 8 ile 12 arizanin farki bakim kararini degistirmez, "bu
+# aralik elden gecmeli" der; oysa 0 ile 1'in farki her seyi degistirir.
+# Egri de bu yuzden basta dik, sonda yatiktir.
+#
+# ANOMALI TESPITI ICIN: puan MUTLAKTIR (kume icinde normalize EDILMEZ).
+# Normalize edilseydi tek bir aralik iyilesince digerlerinin puani kendi
+# kendine yukselir ve "esik asildi" alarmi anlamsizlasirdi. Ayni aralik icin
+# zaman serisi olarak saklanabilir ve esik/sapma bunun uzerine kurulur.
+#: Puanin yari omru (gun): bu kadar eskiyen bir ariza yariya duser.
+PUAN_YARI_OMUR_GUN = 90.0
+
+#: Tur agirliklari — kalici ariza ekip cikartir, gecici ariza uyaridir.
+PUAN_TUR_AGIRLIK: dict[str | None, float] = {
+    "permanent": 1.0,
+    "transient": 0.5,
+    None: 0.75,
+}
+
+
+def bolge_puani(
+    olaylar: list[tuple[datetime, str | None]], simdi: datetime | None = None
+) -> float:
+    """(acilis, tur) listesinden 0-100 arasi risk puani.
+
+    Saf fonksiyon — testten ve ileride yazilacak anomali katmanindan DB'siz
+    cagrilabilsin diye ayri duruyor.
+    """
+    if not olaylar:
+        return 0.0
+    an = simdi or datetime.now(timezone.utc)
+    ham = 0.0
+    for acilis, tur in olaylar:
+        if acilis is None:
+            continue
+        if acilis.tzinfo is None:
+            acilis = acilis.replace(tzinfo=timezone.utc)
+        yas_gun = max(0.0, (an - acilis).total_seconds() / 86400.0)
+        tazelik = 0.5 ** (yas_gun / PUAN_YARI_OMUR_GUN)
+        ham += PUAN_TUR_AGIRLIK.get(tur, PUAN_TUR_AGIRLIK[None]) * tazelik
+    return round(100.0 * (1.0 - 0.5**ham), 1)
+
+
+def bolge_puanlari(
+    db: Session, *, days: int, visible_line_ids: set[int] | None, limit: int = TOP_N
+) -> list[dict]:
+    """ARALIK bazli risk siralamasi — "hangi aralik elden gecmeli".
+
+    Gruplama anahtari `zone_code`: hat degil, IKI CIHAZ ARASI aralik. Ayni
+    hattin iki ucu birbirinden bagimsiz sorunlar olabilir ve bakim ekibi
+    hatta degil araliga gider.
+
+    Kod topolojiyle birlikte degisir (araya cihaz girerse yeni aralik, yeni
+    kod). Eski kayitlar eski kodda kalir; bu yuzden liste "su anki
+    topolojideki araliklar" degil, "arizalanan araliklar" listesidir —
+    silinmis bir araligin gecmisi kaybolmaz.
+    """
+    base = _temel_sorgu(days, visible_line_ids).subquery()
+    f = base.c
+    rows = db.execute(
+        select(
+            f.zone_code,
+            f.line_id,
+            f.last_red_device_id,
+            f.first_green_device_id,
+            f.from_pole_seq,
+            f.to_pole_seq,
+            f.opened_at,
+            f.fault_kind,
+        )
+        .select_from(base)
+        .where(f.zone_code.is_not(None))
+    ).all()
+    if not rows:
+        return []
+
+    an = datetime.now(timezone.utc)
+    kovalar: dict[str, dict] = {}
+    for kod, line_id, son_red, ilk_green, from_seq, to_seq, acilis, tur in rows:
+        kova = kovalar.setdefault(
+            kod,
+            {
+                "zone_code": kod,
+                "line_id": line_id,
+                "last_red_device_id": son_red,
+                "first_green_device_id": ilk_green,
+                "from_pole_seq": from_seq,
+                "to_pole_seq": to_seq,
+                "count": 0,
+                "permanent_count": 0,
+                "last_opened_at": None,
+                "_olaylar": [],
+            },
+        )
+        kova["count"] += 1
+        if tur == "permanent":
+            kova["permanent_count"] += 1
+        if kova["last_opened_at"] is None or (acilis and acilis > kova["last_opened_at"]):
+            kova["last_opened_at"] = acilis
+        kova["_olaylar"].append((acilis, tur))
+
+    # Ad/kod alanlari: tek seferde cek, satir basina sorgu atma.
+    line_ids = {k["line_id"] for k in kovalar.values() if k["line_id"]}
+    hatlar = {
+        r[0]: r[1]
+        for r in db.execute(select(Line.id, Line.name).where(Line.id.in_(line_ids))).all()
+    } if line_ids else {}
+    device_ids = {
+        did
+        for k in kovalar.values()
+        for did in (k["last_red_device_id"], k["first_green_device_id"])
+        if did
+    }
+    cihazlar = {
+        r[0]: (r[1], r[2])
+        for r in db.execute(
+            select(Device.id, Device.code, Device.name).where(Device.id.in_(device_ids))
+        ).all()
+    } if device_ids else {}
+
+    sonuc: list[dict] = []
+    for kova in kovalar.values():
+        olaylar = kova.pop("_olaylar")
+        son_red = cihazlar.get(kova["last_red_device_id"]) if kova["last_red_device_id"] else None
+        ilk_green = (
+            cihazlar.get(kova["first_green_device_id"])
+            if kova["first_green_device_id"]
+            else None
+        )
+        kova["line_name"] = hatlar.get(kova["line_id"])
+        kova["last_red_device_code"] = son_red[0] if son_red else None
+        kova["last_red_device_name"] = son_red[1] if son_red else None
+        kova["first_green_device_code"] = ilk_green[0] if ilk_green else None
+        kova["first_green_device_name"] = ilk_green[1] if ilk_green else None
+        kova["score"] = bolge_puani(olaylar, an)
+        sonuc.append(kova)
+
+    # Puan esitse cok arizalanan one gelsin — sonra en taze.
+    sonuc.sort(
+        key=lambda k: (k["score"], k["count"], k["last_opened_at"] or datetime.min.replace(tzinfo=timezone.utc)),
+        reverse=True,
+    )
+    return sonuc[:limit]
+
+
 def sebep_dagilimi(
     db: Session, *, days: int, visible_line_ids: set[int] | None
 ) -> list[dict]:
@@ -364,6 +530,10 @@ def tum_analiz(
         "repeat_spans": tekrarlayan_acikliklar(
             db, days=days, visible_line_ids=visible_line_ids
         ),
+        # ARALIK RISK PUANI — bakim onceliginin asil girdisi. `repeat_spans`
+        # direk ciftine bakar ve yalnizca SAYAR; bu liste cihaz araligina
+        # bakar, tazelik ve ariza turuyle agirliklandirir.
+        "zone_scores": bolge_puanlari(db, days=days, visible_line_ids=visible_line_ids),
         "cause_distribution": sebep_dagilimi(
             db, days=days, visible_line_ids=visible_line_ids
         ),

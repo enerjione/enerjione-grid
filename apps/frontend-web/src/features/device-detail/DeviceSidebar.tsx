@@ -53,6 +53,12 @@ type Props = {
   channelSerials?: Partial<Record<SignalSource, string>>;
   /** Kanal pil yuzdeleri (0..100) — her cihazin ayri pil seviyesi. */
   channelBattery?: Partial<Record<SignalSource, number>>;
+  /** Setin sat01/02/03 kanallarinin FIZIKSEL uydu numarasi (set 2 -> 4/5/6).
+   *
+   *  Atamayi kurulumcu degistirebiliyor; hangi kanalin hangi uyduya bagli
+   *  oldugu ekranda GORUNUR olmali, yoksa yanlis atama ancak sahada fark
+   *  edilir. */
+  channelSatelliteNo?: Partial<Record<SignalSource, number>>;
   activeSource: SignalSource;
   onSourceChange: (s: SignalSource) => void;
   /** Her kaynaktaki sinyal sayisi (0 ise kanal disabled). */
@@ -109,6 +115,7 @@ export function DeviceSidebar({
   hasAlarm = false,
   channelSerials,
   channelBattery,
+  channelSatelliteNo,
   activeSource,
   onSourceChange,
   sourceCounts,
@@ -246,6 +253,7 @@ export function DeviceSidebar({
             const active = activeSource === ch.key;
             const sn = channelSerials?.[ch.key];
             const batt = channelBattery?.[ch.key];
+            const uyduNo = channelSatelliteNo?.[ch.key];
             return (
               <li key={ch.key}>
                 <button
@@ -253,6 +261,11 @@ export function DeviceSidebar({
                   className={`device-channel tone-${ch.tone}${active ? " active" : ""}`}
                   onClick={() => onSourceChange(ch.key)}
                   disabled={n === 0}
+                  title={
+                    uyduNo != null
+                      ? t("deviceDetail.sidebar.satelliteNo", { no: uyduNo })
+                      : undefined
+                  }
                 >
                   {batt != null ? (
                     <span className={`device-channel-batt ${batteryClass(batt)}`} title={`%${Math.round(batt)}`}>
@@ -266,6 +279,9 @@ export function DeviceSidebar({
                     </span>
                   ) : null}
                   <span className="device-channel-label">{ch.label}</span>
+                  {uyduNo != null ? (
+                    <span className="device-channel-satno">U{uyduNo}</span>
+                  ) : null}
                   <span className="device-channel-serial">{sn ?? (n === 0 ? "—" : "")}</span>
                 </button>
               </li>

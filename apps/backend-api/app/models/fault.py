@@ -84,6 +84,22 @@ class FaultEvent(Base):
     zone_end_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     zone_length_m: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    #: ARIZA BOLGESININ KIMLIGI — "L12/D34>D35" (bkz.
+    #: `fault_recompute_service.zone_code`).
+    #:
+    #: NEDEN AYRI KOLON: bir ariza "su hattin" degil, "su iki cihaz
+    #: arasindaki araligin" arizasidir. Analiz sorulari da bu duzeyde
+    #: sorulur: "en cok ariza cikaran ARALIK hangisi", "bu aralik son 90
+    #: gunde kac kez patladi". Uc kolondan (line + iki cihaz) her seferinde
+    #: turetmek yerine kaydin kendisinde durur; GROUP BY tek kolon olur ve
+    #: bolge puani (`fault_analytics_service.bolge_puanlari`) bunun uzerine
+    #: kurulur.
+    #:
+    #: ARAYA CIHAZ GIRERSE KOD DEGISIR ve bu DOGRUDUR: aralik artik baska
+    #: bir araliktir. Eski kayitlar eski kodda kalir — gecmisi yeni topolojiye
+    #: gore yeniden yazmak, o gun sahada gidilen yeri degistirmek olurdu.
+    zone_code: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+
     # status:
     #   "open"        - yeni acildi, henuz kimse atanmadi
     #   "assigned"    - bir kullaniciya otomatik veya manuel atandi

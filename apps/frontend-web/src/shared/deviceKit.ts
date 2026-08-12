@@ -50,6 +50,41 @@ export function setMi(device: DeviceRow | null | undefined): boolean {
   return (device?.parentDeviceId ?? null) !== null;
 }
 
+/** Bir sette kac uydu var — backend `SATELLITES_PER_SET` ile AYNI olmali. */
+export const SETTEKI_UYDU_SAYISI = 3;
+
+/**
+ * Setin FIZIKSEL uydu numaralari — sirasiyla sat01/sat02/sat03'un karsiligi.
+ *
+ * KAYITLI ATAMA KAZANIR. Varsayilan yerlesim (set 1 -> 1/2/3, set 2 -> 4/5/6,
+ * set 3 -> 7/8/9) yalnizca BASLANGIC noktasidir: uydulari kelepceyi takan kisi
+ * baglar ve sira kite gore degil DIREGE gore olusur. Kurulumcu atamayi cihaz
+ * ayarlarindan degistirebilir (`subunit_satellites`); sabit turetme kullanmak,
+ * ikinci sete 2/7/9 baglanmis bir kurulumda YANLIS uydunun pilini dogru diye
+ * gostermek olurdu — ekranda hicbir hata gorunmez, sadece yanlis sayi durur.
+ *
+ * Backend'deki `resolve_subunit_satellites` ile AYNI kurali uygular; oradaki
+ * kural yazma tarafinin (telemetri bolme) kaynagidir, buradaki yalnizca
+ * GOSTERIM icin. Ikisi ayrisirsa ekran ile telemetri farkli uydudan bahseder.
+ */
+export function fizikselUydular(device: DeviceRow | null | undefined): number[] {
+  if (!device) return [];
+  const kayitli = device.subunitSatellites;
+  if (kayitli && kayitli.length === SETTEKI_UYDU_SAYISI) {
+    const temiz = kayitli.map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0);
+    if (temiz.length === SETTEKI_UYDU_SAYISI) return temiz;
+  }
+  const sira = device.subunitIndex ?? 0;
+  if (sira < 1) return [];
+  const ilk = (sira - 1) * SETTEKI_UYDU_SAYISI + 1;
+  return Array.from({ length: SETTEKI_UYDU_SAYISI }, (_, i) => ilk + i);
+}
+
+/** Fiziksel uydu numarasindan kaynak oneki: 4 -> "sat04". */
+export function uyduKaynagi(no: number): string {
+  return `sat${String(no).padStart(2, "0")}`;
+}
+
 /**
  * `master.*` gibi RTU sinyallerini DOGRU cihazdan okur.
  *

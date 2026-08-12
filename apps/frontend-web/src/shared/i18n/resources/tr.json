@@ -4263,6 +4263,7 @@
       "channel": "CİHAZLAR",
       "lastComm": "Son iletişim",
       "lastCommShort": "Son İletişim",
+      "satelliteNo": "Fiziksel uydu: {{no}}",
       "otherActions": "Diğer İşlemler",
       "deviceStatus": "Cihaz Durumu",
       "batteryStatus": "Pil Durumu",

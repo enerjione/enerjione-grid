@@ -121,20 +121,28 @@ def source_of(signal_key: str) -> str:
 def phase_from_sources(
     active_signals: list[str] | tuple[str, ...],
     source_phase: dict[str, str] | None = None,
+    *,
+    only_indicators: bool = True,
 ) -> str | None:
     """Arizayi GOREN unitelerden etkilenen fazi turetir.
 
     Tek unite -> tek faz ("a"), iki unite -> "ab" gibi, uc unite -> "abc".
     Hicbir unite ariza sinyali kaldirmadiysa None (bos = cikarilamadi;
     "unknown" yazmak bilgi tasimaz).
+
+    `only_indicators=False`: liste zaten SUZULMUS geliyor demektir (ornegin
+    aktif alarm imzasi — alarm motoru "bu ariza uretir" kararini vermis).
+    Orada FAULT_INDICATORS suzgeci ikinci kez uygulanirsa sicaklik alarmi
+    gibi listede olmayan bir tetikleyiciyle acilan ariza faz uretmez.
     """
     esleme = source_phase or DEFAULT_SOURCE_PHASE
     fazlar: set[str] = set()
     for key in active_signals:
-        if strip_source(key) in FAULT_INDICATORS:
-            faz = esleme.get(source_of(key))
-            if faz:
-                fazlar.add(faz)
+        if only_indicators and strip_source(key) not in FAULT_INDICATORS:
+            continue
+        faz = esleme.get(source_of(key))
+        if faz:
+            fazlar.add(faz)
     if not fazlar:
         return None
     # Kararli siralama: "ac" her zaman "ac", asla "ca".
@@ -194,19 +202,39 @@ def infer(
     fault_current_a: float | None = None,
     load_current_before_a: float | None = None,
     source_phase: dict[str, str] | None = None,
+    phase_signals: list[str] | tuple[str, ...] | None = None,
 ) -> InferenceResult:
     """Alarm imzasindan sebep onerisi uretir.
 
     SIRA ONEMLI — ilk eslesen kural kazanir. Siralama "ne kadar ayirt
     edici" oldugna gore: tamper tek basina kesin bir isaret, asiri akim ise
     onlarca sebebin ortak sonucu.
+
+    FAZ ICIN AYRI KAYNAK (`phase_signals`)
+    --------------------------------------
+    `active_signals` cihazin SON DEGER tablosundan gelir ve orada bir bayrak
+    "aktif" kalir — kalkma/dusme semantigi yoktur. Uc unitenin de eski bir
+    denemeden kalma bayragi duruyorsa faz "abc" cikar; oysa o an alarm veren
+    tek unite vardir. Alarm kaydinin RESET semantigi vardir, bu yuzden faz
+    verildiginde ALARM imzasindan turetilir; `active_signals` yine tur/yon
+    ve sebep kurallarini besler. Verilmezse davranis eskisi gibidir.
     """
     aktif = {strip_source(s) for s in active_signals}
     kind = _kind_from_signals(aktif)
     yon = _direction_from_signals(aktif)
-    faz = phase_from_sources(active_signals, source_phase)
+    faz_kaynagi = active_signals if phase_signals is None else phase_signals
+    faz = phase_from_sources(
+        faz_kaynagi, source_phase, only_indicators=phase_signals is None
+    )
     gorenler = tuple(
-        sorted({source_of(k) for k in active_signals if strip_source(k) in FAULT_INDICATORS})
+        sorted(
+            source_of(k)
+            for k in {
+                key
+                for key in faz_kaynagi
+                if phase_signals is not None or strip_source(key) in FAULT_INDICATORS
+            }
+        )
     )
 
     def sonuc(code: str | None, reason: str, *matched: str) -> InferenceResult:

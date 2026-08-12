@@ -77,6 +77,12 @@ class FaultEventRead(BaseModel):
     zone_end_m: float | None = None
     zone_length_m: float | None = None
 
+    #: ARALIGIN KIMLIGI — "L12/D34>D35". Ariza bir hattin degil, iki cihaz
+    #: arasindaki araligin olayidir; tekrar sayimi ve risk puani bu kodla
+    #: yapilir. Araya cihaz eklenirse kod degisir (yeni aralik). Eski
+    #: kayitlarda NULL olabilir.
+    zone_code: str | None = None
+
     status: str
     opened_at: datetime
     resolved_at: datetime | None = None
