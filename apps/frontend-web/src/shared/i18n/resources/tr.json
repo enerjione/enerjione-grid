@@ -3892,6 +3892,9 @@
     "validation": "Geçersiz veri",
     "unknown": "Beklenmeyen bir hata oluştu",
     "crashTitle": "Beklenmeyen bir hata oluştu",
+    "crashPageBody": "Bu sayfa açılamadı. Diğer sekmeler çalışmaya devam ediyor; başka bir sekmeye geçip geri dönebilir ya da yeniden deneyebilirsiniz.",
+    "crashRetry": "Yeniden dene",
+    "crashDetails": "Teknik detay",
     "crashBody": "Arayüz beklenmedik bir durum nedeniyle yanıt veremez hale geldi. Sayfayı yeniden yüklemek sorunu çoğunlukla çözer. Sorun devam ederse sistem yöneticisine bildirin.",
     "crashReload": "Sayfayı yeniden yükle"
   },

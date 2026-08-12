@@ -137,6 +137,7 @@ import {
 import { useLiveValuesSocket } from "../shared/useLiveValuesSocket";
 import { usePolling } from "../shared/usePolling";
 import { useTabs } from "../features/tabs/useTabs";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 // Uzaktan bakim izni ACIKKEN header'da duran uyari rozeti. Sayfanin kendisi
 // lazy; rozet oturum acilir acilmaz gerektigi icin bu kucuk modul eager.
 import { formatRemaining, useRemoteAccessBadge } from "../features/remote-access/remoteAccessShared";
@@ -2768,6 +2769,15 @@ export function App() {
         // basiyordu — her ilk sayfa acilisinda tum arayuz bir an kararip
         // geri geliyordu. Artik ust cerceve YERINDE KALIR, yalnizca icerik
         // alani yer tutar.
+        // SAYFA HATA SINIRI — cokme TEK SEKMEDE kalir.
+        // 2026-08-12: hat arizasi detayinda bir render hatasi (erken
+        // return'den sonra kalmis bir hook) KOK sinira kadar cikti ve tum
+        // uygulamayi dusurdu; sekme seridi dahil hicbir sey tiklanmiyordu,
+        // tek care sayfayi yenilemekti. Bir SCADA arayuzunde tek bir sekmenin
+        // kaydi silindi diye butun ekranin olmesi kabul edilemez.
+        // `resetKey` aktif sekme: baska sekmeye gecip donunce ekran
+        // kendiliginden toparlanir.
+        <ErrorBoundary variant="page" resetKey={tabsApi.activeKey}>
         <Suspense fallback={pageFallback}>
         {pageMode === "device-detail" && activeDeviceDetailId !== null ? (
           <main className="content">
@@ -3190,6 +3200,7 @@ export function App() {
           </div>
         )}
         </Suspense>
+        </ErrorBoundary>
         )}
       </div>
 

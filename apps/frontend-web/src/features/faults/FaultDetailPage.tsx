@@ -505,6 +505,28 @@ export function FaultDetailPage({
   const triggerAlarms: FaultTriggerAlarm[] = fault?.trigger_alarms ?? [];
   const triggerSignals = fault?.trigger_signals ?? [];
 
+  /** Araligin ORTA NOKTASI — sahaya cikan kisiye verilecek tek sayi.
+   *
+   *  BU HOOK ERKEN `return`DEN ONCE OLMAK ZORUNDA.
+   *
+   *  Asagida "ariza bulunamadi" dali var ve kayit listede yokken (sekme
+   *  yenilenmis, kapanmis ariza, kayit silinmis) ILK render oradan donuyor.
+   *  Bu hook o return'un ALTINDAYDI: ilk render'da calismiyor, kayit
+   *  gelince calisiyordu. React icin hook SAYISI degismis oluyor ve
+   *  "Rendered more hooks than during the previous render" hatasi RENDER
+   *  sirasinda firliyordu — ErrorBoundary tum uygulamayi yutuyor, ekran
+   *  kitleniyor, tek care sayfayi yenilemek oluyordu.
+   *
+   *  Kural: kosullu return'den once TUM hook'lar cagrilmali; `fault` null
+   *  olabilecegi icin govde de null'a dayanikli. */
+  const tahminiMesafe = useMemo(() => {
+    const a = fault?.zone_start_m;
+    const b = fault?.zone_end_m;
+    if (typeof a !== "number" && typeof b !== "number") return "—";
+    const orta = typeof a === "number" && typeof b === "number" ? (a + b) / 2 : (a ?? b)!;
+    return orta >= 1000 ? `~${(orta / 1000).toFixed(2)} km` : `~${Math.round(orta)} m`;
+  }, [fault?.zone_start_m, fault?.zone_end_m]);
+
   // ---- Yukleniyor / bulunamadi -------------------------------------------
   if (!fault) {
     return (
@@ -529,14 +551,8 @@ export function FaultDetailPage({
   const statusColor = STATUS_COLOR[fault.status] ?? "#64748b";
   const assigneeName = fault.assigned_to_full_name ?? fault.assigned_to_username ?? null;
   const distanceText = formatDistanceRange(fault.zone_start_m, fault.zone_end_m);
-  //: Araligin ORTA NOKTASI — sahaya cikan kisiye verilecek tek sayi.
-  const tahminiMesafe = useMemo(() => {
-    const a = fault.zone_start_m;
-    const b = fault.zone_end_m;
-    if (typeof a !== "number" && typeof b !== "number") return "—";
-    const orta = typeof a === "number" && typeof b === "number" ? (a + b) / 2 : (a ?? b)!;
-    return orta >= 1000 ? `~${(orta / 1000).toFixed(2)} km` : `~${Math.round(orta)} m`;
-  }, [fault.zone_start_m, fault.zone_end_m]);
+  // `tahminiMesafe` YUKARIDA, erken return'den ONCE hesaplaniyor (hook
+  // sirasi sabit kalsin diye); burada yeniden tanimlanmaz.
 
   /** KAPATILMIS ARIZA SALT OKUNUR: rapor alinir, kayit degistirilmez.
    *  Kapanmis bir kayda sonradan yorum/sebep eklenmesi, arsivlenen raporun

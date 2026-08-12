@@ -31,6 +31,10 @@ import "./faultStrip.test";
 // cihazin arasinda olmali. Bir direk kaymasi ekibi yanlis acikliga gonderir.
 import "./faultMapView.test";
 
+// Hook sirasi: kosullu return'den sonra hook kalirsa React render sirasinda
+// firlatir ve TUM arayuz kitlenir (2026-08-12'de yasandi).
+import "./hookSirasi.test";
+
 // Bransman baglantilari: "Diger hatlar" acikken kollar sisteme bagli
 // gorunmeli. Bagli gorunmeyen bir kola kimse cihaz yerlestirmez.
 import "./branchConnectors.test";

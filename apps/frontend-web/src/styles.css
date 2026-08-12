@@ -42236,3 +42236,54 @@ th.event-col-category {
 }
 .fx-fault-no:hover { background: #fff7ed; border-color: #f59e0b; color: #b45309; }
 .fx-fault-no:focus-visible { outline: 2px solid #f59e0b; outline-offset: 1px; }
+
+/* ---- SAYFA COKME KARTI (ErrorBoundary variant="page") ----
+   Kok sinir tum ekrani kaplar; bu ise YALNIZCA icerik alanini kaplar ve
+   sekme seridi/ust bar ayakta kalir. Amac: bir sekmenin kaydi silinince
+   ya da bir render hatasi olunca operator digerlerini kullanmaya devam
+   edebilsin (2026-08-12'de tum arayuz kitlenmisti). */
+.page-crash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 60vh;
+  padding: 32px 24px;
+  text-align: center;
+}
+.page-crash h2 { margin: 0; font-size: 1.15rem; color: var(--fd-ink, #0f172a); }
+.page-crash p { margin: 0; max-width: 460px; color: var(--fd-muted, #475569); font-size: 13px; line-height: 1.55; }
+.page-crash-actions { display: flex; gap: 8px; margin-top: 4px; }
+.page-crash-actions button {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--fd-line, #e2e8f0);
+  background: #fff;
+  color: var(--fd-ink, #0f172a);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.page-crash-actions button:first-child {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+.page-crash-actions button:hover { filter: brightness(0.97); }
+/* Teknik detay KAPALI baslar: operatore anlamsiz, ama sahadan teshis
+   isterken "F12 ac" demek zorunda kalmayalim. */
+.page-crash-detail { margin-top: 6px; max-width: 560px; }
+.page-crash-detail summary { cursor: pointer; font-size: 12px; color: var(--fd-faint, #94a3b8); }
+.page-crash-detail code {
+  display: block;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--fd-sunken, #f7f9fc);
+  border: 1px solid var(--fd-line, #e2e8f0);
+  color: #b91c1c;
+  font-size: 12px;
+  text-align: left;
+  word-break: break-word;
+}

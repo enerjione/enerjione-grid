@@ -3895,6 +3895,9 @@
     "validation": "Invalid data",
     "unknown": "An unexpected error occurred",
     "crashTitle": "An unexpected error occurred",
+    "crashPageBody": "This page could not be opened. Other tabs keep working; switch away and back, or try again.",
+    "crashRetry": "Try again",
+    "crashDetails": "Technical detail",
     "crashBody": "The interface stopped responding due to an unexpected condition. Reloading the page usually resolves it. If the problem persists, notify your system administrator.",
     "crashReload": "Reload the page"
   },
