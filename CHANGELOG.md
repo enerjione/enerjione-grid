@@ -14,6 +14,28 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.74.0] — 2026-08-12
+
+### Değişti
+
+- **Tek grafikli sekmeler artık ekranı dolduruyor.** Hat Arıza Yoğunluğu'nun
+  üç kesiti de (harita, alarm sıklığı takvimi, cihaz × zaman matrisi) ve
+  Arıza Akışı sankey'i sabit piksel yüksekliğindeydi; kartın altında yarım
+  ekranlık boş beyaz alan kalıyordu. Ekranın en çok bakılan kartları en
+  küçük kartlarıydı. Sankey ve matris bu yerden doğrudan kazanıyor:
+  düğümler dikeyde ayrıldıkça akışın nereye gittiği, satırlar yükseldikçe
+  hücreler okunur hale geliyor.
+- **Takvim kareleri karta göre büyüyor.** Kareler KARE kalmak zorunda —
+  yüksekliği yüzde yüze çekmek onları dikey dikdörtgene çevirir ve GitHub
+  görünümünü bozardı. Kare kenarı artık iki kısıttan küçüğüne bağlı (53
+  hafta yatayda, 7 gün dikeyde sığmalı) ve takvim kendi kabında dikeyde
+  ortalanıyor. Dar kartta eski 14 piksele iner, geniş kartta 40'a kadar
+  çıkar.
+- Çok kısa ekranda grafiğin altı sessizce kırpılmıyor; içerik sığmazsa
+  sayfa kaydırmaya bırakılıyor.
+
+---
+
 ## [2.73.0] — 2026-08-12
 
 ### Değişti
