@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oturum Odasi — EnerjiOne Grid</title>
+<style>
+/* ---------------------------------------------------------------------------
+   Pixel-art panel. Dis bagimlilik YOK: yerel sunucudan tek dosya olarak
+   servis ediliyor, CDN'e/yaziyuzune erisim gerekmiyor.
+   Sprite'lar SVG <rect> izgarasi; shape-rendering:crispEdges ile buyutulunce
+   bulaniklasmiyor.
+--------------------------------------------------------------------------- */
+:root{
+  --zemin:#0f1020; --zemin2:#171a33; --cerceve:#2b2f57;
+  --metin:#d7dcff; --sonuk:#7d84b8;
+  --yesil:#6bff8e; --sari:#ffd166; --kirmizi:#ff5c7a; --mor:#b98bff; --mavi:#5cc8ff;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:
+    repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0 2px, rgba(0,0,0,0) 2px 4px),
+    radial-gradient(120% 90% at 50% 0%, #1b1f3d 0%, var(--zemin) 70%);
+  color:var(--metin);
+  font-family:ui-monospace,"Cascadia Mono",Consolas,"Courier New",monospace;
+  font-size:13px; letter-spacing:.04em;
+  padding:18px 18px 40px;
+}
+h1{font-size:15px;margin:0;letter-spacing:.22em;text-transform:uppercase}
+.ust{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+     border-bottom:2px solid var(--cerceve);padding-bottom:10px;margin-bottom:18px}
+.ust .alt{color:var(--sonuk);font-size:11px}
+.imlec{display:inline-block;width:8px;height:13px;background:var(--yesil);
+       vertical-align:-2px;animation:yanip 1s steps(2,end) infinite}
+@keyframes yanip{50%{opacity:0}}
+
+/* --- masalar --- */
+.oda{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
+.masa{background:linear-gradient(180deg,var(--zemin2),#12142a);
+      border:2px solid var(--cerceve);padding:12px;position:relative;
+      box-shadow:0 0 0 2px #0b0c18, 0 6px 0 0 #0b0c18}
+.masa.carpisan{border-color:var(--kirmizi);box-shadow:0 0 0 2px #0b0c18,0 6px 0 0 #0b0c18,0 0 18px rgba(255,92,122,.35)}
+.masa.uykuda{opacity:.62}
+.masa .ad{font-weight:700;text-transform:uppercase;letter-spacing:.12em;
+          font-size:12px;display:flex;align-items:center;gap:6px}
+.masa .dal{color:var(--sonuk);font-size:10.5px;margin-top:2px;
+           overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sprite{display:block;margin:10px auto 8px;width:128px;height:128px;
+        image-rendering:pixelated;shape-rendering:crispEdges}
+.is{font-size:11px;line-height:1.45;min-height:2.9em;color:var(--metin);
+    background:#0b0c18;border-left:3px solid var(--cerceve);padding:5px 7px;margin:6px 0}
+.is.bos{color:var(--sonuk)}
+.rozetler{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.rz{font-size:10px;padding:2px 6px;border:1px solid currentColor;text-transform:uppercase;letter-spacing:.08em}
+.rz.yesil{color:var(--yesil)} .rz.sari{color:var(--sari)}
+.rz.kirmizi{color:var(--kirmizi)} .rz.mavi{color:var(--mavi)} .rz.sonuk{color:var(--sonuk)}
+.dosyalar{margin-top:8px;font-size:10px;color:var(--sonuk);line-height:1.5;
+          max-height:64px;overflow:auto}
+.dosyalar b{color:var(--sari);font-weight:400}
+
+/* --- carpisma bolumu --- */
+.bolum{margin-top:26px;border-top:2px solid var(--cerceve);padding-top:14px}
+.bolum h2{font-size:12px;letter-spacing:.2em;text-transform:uppercase;margin:0 0 10px}
+.cakis{border:2px solid var(--kirmizi);background:rgba(255,92,122,.07);
+       padding:8px 10px;margin-bottom:7px;font-size:11px}
+.cakis .yol{color:var(--kirmizi);word-break:break-all}
+.cakis .kim{color:var(--sonuk);font-size:10.5px;margin-top:3px}
+.temiz{color:var(--yesil);font-size:11.5px}
+.aciklama{color:var(--sonuk);font-size:10.5px;margin-top:8px;line-height:1.6}
+.hata{color:var(--kirmizi)}
+</style>
+</head>
+<body>
+
+<div class="ust">
+  <h1>Oturum Odasi<span class="imlec"></span></h1>
+  <div class="alt" id="ozet">baglaniyor...</div>
+</div>
+
+<div class="oda" id="oda"></div>
+
+<div class="bolum">
+  <h2>Carpisma Tahtasi</h2>
+  <div id="carpismalar"></div>
+  <div class="aciklama">
+    Ayni dosyaya birden fazla oturum dokunmus demek. Engel degil, uyari:
+    degisikligi dar tutun ya da once biri main'e girsin.<br>
+    <b>-N</b> = dal main'in N commit gerisinde. Buyudukce merge kavgasi buyur:
+    <code>tools\oturum-birlestir.ps1 -Konu &lt;ad&gt; -Uygula</code>
+  </div>
+</div>
+
+<script>
+/* Sprite izgarasi: 16x16. Harfler renk anahtari.
+   .=bos  M=cerceve  E=ekran  K=kod satiri  S=stand  H=sac  T=ten  G=govde  Z=uyku */
+const SPRITE = [
+  "................",
+  ".MMMMMMMMMMMMMM.",
+  ".MEEEEEEEEEEEEM.",
+  ".MEKKK.EKK.EEEM.",
+  ".MEEKKKK.EEEEEM.",
+  ".MEKK.EKKKK.EEM.",
+  ".MEEEEEEEEEEEEM.",
+  ".MMMMMMMMMMMMMM.",
+  "......SSSS......",
+  "....SSSSSSSS....",
+  "................",
+  ".....HHHHHH.....",
+  "....HHHHHHHH....",
+  "....HTTTTTTH....",
+  "..GGGGGGGGGGGG..",
+  ".GGGGGGGGGGGGGG."
+];
+
+/* Retro palet. Durum ekranin rengini belirler: yesil=yaziyor, sari=bekliyor,
+   mavi-sonuk=uykuda. Govde rengi ajan adindan turer ki masalar birbirinden
+   bir bakista ayrilsin. */
+const DURUM_RENK = {
+  yaziyor:  { ekran:"#0b2a16", kod:"#6bff8e", cerceve:"#3a7f52" },
+  bekliyor: { ekran:"#2a2409", kod:"#ffd166", cerceve:"#7f6a33" },
+  uykuda:   { ekran:"#111528", kod:"#3b4370", cerceve:"#333a63" }
+};
+const GOVDE = ["#b98bff","#5cc8ff","#ff9f6b","#6bffd5","#ff8bc8","#9fd45c"];
+
+function govdeRengi(ad){
+  let h = 0;
+  for (let i = 0; i < ad.length; i++) h = (h * 31 + ad.charCodeAt(i)) >>> 0;
+  return GOVDE[h % GOVDE.length];
+}
+
+function spriteSVG(ajan){
+  const r = DURUM_RENK[ajan.durum] || DURUM_RENK.uykuda;
+  const govde = govdeRengi(ajan.konu);
+  const renk = { M:r.cerceve, E:r.ekran, K:r.kod, S:"#4a5285", H:"#2b2f57", T:"#e8c39e", G:govde };
+
+  let p = "";
+  for (let y = 0; y < SPRITE.length; y++){
+    for (let x = 0; x < SPRITE[y].length; x++){
+      const c = SPRITE[y][x];
+      if (c === "." || !renk[c]) continue;
+      /* Kod pikselleri sirayla yanip soner: "yaziliyor" hissi. Gecikme
+         konuma bagli, boylece satirlar dalga gibi akar. */
+      const anim = (c === "K" && ajan.durum === "yaziyor")
+        ? ` class="kod" style="animation-delay:${((x * 7 + y * 13) % 9) * 0.11}s"` : "";
+      p += `<rect x="${x}" y="${y}" width="1" height="1" fill="${renk[c]}"${anim}/>`;
+    }
+  }
+  /* Uykuda: bas ustunde tuten Z'ler. */
+  if (ajan.durum === "uykuda"){
+    p += `<text x="12.4" y="11.4" font-size="3.2" fill="#5cc8ff" opacity=".75"
+            font-family="monospace" class="zzz">z</text>`;
+  }
+  return `<svg class="sprite" viewBox="0 0 16 16" role="img"
+     aria-label="${ajan.konu} — ${ajan.durum}">
+     <style>
+       .kod{animation:kodyan .9s steps(2,end) infinite}
+       @keyframes kodyan{50%{opacity:.25}}
+       .zzz{animation:yuz 2.4s ease-in-out infinite}
+       @keyframes yuz{0%{opacity:0;transform:translateY(1px)}
+                      35%{opacity:.9}100%{opacity:0;transform:translateY(-2.5px)}}
+     </style>${p}</svg>`;
+}
+
+function kacar(s){
+  return String(s == null ? "" : s).replace(/[&<>"]/g, c =>
+    ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+}
+
+function ciz(veri){
+  const cakisanlar = new Set();
+  for (const c of veri.carpismalar) for (const k of c.kimler) cakisanlar.add(k);
+
+  const oda = document.getElementById("oda");
+  oda.innerHTML = veri.ajanlar.map(a => {
+    const rozet = [];
+    if (a.anaMi) rozet.push(`<span class="rz mavi">ana agac</span>`);
+    if (a.port)  rozet.push(`<span class="rz sonuk">:${a.port}</span>`);
+    if (a.kirli) rozet.push(`<span class="rz sari">${a.kirli} dosya acik</span>`);
+    if (a.ileride) rozet.push(`<span class="rz yesil">+${a.ileride}</span>`);
+    if (a.geride)  rozet.push(`<span class="rz ${a.geride > 10 ? "kirmizi" : "sonuk"}">-${a.geride}</span>`);
+    if (cakisanlar.has(a.konu)) rozet.push(`<span class="rz kirmizi">carpisma</span>`);
+    if (!a.canli) rozet.push(`<span class="rz sonuk">oturum kapali</span>`);
+
+    const is = a.baslik
+      ? `<div class="is">${kacar(a.baslik)}</div>`
+      : `<div class="is bos">${a.canli ? "henuz istek gelmedi" : "acik Claude oturumu yok"}</div>`;
+
+    const dosyalar = a.dosyalar.length
+      ? `<div class="dosyalar">${a.dosyalar.map(f => `<b>&#9679;</b> ${kacar(f)}`).join("<br>")}</div>`
+      : "";
+
+    return `<div class="masa ${cakisanlar.has(a.konu) ? "carpisan" : ""} ${a.durum === "uykuda" ? "uykuda" : ""}">
+      <div class="ad">${kacar(a.konu)}</div>
+      <div class="dal">${kacar(a.dal || "-")}</div>
+      ${spriteSVG(a)}
+      ${is}
+      <div class="rozetler">${rozet.join("")}</div>
+      ${dosyalar}
+    </div>`;
+  }).join("");
+
+  const c = document.getElementById("carpismalar");
+  c.innerHTML = veri.carpismalar.length
+    ? veri.carpismalar.map(x => `<div class="cakis">
+        <div class="yol">${kacar(x.dosya)}</div>
+        <div class="kim">${x.kimler.map(kacar).join("  &#8596;  ")}</div>
+      </div>`).join("")
+    : `<div class="temiz">Carpisma yok — hicbir dosyada iki oturum birden calismiyor.</div>`;
+
+  const calisan = veri.ajanlar.filter(a => a.durum === "yaziyor").length;
+  document.getElementById("ozet").textContent =
+    `${veri.ajanlar.length} agac · ${calisan} calisiyor · ${veri.carpismalar.length} carpisma · ${veri.guncelleme}`;
+}
+
+async function tazele(){
+  try{
+    const cevap = await fetch("/durum", { cache:"no-store" });
+    ciz(await cevap.json());
+  }catch(e){
+    document.getElementById("ozet").innerHTML =
+      `<span class="hata">panel sunucusuna ulasilamiyor — oturum-panel.ps1 kapanmis olabilir</span>`;
+  }
+}
+tazele();
+setInterval(tazele, 4000);
+</script>
+</body>
+</html>

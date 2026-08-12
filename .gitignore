@@ -38,6 +38,19 @@ memory/
 .claude/oturumlar.json
 .claude/oturumlar.cache.json
 
+# Worktree acilisinda uretilen oturum notu (port, calistirma komutlari).
+# Her worktree'de ayri ve o makineye ozel — commit edilmez.
+OTURUM.md
+
+# Paralel oturum defteri: hangi oturum acik, hangi portta, ne isle mesgul.
+# YEREL MAKINE DURUMU — bu makineye ozel, commit edilmez. Kaybolursa
+# `tools/oturum-kayit.ps1 -Onar` worktree listesinden yeniden kurar.
+.claude/oturumlar.json
+.claude/oturumlar.json.lock
+.claude/oturumlar.json.tmp
+.claude/oturumlar.cache.json
+.claude/oturumlar.cache.json.tmp
+
 # Firebase Admin SDK service account dosyalari — ASLA commit edilmemeli
 # (private key icerir). Backend runtime'da yerel dosyadan veya env ile okur.
 fcm-service-account.json

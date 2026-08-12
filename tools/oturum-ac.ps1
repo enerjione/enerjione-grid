@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Paralel calisma oturumu icin izole bir git worktree acar.
 
@@ -44,8 +44,25 @@
   `node_modules` icin baglanti (junction) yerine GERCEK `npm install`.
   Yalnizca o worktree'de bagimlilik degistiriyorsan gerekir.
 
+.PARAMETER Aciklama
+  Isin bir cumlelik tarifi. Defterde ("kim ne yapiyor") ve diger oturumlarin
+  SessionStart tablosunda gorunur.
+
+.PARAMETER VSCode
+  Worktree'yi AYRI bir VSCode penceresinde acar.
+  NEDEN GEREKLI: VSCode eklentisinde her sekme bir Claude oturumu ama hepsi
+  AYNI workspace klasorunu gosterir. Claude `EnterWorktree` ile worktree'ye
+  gecse bile EDITOR ana agacta kalir; acik bir tampon kaydedildiginde
+  degisiklik ana agaca yazilir. 246 satirlik kayip tam bu ayrimdan cikti.
+  Ayri pencere, editor ile oturumu ayni dizinde bulusturur.
+
+.PARAMETER Sessiz
+  Yalnizca worktree yolunu stdout'a basar, diger her seyi stderr'e. Bu bicimi
+  WorktreeCreate hook'u kullanir: Claude Code o olayda stdout'u worktree yolu
+  olarak okur, fazladan tek satir ciktiy akisi bozar.
+
 .EXAMPLE
-  .\tools\oturum-ac.ps1 -Konu analiz
+  .\tools\oturum-ac.ps1 -Konu analiz -VSCode
   .\tools\oturum-ac.ps1 -Konu gateway -Temel main -TamKurulum
 #>
 [CmdletBinding()]
@@ -53,12 +70,19 @@ param(
   [Parameter(Mandatory = $true)][string]$Konu,
   [string]$Dal = "",
   [string]$Temel = "origin/main",
-  [switch]$TamKurulum
+  [string]$Aciklama = "",
+  [switch]$TamKurulum,
+  [switch]$VSCode,
+  [switch]$Sessiz
 )
 
 $ErrorActionPreference = "Stop"
 
-function Yaz($metin, $renk = "Gray") { Write-Host $metin -ForegroundColor $renk }
+# Sessiz kipte TUM anlatim stderr'e gider; stdout yalnizca worktree yolunu
+# tasir (WorktreeCreate hook sozlesmesi).
+function Yaz($metin, $renk = "Gray") {
+  if ($Sessiz) { [Console]::Error.WriteLine($metin) } else { Write-Host $metin -ForegroundColor $renk }
+}
 
 # Git'i cagirmanin GUVENLI yolu.
 #
@@ -77,9 +101,9 @@ function Git-Calistir {
     # "hata almis" gibi gorunur — kullanici bosuna geri alir.
     & git @Arg 2>&1 | ForEach-Object {
       if ($_ -is [System.Management.Automation.ErrorRecord]) {
-        Write-Host $_.Exception.Message -ForegroundColor DarkGray
+        Yaz $_.Exception.Message "DarkGray"
       } else {
-        Write-Host $_
+        Yaz "$_"
       }
     }
   } finally { $ErrorActionPreference = $eski }
@@ -106,20 +130,13 @@ $worktreeKok = Join-Path $kok ".claude\worktrees"
 $hedef = Join-Path $worktreeKok $Konu
 if (Test-Path $hedef) { throw "Bu konu zaten acik: $hedef" }
 
-# --- Port cifti: mevcut worktree sayisina gore bir sonraki slot ----------
-# Slot 0 ANA AGACIN: 5173/8000 orada kalsin, alisilmis akis bozulmasin.
-$mevcut = @()
-if (Test-Path $worktreeKok) {
-  $mevcut = @(Get-ChildItem $worktreeKok -Directory -ErrorAction SilentlyContinue)
-}
-$slot = $mevcut.Count + 1
-$frontPort = 5173 + $slot
-$backPort = 8000 + $slot
+# --- Ortak defter --------------------------------------------------------
+# Slot/port dagitimi ve "kim ne yapiyor" kaydi buradan yurur.
+. (Join-Path $PSScriptRoot "oturum-ortak.ps1")
 
 Yaz "Depo      : $kok"
 Yaz "Konu/dal  : $Konu  ->  $Dal"
 Yaz "Temel ref : $Temel"
-Yaz "Portlar   : frontend $frontPort / backend $backPort"
 Yaz ""
 
 # --- Worktree ------------------------------------------------------------
@@ -130,94 +147,70 @@ if ($Temel -like "origin/*") {
 Yaz "Worktree aciliyor..." "DarkGray"
 Git-Calistir worktree add -b $Dal $hedef $Temel
 
-# --- Gitignore'daki yerel dosyalar: worktree'ye GELMEZLER ----------------
-# Backend .env olmadan uygulama hic acilmaz; kopyalanmasi sart.
-$kaynakEnv = Join-Path $kok "apps\backend-api\.env"
-$hedefEnv = Join-Path $hedef "apps\backend-api\.env"
-if (Test-Path $kaynakEnv) {
-  Copy-Item $kaynakEnv $hedefEnv
-  Yaz "backend .env kopyalandi" "DarkGray"
+# --- Port cifti: DEFTERDEN ilk bos slot ----------------------------------
+# Slot 0 ANA AGACIN: 5173/8000 orada kalsin, alisilmis akis bozulmasin.
+#
+# ESKI HESAP YANLISTI: slot = "dizin sayisi + 1". Bir oturum kapatilip yenisi
+# acildiginda ayni slot ikinci kez dagitiliyordu; iki uvicorn ayni portta
+# ikincisi sessizce baslamiyor, kullanici da "backend neden cevap vermiyor"
+# diye frontend'de ariyordu. Defter ilk BOS tam sayiyi verir ve kilit
+# altinda calisir -- iki oturum ayni anda acilsa da ayni slotu almaz.
+$kayit = Add-Oturum -Konu $Konu -Yol $hedef -Dal $Dal -Aciklama $Aciklama
+if ($kayit) {
+  $slot = [int]$kayit.slot
+  $frontPort = [int]$kayit.frontendPort
+  $backPort = [int]$kayit.backendPort
 } else {
-  Yaz "UYARI: apps/backend-api/.env yok; .env.example'dan uretin." "Yellow"
+  # Defter yazilamadiysa is DURMASIN; kaba ama calisir bir port ver.
+  $slot = (@(Get-ChildItem $worktreeKok -Directory -ErrorAction SilentlyContinue)).Count
+  $frontPort = 5173 + $slot
+  $backPort = 8000 + $slot
+  $kayit = [pscustomobject]@{
+    konu = $Konu; dal = $Dal; yol = $hedef; slot = $slot
+    frontendPort = $frontPort; backendPort = $backPort; aciklama = $Aciklama
+  }
+  Yaz "UYARI: defter yazilamadi; port kaba hesapla verildi." "Yellow"
 }
+Yaz "Portlar   : frontend $frontPort / backend $backPort" "DarkGray"
 
-# Frontend'in API adresi: 5173 DISINDA bir portta calisirken zorunlu.
-$frontEnv = Join-Path $hedef "apps\frontend-web\.env"
-@(
-  "# Bu dosyayi tools/oturum-ac.ps1 uretti (paralel oturum: $Konu).",
-  "# 5173 DISINDA bir portta calisiyoruz; api.ts'teki 5173 varsayimi",
-  "# devreye girmedigi icin backend adresi burada ACIKCA verilmeli.",
-  "VITE_API_BASE_URL=http://localhost:$backPort/api/v1"
-) | Set-Content -Path $frontEnv -Encoding utf8
-Yaz "frontend .env yazildi (VITE_API_BASE_URL -> :$backPort)" "DarkGray"
-
-# --- node_modules --------------------------------------------------------
-$anaNode = Join-Path $kok "apps\frontend-web\node_modules"
-$yeniNode = Join-Path $hedef "apps\frontend-web\node_modules"
-if ($TamKurulum) {
-  Yaz "npm install calisiyor (tam kurulum)..." "DarkGray"
-  Push-Location (Join-Path $hedef "apps\frontend-web")
-  npm install
-  Pop-Location
-} elseif (Test-Path $anaNode) {
-  # Junction: yonetici hakki gerektirmez, vite/tsc sorunsuz izler.
-  # BAGIMLILIK DEGISTIRIRSEN bu paylasim yaniltir — o durumda -TamKurulum.
-  New-Item -ItemType Junction -Path $yeniNode -Target $anaNode | Out-Null
-  Yaz "node_modules ana agaca baglandi (junction)" "DarkGray"
-} else {
-  Yaz "UYARI: ana agacta node_modules yok; `npm install` gerekiyor." "Yellow"
+# --- Kurulum: .env'ler, node_modules, OTURUM.md -------------------------
+# Ortak kitaplikta (oturum-ortak.ps1 > Copy-OturumKurulumu). NEDEN ORADA:
+# yerlesik `--worktree` akisi da ayni kurulumdan gecmeli, yoksa oradan
+# acilan worktree .env'siz kalir ve hic calismaz.
+Copy-OturumKurulumu -Hedef $hedef -Kayit $kayit -Temel $Temel -TamKurulum:$TamKurulum -Bildir { param($m, $r) Yaz $m $r }
+# --- VSCode penceresi ----------------------------------------------------
+# VSCode eklentisinde sekmeler AYNI workspace klasorunu paylasir. Claude
+# `EnterWorktree` ile worktree'ye gecse bile EDITOR ana agacta kalir: acik
+# bir tampon kaydedildiginde degisiklik ana agaca yazilir. 246 satirlik kayip
+# tam bu ayrimdan cikti. Ayri pencere ikisini ayni dizinde bulusturur.
+if ($VSCode) {
+  $kod = Get-Command code -ErrorAction SilentlyContinue
+  if ($kod) {
+    Yaz "VSCode yeni pencerede aciliyor..." "DarkGray"
+    # cmd uzerinden: `code` bir .cmd sarmalayicisi, dogrudan cagrilinca
+    # PowerShell bazi kurulumlarda pencereyi acip donmuyor.
+    Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "code", "-n", "`"$hedef`"" -WindowStyle Hidden
+  } else {
+    Yaz "UYARI: 'code' PATH'te yok; VSCode elle acilmali." "Yellow"
+    Yaz "  VSCode > Command Palette > 'Shell Command: Install code command in PATH'" "Yellow"
+  }
 }
-
-# --- Oturum notu: dizini acan herkes ne oldugunu gorsun ------------------
-$not = @(
-  "# Oturum: $Konu",
-  "",
-  "Bu dizin PARALEL BIR CALISMA OTURUMU icin acilmis bir git worktree'sidir.",
-  "Ana agac: $kok",
-  "",
-  "| Ne | Deger |",
-  "| --- | --- |",
-  "| Dal | ``$Dal`` |",
-  "| Temel | ``$Temel`` |",
-  "| Frontend portu | $frontPort |",
-  "| Backend portu | $backPort |",
-  "",
-  "## Calistirma",
-  "",
-  '```powershell',
-  "# Backend (venv ANA AGACTAN kullanilir; ayri kurulum gerekmez)",
-  "& '$kok\apps\backend-api\.venv\Scripts\Activate.ps1'",
-  "cd '$hedef\apps\backend-api'",
-  "python -m uvicorn app.main:app --reload --port $backPort",
-  "",
-  "# Frontend (ayri pencerede)",
-  "cd '$hedef\apps\frontend-web'",
-  "npm run dev -- --port $frontPort",
-  '```',
-  "",
-  "## Bitince",
-  "",
-  '```powershell',
-  "cd '$kok'",
-  ".\tools\oturum-kapat.ps1 -Konu $Konu",
-  '```',
-  "",
-  "> Duz ``git worktree remove`` KULLANMA: node_modules ana agaca junction",
-  "> ile bagli, baglantinin icine giren bir silme ANA AGACIN node_modules'unu",
-  "> goturur. Kapatma scripti once baglantiyi tek basina kaldirir.",
-  "",
-  "> `node_modules` ana agaca junction ile bagli. Bu oturumda BAGIMLILIK",
-  "> degistirirsen once `npm install` ile bagimsizlastir, yoksa ana agaci",
-  "> da etkilersin."
-)
-Set-Content -Path (Join-Path $hedef "OTURUM.md") -Value $not -Encoding utf8
 
 Yaz ""
 Yaz "HAZIR: $hedef" "Green"
 Yaz ""
 Yaz "Sonraki adimlar:" "White"
-Yaz "  1) Bu oturumu oraya tasi (Claude Code):" "White"
-Yaz "       EnterWorktree  path: $hedef"
-Yaz "     ya da terminalde:  cd '$hedef'"
+if ($VSCode) {
+  Yaz "  1) Acilan YENI VSCode penceresinde Claude sekmesi baslat." "White"
+  Yaz "     (Bu pencerede baslatirsan editor ana agacta kalir.)" "DarkGray"
+} else {
+  Yaz "  1) Bu oturumu oraya tasi (Claude Code):" "White"
+  Yaz "       EnterWorktree  path: $hedef"
+  Yaz "     ya da terminalde:  cd '$hedef'"
+  Yaz "     VSCode kullaniyorsan -VSCode ile ayri pencere acmak DAHA GUVENLI." "DarkGray"
+}
 Yaz "  2) Calistirma komutlari: $hedef\OTURUM.md"
 Yaz "  3) Is bitince ana agactan:  tools\oturum-kapat.ps1 -Konu $Konu"
+
+# WorktreeCreate hook sozlesmesi: stdout YALNIZCA worktree yolu.
+if ($Sessiz) { [Console]::Out.WriteLine($hedef) }

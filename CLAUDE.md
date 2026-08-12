@@ -146,32 +146,65 @@ editörde kalmış eski tampon 246 satırlık bir düzeltmeyi commit ile geri al
 `git reset` iki commit'i daldan düşürdü.
 
 **Kural: her iş kendi worktree'sinde.** Bu artık *otomatik* — hatırlamaya
-bağlı değil (`.claude/settings.json` > `hooks`):
+bağlı değil (`.claude/settings.json` > `hooks`).
 
-- **SessionStart** → `tools/oturum-durum.ps1`: her oturum açılışında nerede
-  olduğunu (ana ağaç mı, worktree mi), hangi dalda ve başka hangi oturumların
-  açık olduğunu bağlama yazar.
-- **PreToolUse (Bash, yalnız `git *`)** → `tools/oturum-koruma.ps1`: ana ağaçta
-  `git add -A`, `commit -a`, `reset --hard`, `clean -f`, `checkout -- .`,
-  `stash` komutlarını **engeller** ve doğrusunu söyler. Kendi worktree'nde
-  hepsi serbest. Davranış testi: `tools/oturum-koruma-test.ps1`.
+### Günlük akış
 
 ```powershell
-.\tools\oturum-ac.ps1     -Konu analiz   # worktree + dal + .env + ayrı port
-.\tools\oturum-kapat.ps1  -Konu analiz   # güvenli kapatma (junction'a dikkat)
-.\tools\oturum-koruma-test.ps1           # hook hâlâ doğru mu (13 durum)
+.\tools\oturum-kayit.ps1                         # kim ne yapıyor, nerede çarpışıyoruz
+.\tools\oturum-panel.ps1 -Ac                     # aynısının canlı görsel hâli (:7373)
+.\tools\oturum-ac.ps1  -Konu analiz -VSCode      # worktree + dal + .env + port + AYRI pencere
+.\tools\oturum-birlestir.ps1 -Hepsi              # dallar main'e göre nerede
+.\tools\oturum-birlestir.ps1 -Konu analiz -Uygula  # güncel main üstüne rebase
+.\tools\oturum-kapat.ps1 -Konu analiz            # güvenli kapatma (junction'a dikkat)
 ```
 
-Worktree'ler `.claude/worktrees/` altında (gitignore'da, Docker bağlamına
-girmez). Claude Code oturumu `EnterWorktree path: <yol>` ile oraya geçer;
-`worktree.symlinkDirectories` ayarı sayesinde yerleşik `--worktree` akışı da
-`node_modules`'u bağlar (npm install beklemez).
+Claude içinden hepsi tek komut: **`/oturum`** (durum · ac · birlestir · panel · kapat).
 
-Ana ağaçta kalmak zorundaysan: commit'i **açık dosya yoluyla** yap, `reset` /
-`checkout --` öncesi `git log --oneline -5` ile ne düşeceğine bak (düşen commit
-başkasının olabilir; reflog'dan kurtarılır ama önce fark etmek gerekir),
-`types.ts` / `App.tsx` / i18n gibi **ortak dosyalara** dokunduysan hemen
-commit'le — çarpışmaların hepsi bu dosyalarda oldu.
+### Ortak defter
+
+`.claude/oturumlar.json` (ana ağaçta, gitignore'da) — açık oturumlar, dalları,
+port çiftleri ve **canlı Claude pencerelerinin ne işle meşgul olduğu**. Hook'lar
+yazar; `tools/oturum-ortak.ps1` okur. Bozulursa `oturum-kayit.ps1 -Onar`
+worktree listesinden yeniden kurar. Port slotu defterden **ilk boş sayı** olarak
+verilir — bir oturum kapanınca portu serbest kalır.
+
+### Hook'lar
+
+| Olay | Script | Ne yapar |
+| --- | --- | --- |
+| SessionStart | `oturum-durum.ps1` | Nerede olduğun, **açık oturumlar + ne yaptıkları**, dalların kaç commit geride kaldığı, aynı dosyada birden fazla oturum, migration zinciri çakışma riski |
+| UserPromptSubmit | `oturum-baslik.ps1` | İlk isteği oturumun "işi" olarak deftere yazar (diğer oturumlar bunu görür) |
+| PreToolUse `Bash(git *)` | `oturum-koruma.ps1` | Ana ağaçta `add -A`, `commit -a`, `reset --hard`, `clean -f`, `checkout -- .`, `stash` **engellenir**. Kendi worktree'nde serbest |
+| PreToolUse `Edit/Write` | `oturum-carpisma.ps1` | Paylaşımlı dosyalarda (`src/shared/`, `src/app/`, `styles.css`, `app/models/`, `alembic_migrations/versions/`) "bu dosyada 2 oturum daha var" uyarısı. Engellemez |
+| SessionEnd | `oturum-bitis.ps1` | Defterden düşer; commit'lenmemiş iş varsa ekrana yazar |
+| WorktreeCreate | `oturum-worktree-hook.ps1` | Yerleşik `--worktree` / `EnterWorktree` akışını da `oturum-ac.ps1`'den geçirir |
+
+Testler: `tools/oturum-test.ps1` (34 durum — defter, slot, yol, hook'lar) ve
+`tools/oturum-koruma-test.ps1` (13 durum — engelleme; **ana ağaçtan** koşulur).
+
+### VSCode kullanıyorsan
+
+Eklentide sekmeler **aynı workspace klasörünü paylaşır**. Claude `EnterWorktree`
+ile worktree'ye geçse bile **editör ana ağaçta kalır**; açık bir tampon
+kaydedildiğinde değişiklik ana ağaca yazılır — 246 satırlık kayıp tam bu
+ayrımdan çıktı. Bu yüzden `oturum-ac.ps1 -Konu <ad> **-VSCode**` kullan: ayrı
+pencere açar, editörle oturumu aynı dizinde buluşturur.
+
+### Bilinen sınır: tek Postgres
+
+Portlar ayrı, veritabanı ortak (`enerjione_grid`). İki dal farklı migration
+zinciriyle `alembic upgrade head` çalıştırırsa `alembic_version` **herkes için**
+bozulur. SessionStart bunu tespit edip uyarır; sırayı konuşun — önce biri
+main'e girsin, diğeri üstüne rebase etsin.
+
+### Ana ağaçta kalmak zorundaysan
+
+Commit'i **açık dosya yoluyla** yap, `reset` / `checkout --` öncesi
+`git log --oneline -5` ile ne düşeceğine bak (düşen commit başkasının olabilir;
+reflog'dan kurtarılır ama önce fark etmek gerekir), `types.ts` / `App.tsx` /
+i18n gibi **ortak dosyalara** dokunduysan hemen commit'le — çarpışmaların hepsi
+bu dosyalarda oldu.
 
 ---
 
