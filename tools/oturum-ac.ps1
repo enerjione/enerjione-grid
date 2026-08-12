@@ -60,6 +60,32 @@ $ErrorActionPreference = "Stop"
 
 function Yaz($metin, $renk = "Gray") { Write-Host $metin -ForegroundColor $renk }
 
+# Git'i cagirmanin GUVENLI yolu.
+#
+# NEDEN: git normal ilerleme mesajlarini ("Preparing worktree...") STDERR'e
+# yazar. `$ErrorActionPreference = "Stop"` altinda, cagiran taraf ciktiyi
+# yonlendirirse (`2>&1`, boru hatti, CI) PowerShell bu satirlari ErrorRecord'a
+# cevirir ve script BASARILI git komutunda oluverir. Basari olcusu tek sey:
+# cikis kodu.
+function Git-Calistir {
+  param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arg)
+  $eski = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    # stderr satirlari DUZ METNE cevrilir. Aksi halde PowerShell onlari
+    # kirmizi ErrorRecord olarak basar ve basarili bir kurulum ekranda
+    # "hata almis" gibi gorunur — kullanici bosuna geri alir.
+    & git @Arg 2>&1 | ForEach-Object {
+      if ($_ -is [System.Management.Automation.ErrorRecord]) {
+        Write-Host $_.Exception.Message -ForegroundColor DarkGray
+      } else {
+        Write-Host $_
+      }
+    }
+  } finally { $ErrorActionPreference = $eski }
+  if ($LASTEXITCODE -ne 0) { throw "git $($Arg -join ' ') basarisiz (kod $LASTEXITCODE)." }
+}
+
 # --- Depo kokunu bul: script nereden cagrilirsa cagrilsin dogru yer -------
 $kok = (git rev-parse --show-toplevel 2>$null)
 if (-not $kok) { throw "Git deposu bulunamadi. Depo icinden calistirin." }
@@ -99,11 +125,10 @@ Yaz ""
 # --- Worktree ------------------------------------------------------------
 if ($Temel -like "origin/*") {
   Yaz "origin fetch ediliyor..." "DarkGray"
-  git fetch origin --quiet
+  Git-Calistir fetch origin --quiet
 }
 Yaz "Worktree aciliyor..." "DarkGray"
-git worktree add -b $Dal $hedef $Temel
-if ($LASTEXITCODE -ne 0) { throw "git worktree add basarisiz." }
+Git-Calistir worktree add -b $Dal $hedef $Temel
 
 # --- Gitignore'daki yerel dosyalar: worktree'ye GELMEZLER ----------------
 # Backend .env olmadan uygulama hic acilmaz; kopyalanmasi sart.

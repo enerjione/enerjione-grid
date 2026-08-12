@@ -33,6 +33,27 @@ param(
 $ErrorActionPreference = "Stop"
 function Yaz($metin, $renk = "Gray") { Write-Host $metin -ForegroundColor $renk }
 
+# Bkz. oturum-ac.ps1: git ilerleme mesajlarini stderr'e yazar; ciktisi
+# yonlendirilen bir cagride bu, BASARILI komutu hataya cevirir.
+function Git-Calistir {
+  param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arg)
+  $eski = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    # stderr satirlari DUZ METNE cevrilir. Aksi halde PowerShell onlari
+    # kirmizi ErrorRecord olarak basar ve basarili bir kurulum ekranda
+    # "hata almis" gibi gorunur — kullanici bosuna geri alir.
+    & git @Arg 2>&1 | ForEach-Object {
+      if ($_ -is [System.Management.Automation.ErrorRecord]) {
+        Write-Host $_.Exception.Message -ForegroundColor DarkGray
+      } else {
+        Write-Host $_
+      }
+    }
+  } finally { $ErrorActionPreference = $eski }
+  if ($LASTEXITCODE -ne 0) { throw "git $($Arg -join ' ') basarisiz (kod $LASTEXITCODE)." }
+}
+
 $kok = (git rev-parse --show-toplevel 2>$null)
 if (-not $kok) { throw "Git deposu bulunamadi." }
 $kok = $kok.Trim() -replace "/", "\"
@@ -44,6 +65,25 @@ if ($gitDir -match "worktrees") {
 
 $hedef = Join-Path $kok ".claude\worktrees\$Konu"
 if (-not (Test-Path $hedef)) { throw "Boyle bir oturum yok: $hedef" }
+
+# --- Dizin GERCEKTEN kayitli bir worktree mi -----------------------------
+# SART: worktree kaydi dusmus ama dizin diskte kalmis olabilir (yarim kalan
+# bir silme). O durumda `git -C <dizin> status` sessizce ANA DEPOYU raporlar
+# — dizin ana deponun icinde oldugu icin git yukari yuruyup onu bulur. Kontrol
+# olmadan script "bu oturumda commit'lenmemis is var" diye ANA AGACIN
+# degisikliklerini listeliyor, kullanici da yanlis agaci temizlemeye kalkiyor.
+$kayitli = (git worktree list --porcelain) -match '^worktree ' | ForEach-Object {
+  ($_ -replace '^worktree ', '').Trim() -replace '/', '\'
+}
+if ($kayitli -notcontains $hedef) {
+  Yaz "Dizin var ama KAYITLI BIR WORKTREE DEGIL (yarim kalmis silme olabilir):" "Yellow"
+  Yaz "  $hedef"
+  Yaz ""
+  Yaz "Elle temizlik:" "White"
+  Yaz "  git worktree prune"
+  Yaz "  Remove-Item -Recurse -Force '$hedef'   # once node_modules junction'ini kaldirin"
+  exit 1
+}
 
 # --- Commit'lenmemis is var mi -------------------------------------------
 # Scriptin KENDI urettigi dosyalar sayilmaz (OTURUM.md, kopyalanan .env'ler).
@@ -81,8 +121,22 @@ if (Test-Path $junction) {
 
 # --- Worktree ------------------------------------------------------------
 # `--force`: .env ve OTURUM.md izlenmeyen dosyalar, onlarsiz git reddeder.
-git worktree remove --force $hedef
-if ($LASTEXITCODE -ne 0) { throw "git worktree remove basarisiz." }
+try {
+  Git-Calistir worktree remove --force $hedef
+} catch {
+  # Windows'ta en sik sebep: bir kabuk/editor HALA o dizinin icinde. Acik
+  # dizin silinemez ve git'in "Permission denied"i bunu soylemez. Yarim kalan
+  # silme worktree kaydini dusurur, dizin diskte kalir — bir sonraki denemede
+  # script ana agaci raporlamaya baslar (bkz. yukaridaki kayit kontrolu).
+  Yaz ""
+  Yaz "Worktree silinemedi. En olasi sebep: BIR KABUK/EDITOR bu dizinin icinde." "Yellow"
+  Yaz "  $hedef"
+  Yaz ""
+  Yaz "Yapilacak: o pencereleri kapatin ya da baska dizine gecin, sonra:" "White"
+  Yaz "  git worktree prune"
+  Yaz "  .\tools\oturum-kapat.ps1 -Konu $Konu"
+  throw
+}
 Yaz "Worktree silindi: $hedef" "Green"
 
 # --- Dal ------------------------------------------------------------------
