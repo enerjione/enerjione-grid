@@ -219,7 +219,7 @@ def test_OLMAYAN_ekip_REDDEDILIR(db, saha):
 
 
 def test_migration_KOLONU_ekler():
-    """0059 GERCEKTEN kosturulur: SQLite'ta FK eklenemez, kolon yine de gelmeli.
+    """0060 GERCEKTEN kosturulur: SQLite'ta FK eklenemez, kolon yine de gelmeli.
 
     Migration'in SQLite dalini test etmezsek gelistirici makinesinde
     `alembic upgrade` patlar ve uretimde calisan bir degisiklik burada test
@@ -236,9 +236,9 @@ def test_migration_KOLONU_ekler():
 
     yol = next(
         (pathlib.Path(__file__).resolve().parents[1] / "alembic_migrations" / "versions")
-        .glob("*0059_fault_assign_to_team.py")
+        .glob("*0060_fault_assign_to_team.py")
     )
-    spec = importlib.util.spec_from_file_location("migration_0059", yol)
+    spec = importlib.util.spec_from_file_location("migration_0060", yol)
     modul = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(modul)
 

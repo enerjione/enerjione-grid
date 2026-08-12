@@ -1,7 +1,7 @@
 """fault_assign_to_team
 
-Revision ID: 0059
-Revises: 0058
+Revision ID: 0060
+Revises: 0059
 Create Date: 2026-08-12 00:00:05.000000
 
 `fault_events.assigned_to_area_id` — ariza bir KISIYE ya da bir EKIBE atanabilir.
@@ -32,8 +32,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0059"
-down_revision = "0058"
+revision = "0060"
+down_revision = "0059"
 branch_labels = None
 depends_on = None
 
