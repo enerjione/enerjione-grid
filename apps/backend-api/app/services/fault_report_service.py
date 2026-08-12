@@ -549,6 +549,14 @@ def _title_block(
             [
                 ("VALIGN", (0, 0), (0, 0), "TOP"),
                 ("VALIGN", (1, 0), (1, 0), "TOP"),
+                # ROZET SAG KENARA YASLANIR.
+                #
+                # Ic tablonun kendi `hAlign`i bir HUCRE icinde gecerli degil;
+                # hizayi hucrenin ALIGN'i belirler. Rozet hucre genisligi
+                # kadarken bu fark etmiyordu (kutu zaten sag kenara kadar
+                # uzaniyordu); metin kadar daraltilinca rozet sutunun SOL
+                # basina dustu.
+                ("ALIGN", (1, 0), (1, 0), "RIGHT"),
                 ("LINEBELOW", (0, 0), (-1, -1), 1.2, INK),
                 ("LEFTPADDING", (0, 0), (-1, -1), 0),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 0),
