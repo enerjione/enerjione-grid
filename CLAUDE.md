@@ -4,7 +4,7 @@ Endüstriyel akıllı şebeke izleme platformu. Horstmann Smart Navigator 2.0 ar
 göstergesi cihazlarını izler/yönetir. Event-driven mikroservis mimarisi, Docker + systemd
 ile deploy edilir.
 
-- **Sürüm:** 2.72.0
+- **Sürüm:** 2.73.0
 - **Ana dal:** `main` (tek gövde, her an release edilebilir). Sürümler `v2.25.0` gibi
   **tag** ile çıkar; deploy tag'den tetiklenir, daldan değil. İş dalları: `feat/...`, `fix/...`.
 - **Dil:** Kod yorumları ve UI **Türkçe**. Kod tabanında ASCII-only yorum tercih edilir
@@ -145,23 +145,33 @@ Bu depoda aynı anda birden fazla oturum (Claude Code penceresi, IDE, terminal)
 editörde kalmış eski tampon 246 satırlık bir düzeltmeyi commit ile geri aldı,
 `git reset` iki commit'i daldan düşürdü.
 
-**Kural: her iş kendi worktree'sinde.**
+**Kural: her iş kendi worktree'sinde.** Bu artık *otomatik* — hatırlamaya
+bağlı değil (`.claude/settings.json` > `hooks`):
+
+- **SessionStart** → `tools/oturum-durum.ps1`: her oturum açılışında nerede
+  olduğunu (ana ağaç mı, worktree mi), hangi dalda ve başka hangi oturumların
+  açık olduğunu bağlama yazar.
+- **PreToolUse (Bash, yalnız `git *`)** → `tools/oturum-koruma.ps1`: ana ağaçta
+  `git add -A`, `commit -a`, `reset --hard`, `clean -f`, `checkout -- .`,
+  `stash` komutlarını **engeller** ve doğrusunu söyler. Kendi worktree'nde
+  hepsi serbest. Davranış testi: `tools/oturum-koruma-test.ps1`.
 
 ```powershell
-.\tools\oturum-ac.ps1   -Konu analiz     # worktree + dal + .env + ayrı port
-.\tools\oturum-kapat.ps1 -Konu analiz    # güvenli kapatma (junction'a dikkat)
+.\tools\oturum-ac.ps1     -Konu analiz   # worktree + dal + .env + ayrı port
+.\tools\oturum-kapat.ps1  -Konu analiz   # güvenli kapatma (junction'a dikkat)
+.\tools\oturum-koruma-test.ps1           # hook hâlâ doğru mu (13 durum)
 ```
 
 Worktree'ler `.claude/worktrees/` altında (gitignore'da, Docker bağlamına
-girmez). Claude Code oturumu `EnterWorktree` ile o yola geçebilir.
+girmez). Claude Code oturumu `EnterWorktree path: <yol>` ile oraya geçer;
+`worktree.symlinkDirectories` ayarı sayesinde yerleşik `--worktree` akışı da
+`node_modules`'u bağlar (npm install beklemez).
 
-Tek ağaçta kalmak zorundaysan üç kural:
-
-1. **`git add -A` / `git commit -a` YOK** — her zaman açık dosya yolu ver.
-2. `reset` / `checkout --` öncesi `git log --oneline -5` ile ne düşeceğine bak;
-   düşen commit başkasının olabilir (reflog'dan kurtarılır ama önce fark et).
-3. `types.ts`, `App.tsx`, i18n dosyaları gibi **ortak dosyalara** dokunan
-   oturum işini hemen commit'lesin; çarpışmaların hepsi bu dosyalarda oldu.
+Ana ağaçta kalmak zorundaysan: commit'i **açık dosya yoluyla** yap, `reset` /
+`checkout --` öncesi `git log --oneline -5` ile ne düşeceğine bak (düşen commit
+başkasının olabilir; reflog'dan kurtarılır ama önce fark etmek gerekir),
+`types.ts` / `App.tsx` / i18n gibi **ortak dosyalara** dokunduysan hemen
+commit'le — çarpışmaların hepsi bu dosyalarda oldu.
 
 ---
 

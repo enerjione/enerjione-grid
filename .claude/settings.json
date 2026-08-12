@@ -31,5 +31,38 @@
       "Read(**/*.pem)",
       "Read(**/*.key)"
     ]
+  },
+
+  "worktree": {
+    "symlinkDirectories": ["apps/frontend-web/node_modules"],
+    "baseRef": "fresh"
+  },
+
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-durum.ps1",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git *)",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-koruma.ps1",
+            "timeout": 20,
+            "statusMessage": "Paralel oturum korumasi"
+          }
+        ]
+      }
+    ]
   }
 }
