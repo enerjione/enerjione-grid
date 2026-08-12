@@ -14,6 +14,48 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.77.0] — 2026-08-12
+
+### Eklendi
+
+- **Arıza artık bir kişiye ya da bir ekibe atanabiliyor.** Atama yalnızca
+  kullanıcıyaydı; gece vardiyasında ya da nöbet devrinde işi üstlenecek kişi
+  belli değildir, operatör "birine" atıyor ve o kişi izinliyse kayıt sessizce
+  bekliyordu. Ekip zaten sistemde: sorumluluk alanı "bakım/operasyon ekibini
+  temsil eder". Kişi ile ekip **aynı anda dolu olmaz** — "sorumlu kim"
+  sorusunun iki cevabı olsaydı sahada iki ekip aynı arızaya gider ya da ikisi
+  de diğerini beklerdi; bir tarafa atama diğerini temizler (devralma). Ekibe
+  atandığında **tüm üyeler** haberdar olur, çünkü kimse tek tek seçilmemiştir.
+- **Atanan kişinin profil fotoğrafı** arıza kartında ve detayda görünüyor;
+  fotoğraf yoksa baş harflere düşer. Sahayla telsizde konuşan kişi "kim
+  gidiyor" sorusunu isimden önce yüzden cevaplıyor. Ekipte fotoğraf yok —
+  ekibin yüzü olmaz; ikon, ad ve ayrı renk kullanılıyor.
+
+### Değişti
+
+- **Arıza bölgesi kararı tek kurala indi.** Aynı karar üç ayrı yerde, üç ayrı
+  kodla veriliyordu: haritadaki kırmızı kesim, şematik çizimdeki kırmızı parça
+  ve aday kol taraması. Kâğıt üzerinde aynı kuraldı ama kopyalar sessizce
+  ayrıştı ve sonuç sahada görüldü: aynı arıza için harita bir cihazın
+  **üstünü**, şema **altını** işaretliyordu; ekip yanlış açıklığa gidiyor ve
+  hangi ekranın doğru olduğunu söyleyen hiçbir şey bulunmuyordu. Kural
+  değişmedi, yalnızca tek kopyaya indi.
+
+### Düzeltildi
+
+- **Alarm tarihçesi artık silinmiyor; geçmiş tarihli sayılar geri geldi.**
+  Analiz ekranındaki takvim ve cihaz × zaman kesitleri geçmiş günler için boş
+  görünüyordu — grafikler doğruydu, **veri yoktu**: alarm satırları dört ayrı
+  yerde siliniyordu (tekrar tetikleyen sinyal, onaylanmış alarmın normale
+  dönüşü, periyodik işçilik ve onay sonrası temizlik). Dördü de bir görünüm
+  sorununu ("listede yer kaplamasın") veri silerek çözüyordu; 18 arıza kaydına
+  karşılık 6 alarm satırı kalan bir sahada "geçen ay hangi gün kaç alarm geldi"
+  sorusunun cevabı yoktu. Artık satır kalıyor, damgalanıyor: canlı listeler
+  damgayı süzüyor, analiz katmanı tam tarihçeyi sayıyor. Saha yorumları da
+  yerinde kalıyor. Tablo kendini budamadığı için saklama tavanı da eklendi.
+
+---
+
 ## [2.76.0] — 2026-08-12
 
 ### Eklendi
