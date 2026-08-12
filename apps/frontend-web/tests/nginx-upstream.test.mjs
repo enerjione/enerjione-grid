@@ -70,3 +70,38 @@ test("her proxy_pass ayni degiskeni kullaniyor ve o degisken tanimli", () => {
     `$${ad} tanimlanmamis ya da backend-api:8000i gostermiyor`,
   );
 });
+
+/**
+ * index.html ONBELLEKLENMEMELI.
+ *
+ * YASANAN ARIZA
+ * -------------
+ * Bundle dosyalari hash'li ve `immutable` (7 gun). Yeni surumu isaret eden
+ * TEK dosya index.html; uzerinde acik bir Cache-Control yoktu, dolayisiyla
+ * tarayici sezgisel onbellekleme uyguluyordu. Deploy sonrasi eski index.html
+ * yeniden dogrulanmadan kullanilip ESKI bundle yukleniyor, eski arayuz YENI
+ * backend ile konusuyordu.
+ *
+ * Bedeli sessiz degil ama teshisi zor: alanlar surumler arasinda yer
+ * degistirdiginde (2.73.0'da top_rules/flapping_devices device-health'e
+ * tasindi) eski arayuz olmayan alani okuyor ve ekran "Beklenmeyen bir hata"
+ * ile dusuyor. Operator icin gorunusu "uygulama bozuldu".
+ *
+ * Bu test iki seyi kilitler: no-store var, ve blok guvenlik basliklarini
+ * include ediyor (add_header iceren bir location server duzeyindekileri
+ * MIRAS ALMAZ — bu tuzak yapilandirmanin baska yerinde de not edilmis).
+ */
+test("index.html no-store ile servis ediliyor", () => {
+  const blok = conf.match(/location\s*=\s*\/index\.html\s*\{([^}]*)\}/);
+  assert.ok(blok, "index.html icin ayri bir location blogu yok");
+  assert.match(
+    blok[1],
+    /add_header\s+Cache-Control\s+"[^"]*no-store/,
+    "index.html Cache-Control: no-store almiyor — deploy sonrasi eski bundle yuklenir"
+  );
+  assert.match(
+    blok[1],
+    /include\s+\/etc\/nginx\/security-headers\.conf/,
+    "add_header iceren blok guvenlik basliklarini MIRAS ALMAZ; include zorunlu"
+  );
+});
