@@ -14,6 +14,79 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.76.0] — 2026-08-12
+
+### Eklendi
+
+- **Haberleşme arızası artık düzenlenebilir bir standart alarm kuralı.**
+  Alarmın seviyesi, başlığı, kimlere gideceği ve hat arızası üretip
+  üretmeyeceği kodda gömülüydü; operatörün göreceği ya da değiştireceği
+  hiçbir yer yoktu — Alarm Kuralları ekranı sahadaki en sık alarmlardan
+  birini hiç göstermiyordu, kapatmak isteyen için tek yol kod değişikliğiydi.
+  Artık listede **STANDART** rozetiyle duruyor: aktiflik, ad, seviye, bildirim
+  kanalları, cihaz/model kapsamı ve **Hat Arızası** seçeneği düzenlenebilir.
+  Silinemez (silinseydi haberleşme alarmı tamamen susar ve bunu fark etmenin
+  yolu olmazdı) — kapatmak için Aktif seçeneği kaldırılır. Sihirbazda sinyal
+  ve eşik adımları görünmez: bu kural bir sinyalin değerine değil cihazın
+  **kalitesine** bakar, eşik girmek hiçbir şey yapmazdı.
+- **Arıza Analizi artık herkese açık.** Sayfa mühendislik menüsünün altındaydı,
+  yani operatör ve sorumlu yönetici için kapalı bir kapının arkasındaydı; oysa
+  "hangi hat en çok arıza çıkarıyor, hangi aralık elden geçmeli" sorusu önce
+  sahayı izleyen kişinin sorusu. Artık Hat Arızaları'nın yanında normal bir üst
+  menü sekmesi. Veri sızmaz: sorgular zaten **kapsamla** sınırlı, operatör
+  yalnızca sorumluluk alanındaki hatların sayılarını görür.
+
+### Değişti
+
+- **Arıza akışı gerçek topolojiyi izliyor: Bölge → Hat → Branşman → Faz.**
+  Branşman kolu ayrı bir hat kaydıdır ama hattın kardeşi değil **çocuğudur**;
+  önceki akış tüm hatları bölgenin altına düz diziyor, "BR-4" ile "ANA HAT"
+  aynı kademede duruyordu. Kolun kolu varsa o bağlantı da görünüyor. Şerit
+  kalınlığı geçişli: bir hattın bölgeden aldığı akış kendi arızaları + tüm alt
+  kollarınınkidir, böylece "giren = çıkan" okuması bozulmaz.
+- **Arıza kartının üst şeridi tek satır.** Bölge üstte, hat altta, durum en
+  altta ayrı bir şeritteydi; üç satır kartın üçte birini yiyor, asıl iş olan
+  çizim aşağı kayıyordu. Artık önce **durum**, sonra tek bir kırıntı yolu:
+  bölge › hat › direk aralığı. "Konum tespit edildi" ve "N. kez" etiketleri
+  kaldırıldı — birincisi aralık zaten yazılıyken bilgi taşımıyordu, ikincisi
+  karttaki "bu hattın geçmişi" bloğunu tekrar ediyordu.
+- **Açık kalma süresi kendi kartında**, başlangıç saatiyle birlikte. Üst
+  şeritte bir etiket gibi duruyordu; oysa müdahale önceliğini belirleyen sayı
+  odur. **Atanan kişi** de artık baş harf rozetli kendi kartında.
+- **Arıza aralığı kodu künyeden çıktı.** "L13/D21>D10" bir iç anahtardır,
+  sahadaki kişiye bir şey söylemez; aynı bilgi başlıkta okunur hâliyle zaten
+  duruyor. Kod veritabanında kalıyor — tekrar sayımı ve risk puanı hâlâ onunla
+  tutuluyor.
+
+### Düzeltildi
+
+- **Haberleşmesi kopan cihaz artık hat arızası açmıyor.** "Bu alarm gerçek hat
+  arızası üretir mi" bayrağı alarm kurallarında yönetiliyordu ama haberleşme
+  alarmının kuralı yoktu ve iki üreticisi de bu alanı hiç göndermiyordu; her
+  iki tarafta da varsayılan "üretir" devreye giriyordu. Sonucu: sessiz kalan
+  cihaz, kendisiyle sonraki cihaz arasındaki aralıkta hat arızası açıyordu —
+  haritada kırmızı kesim, operatöre bildirim, ekibe boşuna saha çıkışı. Oysa
+  sessiz kalan cihaz arıza akımı **görmüş değildir**, sadece bilmiyoruzdur.
+  Mevcut kayıtlar da düzeltiliyor (bu alarmlar cihaz sessiz kaldığı sürece
+  yeniden gönderilmediği için bayrak kendiliğinden düzelmezdi).
+- **Kolda arıza varken ana hatta kopya kayıt açılmıyor.** Arıza akımı ana hat
+  boyunca ilerleyip dallanma direğinden kola saptığı için ana hattaki cihazlar
+  da "gördüm" der; bölge hesabı her hattı düz bir zincir saydığından tek
+  fiziksel arıza **iki kayıt** üretiyordu. Ana hattaki kayıt sahada bir işe
+  yaramıyor ama listede "AÇIK" duruyor ve kol düzelene kadar kapanmıyordu —
+  "önceki arıza normale dönmemiş gibi duruyor" denen hâl buydu. Harita bu
+  tuzağa hiç düşmüyordu, yani harita ile liste aynı olay için farklı şey
+  söylüyordu.
+- **Süre sayacı normale dönünce duruyor.** Süre her zaman şu ana kadar
+  sayıyordu; 14:01'de açılıp 14:07'de düzelen arıza ertesi gün "1g 3sa süredir
+  açık" diyordu.
+- **Haberleşme alarmları analizde kural alarmı sayılıyordu.** Alarm servisinin
+  ürettiği kayıtlar backend'de koşulsuz "kural tetikledi" diye etiketleniyordu;
+  "hangi cihazın haberleşmesi sık kopuyor" sorusu bu alarmları hiç görmüyordu.
+- **PDF raporunda durum rozeti** sağ kenara yaslanıyor.
+
+---
+
 ## [2.75.1] — 2026-08-12
 
 ### Düzeltildi
