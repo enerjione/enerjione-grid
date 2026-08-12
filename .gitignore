@@ -32,18 +32,15 @@ memory/
 # Claude Code — ekip ayarlari (.claude/settings.json, commands/, CLAUDE.md) commit edilir.
 # Kisiye ozel local override ve gecici dosyalar commit edilmez.
 .claude/settings.local.json
-# Oturum defteri ve onbellegi (tools/oturum-*.ps1 uretir): MAKINEYE OZEL.
-# Icinde mutlak Windows yollari, port atamalari ve acilis zamanlari var —
-# baska bir makinede anlamsiz, commit edilirse her oturumda catisir.
-.claude/oturumlar.json
-.claude/oturumlar.cache.json
 
 # Worktree acilisinda uretilen oturum notu (port, calistirma komutlari).
 # Her worktree'de ayri ve o makineye ozel — commit edilmez.
 OTURUM.md
 
-# Paralel oturum defteri: hangi oturum acik, hangi portta, ne isle mesgul.
-# YEREL MAKINE DURUMU — bu makineye ozel, commit edilmez. Kaybolursa
+# Oturum defteri, onbellekleri ve izleri (tools/oturum-*.ps1 uretir):
+# MAKINEYE OZEL. Icinde mutlak Windows yollari, port atamalari, acilis
+# zamanlari ve transkript ozetleri var — baska bir makinede anlamsiz,
+# commit edilirse her oturumda catisir. Kaybolursa
 # `tools/oturum-kayit.ps1 -Onar` worktree listesinden yeniden kurar.
 .claude/oturumlar.json
 .claude/oturumlar.json.lock
