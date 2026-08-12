@@ -17,6 +17,15 @@ export type PageMode =
   | "home"
   | "alarms"
   | "faults"
+  // ARIZA ANALIZI MUHENDISLIK ALTINDAN CIKTI (2026-08-12).
+  //
+  // Muhendislik menusunun altindayken operator ve ops_manager'a kapali bir
+  // kapinin arkasindaydi; oysa "hangi hat en cok ariza cikariyor, hangi
+  // aralik elden gecmeli" sorusu ONCE sahayi izleyen kisinin sorusu. Backend
+  // ucu zaten `get_current_user` ile aciktir ve sonucu KAPSAMLA (gorunur
+  // hatlar) sinirlar — yani sayfayi acmak veri sizdirmaz, operator yalnizca
+  // kendi sorumluluk alanini gorur.
+  | "fault-analytics"
   | "events"
   | "engineering";
 
@@ -43,7 +52,6 @@ export type EngineeringPage =
   | "offline-map"
   | "active-sessions"
   | "field-tools"
-  | "fault-analytics"
   // Kullanicinin kendi profili. Muhendislik menusunde GORUNMEZ (bkz.
   // ENGINEERING_NAV_GROUPS) — ust sagdaki kullanici menusunden acilir.
   // Yine de bir sekme rotasi: eskiden modaldi ve modal sekme sisteminde
@@ -107,6 +115,7 @@ export function tabLabel(
         home: "header.home",
         alarms: "header.alarms",
         faults: "header.faults",
+        "fault-analytics": "header.faultAnalytics",
         events: "header.events",
       };
       return t(map[route.page]);
@@ -135,7 +144,6 @@ export function tabLabel(
         "offline-map": "engineering.nav.offlineMap",
         "active-sessions": "engineering.nav.activeSessions",
         "field-tools": "engineering.nav.fieldTools",
-        "fault-analytics": "engineering.nav.faultAnalytics",
         profile: "userSettings.title",
       };
       return t(map[route.page]);
@@ -195,9 +203,6 @@ const OPS_MANAGER_ENG: EngineeringPage[] = [
   // DEGISTIRME yetkisi backend'de engineer/installer — sayfa `can_manage`
   // ile kendini kisitlar (bkz. backend api/firewall.py).
   "firewall",
-  // Ariza analizi: bakim planlama isi; sorumlu yonetici gormeli. Backend
-  // sorguyu kapsamla (gorunur hatlar) zaten sinirliyor.
-  "fault-analytics",
 ];
 const ENGINEER_ENG: EngineeringPage[] = [
   "devices",
@@ -219,7 +224,6 @@ const ENGINEER_ENG: EngineeringPage[] = [
   "firewall",
   // Saha araclari (ping testi): backend /field-tools installer+engineer.
   "field-tools",
-  "fault-analytics",
 ];
 // installer: tum engineering sayfalari.
 
@@ -293,7 +297,7 @@ export function loadTabs(): { tabs: Tab[]; activeKey: string } {
     const seen = new Set<string>();
     for (const item of routes) {
       if (!item || typeof item !== "object" || !item.route) continue;
-      const route = item.route as TabRoute;
+      const route = tasinmisRota(item.route as TabRoute);
       if (!isValidRoute(route)) continue;
       const key = routeKey(route);
       if (seen.has(key)) continue;
@@ -316,10 +320,28 @@ export function loadTabs(): { tabs: Tab[]; activeKey: string } {
   }
 }
 
+/** TASINMIS SAYFALARIN eski rotasi -> yenisi.
+ *
+ *  Sekmeler localStorage'da duruyor: bir sayfa yer degistirdiginde eski kayit
+ *  gecersizlesir ve kullanicinin ACIK sekmesi sessizce kaybolur. Ariza Analizi
+ *  muhendislik agacindan ust menuye tasindi (2026-08-12); eski kayit yenisine
+ *  cevrilir, sekme yerinde kalir. */
+function tasinmisRota(route: TabRoute): TabRoute {
+  if (
+    route &&
+    typeof route === "object" &&
+    route.kind === "engineering" &&
+    (route.page as string) === "fault-analytics"
+  ) {
+    return { kind: "page", page: "fault-analytics" };
+  }
+  return route;
+}
+
 function isValidRoute(route: TabRoute): boolean {
   if (!route || typeof route !== "object") return false;
   if (route.kind === "page") {
-    return ["home", "alarms", "faults", "events"].includes(route.page);
+    return ["home", "alarms", "faults", "fault-analytics", "events"].includes(route.page);
   }
   if (route.kind === "engineering") {
     return typeof route.page === "string";

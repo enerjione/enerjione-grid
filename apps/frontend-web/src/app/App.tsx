@@ -2704,14 +2704,8 @@ export function App() {
         isEngineeringView={pageMode === "engineering"}
         onToggleEngineering={() => handleChangePage("engineering")}
         onOpenSystemStatus={() => openEng("system-status")}
-        // Analiz sayfasi muhendislik yetkisi ister; operator rolunde geri
-        // cagri hic gecilmez, dugme de gorunmez.
-        onOpenFaultAnalytics={
-          session.role === "operator" ? undefined : () => openEng("fault-analytics")
-        }
-        faultAnalyticsActive={
-          pageMode === "engineering" && engineeringPage === "fault-analytics"
-        }
+        // Analiz artik NAV_ITEMS icinde bir ust menu sekmesi; header'daki ayri
+        // kisayol dugmesi ikinci bir giris kapisi olarak kaliyordu.
         remoteAccessActive={remoteAccessBadge.active}
         remoteAccessLabel={
           remoteAccessBadge.remainingSeconds === null
@@ -3034,14 +3028,6 @@ export function App() {
                 onToggleNotifPref={handleToggleNotifPref}
               />
             ) : null}
-            {/* Ariza analizi — sorumlu yonetici dahil. Backend sorguyu
-                gorunur hatlarla (kapsam) zaten sinirliyor. */}
-            {engineeringPage === "fault-analytics" &&
-            (session.role === "installer" ||
-              session.role === "engineer" ||
-              session.role === "ops_manager") ? (
-              <FaultAnalyticsPage accessToken={session.accessToken} />
-            ) : null}
             {engineeringPage === "backups" &&
             (session.role === "engineer" || session.role === "installer") ? (
               <BackupsPanel accessToken={session.accessToken} currentRole={session.role} />
@@ -3126,6 +3112,15 @@ export function App() {
                 onUpdateCause={handleUpdateFaultCause}
                 accessToken={session.accessToken}
               />
+            ) : null}
+            {/* ARIZA ANALIZI — ust menu sayfasi, ROL KAPISI YOK.
+                Muhendislik altindayken operator ve ops_manager goremiyordu;
+                oysa bakim onceligini okuyan ilk kisi sahayi izleyen kisi.
+                Backend ucu (`GET /faults/analytics`) her oturuma acik ve
+                sonucu KAPSAMLA sinirliyor: operator yalnizca sorumluluk
+                alanindaki hatlarin sayilarini gorur. */}
+            {pageMode === "fault-analytics" ? (
+              <FaultAnalyticsPage accessToken={session.accessToken} />
             ) : null}
             {pageMode === "events" ? (
               <EventsPage accessToken={session.accessToken} devices={devices} />
