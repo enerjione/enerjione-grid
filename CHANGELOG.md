@@ -14,6 +14,94 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.72.0] — 2026-08-12
+
+### Eklendi
+
+- **Cihaz Sağlığı artık filoyu karşılaştırıyor.** Ekranda dört ayrı "en kötü
+  10" listesi vardı ve aralarında çapraz soru sorulamıyordu. Yeni **Sinyal ×
+  Alarm** saçılımı o soruyu cevaplıyor: sinyali zayıf cihazlar aynı zamanda
+  çok alarm üretiyorsa sorun eşikte değil anten/modemdedir, dağınıksa iki
+  ayrı iş emri gerekir. Yanına filonun anlık **haberleşme durumu** halkası,
+  **sinyal kalitesi** ve **batarya tükenme hızı** dağılımları eklendi —
+  "bu cihaz mı kötü, filo mu" sorusu artık listeden değil dağılımdan
+  okunuyor. Altında sütun başlığından sıralanabilen **cihaz karşılaştırma
+  tablosu** var; alarm, kesinti, arıza, sinyal ve tükenme tek satırda.
+  Ölçüsü olmayan alan "—" gösteriliyor, 0 değil: 0 dBm "mükemmel sinyal"
+  demektir ve tam ters okunurdu.
+- **Arıza Akışı kendi sekmesine taşındı.** Bölge → Hat → Faz akış diyagramı
+  haritanın altında sıkışıyor, kademe etiketleri üst üste biniyordu.
+- **Riskli Arıza Aralıkları.** "Tekrarlayan Açıklıklar" arızaları sayıyordu;
+  bu liste tartıyor. Bir aralıkta dört arıza da 11 ay önceyse orası bugün
+  sorunlu değildir, üçü son iki haftadaysa ekip bekliyor demektir. Puan
+  (0-100) tazelik — 90 gün yarı ömür — ve arıza türüyle ağırlıklı, mutlak:
+  başka bir aralığın iyileşmesi bu aralığın puanını değiştirmez, böylece
+  eşik konulabilir. Anahtar hat değil **cihaz aralığı**; bakım ekibi de
+  hatta değil aralığa gidiyor.
+
+### Değişti
+
+- **Arıza artık hattın değil, iki cihaz arasındaki aralığın kaydı.** Her
+  kaydın bir **aralık kodu** var: arızayı gören son cihaz → görmeyen ilk
+  cihaz. Eskiden aynı hatta başka bir aralıkta çıkan arıza, direk aralıkları
+  kesiştiği için mevcut kaydın üstüne yazılıyordu — operatör için arıza
+  "sürüyor" görünüyor, oysa ikinci bir olay olmuştu ve ilk aralık artık
+  temizdi. Artık yeni aralık yeni kayıt açar, karşılıksız kalan eski kayıt
+  normale döner. Araya cihaz eklenirse aralık kodu da değişir: artık başka
+  bir aralıktan bahsediliyordur. Tek istisna 30 saniyelik yerleşme
+  penceresi (`FAULT_DISPLAY_DELAY_SEC`) — kayıt listede henüz görünmezken
+  haberleşmesi geciken cihazın "ben de gördüm"ü aynı kaydı netleştirir.
+- **Arıza kartının üst şeridi tek satıra indi.** Bölge, hat, aralık, durum,
+  süre ve etiketler alt alta üç satırdaydı; şerit kartın üçte birini yiyor,
+  asıl iş olan çizim aşağı kayıyordu.
+- **Künyeden yön satırı kaldırıldı.** "İleri/geri" bayrağı kelepçenin takılış
+  yönüne göre anlam değiştiriyor ve sahada yanlış tarafa yönlendirebiliyordu.
+  Veri kayıtta duruyor, künyede yazmıyor.
+
+- **Sistem Sağlığı tek bir takvime indi.** Alarm yoğunluğu artık GitHub
+  katkı grafiği gibi gün gün okunuyor: her kare bir gün, koyulaştıkça o gün
+  üretilen alarm artıyor. Önceki matris yalnızca **veri olan** günlerde
+  sütun açtığı için iki günlük veri sonsuza kadar iki sütunluk bir grafik
+  üretiyordu; ekranda sahanın ritmi değil veri tabanının şekli görünüyordu.
+  Takvim sessiz günlere de kare açıyor, dolayısıyla sessiz geçen bir hafta
+  grafikte gerçekten bir hafta genişliğinde.
+- **Kural sıralaması ve kopan cihaz listesi Cihaz Sağlığı'na taşındı.**
+  İkisi de cihaz düzeyinde sorular; aynı ekranın iki sekmesi aynı sorguyu
+  iki kez koşturuyordu.
+- **Harita sekmesinde yalnızca harita var** ve artık ikinci bir istek
+  atmıyor. Isı katmanı arıza analizi yanıtından geliyor; eskiden cihaz
+  sağlığı ucundan çekildiği için harita, 600 cihazlık karşılaştırma
+  tablosunu ve iki ağır telemetri sorgusunu boşuna ödüyordu.
+- **Üst ölçü şeridi yarı yüksekliğe indi**, kart başlıkları tek bir kabuk
+  bileşeninde toplandı. Şerit ~64 pikselden ~38'e indi; kazanılan yer
+  grafiklere gitti.
+
+### Kaldırıldı
+
+- **Kural İsabeti kartı.** Çıkarım katmanına güvenmeden önce bakılan sayıydı
+  ama karar üretmiyordu; yer kaplıyordu.
+
+### Düzeltildi
+
+- **Tek fazlı arıza künyede "A-B-C" görünüyordu.** Etkilenen faz, cihazın son
+  değer tablosundaki bayraklardan türetiliyordu; o tabloda bir arıza bayrağı
+  kalkar ama **düşmez**. Önceki denemelerden kalan master/sat01 bayrakları
+  dururken tek uydunun alarm verdiği bir arıza üç fazlı yazılıyordu — üstelik
+  aynı ekrandaki çizimde tek tel kırmızıydı. Faz artık aktif alarm imzasından
+  geliyor (alarmın sıfırlanma anlamı var, son değerin yok); çizim ile künye
+  aynı şeyi söylüyor.
+- **Arıza bölgesi başka bir cihaza kaydığında künye eski cihazda kalıyordu.**
+  Kart bölgeyi bir cihazdan, akım/sıcaklık/faz ölçümlerini başka cihazdan
+  gösteriyordu. Sınır değiştiğinde ve arıza yeniden açıldığında ölçümler
+  yeniden alınıyor.
+- **Telemetri özeti yoklaması çağıranın işlemini bozuyordu.** Timescale
+  kurulu olmayan bir kurulumda `telemetry_history_1h` var mı diye bakan
+  yoklama, hata alınca **tüm oturumu** geri alıyordu — aynı oturumda
+  bekleyen kayıtlar yalnızca bu kontrol yüzünden yok oluyordu. Yoklama
+  artık savepoint içinde; dış işlem ayakta kalıyor.
+
+---
+
 ## [2.71.0] — 2026-08-11
 
 ### Düzeltildi
