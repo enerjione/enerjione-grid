@@ -52,7 +52,7 @@ BOZUK_CIHAZ_SAATI = datetime(2000, 1, 1, tzinfo=timezone.utc)
 @pytest.fixture()
 def db_session():
     """Alarm yolunun dokundugu tablolarla sqlite in-memory oturum."""
-    from app.models.alarm import AlarmEvent
+    from app.models.alarm import AlarmDailyCount, AlarmEvent
     # Haberlesme alarmi artik STANDART KURALDAN uretiliyor (seviye, baslik,
     # hat arizasi uretip uretmeyecegi); tablo olmadan uc okunamaz.
     from app.models.alarm_rule import AlarmRule
@@ -68,6 +68,9 @@ def db_session():
         engine,
         tables=[
             AlarmEvent.__table__,
+            # Alarm satiri eklenince gunluk sayac da artiyor (ORM olayi,
+            # bkz. models/alarm.py) — tablosu olmadan alarm ACILAMAZ.
+            AlarmDailyCount.__table__,
             AlarmRule.__table__,
             SystemEvent.__table__,
             OutboxEvent.__table__,

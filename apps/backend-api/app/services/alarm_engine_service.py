@@ -569,6 +569,8 @@ def handle_telemetry_alarm_event(db: Session, payload: dict) -> None:
         produces_fault=ariza_uretir,
     )
     db.add(alarm)
+    # Haberlesme alarmi da bir TETIKLENMEDIR ve gunluk sayaca girer; artirma
+    # satir eklenmesine bagli ORM olayinda (bkz. models/alarm.py).
     record_event(
         db,
         category="alarm",

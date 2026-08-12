@@ -121,13 +121,19 @@ def test_hepsi_siga_gordugunde_truncated_YANLIS_pozitif_vermez(db):
     assert h["device_total"] == 1
 
 
-def test_kisa_pencere_SAATLIK_kova(db):
-    # Gunluk kovada 2 gunluk pencere iki sutuna duser; desen gorunmez.
+def test_kova_HER_ZAMAN_gunluk(db):
+    """Kaynak gunluk sayac oldugu icin kova da gunluk.
+
+    Onceden 2 gunden kisa pencerede saatlik kovaya duselirdi. Iki sebeple
+    kaldirildi: matris zaten 30 gune SABIT (bkz. HEATMAP_WINDOW_DAYS), yani
+    o dal pratikte hic calismiyordu; ve grafik artik alarm satirlarini degil
+    gunluk tetiklenme sayacini okuyor — sayacin tanesi gun.
+    """
     d = _cihaz(db, "A")
     _alarm(db, d, gun_once=0.1)
     _alarm(db, d, gun_once=0.5)
     h = alarm_isi_haritasi(db, days=2, visible_device_ids=None)
-    assert h["bucket"] == "hour"
+    assert h["bucket"] == "day"
 
 
 def test_uzun_pencere_GUNLUK_kova(db):
