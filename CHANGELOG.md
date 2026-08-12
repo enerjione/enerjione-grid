@@ -14,6 +14,41 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.73.0] — 2026-08-12
+
+### Değişti
+
+- **"Harita & Akış" ile "Sistem Sağlığı" tek sekmede birleşti: Hat Arıza
+  Yoğunluğu.** Üçü de aynı soruyu farklı eksenden soruyordu — yoğunlaşma
+  nerede, ne zaman, hangi cihazda — ama üç ayrı yerde duruyordu. Artık tek
+  sekmede anahtarla geçiliyor: **Harita** (coğrafya), **Alarm Sıklığı**
+  (gün gün takvim), **Cihaz × Zaman** (matris). Anahtar yalnızca seçili
+  kesiti çiziyor; Leaflet karoları ve echarts örnekleri boşuna monte
+  edilmiyor. Takvim ile matris aynı yanıttan geldiği için aralarındaki
+  geçiş ek istek atmıyor.
+- **Harita artık ekranı dolduruyor.** Sabit 460 piksele hapsedilmişti ve
+  altında boş beyaz alan kalıyordu: ekranın en çok bakılan kartı en küçük
+  kartı oluyordu. Harita kesitinde sayfa kaymıyor, harita kendi içinde
+  kayıyor.
+- **Cihaz × zaman matrisi artık hep son 30 günü gösteriyor** ve sessiz
+  günlere de sütun açıyor. Önceden yalnızca **veri olan** günlerde sütun
+  açtığı için iki günlük veri sonsuza kadar iki sütunluk bir grafik
+  üretiyordu. Dönem seçimini izlemiyor — 365 günlük pencerede 25 satırlık
+  matris sütun başına bir pikselin altına düşerdi; uzun dönem sorusunu
+  takvim cevaplıyor. Kart başlığı bunu açıkça yazıyor.
+- **Aktif arıza kartının başlığı yeniden dizildi.** Şerit önce konumu yazıp
+  durumu sona bırakıyordu; en çok sorulan soru ("bu arıza açık mı, ne
+  kadardır") en sondaydı. Artık durum rozeti şeridin başında ve yer tek bir
+  kırıntı yolu olarak ilerliyor: bölge → (ana hat) → hat → aralık. Branşman
+  kaydında hangi ana hattan çıktığı da başlıkta; "BR-4" tek başına nereye
+  ait olduğunu söylemiyordu. Süre ve başlangıç saati kanıt panelindeki tek
+  bir karta taşındı — ikisi aynı sorunun iki yarısıyken şerit ile panel
+  arasında bölünmüştü. "Konum tespit edildi" ve "N. kez" etiketleri
+  kaldırıldı: ilki aralık zaten yazılıyken bilgi taşımıyordu, ikincisi
+  kartın alt bölümündeki geçmiş bloğunda tekrar ediyordu.
+
+---
+
 ## [2.72.0] — 2026-08-12
 
 ### Eklendi
