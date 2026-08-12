@@ -1728,7 +1728,21 @@ export function App() {
   // edilir (fire-and-forget toast).
   const handleDeviceCommand = async (deviceCode: string, command: string, label: string) => {
     if (!session) return;
-    if (!(await asyncConfirm(t("deviceDetail.commands.confirm", { command: label, code: deviceCode }))))
+    // KOMUT HER ZAMAN FIZIKSEL CIHAZA GIDER.
+    //
+    // Bir Pole Master Kit SETI sanal bir kayittir: kendi DNP3 oturumu yoktur,
+    // uc set tek bir outstation'in (kitin) arkasindadir. Backend komutu zaten
+    // kite yonlendiriyor, ama onay metni setin kodunu yaziyordu ("... PM-4-S1
+    // cihazina gonderilsin mi?"). Operator komutun sete gittigini saniyor,
+    // uc setten ayni komutu ayri ayri vermeye calisiyordu. Onay artik gercek
+    // hedefi yazar.
+    const hedefCihaz = devices.find((d) => d.code === deviceCode);
+    const ustCihaz =
+      hedefCihaz?.parentDeviceId != null
+        ? devices.find((d) => d.id === hedefCihaz.parentDeviceId)
+        : undefined;
+    const hedefKod = ustCihaz?.code ?? deviceCode;
+    if (!(await asyncConfirm(t("deviceDetail.commands.confirm", { command: label, code: hedefKod }))))
       return;
     try {
       await sendDeviceCommand(session.accessToken, deviceCode, command);

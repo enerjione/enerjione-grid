@@ -13,6 +13,7 @@ import type { GridSnapshot } from "../../shared/api";
 import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
 import { useDeviceModelSettings } from "../../components/DeviceModelSettingsProvider";
 import { voltageToPercent as voltsToPercent } from "../../shared/battery";
+import { saglikSahibi } from "../../shared/deviceKit";
 import { locateDevice } from "../../shared/geoLookup";
 import { planDeviceFocus } from "./deviceFocus";
 import type { FocusPoint } from "./deviceFocus";
@@ -467,11 +468,17 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
 
   // Master modem RSSI -> sebeke sinyali (4 kademeli cubuk + dBm) — detay
   // sidebar'i ile ayni esikler.
+  //
+  // KIT SETINDE KAYNAK KITTIR: setin kaydinda `master.*` telemetrisi HIC
+  // yoktur (bkz. shared/deviceKit). Setin kendi id'siyle arandigi icin
+  // sebeke sinyali sette her zaman "—" cikiyordu — cihaz bilgiyi
+  // uretmiyormus gibi gorunuyordu, oysa modem kitin uzerinde ve degeri var.
   const selectedSignal = useMemo(() => {
+    const sahip = selectedDevice ? saglikSahibi(selectedDevice, devices) : null;
     const row =
-      selectedDevice && liveValues
+      sahip && liveValues
         ? liveValues.find(
-            (r) => r.device_id === selectedDevice.id && r.signal_key === "master.modem_rssi"
+            (r) => r.device_id === sahip.id && r.signal_key === "master.modem_rssi"
           )
         : undefined;
     const rssi = typeof row?.value === "number" ? row.value : null;
@@ -481,7 +488,18 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
     if (rssi >= -85) return { key: "fair", dbm, bars: 3 };
     if (rssi >= -100) return { key: "poor", dbm, bars: 2 };
     return { key: "poor", dbm, bars: 1 };
-  }, [selectedDevice, liveValues]);
+  }, [selectedDevice, devices, liveValues]);
+
+  /** Haberlesme/pil bilgisinin sahibi — sette fiziksel kit, sadede kendisi.
+   *
+   *  Setin kendi modemi ve RTU pili yoktur; uc set tek bir outstation'in
+   *  arkasindadir. Kart bu degerleri setin kendi kaydindan okudugu icin
+   *  ayni cihaz icin harita karti %0, detay sayfasi %100 gosteriyordu —
+   *  tek ekranda iki farkli cevap. */
+  const selectedHealth = useMemo(
+    () => (selectedDevice ? saglikSahibi(selectedDevice, devices) : undefined),
+    [selectedDevice, devices]
+  );
 
   // ===== Sebeke topolojisi: hatlar + direkler + cihaz segmentleri =====
   // Cihazda aktif (reset edilmemis) VE hat arizasi ureten alarm var mi?
@@ -1613,16 +1631,16 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                   <li className="device-sidebar-info-row">
                     <span className="material-symbols-outlined">wifi</span>
                     <span className="device-sidebar-info-label">{t("deviceDetail.sidebar.deviceStatus")}</span>
-                    <span className={`device-sidebar-info-value tone-${selectedDevice.communicationStatus === "online" ? "green" : "slate"}`}>
-                      <span className={`device-sidebar-info-dot dot-${selectedDevice.communicationStatus === "online" ? "green" : "slate"}`} aria-hidden="true" />
-                      {selectedDevice.communicationStatus === "online" ? t("dashboard.popup.online") : t("dashboard.popup.offline")}
+                    <span className={`device-sidebar-info-value tone-${(selectedHealth ?? selectedDevice).communicationStatus === "online" ? "green" : "slate"}`}>
+                      <span className={`device-sidebar-info-dot dot-${(selectedHealth ?? selectedDevice).communicationStatus === "online" ? "green" : "slate"}`} aria-hidden="true" />
+                      {(selectedHealth ?? selectedDevice).communicationStatus === "online" ? t("dashboard.popup.online") : t("dashboard.popup.offline")}
                     </span>
                   </li>
                   <li className="device-sidebar-info-row">
                     <span className="material-symbols-outlined">schedule</span>
                     <span className="device-sidebar-info-label">{t("deviceDetail.sidebar.lastCommShort")}</span>
                     <span className="device-sidebar-info-value">
-                      {formatRelative(selectedDevice.lastUpdateAt, localeTag, t)}
+                      {formatRelative((selectedHealth ?? selectedDevice).lastUpdateAt, localeTag, t)}
                     </span>
                   </li>
                   {selectedTopo?.regionName ? (
@@ -1642,14 +1660,14 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                   <li className="device-sidebar-info-row">
                     <span className="material-symbols-outlined">battery_full</span>
                     <span className="device-sidebar-info-label">{t("deviceDetail.meta.battery")}</span>
-                    <span className={`device-sidebar-battery ${batteryClass(selectedDevice.batteryPercent)}`}>
+                    <span className={`device-sidebar-battery ${batteryClass((selectedHealth ?? selectedDevice).batteryPercent)}`}>
                       <span className="device-battery-icon" aria-hidden="true">
                         <span
                           className="device-battery-fill"
-                          style={{ width: `${Math.max(0, Math.min(100, selectedDevice.batteryPercent))}%` }}
+                          style={{ width: `${Math.max(0, Math.min(100, (selectedHealth ?? selectedDevice).batteryPercent))}%` }}
                         />
                       </span>
-                      <span className="device-sidebar-battery-text">%{Math.round(selectedDevice.batteryPercent)}</span>
+                      <span className="device-sidebar-battery-text">%{Math.round((selectedHealth ?? selectedDevice).batteryPercent)}</span>
                     </span>
                   </li>
                   <li className="device-sidebar-info-row">
