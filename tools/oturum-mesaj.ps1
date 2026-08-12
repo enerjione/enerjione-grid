@@ -57,7 +57,10 @@ if ($Tumu) {
   foreach ($m in $hepsi) {
     $okundu = if (@($m.okuyan).Count -gt 0) { "okundu: $((@($m.okuyan)) -join ', ')" } else { "OKUNMADI" }
     $renk = if (@($m.okuyan).Count -gt 0) { "DarkGray" } else { "Yellow" }
-    Yaz ("  {0}  {1} -> {2}" -f $m.zaman.Substring(11, 5), $m.kimden, $m.kime) $renk
+    # Zaman UTC saklanir; YEREL gosterilir. Ham UTC basildiginda kullanici
+    # az once attigi mesaji "3 saat once" sanip mesajin kayboldugunu dusunuyor.
+    $saat = try { [datetime]::Parse($m.zaman).ToLocalTime().ToString("HH:mm") } catch { "--:--" }
+    Yaz ("  {0}  {1} -> {2}" -f $saat, $m.kimden, $m.kime) $renk
     Yaz ("      {0}" -f $m.metin)
     Yaz ("      {0}" -f $okundu) "DarkGray"
   }
