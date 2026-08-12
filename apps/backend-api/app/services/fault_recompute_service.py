@@ -24,7 +24,13 @@ Algoritma:
          from_pole = last_red'in oturdugu slot'un from_pole'u
          to_pole   = first_green varsa onun slot'unun to_pole'u; yoksa
                      last_red'in slot'unun to_pole'u (hat ucu).
-    5) Hesaplanan bolgeler, o hattin mevcut AKTIF FaultEvent kayitlariyla
+    5) KOL ONCELIGI (bkz. `_apply_branch_priority`): bir bolgenin direk
+       araliginin ICINDEN cikan kolun kendi bolgesi varsa, ust hattaki
+       bolge elenir. Koldaki ariza akimi ana hattan gectigi icin ust
+       hattaki cihazlar da "gordum" der; eleme olmadan TEK fiziksel ariza
+       IKI kayit uretir ve ana hattaki kopya, kol duzelene kadar "ACIK"
+       kalir. Bu adim tum hatlarin bolgeleri hesaplandiktan SONRA calisir.
+    6) Hesaplanan bolgeler, o hattin mevcut AKTIF FaultEvent kayitlariyla
        eslestirilir (bkz. `_match_zones_to_faults`): eslesen guncellenir,
        eslesmeyen bolge icin YENI kayit acilir, karsiligi kalmayan kayit
        "resolved" edilir.
@@ -266,6 +272,99 @@ def _compute_line_zones(
 
 def _seq_overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
     return a[0] <= b[1] and b[0] <= a[1]
+
+
+def _apply_branch_priority(
+    zones_by_line: dict[int, list[_FaultZone]],
+    lines: list[Line],
+    poles_by_id: dict[int, Pole],
+) -> dict[int, list[_FaultZone]]:
+    """KOL ONCELIGI — ariza EN DAR bolgeye yazilir, ust hatta kopyalanmaz.
+
+    SORUN
+    -----
+    Bolge hesabi hat hat yapilir ve her hat duz bir zincir sanilir; kollarin
+    varligindan haberi yoktur. Oysa bir kolda ariza olunca arizanin akimi
+    ana hattan gecerek kola ulasir: dallanma diregine kadar olan ANA HAT
+    cihazlari da "gordum" der. Sonuc, tek bir fiziksel ariza icin IKI kayit:
+
+        ANA HAT ...─[D6 KIRMIZI]─ G_Ckl21 ─[D7 YESIL]─ ...
+                                     │
+                                    BR-4 ─[D3 KIRMIZI]─   <- ariza BURADA
+
+    Ana hattaki kayit sahada bir ise yaramaz (o kesimde ariza yok) ama
+    listede "ACIK" durur ve kol duzelene kadar da kapanmaz — kullanicinin
+    gordugu "onceki ariza normale donmemis gibi" hali budur. Harita bu
+    tuzaga hic dusmuyordu: o, sebekeyi graf olarak yuruyup ayni kirmiziyi
+    kola yaziyor (bkz. frontend `nearestDeviceRed.ts`), yani harita ile
+    ariza listesi ayni olay icin farkli sey soyluyordu.
+
+    KURAL
+    -----
+    Bir bolgenin direk araliginin ICINDEN (kesin esitsizlik) cikan bir kolun
+    AYNI turda kendi bolgesi varsa, ust hattaki bolge kayit uretmez.
+
+    Sinirlar neden HARIC: aralik "son goren cihazdan onceki direk" ile "ilk
+    gormeyen cihazdan sonraki direk" arasidir; iki uc direk de arizanin
+    saglam tarafinda kalir ve oralara asili kollar arizayi gormeyen cihazin
+    otesinden beslenir (ayni gerekce: `api/faults.py` etkilenen kollar).
+
+    ZINCIR: kol da kendi altindaki bir kol yuzunden dusebilir. Karar HAM
+    bolge tablosuna bakar (bu fonksiyonun ciktisina degil), boylece
+    ANA HAT -> BR-4 -> BR-4-1 zincirinde kayit en dipteki kolda kalir ve
+    aradaki halkalar tek tek elenir.
+
+    Kol duzelince ust hattin cihazlari da yesile doner (ayni fiziksel ariza)
+    — yani elenen bolge bir sonraki turda kendiliginden geri gelmez. Ana
+    hatta GERCEKTEN ayri bir ariza varsa kirmizi blok dallanma diregini
+    ASAR, aralik kolu icine almaz ve bolge elenmez.
+
+    ELENMEYEN HAL — BAGLANTI TELI: bolgenin baslangic diregi BASKA bir
+    hattaysa (kolun ilk acikligi ana hattin diregiyle baslar, bkz.
+    `api/faults.py` `is_link_span`) aralik iki farkli numaralandirmayi
+    karistirir ve `lo < seq < hi` karsilastirmasi anlamini yitirir. Boyle
+    bir bolge elenmez — belirsizlikte kaydi SILMEK degil BIRAKMAK guvenli
+    taraftir.
+    """
+    # parent_line_id -> [(dallanma direginin sequence_no'su, kol line_id)]
+    takeoffs: dict[int, list[tuple[int, int]]] = {}
+    for kol in lines:
+        if kol.branched_from_pole_id is None:
+            continue
+        direk = poles_by_id.get(kol.branched_from_pole_id)
+        if direk is None:
+            continue
+        takeoffs.setdefault(direk.line_id, []).append((direk.sequence_no, kol.id))
+    if not takeoffs:
+        return zones_by_line
+
+    kendi_bolgesi_olan = {lid for lid, zs in zones_by_line.items() if zs}
+    sonuc: dict[int, list[_FaultZone]] = {}
+    for line_id, zones in zones_by_line.items():
+        kollar = takeoffs.get(line_id)
+        if not kollar:
+            sonuc[line_id] = zones
+            continue
+        kalan: list[_FaultZone] = []
+        for zone in zones:
+            lo, hi = zone.seq_range
+            suclu = next(
+                (
+                    kol_id
+                    for seq, kol_id in kollar
+                    if lo < seq < hi and kol_id in kendi_bolgesi_olan
+                ),
+                None,
+            )
+            if suclu is None:
+                kalan.append(zone)
+                continue
+            logger.info(
+                "fault_zone_kolda line_id=%d poles=%d-%d branch_line_id=%d",
+                line_id, lo, hi, suclu,
+            )
+        sonuc[line_id] = kalan
+    return sonuc
 
 
 def zone_code(
@@ -526,14 +625,31 @@ def recompute_faults(db: Session) -> None:
     # id'si olmayan (yeni eklenen) kayitlari da takip etmemiz gerek.
     newly_created: list[FaultEvent] = []
 
+    # --- 1. TUR: her hattin HAM bolgeleri --------------------------------
+    # Kol onceligi (asagida) tum hatlarin bolgelerini AYNI ANDA gormek
+    # zorunda: "bu ana hat bolgesinin icindeki kolun kendi bolgesi var mi?"
+    # sorusu, kol henuz hesaplanmamisken cevaplanamaz. Eskiden hesaplama ve
+    # eslestirme tek dongudeydi ve hat sirasi cevabi degistirirdi.
+    zones_by_line: dict[int, list[_FaultZone]] = {}
+    for line in lines:
+        line_devices = devices_per_line.get(line.id, [])
+        if not line_devices:
+            continue
+        zones_by_line[line.id] = _compute_line_zones(
+            line_devices, active_alarm_device_ids, poles_by_id, dist_index, line.id
+        )
+
+    # ARIZA EN DAR BOLGEYE YAZILIR: kolda kendi bolgesi varsa ust hattaki
+    # kopya bolge elenir (bkz. `_apply_branch_priority`).
+    zones_by_line = _apply_branch_priority(zones_by_line, lines, poles_by_id)
+
+    # --- 2. TUR: bolgeleri kayitlarla eslestir ---------------------------
     for line in lines:
         line_devices = devices_per_line.get(line.id, [])
         if not line_devices:
             continue
 
-        zones = _compute_line_zones(
-            line_devices, active_alarm_device_ids, poles_by_id, dist_index, line.id
-        )
+        zones = zones_by_line.get(line.id, [])
         existing_faults = faults_by_line.get(line.id, [])
         pairs, fresh_zones, orphan_faults = _match_zones_to_faults(
             zones, existing_faults, line.id, now, settle_sec
