@@ -132,6 +132,35 @@ def _lookback_minutes() -> int:
         return 30
 
 
+#: Haberlesme alarminin basligi — alarm-service `_build_quality_alarm`
+#: icinde SABIT olarak bu metinle uretiliyor. `kind` alani eklenmeden once
+#: acilmis kayitlarda tur bilgisi yok; yedek olarak baslik eslesmesi kalir.
+COMM_ALARM_TITLE = "Haberleşme arızası"
+
+#: Alarm degerlendirmesini engelleyen kaliteler — `quality_blocks_alarm` ile
+#: AYNI kume, ama burada SQL `IN` icin gerekiyor (satir satir Python'a cekip
+#: filtrelemek yerine veritabaninda eleyelim).
+_BLOCKING_QUALITIES = ("bad", "offline", "invalid", "comm_lost", "restart", "forced")
+
+#: Haberlesme alarmi icin "toparlandi" penceresi (saniye).
+#:
+#: Kural alarmlarinin 30 dakikalik `lookback`i burada KULLANILMAZ: toparlanan
+#: bir cihazin yarim saat daha alarmda gorunmesi operatore yalan soylemek
+#: olurdu. Iki dakika, varsayilan 2 sn'lik tarama periyodunda ~60 okuma —
+#: gecici bir titremenin alarmi erken kapatmasina yetmeyecek kadar uzun.
+#:
+#: ENV ILE AYARLANABILIR DEGIL (bilincli): `ALARM_RECONCILE_*` kardeslerinin
+#: env okumasi compose'dan GECMIYOR ve test bunu bir "borc kaydi" olarak
+#: tutuyor (tests/test_env_compose_ulasilabilirlik.py). Ulasilamayan ucuncu
+#: bir dugme eklemektense sabit ve belgeli bir deger daha durust.
+_COMM_RECOVERY_WINDOW_SEC = 120
+
+
+def _is_comm_alarm(alarm: AlarmEvent) -> bool:
+    """Cihaz seviyesi haberlesme alarmi mi? (kurali ve sinyali yoktur)"""
+    return (alarm.kind or "") == "comm_loss" or alarm.title == COMM_ALARM_TITLE
+
+
 def _evaluate_rule(rule: AlarmRule, value: float) -> bool:
     """Kuralin verilen deger icin AKTIF olup olmadigini doner.
 
@@ -321,8 +350,77 @@ class AlarmReconciliationWorker:
                 ).all()
                 son_degerler = {(r.device_id, r.signal_key): r for r in satirlar}
 
+            # --- HABERLESME ALARMLARI (kuralsiz, sinyalsiz) -----------------
+            #
+            # 2026-08-12 OLAYI: yedi cihazin "Haberleşme arızası" alarmi
+            # 08:23'te acildi ve cihazlar saatlerce sorunsuz haberlesmesine
+            # ragmen HIC kapanmadi. Sebep uc kirigin ust uste gelmesi:
+            #
+            #   1. alarm-service kapanisi YALNIZCA surec ici bir sozlukten
+            #      (`_QUALITY_STATE`) karar veriyor. Servis yeniden basladiginda
+            #      sozluk bosaliyor; iyi veri geldiginde "bu cihaz zaten bozuk
+            #      degildi" deyip CLEAR gondermiyor.
+            #   2. Bu worker — tam olarak o drift'i temizlemek icin yazilmis
+            #      olan yer — alarmi KURALINA gore cozuyor. Haberlesme
+            #      alarminin kurali yok (`rule_id=None`), asagidaki
+            #      `rule is None -> continue` filtresinden dusuyor.
+            #   3. Ayni dongudeki `if not alarm.signal_key` filtresi de
+            #      eliyor: haberlesme alarmi cihaz seviyesidir, sinyali yok.
+            #
+            # Sonuc: sistemin kendi kendini iyilestiren yolu bu alarm turunu
+            # HIC gormuyordu. Asagidaki blok o deligi kapatir.
+            #
+            # KARAR OLCUSU (kurala degil VERIYE bakar): son
+            # `_COMM_RECOVERY_WINDOW_SEC` icinde cihazdan telemetri geldi mi ve
+            # o pencerede BOZUK KALITELI hic okuma var mi?
+            #   * taze veri YOK          -> cihaz gercekten sessiz, alarm HAKLI
+            #   * pencerede bozuk okuma  -> sorun suruyor, dokunma
+            #   * taze + hepsi iyi       -> haberlesme geri geldi, alarmi coz
+            # Pencere kisa (2 dk) cunku 30 dakikalik `lookback` kullanilsaydi
+            # toparlanan bir cihaz yarim saat daha alarmda kalirdi.
+            comm_alarms = [a for a in open_alarms if _is_comm_alarm(a)]
+            comm_ids = {a.device_id for a in comm_alarms if a.device_id is not None}
+            taze_cihazlar: set[int] = set()
+            bozuk_cihazlar: set[int] = set()
+            if comm_ids:
+                pencere = datetime.now(timezone.utc) - timedelta(
+                    seconds=_COMM_RECOVERY_WINDOW_SEC
+                )
+                taze_cihazlar = set(
+                    db.scalars(
+                        select(Telemetry.device_id)
+                        .where(Telemetry.source_timestamp >= pencere)
+                        .where(Telemetry.device_id.in_(comm_ids))
+                        .distinct()
+                    ).all()
+                )
+                bozuk_cihazlar = set(
+                    db.scalars(
+                        select(Telemetry.device_id)
+                        .where(Telemetry.source_timestamp >= pencere)
+                        .where(Telemetry.device_id.in_(comm_ids))
+                        .where(Telemetry.quality.in_(_BLOCKING_QUALITIES))
+                        .distinct()
+                    ).all()
+                )
+
             cleared_count = 0
             for alarm in open_alarms:
+                if _is_comm_alarm(alarm):
+                    if alarm.device_id is None:
+                        continue
+                    if alarm.device_id not in taze_cihazlar:
+                        continue  # Cihaz sessiz — alarm dogru, ACIK KALIR.
+                    if alarm.device_id in bozuk_cihazlar:
+                        continue  # Pencerede hala bozuk okuma var.
+                    action = _resolve_alarm(db, alarm, reason="comm_restored")
+                    cleared_count += 1
+                    logger.info(
+                        "comm_alarm_reconciled action=%s alarm_id=%d device_id=%d",
+                        action, alarm.id, alarm.device_id,
+                    )
+                    continue
+
                 rule = rules_by_name.get(alarm.title)
                 if rule is None:
                     continue  # Kural silinmis veya pasif — drift; yine de
