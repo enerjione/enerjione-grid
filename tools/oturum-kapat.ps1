@@ -139,6 +139,18 @@ try {
 }
 Yaz "Worktree silindi: $hedef" "Green"
 
+# --- Defterden dus --------------------------------------------------------
+# Slot serbest kalsin: bir sonraki oturum onu yeniden kullanabilsin. (Senkron
+# zaten olmayan worktree'leri dusuruyor; burada hemen yapmak defteri her an
+# dogru tutar ve port dagitimini gecikmesiz serbest birakir.)
+try {
+  . (Join-Path $PSScriptRoot "oturum-ortak.ps1")
+  Remove-Oturum -Yol $hedef
+  Yaz "Defterden dusuruldu (port serbest)" "DarkGray"
+} catch {
+  Yaz "UYARI: defter guncellenemedi; bir sonraki oturum acilisinda esitlenir." "Yellow"
+}
+
 # --- Dal ------------------------------------------------------------------
 # Dal SILINMEZ: is birlestirilmemis olabilir. Ne yapilacagi ekranda dursun.
 $dal = "feat/$Konu"
