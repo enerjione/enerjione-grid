@@ -14,6 +14,44 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.80.1] — 2026-08-13
+
+### Düzeltildi
+
+- **Modbus'ta değişmeyen sinyaller SCADA'ya hiç ulaşmıyordu — register'lar 0
+  kalıyordu.** Değerleri register'a yazan tek kanal canlı telemetri akışıydı ve o
+  akış yalnızca cihaz **yeni ölçüm yayınladıkça** akar. Modbus'ta "değer henüz
+  gelmedi" diye bir hal yoktur: yazılmamış adres **0** döner ve SCADA bunu
+  gerçek bir ölçüm gibi okur. Üç yol da aynı yere çıkıyordu: değişmeyen
+  sinyaller (arıza bayrağı, nominal değerler, konum) günlerce mesaj üretmez;
+  servis yeniden başladığında geçmiş telemetri tekrar oynatılmaz; yeni eklenen
+  hedef/cihaz ilk ölçüme kadar boş kalır. Belirti sinsiydi — Modbus okuması
+  **hatasız** cevap veriyor, sadece hep 0 diyordu; Canlı Değerler ekranı ise
+  aynı anda gerçek değeri gösteriyordu.
+
+  Artık `modbus-outbound` ikinci bir kanaldan besleniyor: her 30 saniyede
+  (`MODBUS_SNAPSHOT_REFRESH_SEC`) **son bilinen değerleri** okuyup eksik
+  register'ları dolduruyor. Kaynak, Canlı Değerler ekranının okuduğu **aynı**
+  tablo — yani "ekranda var, SCADA'da yok" ayrışması yapısal olarak ortadan
+  kalkıyor. Canlı akıştan gelen **daha yeni** bir değer, veritabanından dönen
+  bayat bir satırla **ezilmiyor** (kaynak damgası karşılaştırması); aksi halde
+  SCADA'da görünür bir geri sıçrama olurdu. Çekim artımlıdır: ilk tur tam,
+  sonraki turlar yalnızca değişenleri alır — 600 cihazlık kurulumda her turda
+  ~115.000 satır taşımak backend'i zorlardı.
+
+  **Bu güncelleme .deb gerektirmez**, yalnızca servis imajları yenilenir.
+
+### Eklendi
+
+- **Modbus Yayın Durumu panelinde tazeleme sayaçları.** "Son bilinen değerle
+  tazelenen register" satırı ve iki yeni teşhis cümlesi: canlı akış sessizken
+  register'ların son bilinen değerlerle beslendiği durum, ve tazelemenin
+  kapatılmış olması. "Veri akışı yok" rozeti artık iki kanalı birlikte sayıyor —
+  değişmeyen sinyallerle doğru veri veren bir hedef bir daha "akış yok"
+  görünmüyor. `docs/MODBUS.md`'ye "SCADA sıfır görüyor" karar ağacı eklendi.
+
+---
+
 ## [2.80.0] — 2026-08-13
 
 ### Güvenlik
