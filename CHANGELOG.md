@@ -14,6 +14,50 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.86.0] — 2026-08-13
+
+### Eklendi
+
+- **Cihaz Durum Raporu (PDF).** Cihaz detay sayfasının üst şeridine "PDF rapor"
+  düğmesi geldi: cihazın o anki durumunun tek dosyalık özeti. Belge Arıza
+  Raporu ile **aynı şablondan** çıkıyor (solda EnerjiOne, sağda müşteri
+  logosu, altta "Sayfa X / Y"). Sayfa beş sekmeye yayılmış bir panoydu ve
+  tarayıcının yazdırma çıktısı yalnızca **açık sekmeyi**, seçili kanalla,
+  pencere genişliğine bağlı biçimde kağıda dökerdi; rapor artık kayıttan
+  üretiliyor ve hangi sekmede olursanız olun aynı çıkıyor.
+
+  İçerik: künye ve bağlantı, konum (uydu görüntüsü üzerinde cihaz pini,
+  izlediği kesim ve direk numaraları), ölçüm kanalları
+  (ünite/uydu/seri/faz/batarya/anlık ölçüm), satır=sinyal & sütun=kanal
+  durum tabloları, RTU değerleri, aktif alarmlar ve son olaylar.
+
+- **Rapor cihaz türüne göre şekilleniyor.** Sistemde üç ayrı şey "cihaz" diye
+  geçiyor ve üçü de farklı bir belge istiyor: Horstmann SN 2.0'da `master`
+  hem RTU'dur hem ölçüm yapar; Pole Master Kit'in kendisi **ölçüm yapmaz**
+  (raporunda ölçüm kanalı yerine bağlı setler tablosu var); kit setinin
+  ölçümleri kendisinden, modem/IP/RTU değerleri ise **kitten** okunur. Bu
+  ayrım cihazın adından değil sinyal kataloğundan çıkarılıyor, yani
+  katalogdan tanımlanan yeni bir model de sürüm çıkmadan doğru raporlanır.
+
+### Değişti
+
+- **Rapordaki sinyal adları ekrandakinin aynısı.** Katalog etiketleri
+  İngilizce; ekran çeviriyordu, sunucunun karşılığı yoktu — kullanıcı
+  ekranda "Aşırı Akım Açması" görüp raporda "Overcurrent Tripped" indirirdi.
+- **Güvenilmez okuma raporda da değeri gizlemiyor, damgalıyor.** Haberleşme
+  kalitesi düşükken gelen son değer "· son bilinen" damgasıyla nötr renkte
+  basılıyor; düz yeşil "Normal" **basılmıyor** — yeşil "sorun yok" der, oysa
+  o okuma taze değil.
+
+### Düzeltildi
+
+- **Pole Master Kit'e özel dört sinyal adı hiçbir dilde yoktu**
+  (`solar_power`, `ac_power`, `enable_fast_curve`, `fast_curve_enabled`) —
+  "Pole Master" sekmesinde de İngilizce görünüyorlardı. Türkçe ve İngilizce
+  karşılıkları eklendi.
+
+---
+
 ## [2.85.0] — 2026-08-13
 
 ### Eklendi
