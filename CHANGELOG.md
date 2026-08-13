@@ -14,6 +14,36 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.83.0] — 2026-08-13
+
+### Eklendi
+
+- **Cihaz Karşılaştırması tablosunda batarya yüzdesi ve gerilim.** Tablo master
+  cihazları listeliyordu ama batarya hiç yoktu; yerindeki "Tükenme" sütunu da
+  çoğu cihazda "—" gösteriyordu, çünkü tükenme bir **eğim** hesabı ve en az
+  birkaç günlük gözlem istiyor — yeni kurulan cihazda hiçbir şey dönmüyordu.
+  Artık son ölçülen master batarya voltajı okunuyor: cihaz dün takılmış olsa
+  bile değeri belli. Yüzde, cihaz listesi ve haritanın kullandığı **aynı**
+  eşiklerden hesaplanıyor, yani aynı batarya her ekranda aynı yüzdeyi
+  gösteriyor. Ham gerilim yüzdenin yanında duruyor: eşik cihaz türüne göre
+  değiştiği için "%40" tek başına hangi hücrede ne demek olduğunu söylemiyor.
+- **Sinyal sütununa birim eklendi** — çıplak "-31.2" hangi ölçek olduğunu
+  söylemiyordu, artık "-31.2 dBm".
+
+### Düzeltildi
+
+- **Hat Arızaları'nda sağ panel kaydırılamıyordu.** Arıza künyesi, alarmlar,
+  hat geçmişi ve branşman kolları alt alta uzayınca panel kartın boyunu aşıyor
+  ve alttakiler **kırpılıyordu** — dört alarmlı bir arızada son satır yarıda
+  kesiliyor, ulaşmanın hiçbir yolu kalmıyordu. Panel artık kendi içinde
+  kayıyor; kart ekranda sabit kalıyor.
+- **Arıza künyesinde "25 Â°C" yazıyordu.** Kaynak dosyanın karakter kodlaması
+  bozulmuştu; aynı bozulma alarm satırlarındaki ayraçta da görünüyordu
+  ("DEMO-5 Â· 14:10"). Düzeltildi ve tekrarını önleyen bir kontrol eklendi —
+  bu hata sınıfı derleyiciyi uyarmadığı için ancak ekranda fark ediliyordu.
+
+---
+
 ## [2.82.0] — 2026-08-13
 
 ### Değişti
