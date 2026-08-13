@@ -14,6 +14,48 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.79.0] — 2026-08-13
+
+### Düzeltildi
+
+- **İki hattı birleştiren telin üzerindeki arıza artık çizimde okunuyor.**
+  Böyle bir kayıt "hat = BR-2, direk 7 → direk 1" der; buradaki **7 ana hattın,
+  1 kolun** direğidir. Çizim bunu tek hattın aralığı sanıp kolu tek başına ana
+  satır yapıyordu: tel havada asılı kalıyor, telin üzerindeki cihaz kolun tek
+  direğine yapışıyor, "aranacak kesim" 0 m çıkıyordu — sahaya çıkan ekip hangi
+  açıklığa gideceğini okuyamıyordu. Artık çizim **ana hattan** başlar: ana hat
+  satırı + dallanma direğinden sarkan kol satırı, arıza da ikisini birleştiren
+  **telin üzerinde**. Telin hangi yarısının şüpheli olduğunu telin cihazı
+  söyler: "gördüm" ise cihazdan kola doğru olan yarı ve kolun ilk direği,
+  "görmedim" ise ana hattan cihaza kadarki yarı. Kolun kendi bölgesi boş kalır,
+  çünkü arıza kolun içinde değil teldedir.
+- **Arıza aralığı başlığı** aynı kayıtta "Direk #7 — Direk #1" yazıyordu; geriye
+  giden, anlamsız bir aralık. Artık iki uçlu bir bağlantı olarak yazılıyor:
+  **"ANA HAT #7 ↔ BR-2 #1"**. Dört ekran (aktif kart, detay sayfası, geçmiş
+  tablosu, detay penceresi) aynı metni ayrı ayrı üretiyordu; tek kaynağa alındı.
+- **Uydu bataryaları artık kendi voltaj eşiğiyle ölçülüyor.** Uydunun hücresi,
+  RTU'yu besleyen master hücresiyle aynı voltaj aralığında çalışmaz. Tek çift
+  eşikle ölçülünce sahada sağlam uydular ekranda **sürekli %0** görünüyordu
+  (ölçülen ~3,05 V, master eşiği 3,40 V). Bu sessiz bir yanlıştı: ne hata ne
+  uyarı üretir, üstelik gerçekten biten bir hücreyi de gizler — zaten %0
+  yazıyordu. **Proje Ayarları → Batarya Voltaj Eşikleri** altına uydu çifti
+  eklendi; boş bırakılırsa uydular master eşiğini kullanmaya devam eder, yani
+  güncelleyen bir kurulumda hiçbir şey değişmez. Ayrıca setin yüzdesi artık en
+  düşük *voltaj* değil en düşük *yüzde* ile bulunuyor: üniteler farklı
+  aralıklarda çalışıyorsa ham voltajları kıyaslamak yanlış üniteyi "en zayıf"
+  gösterirdi.
+
+### Kaldırıldı
+
+- Cihaz detayında alarm reset düğmesinin solundaki **veri akışı rozeti**
+  ("Veri bekleniyor"). Bayat veri koruması kaldırılmadı — bekçi çalışmaya devam
+  eder, değer satırları kendi tazeliğini gösterir ve rozet Canlı Değerler
+  ekranında durur.
+- Pole Master sekmesindeki **"52/36 dolu"** doluluk sayacı. Bir iş değeri
+  taşımıyordu; veri hiç gelmiyorsa bunu zaten boş ekran metni söylüyor.
+
+---
+
 ## [2.78.0] — 2026-08-13
 
 ### Eklendi
