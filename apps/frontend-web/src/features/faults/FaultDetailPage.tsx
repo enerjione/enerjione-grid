@@ -88,6 +88,8 @@ import {
   Wrench,
   Zap
 } from "lucide-react";
+// Wrench: artik yalnizca COZUM kartinin basliginda (eylem cubugundaki
+// "sebep ve cozum" dugmesi kaldirildi, bkz. eylem cubugu).
 import { LayersControl, MapContainer, Marker, Polyline, Tooltip } from "react-leaflet";
 import L from "leaflet";
 
@@ -271,9 +273,7 @@ export function FaultDetailPage({
   /** Acik islem ekrani. Taslaklarin tamami o ekranlarin ICINDE tutulur;
    *  ekran unmount oldugunda kendiliginden temizlenir ve arka planda liste
    *  tazelendiginde kullanicinin yazdigi silinmez. */
-  const [islemModal, setIslemModal] = useState<null | "close" | "solve" | "comments">(
-    null
-  );
+  const [islemModal, setIslemModal] = useState<null | "close" | "comments">(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [mapFocus, setMapFocus] = useState<"zone" | "line" | "grid">("zone");
@@ -570,6 +570,20 @@ export function FaultDetailPage({
     return orta >= 1000 ? `~${(orta / 1000).toFixed(2)} km` : `~${Math.round(orta)} m`;
   }, [fault?.zone_start_m, fault?.zone_end_m]);
 
+  /** Kapanista girilen sebebin OKUNABILIR etiketi (katalogdan).
+   *
+   *  BU HOOK DA ERKEN `return`DEN ONCE — bkz. yukaridaki not.
+   *
+   *  Katalog gelmediyse ham kod gosterilir: "hicbir sey" gostermektense
+   *  kodu gostermek daha iyi, cunku kart yalnizca bu bilgi VARKEN aciliyor. */
+  const cozumSebebi = useMemo(() => {
+    const kod = fault?.cause_code;
+    if (!kod) return null;
+    const c = causeCatalog?.causes.find((x) => x.code === kod);
+    if (!c) return kod;
+    return i18n.language?.startsWith("tr") ? c.label_tr : c.label_en;
+  }, [causeCatalog, fault?.cause_code, i18n.language]);
+
   // ---- Yukleniyor / bulunamadi -------------------------------------------
   if (!fault) {
     return (
@@ -699,14 +713,13 @@ export function FaultDetailPage({
             {islemYapilabilir ? (
               <>
                 <span className="fd-act-sep" aria-hidden="true" />
-                <button
-                  type="button"
-                  className="fd-act"
-                  onClick={() => setIslemModal("solve")}
-                >
-                  <Wrench size={15} />
-                  {t("faults.detail.actionSolve")}
-                </button>
+                {/* SEBEP/COZUM ICIN AYRI DUGME YOK.
+                    Kapatma diyalogu zaten sebebi ve cozum notunu istiyor
+                    (cozum notu ZORUNLU) — arizayi kapatmadan bu bilgiler
+                    kalici da olmuyordu. Ayri bir giris ayni iki alani iki
+                    ayri yerden toplayip "hangisi asil kayit" sorusunu geri
+                    getiriyordu. Ariza ACIKKEN saha gozlemi Saha Yorumlari'na
+                    yazilir; sebep/cozum kapanista bir kez girilir. */}
                 {/* KAPATMA KILITLI: ariza sahada duzelmeden (`resolved_at`)
                     kapatilamaz. Dugmeyi gizlemek yerine KILITLI gostermek,
                     "kapatma nerede" sorusunu ekranda cevaplar. */}
@@ -1030,6 +1043,55 @@ export function FaultDetailPage({
         </section>
 
         <div className="fd-col">
+          {/* COZUM — "ne yapildi" sorusunun cevabi.
+              Bu bilgi HICBIR YERDE gorunmuyordu: kapatma diyalogunda yazilip
+              kaydediliyor, ariza kapaninca da o diyalog bir daha acilamadigi
+              icin ("kapatilmis ariza salt okunur") yazilan sey ekrandan
+              kayboluyordu. Kapanmis bir kayda bakan kisinin ILK sorusu bu —
+              kart o yuzden sag sutunun en ustunde ve kunyenin uzerinde.
+              Kart yalnizca ICI DOLUYSA acilir; acik arizada bos bir "cozum"
+              kutusu bulundurmak kaydin cozulmus oldugunu ima ederdi. */}
+          {cozumSebebi || fault.cause_detail || fault.resolution_note ? (
+            <section className={`fd-card fd-resolution${kapali ? " is-closed" : ""}`}>
+              <header className="fd-card-head">
+                <h2>
+                  <Wrench size={15} />
+                  {t("faults.detail.resolutionTitle")}
+                </h2>
+                {fault.closed_at ? (
+                  <small>
+                    {t("faults.detail.resolutionClosedAt", {
+                      at: fmtDate(fault.closed_at, localeTag)
+                    })}
+                  </small>
+                ) : null}
+              </header>
+
+              {cozumSebebi ? (
+                <div className="fd-res-row">
+                  <span className="fd-label">{t("faults.detail.causeTitle")}</span>
+                  <span className="fd-res-cause">{cozumSebebi}</span>
+                </div>
+              ) : null}
+
+              {fault.cause_detail ? (
+                <div className="fd-res-row">
+                  <span className="fd-label">{t("faults.detail.causeDetailLabel")}</span>
+                  <p className="fd-res-text">{fault.cause_detail}</p>
+                </div>
+              ) : null}
+
+              {/* COZUM NOTU kapatmanin ZORUNLU alani: arizanin kalici cevabi.
+                  Digerlerinden daha belirgin dursun diye kendi kutusunda. */}
+              {fault.resolution_note ? (
+                <div className="fd-res-row fd-res-row--note">
+                  <span className="fd-label">{t("faults.detail.resolutionNote")}</span>
+                  <p className="fd-res-text">{fault.resolution_note}</p>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
           {/* ARIZA KUNYESI — cihazin arizanin KENDISI hakkinda soyledikleri.
               Bu ekranda hic gorunmuyordu; operator ayni bilgiyi liste
               kartindan okumak icin geri donuyordu. */}
@@ -1406,14 +1468,14 @@ export function FaultDetailPage({
       </div>
 
       {/* ---- ISLEM EKRANLARI ----
-          Sebep/cozum ve saha raporu AYRI iki ekran. Once ikisi ayni popup'in
-          icinde yan yanaydi; sebep bir siniflandirma, yorum ise serbest
-          metinli bir akis oldugu icin ayni kutuda hangisinin kalici kayit
-          oldugu belirsiz kaliyordu. */}
-      {islemModal === "solve" || islemModal === "close" ? (
+          Iki ekran, iki ayri is: KAPATMA (sebep + cozum notu, bir kez) ve
+          SAHA YORUMLARI (serbest metinli, zamana yayilan akis). Once ikisi
+          ayni popup'in icinde yan yanaydi ve hangisinin kalici kayit oldugu
+          belirsiz kaliyordu. */}
+      {islemModal === "close" ? (
         <FaultResolveModal
           fault={fault}
-          mod={islemModal === "close" ? "kapat" : "duzenle"}
+          mod="kapat"
           catalog={causeCatalog}
           onKapat={() => setIslemModal(null)}
           onSebepKaydet={sebepKaydet}
