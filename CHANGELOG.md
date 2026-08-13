@@ -14,6 +14,57 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.80.0] — 2026-08-13
+
+### Güvenlik
+
+- **Güvenlik duvarı artık yalnızca Kurulumcu'da — görmek de dahil.** Önceden
+  durumu Mühendis ve Operasyon Yöneticisi de görebiliyor, Mühendis
+  değiştirebiliyordu. Kural listesi cihazın **ağ yüzeyidir**: hangi port dışarıya
+  açık, hangi adres geçebiliyor. Tek başına bir keşif haritası; "sadece bakıyor"
+  diye dağıtılacak bir bilgi değil. Ağ Ayarları zaten yalnızca Kurulumcu'daydı,
+  bu da aynı sınıftan bir yetki. **Etki:** Mühendis ve Operasyon Yöneticisi
+  hesaplarında Mühendislik menüsündeki "Güvenlik Duvarı" sayfası kayboluyor.
+
+### Düzeltildi
+
+- **Operasyon Yöneticisi Mühendislik'e girince artık Kullanıcılar sayfası
+  açılıyor.** Menü sabit olarak Cihazlar sayfasını açıyordu; Operasyon Yöneticisi
+  o sayfayı hiç göremediği için açılan sekme anında eleniyor ve **menüye basmak
+  hiçbir şey yapmıyor** gibi görünüyordu. Açılış sayfası artık role göre.
+- **Operasyon Yöneticisi'nin Kullanıcılar sayfası boş açılıyordu.** Yetki
+  kuralları hazırdı (yalnızca operatör hesaplarını görür, yalnızca operatör
+  oluşturabilir) ama arayüz listeyi bu rol için hiç çekmiyordu. Artık operatör
+  hesapları listeleniyor ve oluşturulabiliyor.
+- **Geçmiş arızalar listesi kaydırılmıyordu.** Kayıt sayısı ekranı aşınca kart
+  görüntü alanının altına taşıyor, taşan satırlar kırpılıyordu; alttaki arızalara
+  ulaşmanın hiçbir yolu yoktu. Artık satırlar kartın içinde kayıyor ve sütun
+  başlıkları kaydırırken yerinde kalıyor.
+- **Arızayı açan alarm, alarm normale döndüğü anda karttan siliniyordu.** Cihaz
+  arızayı görüp kısa süre sonra sinyali normale döndürünce, arıza hâlâ açıkken
+  "Arızayı Açan Alarm" bloğu boşalıyordu. Oysa sorulan şey "şu an alarm var mı"
+  değil, **"bu arızayı ne açtı"** — o cevap alarm sıfırlanınca değişmez. Kayıt
+  artık kalıyor, üzerinde "normale döndü" damgasıyla. Kapatılmış arıza PDF
+  raporundaki alarm bölümü de bu yüzden boş çıkıyordu, o da düzeldi.
+- **Alarm Sıklığı takvimi geçmişi boş gösteriyordu.** Takvimi besleyen günlük
+  sayaç ileriye doğru doğru çalışıyordu ama **geçmişi yoktu**: sayaç tablosu tek
+  seferlik olarak alarm kayıtlarından dolduruldu, oysa o tablo o güne kadar
+  tekrar eden ve kapanan alarmların satırlarını siliyordu — geri doldurma elinde
+  zaten silinmiş bir geçmiş buldu. Gerçek geçmiş **olay kaydında** duruyor (2
+  yıl); sayaç artık oradan tamamlanıyor. Güncelleme sırasında bir kez, sonra da
+  bakım döngüsünde arşiv budanmadan önce. Ayrıca takvimde **"veri yok"** ile
+  "o gün sessizdi" artık ayrı çiziliyor — izleme başlamamış bir dönem
+  "sorunsuz geçti" diye okunmuyor.
+- **Cihaz kartları alarm varken "Normal" diyordu.** Cihazın alarm durumunu tutan
+  alan hiçbir yerde yazılmıyordu; her cihaz sonsuza kadar "alarm yok" diyordu.
+  Bunu okuyan her yer yanılıyordu: haritadaki cihaz kartı, ana sayfanın
+  "alarmlı" filtresi ve sayacı, üst arama, şebeke yönetimi çipleri, cihaz özeti
+  ve dış API. Haritanın pini doğruydu (kendi listesini alarmlardan çıkarıyordu),
+  yani aynı ekranda pin kırmızı, kart yeşil oluyordu. Alan artık canlı alarmdan
+  okunuyor.
+
+---
+
 ## [2.79.0] — 2026-08-13
 
 ### Düzeltildi
