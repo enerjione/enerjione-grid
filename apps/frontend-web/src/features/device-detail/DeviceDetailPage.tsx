@@ -13,9 +13,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { useTranslation } from "react-i18next";
 
 import { useDeviceModelSettings } from "../../components/DeviceModelSettingsProvider";
-import { WsStatusBadge } from "../../components/WsStatusBadge";
 import { voltageToPercent } from "../../shared/battery";
-import type { WsConnectionState } from "../../shared/useLiveValuesSocket";
 import { fizikselUydular, setMi, uyduKaynagi } from "../../shared/deviceKit";
 
 import { fetchAlarmEvents } from "../../shared/api";
@@ -60,12 +58,6 @@ type Props = {
   canConfig?: boolean;
   onDeviceCommand?: (deviceCode: string, command: string, label: string) => Promise<void>;
   token?: string;
-  /** Canli veri akisinin durumu — ust cubuktaki rozet icin. Verilmezse rozet
-   *  hic cizilmez (bileseni baska yerde kullanan cagiran bozulmasin). */
-  wsState?: WsConnectionState;
-  /** Son TELEMETRI mesajinin zamani (ms). Soket durumundan AYRI: soket acik
-   *  olup gateway susmus olabilir. */
-  wsLastDataAt?: number | null;
 };
 
 // ---- Kategori tanimi (source-agnostic suffix -> kategori + TR etiket) --------
@@ -186,8 +178,6 @@ export function DeviceDetailPage({
   canConfig = false,
   onDeviceCommand,
   token,
-  wsState,
-  wsLastDataAt,
 }: Props) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
@@ -428,8 +418,8 @@ export function DeviceDetailPage({
   // sayfasinda listedekinden farkli yuzde gosteriyordu.
   const { thresholdsFor } = useDeviceModelSettings();
   const voltToPct = useCallback(
-    (v: number | undefined): number | undefined =>
-      voltageToPercent(v, thresholdsFor(device?.model)),
+    (v: number | undefined, unite?: string): number | undefined =>
+      voltageToPercent(v, thresholdsFor(device?.model, unite)),
     [thresholdsFor, device?.model]
   );
   /** Setin sat01/sat02/sat03 kanallarinin FIZIKSEL uydu karsiligi.
@@ -460,9 +450,10 @@ export function DeviceDetailPage({
       // erisilemezse setin kendi degerine dusulur.
       let pct: number | undefined;
       if (setUydulari.length > i) {
-        pct = voltToPct(rtuNum(`${uyduKaynagi(setUydulari[i])}.battery_voltage_satellite`));
+        const kaynak = uyduKaynagi(setUydulari[i]);
+        pct = voltToPct(rtuNum(`${kaynak}.battery_voltage_satellite`), kaynak);
       }
-      if (pct == null) pct = voltToPct(numVal(`${src}.battery_voltage_satellite`));
+      if (pct == null) pct = voltToPct(numVal(`${src}.battery_voltage_satellite`), src);
       if (pct != null) out[src] = pct;
     });
     return out;
@@ -579,14 +570,12 @@ export function DeviceDetailPage({
             ))}
           </nav>
           <div className="device-detail-topbar-actions">
-            {/* CANLI MI, DONMUS MU — bu ekranda hicbir gosterge YOKTU.
-                Baglanti sessizce olduğunde (uyku, ag degisimi) sayfa son
-                gelen degerleri sanki taze gibi gostermeye devam ediyordu;
-                operator bunu ancak baska bir kaynakla karsilastirinca fark
-                ediyordu. Rozet soket durumunu DEGIL veri akisini soyler
-                (bkz. wsDataStatus): soket acikken gateway sussa da "Veri yok"
-                yazar. */}
-            {wsState ? <WsStatusBadge state={wsState} lastDataAt={wsLastDataAt ?? null} /> : null}
+            {/* VERI AKISI ROZETI YOK (kullanici istegi): ust seritte alarm
+                reset dugmesinin yaninda ikinci bir durum etiketi gurultu
+                yapiyordu. Bayat veri korumasi KALDIRILMADI — bekci hala
+                caliyor ve deger satirlari kendi tazeligini gosteriyor
+                (bkz. useLiveValuesSocket / wsDataStatus). Rozet Canli
+                Degerler ekraninda duruyor. */}
             {device.alarmActive ? (
               <span className="device-alarm-badge">
                 <span className="device-alarm-pulse" aria-hidden="true" />

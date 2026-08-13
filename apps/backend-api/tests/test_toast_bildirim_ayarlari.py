@@ -187,6 +187,8 @@ PUBLIC_ALANLAR = {
     "customer_logo_light": "header'da gosterilen gorsel",
     "battery_voltage_low": "goruntuleme esigi; cihaz/olcum verisi degil",
     "battery_voltage_full": "goruntuleme esigi; cihaz/olcum verisi degil",
+    "battery_voltage_low_sat": "ayni sinif: UYDU hucresinin goruntuleme esigi",
+    "battery_voltage_full_sat": "ayni sinif: UYDU hucresinin goruntuleme esigi",
     "site_title": "tarayici sekme basligi",
     "favicon": "tarayici ikonu",
     "login_image": "login ekrani dekoratif gorseli",

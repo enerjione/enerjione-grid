@@ -176,6 +176,13 @@ def update_project_settings(
             _validate_image_data_url(field, updates[field])
     for key, value in updates.items():
         setattr(row, key, value)
+    # BATARYA ESIGI CACHE'LENIR (bkz. device_profile_service._CACHE, 60 sn).
+    # Kurulumcu esigi degistirip ekrana dondugunde yuzdenin hala eski esikle
+    # hesaplanmasi "ayar tutmadi" gibi okunuyor; dokunuldugunda hemen dusur.
+    if any(k.startswith("battery_voltage_") for k in updates):
+        from app.services.device_profile_service import invalidate_cache
+
+        invalidate_cache()
     # Toast ayarlari TUM kurulumu etkiler (susturma herkesin alarm baloncugunu
     # kapatir); denetim kaydinda yalnizca alan adi degil DEGERI de dursun.
     _VALUE_FIELDS = {"toast_position", "toast_muted"}

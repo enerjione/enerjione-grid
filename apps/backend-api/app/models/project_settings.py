@@ -30,6 +30,18 @@ class ProjectSettings(Base):
     # NULL ise fallback default'lar kullanilir (3.40 / 3.71).
     battery_voltage_low: Mapped[float | None] = mapped_column(Float, nullable=True)
     battery_voltage_full: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # UYDU (sat01/sat02/sat03) BATARYALARI ICIN AYRI ESIK.
+    #
+    # Uydu hucresi ile RTU'yu besleyen master hucresi ayni voltaj araliginda
+    # calismaz. Tek cift esikle olculunce uydular sahada saglamken ekranda
+    # SURKELI %0 gorunuyordu (olculen ~3,05 V, master esigi 3,40 V) — sessiz
+    # bir yanlislik: ne hata ne uyari uretir, yalnizca sayi yanlistir ve
+    # gercekten biten bir hucreyi de gizler.
+    #
+    # NULL = uydular master esigini kullanmaya devam eder (guncelleyen
+    # kurulumda hicbir sey degismez).
+    battery_voltage_low_sat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    battery_voltage_full_sat: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Tarayici sekmesinde gozukecek baslik (document.title). NULL ise
     # index.html'deki varsayilan ("EnerjiOne Grid Dashboard") oldugu gibi kalir.
     site_title: Mapped[str | None] = mapped_column(String(200), nullable=True)

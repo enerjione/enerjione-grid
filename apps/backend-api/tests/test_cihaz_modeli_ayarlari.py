@@ -216,3 +216,146 @@ def test_api_liste_tum_modelleri_doner(db):
         # Kayit olmasa bile cozulmus deger HER ZAMAN dolu gelir.
         assert item["resolved_battery_voltage_low"] is not None
         assert item["resolved_battery_voltage_full"] is not None
+
+
+# ---------------------------------------------------------------------------
+# UYDU HUCRESI AYRI OLCULUR
+#
+# Uydunun bataryasi RTU'yu besleyen master hucresiyle ayni voltaj araliginda
+# calismaz. Proje ayarinda tek cift esik vardi ve uydular da onunla
+# olculuyordu: sahada saglam uydular ekranda SURKELI %0 gorunuyordu (olculen
+# ~3,05 V, master esigi 3,40 V). Sessiz bir yanlislik — ne hata ne uyari
+# uretir, ustelik gercekten biten bir hucreyi de gizler.
+# ---------------------------------------------------------------------------
+
+
+def test_uydu_cifti_YALNIZCA_uydu_unitesine_uygulanir(db):
+    db.add(
+        ProjectSettings(
+            id=1,
+            battery_voltage_low=3.40,
+            battery_voltage_full=3.71,
+            battery_voltage_low_sat=2.90,
+            battery_voltage_full_sat=3.30,
+        )
+    )
+    db.commit()
+    assert dps.battery_thresholds(db, DEFAULT_MODEL, unit="master") == (3.40, 3.71)
+    for unite in ("sat01", "sat02", "sat03"):
+        assert dps.battery_thresholds(db, DEFAULT_MODEL, unit=unite) == (2.90, 3.30)
+
+
+def test_uydu_cifti_BOSSA_master_esigi_kullanilir(db):
+    # Guncelleyen kurulumda alanlar bos gelir; davranis aynen korunmali.
+    db.add(ProjectSettings(id=1, battery_voltage_low=3.0, battery_voltage_full=4.0))
+    db.commit()
+    assert dps.battery_thresholds(db, DEFAULT_MODEL, unit="sat01") == (3.0, 4.0)
+
+
+def test_uydu_esigi_yuzdeyi_DUZELTIR(db):
+    # Sahadan gelen gercek deger: 3,05 V. Master esigiyle %0, uydu esigiyle
+    # gercekci bir sayi. Eskiden bu cihazlar surekli "bitmis" gorunuyordu.
+    db.add(
+        ProjectSettings(
+            id=1,
+            battery_voltage_low=3.40,
+            battery_voltage_full=3.71,
+            battery_voltage_low_sat=2.90,
+            battery_voltage_full_sat=3.30,
+        )
+    )
+    db.commit()
+    d = _cihaz(db, "PMK-SET-1", PMK_SET_MODEL)
+    yuzde = dps.battery_percent_for_device(
+        db, d.id, PMK_SET_MODEL, "sat01.battery_voltage_satellite", 3.05
+    )
+    assert yuzde is not None and yuzde > 0, "uydu hala %0 gosteriyor"
+    # (3.05 - 2.90) / (3.30 - 2.90) = %37,5
+    assert abs(yuzde - 37.5) < 0.1
+
+
+def test_setin_yuzdesi_EN_ZAYIF_unite_YUZDESIDIR(db):
+    # Uniteler farkli araliklarda olabilir; karsilastirma ham voltaj uzerinden
+    # yapilirsa yanlis unite "en zayif" secilir.
+    db.add(
+        ProjectSettings(
+            id=1,
+            battery_voltage_low=3.40,
+            battery_voltage_full=3.71,
+            battery_voltage_low_sat=2.90,
+            battery_voltage_full_sat=3.30,
+        )
+    )
+    db.commit()
+    d = _cihaz(db, "PMK-SET-2", PMK_SET_MODEL)
+    for anahtar, deger in (
+        ("sat02.battery_voltage_satellite", 3.30),  # %100
+        ("sat03.battery_voltage_satellite", 2.98),  # %20
+    ):
+        db.add(
+            TelemetryLatest(
+                device_id=d.id,
+                signal_key=anahtar,
+                value=deger,
+                quality='good',
+                source_timestamp=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+    db.commit()
+    yuzde = dps.battery_percent_for_device(
+        db, d.id, PMK_SET_MODEL, "sat01.battery_voltage_satellite", 3.20
+    )
+    assert yuzde is not None and abs(yuzde - 20.0) < 0.1, f"en zayif unite alinmadi: {yuzde}"
+
+
+def test_model_ayari_uydu_ciftini_de_EZER(db):
+    # Zincir bozulmasin: modele ozel bir esik girildiyse (o donanimin gercegi)
+    # proje uydu cifti onun yerine gecmez.
+    db.add(
+        ProjectSettings(
+            id=1,
+            battery_voltage_low=3.40,
+            battery_voltage_full=3.71,
+            battery_voltage_low_sat=2.90,
+            battery_voltage_full_sat=3.30,
+        )
+    )
+    db.add(
+        DeviceModelSettings(
+            model=PMK_SET_MODEL, battery_voltage_low=2.50, battery_voltage_full=3.20
+        )
+    )
+    db.commit()
+    assert dps.battery_thresholds(db, PMK_SET_MODEL, unit="sat01") == (2.50, 3.20)
+
+
+def test_api_cevabinda_uydu_cifti_de_gelir(db):
+    # Arayuz ayni yuzdeyi hesaplayabilmeli; yoksa backend bir, ekran baska
+    # sayi gosterir.
+    from app.api.device_models import list_device_model_settings
+
+    db.add(
+        ProjectSettings(
+            id=1,
+            battery_voltage_low=3.40,
+            battery_voltage_full=3.71,
+            battery_voltage_low_sat=2.90,
+            battery_voltage_full_sat=3.30,
+        )
+    )
+    db.commit()
+    satirlar = list_device_model_settings(_=_Kullanici(), db=db)
+    for item in satirlar:
+        assert item["resolved_battery_voltage_low_sat"] == 2.90
+        assert item["resolved_battery_voltage_full_sat"] == 3.30
+
+
+def test_uydu_unitesi_TANIMI_dar(db):
+    # "sat" oneki uydu demek; master ya da bos deger uydu SAYILMAZ, aksi halde
+    # master hucresi uydu esigiyle olculur ve bu sessizce yanlis olur.
+    assert dps.is_satellite_unit("sat01") is True
+    assert dps.is_satellite_unit("SAT03") is True
+    assert dps.is_satellite_unit("master") is False
+    assert dps.is_satellite_unit("") is False
+    assert dps.is_satellite_unit(None) is False

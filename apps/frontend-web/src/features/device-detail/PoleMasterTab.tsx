@@ -166,21 +166,13 @@ export function PoleMasterTab({ parent, values, signals }: Props) {
   }, [signals, canli, parent.model]);
 
   const sirali = [...GROUPS.map((g) => g.key), "other"].filter((k) => gruplar.has(k));
-  const doluSayisi = canli.size;
-  const toplam = sirali.reduce((n, k) => n + (gruplar.get(k)?.length ?? 0), 0);
 
   return (
     <div className="pole-master-panel">
-      {/* Ust kisimda ACIKLAMA METNI YOK (kullanici istegi): kitin adi zaten
-          sol paneldeki "Ust cihaz" satirinda, degerlerin kite ait oldugu da
-          sekmenin adinda yaziyor. Kalan tek sey OLCU: kac noktadan kacinin
-          degeri geldi — "bos ekran" ile "veri gelmiyor" ayrimini o soyluyor. */}
-      <header className="pole-master-head">
-        <span className={`pole-master-fill${doluSayisi === 0 ? " is-empty" : ""}`}>
-          {t("deviceDetail.poleMaster.filled", { filled: doluSayisi, total: toplam })}
-        </span>
-      </header>
-
+      {/* Ust kisimda ne aciklama ne DOLULUK SAYACI var (kullanici istegi):
+          "52/36 dolu" bir is degeri tasimiyordu — okuyan kisi icin anlamli
+          olan, asagidaki kartlarda hangi degerin geldigi. Veri hic gelmiyorsa
+          bunu zaten `pole-master-empty` metni soyluyor. */}
       {sirali.length === 0 ? (
         <p className="pole-master-empty">{t("deviceDetail.poleMaster.empty")}</p>
       ) : (

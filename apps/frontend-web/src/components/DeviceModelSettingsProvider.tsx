@@ -20,11 +20,21 @@ import {
 } from "react";
 
 import { fetchDeviceModelSettings, type DeviceModelSettingsRow } from "../shared/api";
-import { DEFAULT_BATTERY_THRESHOLDS, type BatteryThresholds } from "../shared/battery";
+import {
+  DEFAULT_BATTERY_THRESHOLDS,
+  isSatelliteUnit,
+  type BatteryThresholds
+} from "../shared/battery";
 
 type ContextShape = {
-  /** Modelin cozulmus (model -> proje -> kod) batarya esikleri. */
-  thresholdsFor: (model: string | null | undefined) => BatteryThresholds;
+  /** Cozulmus (model -> proje -> kod) batarya esikleri.
+   *
+   *  `unit` verilirse UYDU hucreleri kendi esigini alir: uydu ile master
+   *  ayni voltaj araliginda calismaz (bkz. shared/battery > isSatelliteUnit). */
+  thresholdsFor: (
+    model: string | null | undefined,
+    unit?: string | null
+  ) => BatteryThresholds;
   rows: DeviceModelSettingsRow[];
   refresh: () => Promise<void>;
 };
@@ -59,18 +69,27 @@ export function DeviceModelSettingsProvider({
   }, [refresh]);
 
   const value = useMemo<ContextShape>(() => {
-    const harita = new Map<string, BatteryThresholds>();
+    const master = new Map<string, BatteryThresholds>();
+    const uydu = new Map<string, BatteryThresholds>();
     for (const r of rows) {
-      harita.set(r.model, {
+      master.set(r.model, {
         low: r.resolved_battery_voltage_low,
         full: r.resolved_battery_voltage_full
+      });
+      // Uydu cifti uc tarafinda cozulur (model -> proje uydu -> proje ->
+      // kod); alan eski bir uctan gelmiyorsa master ciftine dusulur.
+      uydu.set(r.model, {
+        low: r.resolved_battery_voltage_low_sat ?? r.resolved_battery_voltage_low,
+        full: r.resolved_battery_voltage_full_sat ?? r.resolved_battery_voltage_full
       });
     }
     return {
       rows,
       refresh,
-      thresholdsFor: (model) =>
-        (model ? harita.get(model) : undefined) ?? DEFAULT_BATTERY_THRESHOLDS
+      thresholdsFor: (model, unit) => {
+        const harita = isSatelliteUnit(unit) ? uydu : master;
+        return (model ? harita.get(model) : undefined) ?? DEFAULT_BATTERY_THRESHOLDS;
+      }
     };
   }, [rows, refresh]);
 

@@ -4,7 +4,11 @@ import { useTranslation } from "react-i18next";
 import type { AlarmEvent, DeviceRow, SignalLiveRow } from "../../shared/types";
 import type { GridSnapshot } from "../../shared/api";
 import { useDeviceModelSettings } from "../../components/DeviceModelSettingsProvider";
-import { batteryPercentFromUnits, batterySignalKeysFor } from "../../shared/battery";
+import {
+  batteryPercentFromUnits,
+  batterySignalKeysFor,
+  unitOfSignalKey
+} from "../../shared/battery";
 import { TablePagination } from "../../components/TablePagination";
 import { DeviceRowButton, type DeviceAlarmState } from "./DeviceRowButton";
 import { DeviceLineTree } from "./DeviceLineTree";
@@ -100,17 +104,23 @@ export function DeviceSidebar({
     const modelById = new Map<number, string | null>();
     for (const d of devices ?? []) modelById.set(d.id, d.model ?? null);
 
-    const voltsByDevice = new Map<number, Array<number | null>>();
+    // UNITE de tasinir: uydu hucresi master ile ayni aralikta calismaz ve
+    // esik unite bazinda cozulur (bkz. shared/battery).
+    const voltsByDevice = new Map<
+      number,
+      Array<{ unit: string; volts: number | null }>
+    >();
     for (const row of liveValues) {
       const model = modelById.get(row.device_id) ?? null;
       if (!batterySignalKeysFor(model).includes(row.signal_key)) continue;
       const v = typeof row.value === "number" ? row.value : null;
       const liste = voltsByDevice.get(row.device_id) ?? [];
-      liste.push(v);
+      liste.push({ unit: unitOfSignalKey(row.signal_key), volts: v });
       voltsByDevice.set(row.device_id, liste);
     }
     for (const [deviceId, volts] of voltsByDevice) {
-      const pct = batteryPercentFromUnits(volts, thresholdsFor(modelById.get(deviceId)));
+      const model = modelById.get(deviceId);
+      const pct = batteryPercentFromUnits(volts, (unite) => thresholdsFor(model, unite));
       map.set(deviceId, pct ?? null);
     }
     return map;

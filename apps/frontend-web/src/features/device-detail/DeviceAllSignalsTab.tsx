@@ -94,8 +94,11 @@ export function DeviceAllSignalsTab({
   // Batarya esigi cihaz TURUNDEN gelir; burada sabit 3.2/4.2 vardi ve
   // backend'in 3.40/3.71'i ile uyusmuyordu.
   const { thresholdsFor } = useDeviceModelSettings();
+  // ESIK UNITEYE GORE: uydu hucresi master hucresiyle ayni aralikta calismaz;
+  // ortak esikle olculunce uydu kartlari sahada saglamken %0 gosteriyordu.
   const voltToPct = useCallback(
-    (v: number | undefined) => voltageToPercent(v, thresholdsFor(device.model)),
+    (v: number | undefined, unite: string) =>
+      voltageToPercent(v, thresholdsFor(device.model, unite)),
     [thresholdsFor, device.model]
   );
 
@@ -134,7 +137,7 @@ export function DeviceAllSignalsTab({
             ? Number.isFinite(device.batteryPercent)
               ? device.batteryPercent
               : undefined
-            : voltToPct(numOf("battery_voltage_satellite"));
+            : voltToPct(numOf("battery_voltage_satellite"), src.key);
 
         const permCount = numOf("permanent_fault_counter");
         const momCount = numOf("momentary_fault_counter");

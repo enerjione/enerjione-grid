@@ -12,7 +12,7 @@ import { energyBadgeHtml, rolesOf, topologyMeta } from "../grid/poleTypeMeta";
 import type { GridSnapshot } from "../../shared/api";
 import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
 import { useDeviceModelSettings } from "../../components/DeviceModelSettingsProvider";
-import { voltageToPercent as voltsToPercent } from "../../shared/battery";
+import { batteryUnitsFor, voltageToPercent as voltsToPercent } from "../../shared/battery";
 import { saglikSahibi } from "../../shared/deviceKit";
 import { locateDevice } from "../../shared/geoLookup";
 import { planDeviceFocus } from "./deviceFocus";
@@ -374,8 +374,15 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
   }, [selectedDevice?.id]);
   // Esikler cihaz TURU seviyesinde cozulur (bkz. Cihaz profilleri).
   const { thresholdsFor } = useDeviceModelSettings();
+  // Esik UNITEYE de bagli: Pole Master Kit setinin bataryasini uydular tasir
+  // ve uydu hucresi master ile ayni aralikta calismaz. Modelin batarya
+  // unitesi homojendir (hepsi uydu ya da master), ilki temsil eder.
   const voltageToPercent = useCallback(
-    (v: number | null) => voltsToPercent(v, thresholdsFor(selectedDevice?.model)) ?? null,
+    (v: number | null) =>
+      voltsToPercent(
+        v,
+        thresholdsFor(selectedDevice?.model, batteryUnitsFor(selectedDevice?.model)[0])
+      ) ?? null,
     [thresholdsFor, selectedDevice?.model]
   );
 

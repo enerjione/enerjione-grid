@@ -29,6 +29,10 @@ class ProjectSettingsRead(BaseModel):
     customer_logo_light: str | None = None
     battery_voltage_low: float | None = None
     battery_voltage_full: float | None = None
+    # UYDU (sat01/sat02/sat03) hucreleri master ile ayni aralikta calismaz.
+    # NULL = uydular master esigini kullanir (mevcut davranis).
+    battery_voltage_low_sat: float | None = None
+    battery_voltage_full_sat: float | None = None
     site_title: str | None = None
     favicon: str | None = None
     login_image: str | None = None
@@ -49,6 +53,8 @@ class ProjectSettingsUpdate(BaseModel):
     customer_logo_light: str | None = Field(default=None, max_length=1_500_000)
     battery_voltage_low: float | None = Field(default=None, ge=0, le=10)
     battery_voltage_full: float | None = Field(default=None, ge=0, le=10)
+    battery_voltage_low_sat: float | None = Field(default=None, ge=0, le=10)
+    battery_voltage_full_sat: float | None = Field(default=None, ge=0, le=10)
     site_title: str | None = Field(default=None, max_length=200)
     # Favicon kucuk olur (genelde <50KB), buyuk login_image icin 3MB yeterli marj.
     favicon: str | None = Field(default=None, max_length=300_000)

@@ -64,8 +64,10 @@ def invalidate_cache(model: str | None = None) -> None:
     """Ayar yazildiktan sonra cache'i dusur (TTL beklenmesin)."""
     if model is None:
         _CACHE.clear()
-    else:
-        _CACHE.pop(model or "", None)
+        return
+    # Anahtar `model|unite` oldugu icin o modelin TUM unite girdileri dusmeli.
+    for k in [k for k in _CACHE if k.startswith(f"{model}|")]:
+        _CACHE.pop(k, None)
 
 
 def battery_units(model: str | None) -> tuple[str, ...]:
@@ -78,7 +80,12 @@ def battery_signal_keys(model: str | None) -> tuple[str, ...]:
     return tuple(f"{unit}.{BATTERY_SIGNAL_SLUG}" for unit in battery_units(model))
 
 
-def _proje_esikleri(db: Session) -> tuple[float | None, float | None]:
+def _proje_esikleri(db: Session, *, uydu: bool = False) -> tuple[float | None, float | None]:
+    """Proje ayarindaki esikler. `uydu` ise once UYDU cifti denenir.
+
+    Uydu cifti bos ise master ciftine dusulur: guncelleyen bir kurulumda
+    davranis aynen korunsun (uydu alanlari bos gelir).
+    """
     try:
         from app.models.project_settings import ProjectSettings
 
@@ -87,12 +94,32 @@ def _proje_esikleri(db: Session) -> tuple[float | None, float | None]:
         return None, None
     if row is None:
         return None, None
+    if uydu:
+        return (
+            row.battery_voltage_low_sat if row.battery_voltage_low_sat is not None
+            else row.battery_voltage_low,
+            row.battery_voltage_full_sat if row.battery_voltage_full_sat is not None
+            else row.battery_voltage_full,
+        )
     return row.battery_voltage_low, row.battery_voltage_full
 
 
-def battery_thresholds(db: Session | None, model: str | None = None) -> tuple[float, float]:
-    """Modelin (low, full) batarya esikleri. Zincir: model -> proje -> kod."""
-    anahtar = model or ""
+def is_satellite_unit(unit: str | None) -> bool:
+    """`sat01` / `sat02` / `sat03` — uydu unitesi mi."""
+    return (unit or "").strip().lower().startswith("sat")
+
+
+def battery_thresholds(
+    db: Session | None, model: str | None = None, unit: str | None = None
+) -> tuple[float, float]:
+    """(low, full) batarya esikleri. Zincir: model -> proje(unite) -> kod.
+
+    UNITE NEDEN GEREKLI: uydu hucresi master hucresiyle ayni aralikta
+    calismaz. Tek cift esikle olculunce uydular sahada saglamken %0
+    gorunuyordu; ustelik gercekten biten bir hucre de fark edilmiyordu.
+    """
+    uydu = is_satellite_unit(unit)
+    anahtar = f"{model or ''}|{'sat' if uydu else 'master'}"
     now = time.monotonic()
     cached = _CACHE.get(anahtar)
     if cached is not None and (now - cached[2]) < _CACHE_TTL_SEC:
@@ -102,9 +129,9 @@ def battery_thresholds(db: Session | None, model: str | None = None) -> tuple[fl
 
     low: float | None = None
     full: float | None = None
-    if anahtar:
+    if model:
         try:
-            row = db.get(DeviceModelSettings, anahtar)
+            row = db.get(DeviceModelSettings, model)
         except Exception:  # noqa: BLE001
             row = None
         if row is not None:
@@ -112,7 +139,7 @@ def battery_thresholds(db: Session | None, model: str | None = None) -> tuple[fl
             full = row.battery_voltage_full
 
     if low is None or full is None:
-        proje_low, proje_full = _proje_esikleri(db)
+        proje_low, proje_full = _proje_esikleri(db, uydu=uydu)
         if low is None:
             low = proje_low
         if full is None:
@@ -150,12 +177,18 @@ def resolve_settings(db: Session, model: str) -> dict:
     """API icin: modelin KAYITLI ve COZULMUS degerleri bir arada."""
     row = db.get(DeviceModelSettings, model)
     low, full = battery_thresholds(db, model)
+    # UYDU CIFTI ayrica bildirilir: arayuz her unitenin yuzdesini KENDI
+    # esigiyle hesaplasin, yoksa ayni cihaz backend'de bir, ekranda baska
+    # yuzde gosterir.
+    low_sat, full_sat = battery_thresholds(db, model, unit="sat01")
     return {
         "model": model,
         "battery_voltage_low": row.battery_voltage_low if row else None,
         "battery_voltage_full": row.battery_voltage_full if row else None,
         "resolved_battery_voltage_low": low,
         "resolved_battery_voltage_full": full,
+        "resolved_battery_voltage_low_sat": low_sat,
+        "resolved_battery_voltage_full_sat": full_sat,
         "battery_units": list(battery_units(model)),
         "updated_at": row.updated_at if row else None,
     }
@@ -200,21 +233,39 @@ def battery_percent_for_device(
     anahtarlar = battery_signal_keys(model)
     if incoming_key not in anahtarlar:
         return None
-    low, full = battery_thresholds(db, model)
+
+    def yuzde(anahtar: str, voltaj: float) -> float | None:
+        # ESIK UNITEYE GORE: uydu hucresi master hucresiyle ayni aralikta
+        # calismaz. Bu yuzden karsilastirma VOLTAJ uzerinden degil YUZDE
+        # uzerinden yapilir; farkli araliklarin voltajlari kiyaslanamaz.
+        low, full = battery_thresholds(db, model, unit=anahtar.split(".", 1)[0])
+        return voltage_to_percent(voltaj, low, full)
 
     if len(anahtarlar) == 1:
-        return voltage_to_percent(incoming_value, low, full)
+        return yuzde(incoming_key, incoming_value)
 
     from app.models.telemetry_latest import TelemetryLatest
 
+    yuzdeler: list[float] = []
+    ilk = yuzde(incoming_key, incoming_value)
+    if ilk is not None:
+        yuzdeler.append(ilk)
     digerleri = [k for k in anahtarlar if k != incoming_key]
-    voltajlar = [incoming_value]
     if digerleri:
         satirlar = db.execute(
-            select(TelemetryLatest.value).where(
+            select(TelemetryLatest.signal_key, TelemetryLatest.value).where(
                 TelemetryLatest.device_id == device_id,
                 TelemetryLatest.signal_key.in_(digerleri),
             )
-        ).scalars()
-        voltajlar.extend(float(v) for v in satirlar if v is not None)
-    return voltage_to_percent(min(voltajlar), low, full)
+        ).all()
+        for anahtar, deger in satirlar:
+            if deger is None:
+                continue
+            oran = yuzde(anahtar, float(deger))
+            if oran is not None:
+                yuzdeler.append(oran)
+    if not yuzdeler:
+        return None
+    # Setin yuzdesi EN DUSUK unitedir: ekip direge en zayif hucre bittiginde
+    # cikar, ortalama ya da ilk unite bunu gizler.
+    return min(yuzdeler)

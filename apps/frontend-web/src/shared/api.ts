@@ -443,6 +443,10 @@ export type DeviceModelSettingsRow = {
   battery_voltage_full: number | null;
   resolved_battery_voltage_low: number;
   resolved_battery_voltage_full: number;
+  /** UYDU hucreleri icin cozulmus cift. Eski bir uctan gelmiyorsa
+   *  tanimsizdir; o durumda master cifti kullanilir. */
+  resolved_battery_voltage_low_sat?: number;
+  resolved_battery_voltage_full_sat?: number;
   battery_units: string[];
   updated_at: string | null;
 };

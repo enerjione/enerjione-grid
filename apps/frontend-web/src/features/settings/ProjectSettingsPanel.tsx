@@ -53,6 +53,10 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
   const [customerLogoLight, setCustomerLogoLight] = useState<string | null>(null);
   const [batteryLow, setBatteryLow] = useState<string>("");
   const [batteryFull, setBatteryFull] = useState<string>("");
+  // UYDU hucreleri master ile ayni aralikta calismaz; bos birakilirsa
+  // uydular master esigini kullanmaya devam eder (mevcut davranis).
+  const [batteryLowSat, setBatteryLowSat] = useState<string>("");
+  const [batteryFullSat, setBatteryFullSat] = useState<string>("");
   const [siteTitle, setSiteTitle] = useState("");
   const [favicon, setFavicon] = useState<string | null>(null);
   const [loginImage, setLoginImage] = useState<string | null>(null);
@@ -100,6 +104,18 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
         ? String(settings.battery_voltage_full)
         : ""
     );
+    setBatteryLowSat(
+      settings.battery_voltage_low_sat !== null &&
+        settings.battery_voltage_low_sat !== undefined
+        ? String(settings.battery_voltage_low_sat)
+        : ""
+    );
+    setBatteryFullSat(
+      settings.battery_voltage_full_sat !== null &&
+        settings.battery_voltage_full_sat !== undefined
+        ? String(settings.battery_voltage_full_sat)
+        : ""
+    );
     setSiteTitle(settings.site_title ?? "");
     setFavicon(settings.favicon ?? null);
     setLoginImage(settings.login_image ?? null);
@@ -132,6 +148,8 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
     setSaving(true);
     const lowNum = batteryLow.trim() === "" ? null : Number(batteryLow);
     const fullNum = batteryFull.trim() === "" ? null : Number(batteryFull);
+    const lowSatNum = batteryLowSat.trim() === "" ? null : Number(batteryLowSat);
+    const fullSatNum = batteryFullSat.trim() === "" ? null : Number(batteryFullSat);
     if (lowNum !== null && (!Number.isFinite(lowNum) || lowNum < 0 || lowNum > 10)) {
       toast.error(t("engineering.projectSettings.batteryLowInvalid"));
       setSaving(false);
@@ -139,6 +157,27 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
     }
     if (fullNum !== null && (!Number.isFinite(fullNum) || fullNum < 0 || fullNum > 10)) {
       toast.error(t("engineering.projectSettings.batteryFullInvalid"));
+      setSaving(false);
+      return;
+    }
+    if (
+      lowSatNum !== null &&
+      (!Number.isFinite(lowSatNum) || lowSatNum < 0 || lowSatNum > 10)
+    ) {
+      toast.error(t("engineering.projectSettings.batteryLowInvalid"));
+      setSaving(false);
+      return;
+    }
+    if (
+      fullSatNum !== null &&
+      (!Number.isFinite(fullSatNum) || fullSatNum < 0 || fullSatNum > 10)
+    ) {
+      toast.error(t("engineering.projectSettings.batteryFullInvalid"));
+      setSaving(false);
+      return;
+    }
+    if (lowSatNum !== null && fullSatNum !== null && fullSatNum <= lowSatNum) {
+      toast.error(t("engineering.projectSettings.batteryOrderInvalid"));
       setSaving(false);
       return;
     }
@@ -155,6 +194,8 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
         customer_logo_light: customerLogoLight,
         battery_voltage_low: lowNum,
         battery_voltage_full: fullNum,
+        battery_voltage_low_sat: lowSatNum,
+        battery_voltage_full_sat: fullSatNum,
         site_title: siteTitle.trim() || null,
         favicon: favicon,
         login_image: loginImage,
@@ -342,6 +383,51 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
                   placeholder="3.71"
                   value={batteryFull}
                   onChange={(event) => setBatteryFull(event.target.value)}
+                />
+                <span className="project-settings-battery-unit">V</span>
+              </div>
+            </label>
+          </div>
+
+          {/* UYDU HUCRELERI AYRI OLCULUR: uydunun bataryasi RTU'yu besleyen
+              master hucresiyle ayni voltaj araliginda calismaz. Tek cift
+              esikle olculunce uydular sahada saglamken ekranda surekli %0
+              gorunuyordu (olculen ~3,05 V, master esigi 3,40 V) — sessiz bir
+              yanlislik: gercekten biten bir hucreyi de gizler.
+              BOS BIRAKMAK GECERLI: uydular master esigini kullanmaya devam
+              eder, guncelleyen kurulumda hicbir sey degismez. */}
+          <p className="helper-text">{t("engineering.projectSettings.batterySatHint")}</p>
+          <div className="project-settings-battery-grid">
+            <label className="project-settings-battery-field">
+              <span className="project-settings-battery-label">
+                {t("engineering.projectSettings.batteryLowSat")}
+              </span>
+              <div className="project-settings-battery-input-wrap">
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  max={10}
+                  placeholder={t("engineering.projectSettings.batterySatPlaceholder")}
+                  value={batteryLowSat}
+                  onChange={(event) => setBatteryLowSat(event.target.value)}
+                />
+                <span className="project-settings-battery-unit">V</span>
+              </div>
+            </label>
+            <label className="project-settings-battery-field">
+              <span className="project-settings-battery-label">
+                {t("engineering.projectSettings.batteryFullSat")}
+              </span>
+              <div className="project-settings-battery-input-wrap">
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  max={10}
+                  placeholder={t("engineering.projectSettings.batterySatPlaceholder")}
+                  value={batteryFullSat}
+                  onChange={(event) => setBatteryFullSat(event.target.value)}
                 />
                 <span className="project-settings-battery-unit">V</span>
               </div>

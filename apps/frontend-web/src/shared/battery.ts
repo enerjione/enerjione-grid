@@ -21,6 +21,21 @@ const PMK_SET_MODEL = "horstmann_pmk_set";
 
 export type BatteryThresholds = { low: number; full: number };
 
+/** Uydu unitesi mi (`sat01` / `sat02` / `sat03`)?
+ *
+ *  Uydu hucresi RTU'yu besleyen master hucresiyle AYNI voltaj araliginda
+ *  calismaz; tek cift esikle olculunce uydular sahada saglamken ekranda
+ *  surekli %0 gorunuyordu (olculen ~3,05 V, master esigi 3,40 V). Esik bu
+ *  yuzden model DEGIL model+unite ile cozulur. */
+export function isSatelliteUnit(unit: string | null | undefined): boolean {
+  return (unit ?? "").trim().toLowerCase().startsWith("sat");
+}
+
+/** Sinyal anahtarindan unite oneki: "sat01.battery_voltage_satellite" -> "sat01". */
+export function unitOfSignalKey(signalKey: string): string {
+  return signalKey.split(".", 1)[0] ?? "";
+}
+
 export const DEFAULT_BATTERY_THRESHOLDS: BatteryThresholds = {
   low: DEFAULT_BATTERY_VOLTAGE_LOW,
   full: DEFAULT_BATTERY_VOLTAGE_FULL
@@ -60,12 +75,17 @@ export function voltageToPercent(
  * Degeri olmayan unite hesaba katilmaz.
  */
 export function batteryPercentFromUnits(
-  voltsByUnit: Array<number | null | undefined>,
-  thresholds: BatteryThresholds = DEFAULT_BATTERY_THRESHOLDS
+  voltsByUnit: Array<{ unit: string; volts: number | null | undefined }>,
+  thresholdsFor: (unit: string) => BatteryThresholds
 ): number | undefined {
-  const gecerli = voltsByUnit.filter(
-    (v): v is number => v != null && Number.isFinite(v)
-  );
-  if (gecerli.length === 0) return undefined;
-  return voltageToPercent(Math.min(...gecerli), thresholds);
+  // YUZDE uzerinden karsilastirilir, voltaj uzerinden DEGIL: uniteler farkli
+  // araliklarda calisiyorsa (master 3,40-3,71 V, uydu 2,9-3,3 V) ham
+  // voltajlari kiyaslamak anlamsizdir ve yanlis uniteyi "en zayif" gosterir.
+  const yuzdeler: number[] = [];
+  for (const { unit, volts } of voltsByUnit) {
+    const oran = voltageToPercent(volts, thresholdsFor(unit));
+    if (oran != null) yuzdeler.push(oran);
+  }
+  if (yuzdeler.length === 0) return undefined;
+  return Math.min(...yuzdeler);
 }

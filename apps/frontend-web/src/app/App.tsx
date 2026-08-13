@@ -2809,8 +2809,6 @@ export function App() {
               canConfig={session.role === "installer"}
               onDeviceCommand={handleDeviceCommand}
               token={session.accessToken}
-              wsState={liveSocket.connectionState}
-              wsLastDataAt={liveSocket.lastDataAt}
             />
           </main>
         ) : pageMode === "fault-detail" && activeFaultDetailId !== null ? (

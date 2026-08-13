@@ -1052,6 +1052,12 @@ export type ProjectSettings = {
   /** Batarya yuzdesi voltajdan turetilirken kullanilan esikler (V). */
   battery_voltage_low?: number | null;
   battery_voltage_full?: number | null;
+  /** UYDU (sat01/sat02/sat03) hucreleri icin ayri esik. Uydu hucresi RTU'yu
+   *  besleyen master hucresiyle ayni voltaj araliginda calismaz; tek ciftle
+   *  olculunce uydular sahada saglamken surekli %0 gorunuyordu.
+   *  NULL = uydular master esigini kullanir (mevcut davranis). */
+  battery_voltage_low_sat?: number | null;
+  battery_voltage_full_sat?: number | null;
   /** Tarayici sekmesinde gozukecek baslik (document.title). */
   site_title?: string | null;
   /** Tarayici sekmesinde gozukecek favicon (data URL). */
