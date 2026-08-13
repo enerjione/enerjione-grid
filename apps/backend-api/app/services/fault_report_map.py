@@ -611,3 +611,24 @@ def _draw_attribution(
     x, y = width - w - 18, height - h - 16
     draw.rectangle([x - 6, y - 5, x + w + 6, y + h + 6], fill=(255, 255, 255))
     draw.text((x - box[0], y - box[1]), text, font=font, fill=(71, 85, 105))
+
+
+# ---------------------------------------------------------------------------
+# ORTAK CIZIM YARDIMCILARI
+#
+# Asagidakiler rapor TURUNDEN bagimsizdir: karo mozaigi, zoom secimi, olcek
+# cubugu ve karo saglayici atfi her harita figurunde ayni. Cihaz Durum Raporu
+# haritasi (`device_report_map`) bunlari kullanir; ikinci bir kopya, ayni
+# belgeden cikan iki haritanin zamanla FARKLI gorunmesi demek olurdu — ve
+# atif (karo lisansinin sarti) yalnizca birinde guncellenirdi.
+#
+# Tanimlarin SONUNDA duruyorlar: modul tepesine konsalardi `_draw_scale_bar`
+# daha tanimlanmadan okunur ve modul import edilemezdi.
+# ---------------------------------------------------------------------------
+project_latlon = _project
+pick_zoom = _pick_zoom
+tile_mosaic = _tile_mosaic
+load_report_font = _load_font
+draw_pill = _pill
+draw_scale_bar = _draw_scale_bar
+draw_attribution = _draw_attribution

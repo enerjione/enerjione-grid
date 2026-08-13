@@ -1,10 +1,19 @@
-"""Rapor sablonu — PDF ciktilarinin ORTAK ustbilgi/altbilgi duzeni.
+"""Rapor sablonu — PDF ciktilarinin ORTAK ustbilgi/altbilgi duzeni ve
+ORTAK GOVDE PARCALARI (bolum basligi, kunye izgarasi, veri tablosu...).
 
 Kural: her sayfada SOLDA EnerjiOne logosu, SAGDA musteri logosu; altbilgide
 solda olusturma zamani, sagda "Sayfa X / Y". Toplam sayfa sayisi ancak
 belge kurulduktan sonra bilindiginden iki gecisli bir canvas kullanilir
 (NumberedCanvas): birinci gecis sayfalari biriktirir, ikincisinde altbilgi
 gercek toplamla yazilir.
+
+GOVDE PARCALARI NEDEN BURADA: bu parcalar (turuncu cubuklu bolum basligi,
+zebra satirli tablo, sag hizali kunye izgarasi) Ariza Raporu icin yazilmisti
+ve orada PRIVATE duruyordu. Ikinci bir belge turu (Cihaz Durum Raporu)
+eklenirken iki secenek vardi: 250 satiri kopyalamak ya da buraya tasimak.
+Kopya, iki raporun zamanla FARKLI gorunmesi demekti — musteriye giden iki
+belgenin ayni kurumdan ciktigi bakisla anlasilmaz olurdu. Ustbilgi zaten
+burada ortaklasmisti; govde de ayni yere ait.
 
 TURKCE KARAKTER: reportlab'in gomulu Helvetica'si WinAnsi (cp1252) kodlar
 ve `ğ ş ı İ Ğ Ş` karakterlerini ICERMEZ — bu fontla basilan rapor "Guvenlik
@@ -21,19 +30,29 @@ import binascii
 import io
 from datetime import datetime, timezone
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas as pdfcanvas
+from reportlab.platypus import KeepTogether, Paragraph, Spacer, Table, TableStyle
 
 # Marka rengi (arayuzdeki turuncu ile ayni).
 BRAND_ORANGE = colors.HexColor("#e97800")
 INK = colors.HexColor("#0f172a")
 MUTED = colors.HexColor("#64748b")
 RULE = colors.HexColor("#e2e8f0")
+SOFT = colors.HexColor("#f8fafc")
+
+#: A4 DIKEY govde genisligi (iki yanda 12 mm kenar bosluk). Tablo genislikleri
+#: bunun ORANI olarak verilir; sayfa boyutu degisirse tek yerden degisir.
+CONTENT_WIDTH = A4[0] - 24 * mm
 
 HEADER_HEIGHT = 20 * mm
 FOOTER_HEIGHT = 12 * mm
@@ -262,3 +281,306 @@ class ReportCanvas(pdfcanvas.Canvas):
         self.drawRightString(
             page_w - margin, y, f"Sayfa {self._pageNumber} / {total_pages}"
         )
+
+
+# ===========================================================================
+# ORTAK GOVDE PARCALARI
+#
+# Asagidakiler Ariza Raporu icin yazildi, Cihaz Durum Raporu eklenince
+# ortaklastirildi. Ikisi de AYNI belgeden cikmis gibi gorunmeli; gerekce
+# modul docstring'inde.
+# ===========================================================================
+
+
+def esc(text: object) -> str:
+    """Paragraph'a giden SERBEST METNI kacisla.
+
+    reportlab Paragraph icerigini XML gibi ayristirir: bir yorumda gecen
+    "R&D" ya da "a<b" belge kurulumunu HATA ile dusuruyordu; daha kotusu
+    `<yenilendi>` gibi bir ifade BILINMEYEN ETIKET sayilip SESSIZCE
+    atiliyor, notun bir kelimesi eksik basiliyordu. Kullanicinin ya da
+    cihazin yazdigi her metin buradan gecer.
+    """
+    return escape(str(text if text is not None else ""))
+
+
+def upper_tr(text: str) -> str:
+    """Turkce buyuk harf. `str.upper()` 'i' -> 'I' verir: basliklar "CIZELGESI",
+    "TESPIT", "CIHAZ" diye basiliyordu. Once 'i' -> 'I' esleniyor."""
+    return text.replace("i", "İ").upper()
+
+
+def tr_number(value: float, decimals: int = 0) -> str:
+    """1234.5 -> '1.234,5' (tr-TR). Arayuzdeki toLocaleString karsiligi."""
+    text = f"{value:,.{decimals}f}"
+    return text.replace(",", "\x00").replace(".", ",").replace("\x00", ".")
+
+
+class ReportStyles:
+    """Tek yerde tanimli tipografi — bolumler ve BELGELER arasi kayma olmasin."""
+
+    def __init__(self) -> None:
+        regular, bold = report_fonts()
+        self.regular, self.bold = regular, bold
+        self.eyebrow = ParagraphStyle(
+            "eyebrow", fontName=bold, fontSize=7.5, leading=10, textColor=MUTED
+        )
+        self.title = ParagraphStyle(
+            "docTitle", fontName=bold, fontSize=19, leading=22, textColor=INK
+        )
+        self.crumb = ParagraphStyle(
+            "crumb", fontName=regular, fontSize=8.5, leading=11.5, textColor=MUTED
+        )
+        self.section = ParagraphStyle(
+            "section", fontName=bold, fontSize=10, leading=13, textColor=INK
+        )
+        self.label = ParagraphStyle(
+            "label", fontName=regular, fontSize=7.2, leading=9, textColor=MUTED
+        )
+        self.value = ParagraphStyle(
+            "value", fontName=bold, fontSize=10.5, leading=13, textColor=INK
+        )
+        self.body = ParagraphStyle(
+            "body", fontName=regular, fontSize=8.6, leading=12, textColor=INK
+        )
+        self.body_muted = ParagraphStyle("bodyMuted", parent=self.body, textColor=MUTED)
+        self.cell = ParagraphStyle(
+            "cell", fontName=regular, fontSize=8, leading=10.5, textColor=INK, wordWrap="CJK"
+        )
+        self.cell_bold = ParagraphStyle("cellBold", parent=self.cell, fontName=bold)
+        self.cell_right = ParagraphStyle("cellRight", parent=self.cell, alignment=TA_RIGHT)
+        self.cell_center = ParagraphStyle("cellCenter", parent=self.cell, alignment=TA_CENTER)
+        self.cell_muted = ParagraphStyle("cellMuted", parent=self.cell, textColor=MUTED)
+        self.th = ParagraphStyle(
+            "th", parent=self.cell, fontName=bold, fontSize=8, textColor=colors.white
+        )
+        self.kv_label = ParagraphStyle(
+            "kvLabel", fontName=regular, fontSize=8.2, leading=11, textColor=MUTED
+        )
+        self.kv_value = ParagraphStyle(
+            "kvValue", fontName=bold, fontSize=8.6, leading=11, textColor=INK,
+            alignment=TA_RIGHT,
+        )
+        self.caption = ParagraphStyle(
+            "caption", fontName=regular, fontSize=7.4, leading=10, textColor=MUTED,
+            alignment=TA_LEFT,
+        )
+        self.pill = ParagraphStyle(
+            "pill", fontName=bold, fontSize=10.5, leading=13, textColor=colors.white,
+            alignment=TA_CENTER,
+        )
+
+
+def section_head(
+    st: ReportStyles, title: str, hint: str = "", *, width: float = CONTENT_WIDTH
+) -> Table:
+    """Bolum basligi: solda turuncu dikey cubuk, altta ince kural.
+
+    Baslikta ikon YOK — PDF'te ikon fontu garanti degil ve eksik glif
+    kutu olarak basiliyor.
+    """
+    right = Paragraph(hint, st.caption) if hint else ""
+    table = Table(
+        [[Paragraph(upper_tr(title), st.section), right]],
+        colWidths=[width * 0.62, width * 0.38],
+    )
+    table.setStyle(
+        TableStyle(
+            [
+                ("LINEBEFORE", (0, 0), (0, 0), 2.4, BRAND_ORANGE),
+                ("LINEBELOW", (0, 0), (-1, -1), 0.6, RULE),
+                ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
+                ("LEFTPADDING", (0, 0), (0, 0), 6),
+                ("LEFTPADDING", (1, 0), (1, 0), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    return table
+
+
+def block(head: Table, first, *rest) -> list:
+    """Bolum: basligi ILK icerik parcasindan AYIRMA.
+
+    Baslik sayfanin dibinde yalniz kaldiginda okuyucu sonraki sayfadaki
+    tablonun neyin tablosu oldugunu bilemiyor, geri donmek zorunda kaliyor.
+    Kalan parcalar serbest akar (uzun tablo sayfa bolebilir — basligi
+    `repeatRows` tekrar basar).
+    """
+    return [Spacer(1, 12), KeepTogether([head, Spacer(1, 6), first]), *rest]
+
+
+def stat_strip(
+    st: ReportStyles,
+    cells: list[tuple[str, str, str | None]],
+    *,
+    width: float = CONTENT_WIDTH,
+) -> Table:
+    """Dortlu olcu seridi — (etiket, deger, deger rengi)."""
+    rows: list[list] = []
+    for index in range(0, len(cells), 4):
+        chunk = list(cells[index : index + 4])
+        while len(chunk) < 4:
+            chunk.append(("", "", None))
+        row = []
+        for label, value, color in chunk:
+            style = st.value
+            if color:
+                style = ParagraphStyle(
+                    f"v{color}", parent=st.value, textColor=colors.HexColor(color)
+                )
+            row.append(
+                [Paragraph(upper_tr(label), st.label), Paragraph(esc(value) or "—", style)]
+                if label
+                else ""
+            )
+        rows.append(row)
+    cell_w = width / 4
+    table = Table(rows, colWidths=[cell_w] * 4)
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), SOFT),
+                ("BOX", (0, 0), (-1, -1), 0.6, RULE),
+                ("INNERGRID", (0, 0), (-1, -1), 0.6, RULE),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+            ]
+        )
+    )
+    return table
+
+
+def kv_grid(
+    st: ReportStyles,
+    pairs: list[tuple[str, str]],
+    columns: int = 2,
+    *,
+    width: float = CONTENT_WIDTH,
+) -> Table:
+    """Kunye izgarasi: solda soluk etiket, sagda kalin deger (sag hizali).
+
+    Iki kolon: A4 dikeyde tek kolon sayfayi gereksiz uzatiyor, dort kolon
+    degerleri sikistiriyor.
+    """
+    rows: list[list] = []
+    for index in range(0, len(pairs), columns):
+        chunk = pairs[index : index + columns]
+        row: list = []
+        for label, value in chunk:
+            row.append(Paragraph(esc(label), st.kv_label))
+            row.append(Paragraph(esc(value), st.kv_value))
+        while len(row) < columns * 2:
+            row.append("")
+        rows.append(row)
+    unit = width / columns
+    widths: list[float] = []
+    for _ in range(columns):
+        widths += [unit * 0.58, unit * 0.42]
+    table = Table(rows, colWidths=widths)
+    style = [
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 3.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+    ]
+    for row_index in range(len(rows)):
+        for column in range(columns):
+            # Etiket-deger cifti bir arada okunsun: her cift kendi noktali
+            # cizgisini alir (uzun izgarada satir kaymasini engeller).
+            style.append(
+                ("LINEBELOW", (column * 2, row_index), (column * 2 + 1, row_index), 0.4, RULE)
+            )
+            if column:
+                style.append(("LEFTPADDING", (column * 2, row_index), (column * 2, row_index), 12))
+    table.setStyle(TableStyle(style))
+    return table
+
+
+def data_table(
+    st: ReportStyles, headers: list[str], rows: list[list], widths: list[float]
+) -> Table:
+    """Turuncu baslikli, zebra satirli veri tablosu (tum raporlarda ayni dil)."""
+    data = [[Paragraph(h, st.th) for h in headers]] + rows
+    table = Table(data, colWidths=widths, repeatRows=1)
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), BRAND_ORANGE),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, SOFT]),
+                ("GRID", (0, 0), (-1, -1), 0.25, RULE),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    return table
+
+
+def note_box(
+    st: ReportStyles,
+    title: str,
+    body: str,
+    accent: str = "#e97800",
+    *,
+    width: float = CONTENT_WIDTH,
+) -> Table:
+    """Serbest metin kutusu — sol kenarinda renkli cubuk."""
+    table = Table(
+        [
+            [Paragraph(esc(title), st.label)],
+            # Kacislama SONRA satir sonu: once <br/> konsa kacislama onu da
+            # metne cevirir ve saha notu tek satira yapisirdi.
+            [Paragraph(esc(body).replace("\n", "<br/>"), st.body)],
+        ],
+        colWidths=[width],
+    )
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), SOFT),
+                ("LINEBEFORE", (0, 0), (0, -1), 2.4, colors.HexColor(accent)),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (0, 0), 6),
+                ("BOTTOMPADDING", (0, 0), (0, 0), 1),
+                ("TOPPADDING", (0, 1), (0, 1), 0),
+                ("BOTTOMPADDING", (0, 1), (0, 1), 7),
+            ]
+        )
+    )
+    return table
+
+
+def status_pill(st: ReportStyles, text: str, color: str) -> Table:
+    """Metin kadar genis, yuvarlak kosen durum rozeti.
+
+    `colWidths` verilmezse tablo icinde bulundugu hucrenin TAMAMINA yayilir:
+    "Acik" gibi iki heceli bir durum icin sayfanin sag ucunu kaplayan kocaman
+    bir blok. Genislik yazinin kendisinden olculur.
+    """
+    pill_w = pdfmetrics.stringWidth(text, st.bold, 10.5) + 22
+    table = Table([[Paragraph(esc(text), st.pill)]], colWidths=[pill_w])
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(color)),
+                ("ROUNDEDCORNERS", [5, 5, 5, 5]),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
+    table.hAlign = "RIGHT"
+    return table

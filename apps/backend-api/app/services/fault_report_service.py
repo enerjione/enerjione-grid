@@ -27,10 +27,8 @@ import io
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Sequence
-from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
@@ -50,19 +48,43 @@ from app.models.project_settings import ProjectSettings
 from app.schemas.fault import FaultCommentRead, FaultEventRead
 from app.services.report_layout import (
     BRAND_ORANGE,
+    CONTENT_WIDTH,
     FOOTER_HEIGHT,
     HEADER_HEIGHT,
     INK,
     MUTED,
     RULE,
+    SOFT,
     ReportCanvas,
+    ReportStyles,
+    block,
+    data_table,
     decode_data_url_image,
+    esc,
     format_report_time,
-    report_fonts,
+    kv_grid,
+    note_box,
+    section_head,
+    stat_strip,
+    tr_number,
+    upper_tr,
 )
 
-SOFT = colors.HexColor("#f8fafc")
-CONTENT_W = A4[0] - 24 * mm
+CONTENT_W = CONTENT_WIDTH
+
+# Govde parcalari `report_layout`ta ortaklasti (Cihaz Durum Raporu ile ayni
+# gorunum). Yerel adlar duruyor: bu dosyanin geri kalani ve testleri onlari
+# kullaniyor, yeniden adlandirmak raporla ilgisi olmayan bir diff uretirdi.
+_Styles = ReportStyles
+_esc = esc
+_upper_tr = upper_tr
+_tr_number = tr_number
+_section_head = section_head
+_block = block
+_stat_strip = stat_strip
+_kv_grid = kv_grid
+_data_table = data_table
+_note_box = note_box
 
 #: Durum -> (arayuzdeki etiket, renk). tr.json `faults.status` ile ayni.
 STATUS_LABELS: dict[str, tuple[str, str]] = {
@@ -100,28 +122,6 @@ class ReportRecurrence:
 # ---------------------------------------------------------------------------
 # Bicimleme
 # ---------------------------------------------------------------------------
-def _esc(text: object) -> str:
-    """Paragraph'a giden SERBEST METNI kacisla.
-
-    reportlab Paragraph icerigi XML gibi ayristirir: bir yorumda gecen
-    "R&D" ya da "a<b" belge kurulumunu HATA ile dusuruyordu. Kullanicinin
-    ya da cihazin yazdigi her metin buradan gecer.
-    """
-    return escape(str(text if text is not None else ""))
-
-
-def _upper_tr(text: str) -> str:
-    """Turkce buyuk harf. `str.upper()` 'i' -> 'I' verir: basliklar "ÇIZELGESI",
-    "TESPIT", "CIHAZ" diye basiliyordu. Once 'i' -> 'İ' esleniyor."""
-    return text.replace("i", "İ").upper()
-
-
-def _tr_number(value: float, decimals: int = 0) -> str:
-    """1234.5 -> '1.234,5' (tr-TR). Arayuzdeki toLocaleString karsiligi."""
-    text = f"{value:,.{decimals}f}"
-    return text.replace(",", "\x00").replace(".", ",").replace("\x00", ".")
-
-
 def format_distance(meters: float | None) -> str:
     """1 km altinda '520 m', ustunde '1,24 km' (lineDistance.ts ile ayni)."""
     if meters is None:
@@ -175,228 +175,6 @@ def _cause_label(code: str | None) -> str | None:
         if cause["code"] == code:
             return cause["label_tr"]
     return code
-
-
-# ---------------------------------------------------------------------------
-# Belge kurulumu
-# ---------------------------------------------------------------------------
-class _Styles:
-    """Tek yerde tanimli tipografi — bolumler arasi kayma olmasin."""
-
-    def __init__(self) -> None:
-        regular, bold = report_fonts()
-        self.regular, self.bold = regular, bold
-        self.eyebrow = ParagraphStyle(
-            "eyebrow", fontName=bold, fontSize=7.5, leading=10, textColor=MUTED
-        )
-        self.title = ParagraphStyle(
-            "docTitle", fontName=bold, fontSize=19, leading=22, textColor=INK
-        )
-        self.crumb = ParagraphStyle(
-            "crumb", fontName=regular, fontSize=8.5, leading=11.5, textColor=MUTED
-        )
-        self.section = ParagraphStyle(
-            "section", fontName=bold, fontSize=10, leading=13, textColor=INK
-        )
-        self.label = ParagraphStyle(
-            "label", fontName=regular, fontSize=7.2, leading=9, textColor=MUTED
-        )
-        self.value = ParagraphStyle(
-            "value", fontName=bold, fontSize=10.5, leading=13, textColor=INK
-        )
-        self.body = ParagraphStyle(
-            "body", fontName=regular, fontSize=8.6, leading=12, textColor=INK
-        )
-        self.body_muted = ParagraphStyle("bodyMuted", parent=self.body, textColor=MUTED)
-        self.cell = ParagraphStyle(
-            "cell", fontName=regular, fontSize=8, leading=10.5, textColor=INK, wordWrap="CJK"
-        )
-        self.cell_bold = ParagraphStyle("cellBold", parent=self.cell, fontName=bold)
-        self.cell_right = ParagraphStyle("cellRight", parent=self.cell, alignment=TA_RIGHT)
-        self.th = ParagraphStyle(
-            "th", parent=self.cell, fontName=bold, fontSize=8, textColor=colors.white
-        )
-        self.kv_label = ParagraphStyle(
-            "kvLabel", fontName=regular, fontSize=8.2, leading=11, textColor=MUTED
-        )
-        self.kv_value = ParagraphStyle(
-            "kvValue", fontName=bold, fontSize=8.6, leading=11, textColor=INK,
-            alignment=TA_RIGHT,
-        )
-        self.caption = ParagraphStyle(
-            "caption", fontName=regular, fontSize=7.4, leading=10, textColor=MUTED,
-            alignment=TA_LEFT,
-        )
-        self.pill = ParagraphStyle(
-            "pill", fontName=bold, fontSize=10.5, leading=13, textColor=colors.white,
-            alignment=TA_CENTER,
-        )
-
-
-def _section_head(st: _Styles, title: str, hint: str = "") -> Table:
-    """Bolum basligi: solda turuncu dikey cubuk, altta ince kural.
-
-    Baslikta ikon YOK — PDF'te ikon fontu garanti degil ve eksik glif
-    kutu olarak basiliyor.
-    """
-    right = Paragraph(hint, st.caption) if hint else ""
-    table = Table(
-        [[Paragraph(_upper_tr(title), st.section), right]],
-        colWidths=[CONTENT_W * 0.62, CONTENT_W * 0.38],
-    )
-    table.setStyle(
-        TableStyle(
-            [
-                ("LINEBEFORE", (0, 0), (0, 0), 2.4, BRAND_ORANGE),
-                ("LINEBELOW", (0, 0), (-1, -1), 0.6, RULE),
-                ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
-                ("LEFTPADDING", (0, 0), (0, 0), 6),
-                ("LEFTPADDING", (1, 0), (1, 0), 0),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                ("TOPPADDING", (0, 0), (-1, -1), 0),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-            ]
-        )
-    )
-    return table
-
-
-def _block(head: Table, first, *rest) -> list:
-    """Bolum: basligi ILK icerik parcasindan AYIRMA.
-
-    Baslik sayfanin dibinde yalniz kaldiginda okuyucu sonraki sayfadaki
-    tablonun neyin tablosu oldugunu bilemiyor, geri donmek zorunda kaliyor.
-    Kalan parcalar serbest akar (uzun tablo sayfa bolebilir — basligi
-    `repeatRows` tekrar basar).
-    """
-    return [Spacer(1, 12), KeepTogether([head, Spacer(1, 6), first]), *rest]
-
-
-def _stat_strip(st: _Styles, cells: list[tuple[str, str, str | None]]) -> Table:
-    """Dortlu olcu seridi — (etiket, deger, deger rengi)."""
-    rows: list[list] = []
-    for index in range(0, len(cells), 4):
-        chunk = cells[index : index + 4]
-        while len(chunk) < 4:
-            chunk.append(("", "", None))
-        row = []
-        for label, value, color in chunk:
-            style = st.value
-            if color:
-                style = ParagraphStyle(f"v{color}", parent=st.value, textColor=colors.HexColor(color))
-            row.append(
-                [Paragraph(_upper_tr(label), st.label), Paragraph(_esc(value) or "—", style)]
-                if label
-                else ""
-            )
-        rows.append(row)
-    width = CONTENT_W / 4
-    table = Table(rows, colWidths=[width] * 4)
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, -1), SOFT),
-                ("BOX", (0, 0), (-1, -1), 0.6, RULE),
-                ("INNERGRID", (0, 0), (-1, -1), 0.6, RULE),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 8),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-                ("TOPPADDING", (0, 0), (-1, -1), 6),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-            ]
-        )
-    )
-    return table
-
-
-def _kv_grid(st: _Styles, pairs: list[tuple[str, str]], columns: int = 2) -> Table:
-    """Kunye izgarasi: solda soluk etiket, sagda kalin deger (sag hizali).
-
-    Iki kolon: A4 dikeyde tek kolon sayfayi gereksiz uzatiyor, dort kolon
-    degerleri sikistiriyor.
-    """
-    rows: list[list] = []
-    for index in range(0, len(pairs), columns):
-        chunk = pairs[index : index + columns]
-        row: list = []
-        for label, value in chunk:
-            row.append(Paragraph(_esc(label), st.kv_label))
-            row.append(Paragraph(_esc(value), st.kv_value))
-        while len(row) < columns * 2:
-            row.append("")
-        rows.append(row)
-    unit = CONTENT_W / columns
-    widths: list[float] = []
-    for _ in range(columns):
-        widths += [unit * 0.58, unit * 0.42]
-    table = Table(rows, colWidths=widths)
-    style = [
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, -1), 3.5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-    ]
-    for row_index in range(len(rows)):
-        for column in range(columns):
-            # Etiket-deger cifti bir arada okunsun: her cift kendi noktali
-            # cizgisini alir (uzun izgarada satir kaymasini engeller).
-            style.append(
-                ("LINEBELOW", (column * 2, row_index), (column * 2 + 1, row_index), 0.4, RULE)
-            )
-            if column:
-                style.append(("LEFTPADDING", (column * 2, row_index), (column * 2, row_index), 12))
-    table.setStyle(TableStyle(style))
-    return table
-
-
-def _data_table(st: _Styles, headers: list[str], rows: list[list], widths: list[float]) -> Table:
-    """Turuncu baslikli, zebra satirli veri tablosu (Olay Raporu ile ayni dil)."""
-    data = [[Paragraph(h, st.th) for h in headers]] + rows
-    table = Table(data, colWidths=widths, repeatRows=1)
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), BRAND_ORANGE),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, SOFT]),
-                ("GRID", (0, 0), (-1, -1), 0.25, RULE),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 5),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-                ("TOPPADDING", (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-            ]
-        )
-    )
-    return table
-
-
-def _note_box(st: _Styles, title: str, body: str, accent: str = "#e97800") -> Table:
-    """Serbest metin kutusu — sol kenarinda renkli cubuk."""
-    table = Table(
-        [
-            [Paragraph(_esc(title), st.label)],
-            # Kacislama SONRA satir sonu: once <br/> konsa kacislama onu da
-            # metne cevirir ve saha notu tek satira yapisirdi.
-            [Paragraph(_esc(body).replace("\n", "<br/>"), st.body)],
-        ],
-        colWidths=[CONTENT_W],
-    )
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, -1), SOFT),
-                ("LINEBEFORE", (0, 0), (0, -1), 2.4, colors.HexColor(accent)),
-                ("LEFTPADDING", (0, 0), (-1, -1), 8),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-                ("TOPPADDING", (0, 0), (0, 0), 6),
-                ("BOTTOMPADDING", (0, 0), (0, 0), 1),
-                ("TOPPADDING", (0, 1), (0, 1), 0),
-                ("BOTTOMPADDING", (0, 1), (0, 1), 7),
-            ]
-        )
-    )
-    return table
 
 
 # ---------------------------------------------------------------------------
