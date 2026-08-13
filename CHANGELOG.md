@@ -14,6 +14,47 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.78.0] — 2026-08-13
+
+### Eklendi
+
+- **Arızanın sıçradığı branşman kolu artık arıza detay haritasında görünüyor.**
+  Ana hattaki arıza bir dallanma direğini kapsadığında o kol da enerjisiz kalır
+  ve ekip sahaya çıkarken kolu da gezmek zorundadır. Harita bu kolları **hiç**
+  çizmiyordu: kol yalnızca "Tüm şebeke" odağında, diğer bütün hatlarla aynı
+  soluk gri ile görünüyordu — yani ekranda vardı ama "arızayla ilgisi olan bir
+  şey" olarak okunmuyordu. Artık kol, ana hattaki dallanma direğinden başlayan
+  kendi renginde çiziliyor (doğrulandı → kırmızı, şüpheli → amber, giriş cihazı
+  "görmedim" dedi → yeşil) ve **"Arıza bölgesi" odağının çerçevesine giriyor**;
+  eskiden o odakta kol çerçevenin dışında kalıyordu.
+- **Şematik hat çizimi arıza detay sayfasına eklendi.** Konum kartının
+  başlığındaki **Harita | Şema** seçicisiyle açılıyor. Arıza listesindeki
+  çizimin aynısı: direkler, cihazların tel üzerindeki gerçek konumu, arızalı
+  fazlar ve aday kol satırları. Detaya giren kişi çizimi görmek için listeye
+  geri dönüyordu.
+- **Günlük alarm tetiklenme sayacı** ve grafiğin zaman serisi (Arıza Analizi).
+
+### Düzeltildi
+
+- **Şebeke sinyali boş görünmüyor.** Değer eksik değildi, **yanlış yerden**
+  aranıyordu: kod sayısal bir `modem_rssi` noktası bekliyor, cihaz sinyali
+  metin yanıtın içinde gönderiyor. Çözüm alan sırasına değil **biçime** dayalı
+  (ilk negatif dBm, tırnak içindeki ilk rakam olmayan alan); aralık dışı değer
+  elenir ve çubuk hiç çizilmez — uydurma bir çubuk, zayıf sinyali "iyi"
+  göstermekten kötüdür. Aynı yanıttan operatör adı da çözülüyor.
+- **Pole Master Kit set sayfası kitin gerçek değerlerini gösteriyor.** Setin
+  telemetrisinde modem/IP/firmware/GPS yoktur; bunlar kitin ortak RTU'sundadır.
+  Canlı değer kapsamı yalnızca setin kodunu istediği için alanlar boş
+  kalıyordu — veri backend'de duruyor ama hiç istenmiyordu. Kapsam artık cihaz
+  + varsa üst kit.
+
+### Değişti
+
+- Paralel geliştirme oturumları için ortak defter, çarpışma uyarısı ve panel
+  (yalnızca geliştirme araçları; sahadaki kuruluma etkisi yok).
+
+---
+
 ## [2.77.0] — 2026-08-12
 
 ### Eklendi
