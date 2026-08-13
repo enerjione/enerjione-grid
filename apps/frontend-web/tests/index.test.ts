@@ -40,6 +40,11 @@ import "./hookSirasi.test";
 // sorusunu cevapsiz birakiyordu.
 import "./gridDeviceLabel.test";
 
+// Cihazin slot uzerindeki orani: surukle-birak sonrasi isaretci hattin
+// uzerinde ve BIRAKILDIGI yerde durmali. Enlem/boylam olcek farki hesaba
+// katilmayinca cihaz sessizce kaymis bir noktaya oturuyordu.
+import "./slotProjection.test";
+
 // Bransman baglantilari: "Diger hatlar" acikken kollar sisteme bagli
 // gorunmeli. Bagli gorunmeyen bir kola kimse cihaz yerlestirmez.
 import "./branchConnectors.test";

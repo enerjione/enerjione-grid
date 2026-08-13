@@ -55,6 +55,7 @@ import {
 import { isKitModel } from "../../shared/types";
 import type { DeviceRow, Line, LineDetail, LineSegment, Pole, Region, TopologyRole } from "../../shared/types";
 import { cihazEtiketi, cihazKodu } from "./deviceLabel";
+import { slotNoktasi, slotOrani } from "./slotProjection";
 import type { GridSnapshot } from "../../shared/api";
 import { useToast } from "../../components/ToastProvider";
 import { LineWizardModal } from "./LineWizardModal";
@@ -1305,30 +1306,39 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                           y: native.clientY
                         });
                       };
-                      // Cihaz suruklendiginde: drag boyunca her tickte slot
-                      // vektorune perpendicular projekte et, marker'i zorla
-                      // hat uzerinde tut. Bu sayede cihaz "havada" duramaz,
-                      // sadece slot uzerinde kayar.
-                      const handleDrag = (event: L.LeafletEvent) => {
+                      // BIRAKINCA HATTA OTURUR — SURUKLERKEN DEGIL.
+                      //
+                      // Onceden `drag` olayinda her tickte `m.setLatLng(...)`
+                      // cagriliyordu ("cihaz havada duramasin" diye). Bu,
+                      // Leaflet'in kendi surukleme motoruyla KAVGA ediyordu:
+                      // `L.Draggable` isaretcinin yerini kendi sakladigi
+                      // baslangic noktasi + imlec farkindan hesaplar ve her
+                      // imlec hareketinde yeniden yazar. Aradan `setLatLng`
+                      // cagirmak DOM'u oynatir ama Leaflet'in ic durumunu
+                      // guncellemez; bir sonraki tickte duzeltme EZILIR.
+                      //
+                      // Belirti tam da buydu: kullanici birakinca isaretci
+                      // eski yerine donuyordu — ama `dragend`de hesaplanan `t`
+                      // DOGRU oldugu icin kaydedilen deger ve ana sayfa
+                      // haritasi dogruydu. Yani veri degil, ekran yalan
+                      // soyluyordu.
+                      //
+                      // Artik surukleme boyunca Leaflet'e karisilmiyor;
+                      // birakildigi anda isaretci hat uzerine oturtuluyor.
+                      const handleDragEnd = (event: L.DragEndEvent) => {
                         if (len2 === 0) return;
                         const m = event.target as L.Marker;
                         const ll = m.getLatLng();
-                        const px = ll.lat - ax;
-                        const py = ll.lng - ay;
-                        const tProj = Math.max(0, Math.min(1, (px * dx + py * dy) / len2));
-                        const projLat = ax + dx * tProj;
-                        const projLng = ay + dy * tProj;
-                        // Sadece sapma varsa duzelt (sonsuz dongu olmasin diye threshold)
-                        if (Math.abs(projLat - ll.lat) > 1e-9 || Math.abs(projLng - ll.lng) > 1e-9) {
-                          m.setLatLng([projLat, projLng]);
-                        }
-                      };
-                      const handleDragEnd = (event: L.DragEndEvent) => {
-                        if (len2 === 0) return;
-                        const ll = (event.target as L.Marker).getLatLng();
-                        const px = ll.lat - ax;
-                        const py = ll.lng - ay;
-                        const tNew = Math.max(0, Math.min(1, (px * dx + py * dy) / len2));
+                        // Izdusum saf modulde ve testli (enlem/boylam olcek
+                        // farki dahil): features/grid/slotProjection.ts
+                        const tNew = slotOrani(slot.fromPole, slot.toPole, {
+                          latitude: ll.lat,
+                          longitude: ll.lng
+                        });
+                        // Isaretciyi HEMEN hattin uzerine oturt. React'in
+                        // yeniden cizimini beklemek, bir kare boyunca serbest
+                        // birakilan konumu ekranda birakirdi.
+                        m.setLatLng(slotNoktasi(slot.fromPole, slot.toPole, tNew));
                         void handleDeviceDragEnd(seg, tNew);
                       };
                       return (
@@ -1340,7 +1350,8 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                           eventHandlers={{
                             click: openMenu,
                             contextmenu: openMenu,
-                            drag: handleDrag,
+                            // `drag` YOK: surukleme boyunca Leaflet'e
+                            // karismiyoruz (bkz. handleDragEnd aciklamasi).
                             dragend: handleDragEnd
                           }}
                         >
