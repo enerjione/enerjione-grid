@@ -397,6 +397,10 @@ def ingest_alarm(
     )
     db.add(alarm)
     db.flush()  # alarm.id'yi notification metadata'sinda kullanabilmek icin
+    # NOT: gunluk alarm sayaci (grafigin zaman serisi) BURADA artmaz —
+    # satirin eklenmesine bagli bir ORM olayi artirir, bkz.
+    # `models/alarm.py::_alarm_gunluk_sayacini_artir`. Boylece yeni bir alarm
+    # yolu eklendiginde sayac unutulamaz.
     record_event(
         db,
         category="alarm",

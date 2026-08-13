@@ -25,7 +25,8 @@ bir kesinlik hissi verirdi.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date as date_type
+from datetime import datetime, time, timedelta, timezone
 
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
@@ -584,7 +585,7 @@ def _ariza_cografyasi(
 #     arizada degil o cihazda/modemde/anten hattindadir. Tek tek alarmlara
 #     bakan biri bunu FARK EDEMEZ; ancak sayilinca gorunur.
 
-from app.models.alarm import AlarmEvent  # noqa: E402
+from app.models.alarm import AlarmDailyCount, AlarmEvent  # noqa: E402
 from app.models.device import Device  # noqa: E402
 
 
@@ -595,6 +596,30 @@ def _alarm_temel(days: int, visible_device_ids: set[int] | None):
     if not visible_device_ids:
         return stmt.where(False)
     return stmt.where(AlarmEvent.device_id.in_(visible_device_ids))
+
+
+def _gun_metni(gun) -> str:  # noqa: ANN001
+    """`YYYY-MM-DD`. SQLite `Date` kolonunu bazen metin olarak geri verir."""
+    return gun.isoformat() if hasattr(gun, "isoformat") else str(gun)[:10]
+
+
+def _sayac_temel(days: int, visible_device_ids: set[int] | None):
+    """Gunluk alarm sayacinin pencere + kapsam suzulmus temeli.
+
+    Pencere GUN sinirina yuvarlanir: sayacin tanesi zaten gundur, saat
+    hassasiyetli bir esik gunun bir kismini disarida birakip o gunu eksik
+    gosterirdi (`_surekli_gunler` ile de tutmazdi).
+    """
+    ilk = (
+        datetime.now(timezone.utc).date()
+        - timedelta(days=max(1, min(days, CALENDAR_MAX_DAYS)) - 1)
+    )
+    stmt = select(AlarmDailyCount).where(AlarmDailyCount.day >= ilk)
+    if visible_device_ids is None:
+        return stmt
+    if not visible_device_ids:
+        return stmt.where(False)
+    return stmt.where(AlarmDailyCount.device_id.in_(visible_device_ids))
 
 
 def alarm_sikligi(
@@ -662,14 +687,6 @@ def _surekli_gunler(days: int) -> list[str]:
     return [(ilk + timedelta(days=i)).isoformat() for i in range(uzunluk)]
 
 
-def _kova_ifadesi(db: Session, damga, gunluk: bool):  # noqa: ANN001
-    """Zaman kovasi etiketi — lehceye gore. Gunluk `YYYY-MM-DD`, saatlik
-    `YYYY-MM-DD HH`."""
-    if db.bind is not None and db.bind.dialect.name == "postgresql":
-        return func.to_char(damga, "YYYY-MM-DD" if gunluk else "YYYY-MM-DD HH24")
-    return func.strftime("%Y-%m-%d" if gunluk else "%Y-%m-%d %H", damga)
-
-
 #: Cihaz x zaman matrisinin SABIT penceresi. Sayfanin pencere secimini
 #: (30/90/365/1095) IZLEMEZ ve bu bilinclidir: 25 satirlik matriste 365
 #: sutun, sutun basina bir pikselin altina duser ve desen okunmaz olur.
@@ -720,16 +737,23 @@ def alarm_isi_haritasi(
     altina duser ve matris okunmaz olur. Bu yuzden varsayilan KAPALI ve
     yalnizca 30 gune sabitlenmis matris (bkz. HEATMAP_WINDOW_DAYS) aciyor.
     """
-    base = _alarm_temel(days, visible_device_ids).subquery()
-    a = base.c
+    # KAYNAK: GUNLUK SAYAC — takvimle AYNI tablo (bkz. `alarm_takvimi`).
+    # Iki kesit ayni soruyu farkli kesiyor; farkli kaynaklardan okusalardi
+    # ayni ekranda birbirini tutmayan iki sayi cikardi.
+    #
+    # KOVA HEP GUNLUK: sayacin tanesi gun. Onceden 2 gunden kisa pencerede
+    # saatlik kova aciliyordu; matris zaten 30 gune sabit (bkz.
+    # HEATMAP_WINDOW_DAYS), yani bu dal pratikte hic calismiyordu.
+    temel = _sayac_temel(days, visible_device_ids).subquery()
+    a = temel.c
 
     # 1) Satirlar: en cok alarm ureten cihazlar. Hic alarm uretmemis cihaz
     #    ZATEN gelmez — bos bir satir cizmenin bilgi degeri yok.
     sayimlar = (
-        select(a.device_id, func.count().label("adet"))
-        .select_from(base)
-        .where(a.device_id.is_not(None))
+        select(a.device_id, func.sum(a.count).label("adet"))
+        .select_from(temel)
         .group_by(a.device_id)
+        .having(func.sum(a.count) > 0)
         .subquery()
     )
     toplam_cihaz = db.scalar(select(func.count()).select_from(sayimlar)) or 0
@@ -755,15 +779,13 @@ def alarm_isi_haritasi(
             "truncated": False,
         }
 
-    gunluk = days > 2
-    kova = _kova_ifadesi(db, a.created_at, gunluk)
     id_sira = {int(r[0]): i for i, r in enumerate(satirlar)}
 
     hucreler_ham = db.execute(
-        select(a.device_id, kova.label("kova"), func.count().label("adet"))
-        .select_from(base)
+        select(a.device_id, a.day.label("kova"), func.sum(a.count).label("adet"))
+        .select_from(temel)
         .where(a.device_id.in_(list(id_sira)))
-        .group_by(a.device_id, kova)
+        .group_by(a.device_id, a.day)
     ).all()
 
     # 2) Sutunlar.
@@ -773,7 +795,7 @@ def alarm_isi_haritasi(
     if surekli:
         kovalar = _surekli_gunler(days)
     else:
-        kovalar = sorted({str(r[1]) for r in hucreler_ham})
+        kovalar = sorted({_gun_metni(r[1]) for r in hucreler_ham})
     if len(kovalar) > HEATMAP_MAX_COLS:
         kovalar = kovalar[-HEATMAP_MAX_COLS:]
     kova_sira = {k: i for i, k in enumerate(kovalar)}
@@ -781,16 +803,16 @@ def alarm_isi_haritasi(
     hucreler: list[list[int]] = []
     en_cok = 0
     for dev_id, k, adet in hucreler_ham:
-        sutun = kova_sira.get(str(k))
+        sutun = kova_sira.get(_gun_metni(k))
         if sutun is None:
             continue  # tavan disinda kalan eski kova
-        adet = int(adet)
+        adet = int(adet or 0)
         en_cok = max(en_cok, adet)
         hucreler.append([sutun, id_sira[int(dev_id)], adet])
 
     return {
         "window_days": days,
-        "bucket": "day" if gunluk else "hour",
+        "bucket": "day",
         "buckets": kovalar,
         "devices": [
             {
@@ -939,13 +961,28 @@ def cihaz_ariza_sayilari(
 def alarm_ozeti(
     db: Session, *, days: int, visible_device_ids: set[int] | None
 ) -> dict:
-    """Ust serit: toplam alarm, onaylanan, haberlesme kesintisi, siniflanmamis."""
+    """Ust serit: toplam alarm, onaylanan, haberlesme kesintisi, siniflanmamis.
+
+    TOPLAM SAYACTAN GELIR (`alarm_daily_counts`), takvimle AYNI kaynak.
+    Onceden alarm SATIRLARI sayiliyordu ve serit takvimle celisiyordu:
+    baslikta "6 alarm" yazarken takvim baska bir sey gosteriyordu — cunku
+    satirlar eksilirken tetiklenme sayisi eksilmiyor.
+
+    Onay/haberlesme/siniflanmamis sayilari ise DURUM sorulari; onlarin
+    cevabi alarm satirlarindadir. `ack_ratio` de bu yuzden satir toplamina
+    gore hesaplanir — "elimizdeki kayitlarin yuzde kaci onaylandi".
+    """
     base = _alarm_temel(days, visible_device_ids).subquery()
     a = base.c
+    tetiklenme = db.scalar(
+        _sayac_temel(days, visible_device_ids).with_only_columns(
+            func.coalesce(func.sum(AlarmDailyCount.count), 0)
+        )
+    ) or 0
     toplam = db.scalar(select(func.count()).select_from(base)) or 0
     if toplam == 0:
         return {
-            "total": 0,
+            "total": int(tetiklenme),
             "acknowledged": 0,
             "comm_outages": 0,
             "unclassified": 0,
@@ -963,7 +1000,7 @@ def alarm_ozeti(
         select(func.count()).select_from(base).where(a.kind.is_(None))
     ) or 0
     return {
-        "total": int(toplam),
+        "total": int(tetiklenme),
         "acknowledged": int(onayli),
         "comm_outages": int(kesinti),
         "unclassified": int(siniflanmamis),
@@ -999,16 +1036,23 @@ def alarm_takvimi(
     oncesine dusuyorsa o gunler de 0 gorunur. Bunu ayirmak icin yanit
     `first_alarm_at` tasir; arayuz oncesini soluk cizer.
     """
-    base = _alarm_temel(days, visible_device_ids).subquery()
-    a = base.c
-
-    kova = _kova_ifadesi(db, a.created_at, True)
+    # KAYNAK: GUNLUK SAYAC (`alarm_daily_counts`), alarm satirlari DEGIL.
+    #
+    # Eskiden `alarm_events` gun gun gruplaniyordu ve takvim bos gorunuyordu:
+    # o tablo bir DURUM tablosu ve satirlari eksiliyor (tekrar tetikleyen
+    # alarm oncekinin yerine geciyor, kapanan kayit arsive dusuyor, gunu
+    # gelen retention'a takiliyor). Grafik "gecmiste ne oldu" diye soruyor;
+    # cevabi durum tablosundan okumak, cevabi o tablonun bugunku sekline
+    # bagimli kiliyordu. Sayac tetiklenmeyi OLAY olarak tutar (bkz.
+    # `alarm_counter_service`), boylece gecmis degismez.
     satirlar = db.execute(
-        select(kova.label("gun"), func.count().label("adet"))
-        .select_from(base)
-        .group_by(kova)
+        _sayac_temel(days, visible_device_ids)
+        .with_only_columns(
+            AlarmDailyCount.day, func.sum(AlarmDailyCount.count).label("adet")
+        )
+        .group_by(AlarmDailyCount.day)
     ).all()
-    sayim = {str(r[0]): int(r[1]) for r in satirlar}
+    sayim = {_gun_metni(r[0]): int(r[1] or 0) for r in satirlar}
 
     # Kovalar VERIDEN degil TAKVIMDEN uretilir — bos gunler de sutun acsin.
     # Gun sinirina yuvarlanir ki "bugun" her zaman son kare olsun.
@@ -1023,7 +1067,17 @@ def alarm_takvimi(
         toplam += adet
         gunler.append({"date": g, "count": adet})
 
-    ilk_alarm = db.scalar(select(func.min(a.created_at)).select_from(base))
+    # ILK ALARM — pencere basi kurulumun oncesine dusuyorsa arayuz oncesini
+    # soluk cizsin diye. Sayacin en eski GUNU; pencereyle sinirli degil ki
+    # "bu saha ne zamandir izleniyor" sorusu dogru cevaplansin.
+    ilk_gun = db.scalar(
+        select(func.min(AlarmDailyCount.day)).where(AlarmDailyCount.count > 0)
+    )
+    ilk_alarm = (
+        datetime.combine(ilk_gun, time.min, tzinfo=timezone.utc)
+        if isinstance(ilk_gun, date_type)
+        else None
+    )
     return {
         "start": takvim[0],
         "end": takvim[-1],

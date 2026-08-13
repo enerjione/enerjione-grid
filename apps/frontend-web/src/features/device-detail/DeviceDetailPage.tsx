@@ -40,6 +40,7 @@ import { DeviceChartsPanel } from "./DeviceChartsPanel";
 import { DeviceConfigPanel } from "./DeviceConfigPanel";
 import { DeviceEventsTable } from "./DeviceEventsTable";
 import { DeviceSidebar } from "./DeviceSidebar";
+import { modemDurumuCoz } from "./modemStatus";
 import { Sparkline } from "./Sparkline";
 
 type TopologyInfo =
@@ -366,6 +367,17 @@ export function DeviceDetailPage({
   //   value_string DEGIL value; string variant (info_serial_number) fallback.
   const sidebarIp = rtuStr("master.info_ipv4_address") ?? rtuStr("master.info_modem_ip_address");
   const sidebarPartNo = rtuStr("master.info_part_no");
+  // SEBEKE SINYALI + OPERATOR — modemin ham yanitindan.
+  //
+  // Onceki surum sayisal `master.modem_rssi` ariyordu; cihaz oyle bir nokta
+  // YAYINLAMIYOR ve satir hep bos kaliyordu. Gercek deger
+  // `info_network_rf_status_information` metninin icinde geliyor
+  // (NWS: "286 01",1651,-91,...,"Turkcell",...). Cozum KONUMA degil
+  // BICIME dayali (bkz. modemStatus.ts): modem degisip alan sirasi
+  // kayarsa sessizce yanlis sayi gostermektense bos gostermek dogru.
+  const modem = modemDurumuCoz(rtuStr("master.info_network_rf_status_information"));
+  const sidebarRssi = rtuNum("master.modem_rssi") ?? modem.dbm;
+  const sidebarOperator = rtuStr("master.info_network_operator") ?? modem.operator;
   // Firmware: cihaz ham deger olarak 2338 gonderir, gercek surum "2.338".
   // Ham deger >= 1000 ise X.YYY formatina cevir (2338 -> 2.338); string
   // variant (info_fw_version) varsa onu tercih et.
@@ -535,7 +547,8 @@ export function DeviceDetailPage({
         device={device}
         parentDevice={parentDevice}
         topologyInfo={topologyInfo}
-        rssi={rtuNum("master.modem_rssi")}
+        rssi={sidebarRssi}
+        networkOperator={sidebarOperator}
         ip={sidebarIp}
         partNo={sidebarPartNo}
         firmware={sidebarFirmware}
