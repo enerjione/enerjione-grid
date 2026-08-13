@@ -29,6 +29,12 @@ class Settings:
     backend_api_base: str
     internal_service_token: str
     catalog_refresh_sec: int
+    # Son bilinen degerlerin (`/internal/modbus-values`) register'lara
+    # yazilma periyodu. Canli akis yalnizca DEGISIM oldugunda akar; bu tur
+    # degismeyen sinyallerin register'da 0 kalmasini engeller.
+    # 0 (veya negatif) = kapali — o zaman degismeyen sinyaller SCADA'da
+    # sonsuza dek 0 gorunur, bilerek kapatilmadikca dokunulmamali.
+    snapshot_refresh_sec: int
 
     # ---- Health ------------------------------------------------------------
     health_host: str
@@ -53,6 +59,7 @@ class Settings:
                 "INTERNAL_SERVICE_TOKEN", "change-me-internal-token"
             ),
             catalog_refresh_sec=_get_int("MODBUS_CATALOG_REFRESH_SEC", 30),
+            snapshot_refresh_sec=_get_int("MODBUS_SNAPSHOT_REFRESH_SEC", 30),
             health_host=os.getenv("WORKER_HEALTH_HOST", "127.0.0.1"),
             health_port=_get_int("WORKER_HEALTH_PORT", 8017),
             default_listen_host=os.getenv("MODBUS_DEFAULT_LISTEN_HOST", "0.0.0.0"),

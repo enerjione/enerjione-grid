@@ -73,6 +73,30 @@ def _require_service_token(token: str | None, service_name: str | None = None) -
     )
 
 
+def _parse_iso_utc(raw: str | None) -> datetime | None:
+    """ISO 8601 metni -> UTC-aware datetime. Cozulemezse None.
+
+    None donmesi cagiran tarafta "filtre yok" anlamina gelir; yani bozuk bir
+    `since` parametresi hata degil TAM LISTE uretir. Bilincli: worker'in
+    esigi bozulursa yanit vermemek yerine tohumlamaya donmek istiyoruz
+    (bkz. list_modbus_values_internal).
+    """
+    if not raw:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    if text[-1] in ("Z", "z"):
+        text = text[:-1] + "+00:00"
+    try:
+        ts = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return ts
+
+
 @router.get("/alarm-rules", response_model=list[AlarmRuleRead])
 def list_alarm_rules_internal(
     db: Session = Depends(get_db),
@@ -231,6 +255,137 @@ def list_modbus_plans_internal(
         ModbusPlanRead(**modbus_plan_service.serialize_plan(db, target))
         for target in targets
     ]
+
+
+@router.get("/modbus-values")
+def list_modbus_values_internal(
+    since: str | None = None,
+    db: Session = Depends(get_db),
+    x_service_token: str | None = Header(default=None),
+):
+    """modbus-outbound icin SON BILINEN degerler — register tazeleme kaynagi.
+
+    NEDEN VAR
+    ---------
+    Modbus'ta "deger henuz gelmedi" diye bir hal YOKTUR: SCADA ne sorarsa
+    depoda ne varsa onu okur, yazilmamis adres 0 doner. Worker'in tek besleme
+    kanali NATS akisiydi ve o akis yalnizca CIHAZ YENI OLCUM YAYINLADIGINDA
+    akar. Sonuc: degismeyen bir sinyal register'a HIC yazilmiyordu ve SCADA
+    sonsuza dek 0 goruyordu. Uc yol da ayni yere cikiyordu:
+
+      * worker/servis yeniden basladi     -> tuketici `DeliverPolicy.NEW`,
+                                             eski olcumler tekrar oynatilmaz
+      * sinyal olay tabanli (ariza bayragi, konum, sayac) -> gunlerce sessiz
+      * hedef/plan yeni kuruldu           -> ilk olcum turuna kadar bos
+
+    Bu uc `telemetry_latest` tablosunu doner: Canli Degerler ekraninin ve WS
+    yayininin AYNI kaynagi. Yani Modbus'un yazdigi deger ile arayuzde gorunen
+    deger ayni satirdan gelir; "ekranda var, SCADA'da yok" ayrismasi
+    yapisal olarak imkansiz hale gelir.
+
+    KAPSAM: yalnizca aktif Modbus hedeflerinde SLOTU OLAN cihazlar. Modbus
+    hedefi yoksa sorgu hic kurulmaz (bos liste), yani bu uc modbus
+    kullanmayan kurulumlarda bedava.
+
+    ARTIMLI CEKIM (`since`)
+    -----------------------
+    600 cihaz x 193 sinyal = ~115.000 satir. Bunu her 30 saniyede TAM cekmek,
+    `/signals/live`de OOM'a goturen desenin (istek basina yuz megabaytlik
+    yanit) aynisi olurdu. Bu yuzden:
+
+      * `since` YOKSA  -> tam liste (tohumlama: servis basladi / plan degisti)
+      * `since` VARSA   -> yalnizca `updated_at >= since` satirlari
+
+    Worker kendi saatini KULLANMAZ; yanitta donen `max_updated_at`i bir
+    sonraki cagrida aynen geri verir. Boylece worker ile backend arasindaki
+    saat kaymasi satir kaybettirmez. Sinir karsilastirmasi `>=` (bilincli):
+    ayni damgayi tasiyan birkac satir tekrar gelir, kaybolmaz — tekrar gelen
+    satir worker tarafinda zaten no-op'tur (damga guncel).
+
+    Yanit pydantic modeli DEGIL duz sozluk: her satir icin model nesnesi
+    hidrate etmek sorgudan pahali olur (bkz. `/signals/live` uzerindeki ayni
+    karar). Tuketici tek bir servis (modbus-outbound) ve sozlesme burada yaziyor.
+    """
+    _require_service_token(x_service_token)
+    from app.models.outbound_target import OutboundModbusSlot
+    from app.models.telemetry_latest import TelemetryLatest
+
+    device_ids = list(
+        db.scalars(
+            select(OutboundModbusSlot.device_id)
+            .join(OutboundTarget, OutboundTarget.id == OutboundModbusSlot.target_id)
+            .where(OutboundTarget.is_active.is_(True))
+            .where(OutboundTarget.protocol == "modbus")
+            .distinct()
+        ).all()
+    )
+    if not device_ids:
+        return {"values": [], "count": 0, "full": True, "max_updated_at": None}
+
+    codes = {
+        row[0]: row[1]
+        for row in db.execute(
+            select(Device.id, Device.code).where(Device.id.in_(device_ids))
+        )
+    }
+
+    esik = _parse_iso_utc(since)
+    stmt = select(
+        TelemetryLatest.device_id,
+        TelemetryLatest.signal_key,
+        TelemetryLatest.value,
+        TelemetryLatest.value_string,
+        TelemetryLatest.quality,
+        TelemetryLatest.source_timestamp,
+        TelemetryLatest.updated_at,
+    ).where(TelemetryLatest.device_id.in_(device_ids))
+    if esik is not None:
+        stmt = stmt.where(TelemetryLatest.updated_at >= esik)
+    rows = db.execute(stmt)
+
+    values: list[dict] = []
+    en_yeni: datetime | None = None
+    for (
+        device_id, signal_key, value, value_string, quality, source_ts, updated_at
+    ) in rows:
+        if updated_at is not None:
+            if updated_at.tzinfo is None:
+                updated_at = updated_at.replace(tzinfo=timezone.utc)
+            if en_yeni is None or updated_at > en_yeni:
+                en_yeni = updated_at
+        code = codes.get(device_id)
+        if not code:
+            continue
+        # Damga SAAT DILIMI ILE cikar. Kolon `DateTime(timezone=True)` ama
+        # surucu naive donebilir (SQLite'ta her zaman doner); offset'siz bir
+        # metin worker tarafinda "hangi dilim?" belirsizligi yaratir ve
+        # naive/aware karsilastirmasi TypeError firlatir — tek satir yuzunden
+        # tazeleme turunun tamami duserdi.
+        if source_ts is not None and source_ts.tzinfo is None:
+            source_ts = source_ts.replace(tzinfo=timezone.utc)
+        values.append(
+            {
+                "device_code": code,
+                "signal_key": signal_key,
+                "value": value,
+                "value_string": value_string,
+                "quality": quality,
+                # Worker bu damgayi TAZELIK KARSILASTIRMASI icin kullanir:
+                # canli akistan gelen daha yeni bir deger, DB'den donen bayat
+                # bir satirla EZILMEZ (bkz. registry.apply_snapshot).
+                "source_timestamp": source_ts.isoformat() if source_ts else None,
+            }
+        )
+    return {
+        "values": values,
+        "count": len(values),
+        # Bu turun tam mi artimli mi oldugu (teshis + worker karari).
+        "full": esik is None,
+        # Worker bunu bir sonraki cagrida `since` olarak geri verir. Bos
+        # yanitta None doner ve worker eski esigini KORUR (aksi halde her
+        # sessiz turdan sonra tam listeye donerdi).
+        "max_updated_at": en_yeni.isoformat() if en_yeni else None,
+    }
 
 
 _IDEMPOTENCY_CONSUMER_INTERNAL_ALARMS = "internal-alarms"

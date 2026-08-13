@@ -927,6 +927,17 @@ export type ModbusRuntimeStatus = {
     last_error: string | null;
     last_sync_error: string | null;
   };
+  // Son bilinen deger tazelemesi: canli akis yalnizca DEGISIM oldugunda akar,
+  // degismeyen sinyaller bu tur sayesinde register'a yazilir.
+  snapshot: {
+    enabled: boolean;
+    refreshes: number;
+    rows: number;
+    seeded: number;
+    refreshed: number;
+    stale_skipped: number;
+    last_error: string | null;
+  };
 };
 
 // ===== Public API — Personal Access Token (PAT) =====

@@ -1131,6 +1131,14 @@ services:
       WORKER_HEALTH_HOST: 0.0.0.0
       WORKER_HEALTH_PORT: 8017
       MODBUS_DEFAULT_LISTEN_HOST: 0.0.0.0
+      # SON BILINEN DEGER TAZELEMESI (saniye). Canli telemetri akisi yalnizca
+      # cihaz yeni olcum yayinladikca akar; degismeyen bir sinyalin register'i
+      # aksi halde HIC yazilmaz ve Modbus'ta yazilmamis adres 0 doner —
+      # SCADA bunu gercek bir olcum gibi okur. Bu tur backend'in
+      # `telemetry_latest` tablosunu (Canli Degerler ekraninin kaynagi) okuyup
+      # eksik register'lari doldurur. Taze canli deger EZILMEZ.
+      # 0 = kapali (degismeyen sinyaller SCADA'da sonsuza dek 0 gorunur).
+      MODBUS_SNAPSHOT_REFRESH_SEC: ${MODBUS_SNAPSHOT_REFRESH_SEC:-30}
     # Modbus standart portu 502'dir ve <1024'tur. Servis non-root (uid 10001)
     # calistigi ve `cap_drop: ALL` uygulandigi icin bu sysctl olmadan bind
     # edemez. Namespace'e ozel bir ayardir; host'un port politikasini

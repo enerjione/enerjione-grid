@@ -399,6 +399,11 @@ def get_modbus_runtime(
       updates_applied artiyor                 -> degerler register'lara yaziliyor;
                                                  SCADA sifir goruyorsa sorun
                                                  istemci adres/format tarafinda
+      snapshot_seeded artiyor                 -> canli akista HIC gelmeyen
+                                                 (degismeyen) sinyaller son
+                                                 bilinen degerleriyle yazildi
+      snapshot_enabled=false                  -> tazeleme kapali; degismeyen
+                                                 sinyaller SCADA'da 0 kalir
 
     NOT: kalite (bad_quality_count) YAZMAYI ENGELLEMEZ — Modbus'ta kalite
     biti olmadigi icin gelen deger kalite ne olursa olsun yazilir (Canli
@@ -452,6 +457,17 @@ def get_modbus_runtime(
             "bad_quality_count": int((worker or {}).get("bad_quality_count") or 0),
             "last_error": (worker or {}).get("last_consumer_error"),
             "last_sync_error": (worker or {}).get("last_sync_error"),
+        },
+        # Son bilinen deger tazelemesi. Hedef bazinda sayaclar registry'den,
+        # dongunun durumu servis seviyesinden gelir.
+        "snapshot": {
+            "enabled": bool((worker or {}).get("snapshot_enabled", False)),
+            "refreshes": int((worker or {}).get("snapshot_refreshes") or 0),
+            "rows": int((worker or {}).get("snapshot_rows") or 0),
+            "seeded": int((snapshot or {}).get("snapshot_seeded") or 0),
+            "refreshed": int((snapshot or {}).get("snapshot_refreshed") or 0),
+            "stale_skipped": int((snapshot or {}).get("snapshot_stale_skipped") or 0),
+            "last_error": (worker or {}).get("last_snapshot_error"),
         },
     }
 

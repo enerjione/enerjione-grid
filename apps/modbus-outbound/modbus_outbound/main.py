@@ -4,12 +4,20 @@ Akis:
   1. Health HTTP sunucusunu baslat.
   2. Asyncio loop'unda plan syncer'i baslat -> her aktif Modbus hedefi icin
      bir TCP sunucusu ayaga kalkar.
-  3. NATS consumer'i ayri daemon thread'de baslat.
-  4. SIGINT/SIGTERM ile hepsini duzgun indir.
+  3. Snapshot syncer'i baslat -> son bilinen degerler register'lara yazilir.
+  4. NATS consumer'i ayri daemon thread'de baslat.
+  5. SIGINT/SIGTERM ile hepsini duzgun indir.
 
 tag-engine -> NATS (telemetry.normalized) -> consumer -> PointRegistry ->
 SCADA'nin Modbus okumasi bu hafizadan cevaplanir. Yani SCADA'nin tarama hizi
 telemetri akisini ETKILEMEZ; iki taraf birbirinden tamamen bagimsiz calisir.
+
+IKINCI BESLEME KANALI NEDEN VAR: canli akis yalnizca cihaz yeni olcum
+yayinladikca akar. Degismeyen bir sinyalin ya da yeni baslatilmis bir
+servisin register'i aksi halde HIC yazilmaz ve Modbus'ta yazilmamis adres 0
+doner — SCADA bunu gercek bir olcum gibi okur. Snapshot syncer backend'in
+`telemetry_latest` tablosunu (Canli Degerler ekraninin kaynagi) periyodik
+okuyup bu bosluklari doldurur.
 """
 
 from __future__ import annotations
@@ -21,7 +29,7 @@ import sys
 from datetime import datetime, timezone
 
 from modbus_outbound import __version__
-from modbus_outbound.catalog import CatalogClient, PlanSyncer
+from modbus_outbound.catalog import CatalogClient, PlanSyncer, SnapshotSyncer
 from modbus_outbound.config import SETTINGS
 from modbus_outbound.consumer import TelemetryConsumer
 from modbus_outbound.health import start_health_server
@@ -47,11 +55,19 @@ async def _async_main() -> None:
         base_url=settings.backend_api_base,
         service_token=settings.internal_service_token,
     )
+    snapshot = SnapshotSyncer(
+        catalog=catalog,
+        manager=modbus_manager,
+        refresh_sec=settings.snapshot_refresh_sec,
+    )
     syncer = PlanSyncer(
         catalog=catalog,
         manager=modbus_manager,
         default_listen_host=settings.default_listen_host,
         refresh_sec=settings.catalog_refresh_sec,
+        # Plan degistiginde yeni noktalar ilk canli olcume kadar 0 kalmasin:
+        # tazeleme turu hemen tetiklenir.
+        on_plan_change=snapshot.request_refresh,
     )
     consumer = TelemetryConsumer(settings=settings, manager=modbus_manager)
 
@@ -71,11 +87,23 @@ async def _async_main() -> None:
             "bad_quality_count": consumer.bad_quality_count,
             "last_consumer_error": consumer.last_error,
             "last_sync_error": syncer.last_error,
+            # Son bilinen deger tazelemesi — "SCADA neden 0 goruyor"
+            # sorusunun ikinci yarisi (ilk yarisi consumer sayaclari).
+            "snapshot_enabled": snapshot.enabled,
+            "snapshot_refreshes": snapshot.refreshes,
+            # Kacinin TAM liste oldugu — artimli cekim calisiyor mu?
+            "snapshot_full_refreshes": snapshot.full_refreshes,
+            "snapshot_rows": snapshot.last_row_count,
+            "snapshot_seeded": snapshot.total_seeded,
+            "snapshot_refreshed": snapshot.total_refreshed,
+            "snapshot_last": snapshot.last_result,
+            "last_snapshot_error": snapshot.last_error,
             "targets": modbus_manager.runtime_snapshot(),
             "config": {
                 "backend_api_base": settings.backend_api_base,
                 "nats_subject": settings.nats_subject,
                 "catalog_refresh_sec": settings.catalog_refresh_sec,
+                "snapshot_refresh_sec": settings.snapshot_refresh_sec,
                 "default_listen_host": settings.default_listen_host,
             },
         }
@@ -111,6 +139,9 @@ async def _async_main() -> None:
             signal.signal(sig, _on_signal)
 
     syncer_task = asyncio.create_task(syncer.run_forever(), name="modbus-plan-syncer")
+    snapshot_task = asyncio.create_task(
+        snapshot.run_forever(), name="modbus-snapshot-syncer"
+    )
     consumer.start()
 
     try:
@@ -118,8 +149,9 @@ async def _async_main() -> None:
     finally:
         logger.info("modbus_outbound_shutting_down")
         syncer.request_stop()
+        snapshot.request_stop()
         consumer.stop()
-        await asyncio.wait([syncer_task], timeout=5)
+        await asyncio.wait([syncer_task, snapshot_task], timeout=5)
         await modbus_manager.undeploy_all()
         try:
             health.shutdown()

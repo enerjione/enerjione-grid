@@ -3056,6 +3056,8 @@
         "requestsServed": "SCADA requests served",
         "rejectedPeers": "Connections rejected by IP allowlist",
         "badQualityCount": "Measurements received with bad quality (written anyway)",
+        "snapshotWrites": "Registers refreshed from last known value",
+        "snapshotOff": "off",
         "lastSyncError": "Last plan sync error",
         "diag": {
           "ok": "Flow is healthy: telemetry is being written to registers and SCADA is polling. If values still look empty, check the client-side address/format settings (FC3/FC4, unit ID, 40001 base offset, int16 vs float32).",
@@ -3066,7 +3068,9 @@
           "unmapped": "Telemetry arrives but does not match the device/signal keys in this target's address plan — the plan may be stale (refreshes every 30 s) or device codes differ.",
           "uncoercible": "Telemetry arrives and matches the plan, but the value can't be coerced to a number/bit — the signal's numeric field may be empty (see the uncoercible counter).",
           "noWrites": "Telemetry is processed but nothing was written to this target yet — the incoming signals may be outside the plan, or no measurement has arrived yet for this target's signals.",
-          "noReads": "Values are written to registers but SCADA has not read anything yet — the client connects but sends no queries, or is polling the wrong port."
+          "noReads": "Values are written to registers but SCADA has not read anything yet — the client connects but sends no queries, or is polling the wrong port.",
+          "snapshotOnly": "Live telemetry has never written to this target; registers are fed from last known values. SCADA reads data, but values only update on refresh cycles — check the device/gateway flow.",
+          "snapshotDisabled": "Nothing has been written to the registers and last-known-value refresh is OFF (MODBUS_SNAPSHOT_REFRESH_SEC=0). Signals that never change will read 0 in SCADA forever; enable the refresh."
         }
       },
       "table": {
