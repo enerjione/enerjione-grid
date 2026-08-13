@@ -41630,7 +41630,7 @@ th.event-col-category {
 
 /* CIHAZ PROFILLERI — model bazli ayar listesi. Ustteki proje-geneli batarya
    kutusuyla ayni gorsel dili kullanir; buradaki her satir bir ISTISNADIR. */
-/* Ipucu artik kart basliginda (ps-hint); ayri bir kural gerekmiyor. */
+/* Ipucu kart basligindaki bilgi ikonunda (ps-info); ayri bir kural yok. */
 /* Her model bir KART. Eskiden tam genislikte bir satirdi: model adi en solda,
    voltaj alanlari 1500 px otede en sagda kaliyor, hangi sayinin hangi modele
    ait oldugu goz taramasi gerektiriyordu. Kart icinde ad ile alan alt alta,
@@ -42291,6 +42291,13 @@ th.event-col-category {
   align-items: start;
 }
 
+/* ISTISNA — Olcum & Esikler: uc kart da ayni konunun (cihazdan gelen sayi
+   neye gore yorumlanacak) es degerde parcasi. Boylari icerige gore ayrisinca
+   satir merdiven gibi gorunuyordu; burada esit yukseklik daha duzenli. */
+.ps-body--esit {
+  align-items: stretch;
+}
+
 /* Bolum karti. */
 .ps-card {
   position: relative;
@@ -42306,8 +42313,6 @@ th.event-col-category {
    genis ekranda uclu. Sayilar 12'lik izgaranin sutun adedi. */
 @media (min-width: 1200px) {
   .ps-card--w4 { grid-column: span 4; }
-  .ps-card--w5 { grid-column: span 5; }
-  .ps-card--w7 { grid-column: span 7; }
   .ps-card--w8 { grid-column: span 8; }
 }
 
@@ -42317,11 +42322,13 @@ th.event-col-category {
   .ps-card--xl9 { grid-column: span 9; }
 }
 
+/* Baslik artik TEK SATIR: aciklama satirdan cikip yanindaki bilgi ikonuna
+   tasindi (bkz. .ps-info). Kart yuksekliklerini birbirinden ayiran sey buydu. */
 .ps-card-head {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 16px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .ps-card-icon {
@@ -42339,21 +42346,91 @@ th.event-col-category {
 }
 
 .ps-card-head h4 {
-  margin: 0 0 2px;
+  margin: 0;
   font-size: 14.5px;
   font-weight: 750;
   letter-spacing: -0.01em;
   color: #0f172a;
 }
 
-/* Ipucu artik kartin genisligi kadar akar. Sabit 78ch, 1900 px'lik bir kartin
-   icinde ortada asili kalan bir metin blogu uretiyordu. */
-.ps-hint {
-  margin: 0;
-  font-size: 12px;
+/* ACIKLAMA BALONU.
+   Her kartin altinda duran iki-uc satirlik aciklama, ayari ilk kez kuran
+   icin gerekliydi ama her gun bakan icin gurultu: kartlari uzatiyor, asil is
+   olan alanlari asagi itiyor ve kart boylarini birbirinden ayirdigi icin
+   izgarayi merdivene ceviriyordu. Metin simdi baslik yanindaki ikonda;
+   ustune gelince ya da Tab ile odaklaninca cikiyor. */
+.ps-info {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 21px;
+  height: 21px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #a9b4c4;
+  cursor: help;
+  transition: color 0.15s, background 0.15s;
+}
+
+.ps-info .material-symbols-outlined {
+  font-size: 17px;
+}
+
+.ps-info:hover,
+.ps-info:focus-visible {
+  background: #fff4e6;
+  color: var(--license-accent, #e97800);
+}
+
+.ps-info:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(233, 120, 0, 0.18);
+}
+
+.ps-info-tip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: -8px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  width: max-content;
+  max-width: 300px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #0f172a;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.24);
+  color: #dbe3ee;
+  font-size: 11.5px;
+  font-weight: 500;
   line-height: 1.55;
-  color: #64748b;
-  max-width: 70ch;
+  text-align: left;
+  white-space: normal;
+  /* Balon fareyi YAKALAMAZ: ikonun altinda acildigi icin imlecin onune
+     girerse altindaki alan tiklanamaz hale gelirdi. */
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-3px);
+  transition: opacity 0.14s, transform 0.14s, visibility 0.14s;
+}
+
+/* Kartin sag ucundaki ikonlarda balon sola yaslanir; yoksa panelin disina
+   tasar ve kaydirma kutusu tarafindan kirpilir. */
+.ps-info--sag .ps-info-tip {
+  left: auto;
+  right: -8px;
+}
+
+.ps-info:hover .ps-info-tip,
+.ps-info:focus-visible .ps-info-tip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
 }
 
 /* Alan: etiket + girdi. Genislik ICERIK kadar. */
@@ -42400,6 +42477,13 @@ th.event-col-category {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: 14px 16px;
+}
+
+/* Kurulum kimliginde uc alan ALT ALTA. Auto-fit dar kartta ikisini yan yana
+   koyup ucuncuyu satirda tek birakiyordu; uc kisa metin alani icin bu
+   asimetri, kazanilan yerden daha cok goze batiyor. */
+.ps-field-row--dikey {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 /* Secim kutusu — tarayici oku yerine kendi chevron'u. */
@@ -42614,11 +42698,6 @@ th.event-col-category {
   pointer-events: none;
 }
 
-.ps-cell-note {
-  margin-top: 10px;
-  font-size: 11.5px;
-}
-
 /* --- Bildirimler ---------------------------------------------------------- */
 /* Iki bagimsiz soru yan yana durur: "nerede cikacak" ve "hic cikacak mi".
    Eskiden alt alta idiler ve ikisi de satirin solunda kaliyordu. */
@@ -42636,9 +42715,17 @@ th.event-col-category {
   border: 0;
 }
 
-.ps-toast-side {
+/* Anahtar + bilgi ikonu yan yana. Ikon label'in DISINDA duruyor: icinde
+   olsaydi ustune tiklamak anahtari da cevirirdi. */
+.ps-switch-row {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ps-switch-row .ps-switch {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -42762,7 +42849,7 @@ th.event-col-category {
 /* Anahtar (switch) — kutucuk yerine, "susturuldu" durumu uzaktan okunsun. */
 .ps-switch {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 11px;
   padding: 12px 14px;
   border: 1px solid #e6ebf2;
@@ -42813,41 +42900,10 @@ th.event-col-category {
   box-shadow: 0 0 0 3px rgba(233, 120, 0, 0.18);
 }
 
-.ps-switch-text {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
 .ps-switch-text strong {
   font-size: 13px;
   font-weight: 700;
   color: #0f172a;
-}
-
-.ps-switch-text small {
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: #64748b;
-}
-
-.ps-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
-  margin: 14px 0 0;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: #f1f5f9;
-  font-size: 11.5px;
-  line-height: 1.55;
-  color: #475569;
-}
-
-.ps-note .material-symbols-outlined {
-  flex-shrink: 0;
-  font-size: 16px;
-  color: #94a3b8;
 }
 
 /* Aksiyon cubugu: Kaydet TUM sekmeleri yazar, bunu soylemek gerekiyor. */

@@ -40,6 +40,27 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.84.0] — 2026-08-13
+
+### Değişti
+
+- **Proje Ayarları'nda açıklamalar başlığın yanındaki bilgi ikonuna taşındı.**
+  Her kartın başlığının altında iki-üç satırlık bir açıklama duruyordu: ayarı
+  **ilk kez** kuran için gerekli, her gün bakan için gürültü. Asıl iş olan
+  alanları aşağı itiyor, kartların boyunu birbirinden ayırdığı için de kart
+  dizilimini merdivene çeviriyordu. Metin artık ikonun üstüne gelince (klavye
+  kullanıyorsanız Tab ile odaklanınca) balon olarak çıkıyor; kart başlıkları
+  tek satıra indi. Satırdan çıkanlar: altı kart başlığının açıklaması, batarya
+  hücrelerinin altındaki notlar ve susturma anahtarının uzun kapsam notu.
+
+- **Kurulum Kimliği'nde üç alan alt alta.** Proje adı, müşteri adı ve tarayıcı
+  sekme başlığı; ikisi yan yana gidip üçüncüsü satırda tek kalıyordu.
+
+- **Ölçüm & Eşikler'de üç kart da aynı boyda.** Faz eşlemesi, batarya eşikleri
+  ve cihaz profilleri eşit genişlikte; yükseklikleri de eşitlendi.
+
+---
+
 ## [2.83.0] — 2026-08-13
 
 ### Eklendi

@@ -22,6 +22,7 @@ import {
   type DeviceModelSettingsRow
 } from "../../shared/api";
 import { useToast } from "../../components/ToastProvider";
+import { PsInfo } from "./PsInfo";
 
 type Props = {
   token: string;
@@ -117,10 +118,8 @@ export function DeviceProfilesPanel({ token, canEdit, className = "" }: Props) {
         <span className="ps-card-icon material-symbols-outlined" aria-hidden="true">
           tune
         </span>
-        <div>
-          <h4>{t("engineering.deviceProfiles.title")}</h4>
-          <p className="ps-hint">{t("engineering.deviceProfiles.hint")}</p>
-        </div>
+        <h4>{t("engineering.deviceProfiles.title")}</h4>
+        <PsInfo text={t("engineering.deviceProfiles.hint")} />
       </header>
 
       <div className="device-profiles-list">
