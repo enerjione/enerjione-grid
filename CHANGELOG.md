@@ -14,6 +14,30 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.81.0] — 2026-08-13
+
+### Eklendi
+
+- **Proje Ayarları → Sistem yeniden tasarlandı.** Tek uzun sayfa alt sekmelere
+  ayrıldı; ilgili ayarlar bir arada duruyor ve aranan başlık kaydırmadan
+  bulunuyor.
+
+### Düzeltildi
+
+- **Hat Yönetimi'nden kaldırılan cihaz ana sayfada durmaya devam ediyordu.**
+  "Kaldır" işlemi hat segmentini siliyor ama cihazın kurulumda girilmiş
+  koordinatı yerinde kalıyor; harita konumu segmentten türetemeyince ham
+  koordinata düşüyor ve pin **eski yerinin yakınında** durmaya devam ediyordu —
+  üstelik hatta bağlı cihazlarla **birebir aynı** çizilerek. Soldaki liste
+  "Hatta atanmadı" derken harita onu şebekenin parçası gibi gösteriyordu; yani
+  hat atamasını kaldırmanın ana sayfada hiçbir karşılığı yoktu. Eski davranış
+  geri geldi: kaldırınca düşüyor, hatta ekleyince geri geliyor. Cihaz
+  kaybolmuyor — Bölge/Hat filtresindeki **"Atanmamış"** seçildiğinde yalnızca
+  onlar listeleniyor, Mühendislik → Cihazlar'da da her zaman duruyor.
+- **Hat haritasında cihaz adı artık her zaman yazıyor.**
+
+---
+
 ## [2.80.1] — 2026-08-13
 
 ### Düzeltildi
