@@ -4292,6 +4292,7 @@
       "serial": "Seri No",
       "noLocation": "Konum belirtilmemiş",
       "networkSignal": "Şebeke Sinyali",
+      "networkOperator": "Operatör",
       "parentDevice": "Üst cihaz",
       "fromKit": "{{name}} kitinden",
       "partNo": "Part No",

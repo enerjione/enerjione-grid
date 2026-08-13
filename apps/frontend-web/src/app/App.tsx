@@ -290,7 +290,15 @@ const DASHBOARD_SIGNAL_KEYS = [
 type LiveValuesScope =
   | { kind: "none" }
   | { kind: "dashboard"; selectedDeviceCode?: string }
-  | { kind: "device"; deviceCode: string }
+  /** `deviceCodes`: cihazin KENDISI + (Pole Master Kit setiyse) UST KIT.
+   *
+   *  Setin telemetrisinde `master.*` HIC YOKTUR — modem, IP, part no,
+   *  firmware, GPS ve besleme kitin ortak RTU'sundadir. Sol paneldeki
+   *  BILGILER bu degerleri kit kaydindan okuyor ama kapsam yalnizca setin
+   *  kodunu istedigi icin satirlar hep bos kaliyordu: kullanici "veri
+   *  gelmiyor" saniyordu, oysa veri BACKEND'DE vardi, ekrana hic
+   *  istenmiyordu. */
+  | { kind: "device"; deviceCodes: string[] }
   | { kind: "all" };
 
 /** Kapsama gore canli degerleri ceker.
@@ -308,7 +316,7 @@ async function fetchLiveValuesForScope(
   if (scope.kind === "none") return [];
   if (scope.kind === "all") return fetchSignalLiveValues(token);
   if (scope.kind === "device") {
-    return fetchSignalLiveValues(token, [scope.deviceCode]);
+    return fetchSignalLiveValues(token, scope.deviceCodes);
   }
 
   const dar = await fetchSignalLiveValues(token, undefined, DASHBOARD_SIGNAL_KEYS);
@@ -548,26 +556,39 @@ export function App() {
     () => devices.find((d) => d.id === selectedDeviceId)?.code,
     [devices, selectedDeviceId]
   );
-  const detailDeviceCode = useMemo(
-    () =>
-      activeDeviceDetailId === null
-        ? undefined
-        : devices.find((d) => d.id === activeDeviceDetailId)?.code,
-    [devices, activeDeviceDetailId]
-  );
+  /** Detay sayfasinin canli deger kapsami: cihazin kendisi + varsa UST KIT.
+   *
+   *  Pole Master Kit setinin sol panelindeki BILGILER (IP, part no, firmware,
+   *  pil, sebeke) kitin RTU'sundan okunur; kapsam yalnizca seti istediginde
+   *  o satirlar hicbir zaman dolmuyordu. Kodlar STRING oldugu icin dizinin
+   *  kimligi degerler degismedikce sabit kalir — `useMemo` bagimliligi
+   *  gereksiz fetch tetiklemez. */
+  const detailDeviceCodes = useMemo(() => {
+    if (activeDeviceDetailId === null) return undefined;
+    const dev = devices.find((d) => d.id === activeDeviceDetailId);
+    if (!dev) return undefined;
+    const ust =
+      dev.parentDeviceId != null
+        ? devices.find((d) => d.id === dev.parentDeviceId)?.code
+        : undefined;
+    return ust ? [dev.code, ust] : [dev.code];
+  }, [devices, activeDeviceDetailId]);
+  const detailScopeKey = detailDeviceCodes?.join(",");
 
   const liveScope = useMemo<LiveValuesScope>(() => {
     if (pageMode === "home") {
       return { kind: "dashboard", selectedDeviceCode };
     }
     if (pageMode === "device-detail") {
-      return detailDeviceCode ? { kind: "device", deviceCode: detailDeviceCode } : { kind: "none" };
+      return detailScopeKey
+        ? { kind: "device", deviceCodes: detailScopeKey.split(",") }
+        : { kind: "none" };
     }
     if (pageMode === "engineering" && engineeringPage === "live-values") {
       return { kind: "all" };
     }
     return { kind: "none" };
-  }, [pageMode, engineeringPage, selectedDeviceCode, detailDeviceCode]);
+  }, [pageMode, engineeringPage, selectedDeviceCode, detailScopeKey]);
 
   // Canli degerleri GERCEKTEN tuketen sayfalar. Baska bir sekmede (Alarmlar,
   // Olaylar, Ayarlar, ...) WS'i acik tutmak bedavaya cihaz x sinyal akisini

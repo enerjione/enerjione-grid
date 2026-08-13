@@ -2,8 +2,8 @@
  * DeviceSidebar — cihaz detay sol sabit panel.
  *
  * Cihaz kimlik (kod solunda online/offline nokta) + birlesik BILGILER (bolge/
- * hat/IP/pil/RSSI/kalite/seri no'lar) + mini harita (topoloji konumu) + kanal
- * secimi (seri no'lu). activeSource sidebar'dan kontrol edilir.
+ * hat/IP/pil) + mini harita (topoloji konumu) + kanal secimi.
+ * activeSource sidebar'dan kontrol edilir.
  */
 
 import { useTranslation } from "react-i18next";
@@ -14,6 +14,7 @@ import L from "leaflet";
 
 import { formatRelative } from "../../shared/format";
 import { sourceLabel, sourceTone } from "../signals/signalCatalogConstants";
+import { sinyalKalitesi } from "./modemStatus";
 import type { DeviceRow, SignalSource } from "../../shared/types";
 
 // Cihaz pin ikonu (Leaflet divIcon).
@@ -39,8 +40,11 @@ type Props = {
    *  "set cevrimici ama kit degil" gibi imkansiz durumlar gosteriyordu. */
   parentDevice?: DeviceRow;
   topologyInfo?: TopologyInfo;
-  /** RSSI (master.modem_rssi). */
+  /** Sebeke alim seviyesi (dBm) - modemin ham yanitindan cozulur
+   *  (`master.info_network_rf_status_information`; bkz. modemStatus.ts). */
   rssi?: number;
+  /** Operator adi - ayni ham yanittan; `info_network_operator` bos geliyor. */
+  networkOperator?: string;
   /** Master IP (master.ipv4_address). */
   ip?: string;
   /** Part No (master.info_part_no). */
@@ -82,20 +86,8 @@ function channelsFor(device: DeviceRow): { key: SignalSource; label: string; ton
   return keys.map((key) => ({ key, label: sourceLabel(key), tone: sourceTone(key) }));
 }
 
-// RSSI -> sebeke sinyali (dBm). -70 ust iyi, -85 ust orta, alti zayif.
-// bars: 4 kademeli sinyal cubugu (0..4).
-function rssiQuality(rssi: number | undefined): {
-  key: "good" | "fair" | "poor" | "none";
-  dbm: string;
-  bars: number;
-} {
-  if (rssi == null) return { key: "none", dbm: "—", bars: 0 };
-  const dbm = `${Math.round(rssi)} dBm`;
-  if (rssi >= -70) return { key: "good", dbm, bars: 4 };
-  if (rssi >= -85) return { key: "fair", dbm, bars: 3 };
-  if (rssi >= -100) return { key: "poor", dbm, bars: 2 };
-  return { key: "poor", dbm, bars: 1 };
-}
+// `rssiQuality` KALDIRILDI — sebeke sinyali satiriyla birlikte. Modem
+// olculeri "Pole Master" sekmesinde duruyor.
 
 // Pil % -> renk sinifi (ana sayfa ile ayni esikler).
 function batteryClass(pct: number): string {
@@ -107,8 +99,9 @@ function batteryClass(pct: number): string {
 export function DeviceSidebar({
   device,
   parentDevice,
-  topologyInfo,
   rssi,
+  networkOperator,
+  topologyInfo,
   ip,
   partNo,
   firmware,
@@ -124,7 +117,7 @@ export function DeviceSidebar({
   // Haberlesme/pil/sinyal SAHIBI cihaz: sette kit, sade cihazda kendisi.
   const health = parentDevice ?? device;
   const online = health.communicationStatus === "online";
-  const quality = rssiQuality(rssi);
+  const quality = sinyalKalitesi(rssi);
   // Konum: cihazin kendi lat/lon'u yoksa topoloji (hat/segment) konumu.
   const validSelf =
     Number.isFinite(device.latitude) &&
@@ -228,7 +221,12 @@ export function DeviceSidebar({
             </span>
           </li>
 
-          {/* Sebeke sinyali — renkli sinyal cubugu */}
+          {/* SEBEKE SINYALI — modemin ham yanitindan cozulur.
+              Once sayisal bir `master.modem_rssi` araniyordu; cihaz oyle bir
+              nokta YAYINLAMIYOR, seviye `info_network_rf_status_information`
+              metninin icinde geliyor (bkz. modemStatus.ts). Bu yuzden satir
+              hep bostu. Cozulemezse cubuk cizilmez ve "—" yazar; uydurma bir
+              cubuk, zayif sinyali "iyi" gostermekten kotudur. */}
           <li className="device-sidebar-info-row">
             <span className="material-symbols-outlined">signal_cellular_alt</span>
             <span className="device-sidebar-info-label">{t("deviceDetail.sidebar.networkSignal")}</span>
@@ -238,9 +236,21 @@ export function DeviceSidebar({
                   <span key={b} className={`bar${b <= quality.bars ? " on" : ""}`} />
                 ))}
               </span>
-              <span className="device-sidebar-signal-text">{quality.dbm}</span>
+              <span className="device-sidebar-signal-text">
+                {rssi != null ? `${Math.round(rssi)} dBm` : "—"}
+              </span>
             </span>
           </li>
+
+          {/* OPERATOR — `info_network_operator` sahada BOS geliyor; ad modemin
+              ham yanitinda duruyor ve orada gercekten var. */}
+          {networkOperator ? (
+            <InfoRow
+              icon="cell_tower"
+              label={t("deviceDetail.sidebar.networkOperator")}
+              value={networkOperator}
+            />
+          ) : null}
         </ul>
       </section>
 
@@ -261,11 +271,7 @@ export function DeviceSidebar({
                   className={`device-channel tone-${ch.tone}${active ? " active" : ""}`}
                   onClick={() => onSourceChange(ch.key)}
                   disabled={n === 0}
-                  title={
-                    uyduNo != null
-                      ? t("deviceDetail.sidebar.satelliteNo", { no: uyduNo })
-                      : undefined
-                  }
+                  title={sn ? `SN ${sn}` : undefined}
                 >
                   {batt != null ? (
                     <span className={`device-channel-batt ${batteryClass(batt)}`} title={`%${Math.round(batt)}`}>
@@ -279,9 +285,11 @@ export function DeviceSidebar({
                     </span>
                   ) : null}
                   <span className="device-channel-label">{ch.label}</span>
-                  {uyduNo != null ? (
-                    <span className="device-channel-satno">U{uyduNo}</span>
-                  ) : null}
+                  {/* UYDU NUMARASI ROZETI (U1/U2/U3) KALDIRILDI — kullanici
+                      karari. Kanal secerken sorulan sey "hangi unite"; ayni
+                      satirda hem etiket, hem numara, hem seri no durunca uc
+                      ayri kimlik gibi okunuyordu. Fiziksel uydu atamasi
+                      Cihaz Ayarlari'nda duruyor. */}
                   <span className="device-channel-serial">{sn ?? (n === 0 ? "—" : "")}</span>
                 </button>
               </li>

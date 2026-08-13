@@ -4295,6 +4295,7 @@
       "serial": "Serial",
       "noLocation": "No location set",
       "networkSignal": "Network Signal",
+      "networkOperator": "Operator",
       "parentDevice": "Parent device",
       "fromKit": "from kit {{name}}",
       "partNo": "Part No",
