@@ -1205,6 +1205,44 @@ export function App() {
     fn: pollDevices
   });
 
+  // GATEWAY LISTESI DE TAZELENMELI — yoksa arayuz cihazi kendi bayat
+  // kopyasi yuzunden "offline" sanar.
+  //
+  // YASANAN ARIZA: cihaz detay sayfasi bir sure acik kaldiktan sonra TUM
+  // dijital sinyaller "Güvenilmez" olarak gosteriliyordu — cihaz piril piril
+  // haberlesirken ("Çevrimiçi", "Son İletişim: az önce").
+  //
+  // Zincir: sayfa `isGatewayOnline(gw)` ile gateway'in `last_seen_at`
+  // damgasina bakiyor ve 60 sn'den eskiyse cihazin TUM okumalarinin
+  // kalitesini `"bad"` yapiyor (`effQuality`), o da `signalTrust` uzerinden
+  // "Güvenilmez" rozetine donuyor. Kural DOGRU — gateway gercekten dustuyse
+  // son degerler bayattir ve "Normal" demek yesil yalan olur.
+  //
+  // Ama `gateways` HIC periyodik cekilmiyordu: yalnizca girişte ve elle
+  // yapilan islemlerde. Yani tarayicidaki `last_seen_at` DONUYOR; 60 saniye
+  // sonra kosul kacinilmaz olarak saglaniyor ve bir daha da bozulmuyordu.
+  // Sistem bilmedigini degil, BILDIGININ TERSINI gosteriyordu.
+  //
+  // Gateway 30 sn'de bir haber veriyor (`gateway_heartbeat_interval_sec`),
+  // esik 60 sn — yani iki kacan heartbeat. Istemci kopyasinin da bu
+  // pencerenin ALTINDA kalmasi sart; 15 sn ile esik gercekten "iki kacan
+  // heartbeat" anlamina geliyor. Yuk ihmal edilebilir: gateway sayisi bir
+  // sahada tek haneli, cihaz listesi zaten 5 sn'de bir cekiliyor.
+  const pollGateways = useCallback(async () => {
+    if (!session) return;
+    try {
+      setGateways(await fetchGateways(session.accessToken));
+    } catch {
+      // Bayat liste, YOK listesinden iyidir: hata halinde elimizdekini koru.
+    }
+  }, [session]);
+
+  usePolling({
+    enabled: Boolean(session),
+    intervalMs: deviceStatusIsHot ? 15000 : 60000,
+    fn: pollGateways
+  });
+
   const reloadSignals = async () => {
     if (!session) return;
     setSignalLoading(true);

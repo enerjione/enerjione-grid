@@ -238,6 +238,15 @@ export function DeviceDetailPage({
 
   const gwOnline = useMemo(() => {
     if (!device?.gatewayCode) return true;
+    // GATEWAY LISTESI HENUZ YUKLENMEDIYSE HUKUM VERME.
+    //
+    // Bos listede `find` undefined doner ve asagidaki kontrol "offline"
+    // der; o da cihazin TUM okumalarini "Güvenilmez" yapar. Oysa bildigimiz
+    // tek sey listenin daha gelmedigi. Bilmedigini "sorun var" diye
+    // gostermek, "sorun yok" diye gostermenin aynadaki hali — ikisi de
+    // operatoru yaniltir. (Ayni gerekce asagidaki katalog suzgecinde de
+    // var: "Katalog HENUZ YUKLENMEMISSE suzgec uygulanmaz".)
+    if (gateways.length === 0) return true;
     return isGatewayOnline(gateways.find((g) => g.code === device.gatewayCode));
   }, [gateways, device]);
 
