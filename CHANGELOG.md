@@ -14,6 +14,32 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.85.0] — 2026-08-13
+
+### Eklendi
+
+- **Kapatılan arızanın çözümü artık arıza detayında görünüyor.** Sebep ve
+  çözüm notu hiçbir yerde gösterilmiyordu: kapatma penceresinde yazılıp
+  kaydediliyor, arıza kapandıktan sonra o pencere "kapatılmış arıza salt
+  okunur" kuralı gereği bir daha açılamadığı için yazılan şey ekrandan
+  kayboluyordu — kapanmış bir kayda bakan kişinin ilk sorusu ("ne yapıldı?")
+  cevapsız kalıyordu. Sağ sütunun en üstünde yeni bir **Çözüm** kartı var:
+  sebep, sebep ayrıntısı, çözüm notu ve kapanış tarihi. Kart yalnızca içi
+  doluyken açılıyor.
+
+### Değişti
+
+- **Arıza açıkken "Sebep ve çözüm" düğmesi kaldırıldı.** Arızayı kapatma
+  penceresi zaten ikisini de istiyor (çözüm notu zorunlu); ayrı bir giriş
+  aynı iki alanı iki ayrı yerden topluyordu. Açık arızada sebep, **Hat
+  Arızaları** listesindeki arıza kartından girilmeye devam ediyor.
+
+- **"Saha raporu" adı "Saha yorumları" oldu** (düğme ve panel başlığı).
+  Panel serbest metinli bir yorum akışı; "rapor" adı yanındaki **PDF rapor**
+  düğmesiyle karışıyordu.
+
+---
+
 ## [2.83.0] — 2026-08-13
 
 ### Eklendi
