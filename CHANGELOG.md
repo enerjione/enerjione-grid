@@ -14,6 +14,35 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.82.0] — 2026-08-13
+
+### Değişti
+
+- **Proje Ayarları sayfası kart ızgarasına taşındı.** Sayfa tek dikey yığındı:
+  her kart ekranın tamamına yayılıyor, içindeki iki haneli voltaj alanı solda
+  kalıyor, sağında geniş bir boşluk duruyordu; üç bölüm ekrana sığmadığı için
+  ayrıca kaydırma gerekiyordu. Kartlar artık yan yana diziliyor — **Ölçüm &
+  Eşikler** geniş ekranda tek satıra sığıyor, kaydırma bitiyor. Alanlar
+  ekranın değil **kartın** genişliğine göre sarıyor, dar ekranda alt alta
+  geçiyor.
+
+- **Bildirim baloncuğunun köşesi artık dört küçük ekran maketinden seçiliyor.**
+  Açılır listedeki "Sağ alt" yazısını okuyup zihinde canlandırmak gerekmiyor;
+  seçili kutu zaten sonucun kendisi. Ayrı önizleme kutusu kaldırıldı.
+
+- **Cihaz profillerinde her model kendi kartında.** Model adı satırın en
+  solunda, ait olduğu voltaj alanları en sağında duruyordu; hangi sayının
+  hangi modele ait olduğu göz taraması gerektiriyordu. Ad ile alanlar artık
+  alt alta, **Kaydet** ise "şu an neyi kullanıyor" bilgisinin yanında.
+
+### Düzeltildi
+
+- Stil dosyasında askıda kalmış bir seçici, hemen ardındaki ekran genişliği
+  kuralını geçersiz kılıyordu — logo önizlemelerinin dar ekranda sütun
+  düşürmesi hiç çalışmıyormuş.
+
+---
+
 ## [2.81.1] — 2026-08-13
 
 ### Düzeltildi
