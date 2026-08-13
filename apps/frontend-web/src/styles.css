@@ -12164,42 +12164,10 @@ th.event-col-category {
   font-size: 18px;
 }
 
-/* Satirlar icerige gore yuksellik alir — eskiden orta satir `1fr` idi ve
-   logo onizleme kutulari bos ekranin tamamina yayilarak devlesiyordu. */
-.project-settings-grid {
-  display: grid;
-  grid-template-rows: auto auto auto;
-  gap: 16px;
-}
-
-/* Metin alanlari satiri: Proje Adi / Musteri Adi / Sekme Basligi 3 esit
-   sutun (genis ekranda). Dar ekranda otomatik 2 sutuna duser, sonra 1. */
-.project-settings-field {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  align-items: start;
-}
 @media (max-width: 1100px) {
   .project-settings-field {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
-
-.project-settings-field label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #334155;
-}
-
-.project-settings-field input {
-  padding: 9px 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  font-size: 13px;
 }
 
 .project-settings-logo-grid {
@@ -12359,231 +12327,7 @@ th.event-col-category {
   margin: 8px 0;
 }
 
-.project-settings-battery-box {
-  background: linear-gradient(135deg, #fffaf0, #ffffff);
-  border: 1px solid #fde4c8;
-  border-radius: 12px;
-  padding: 18px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-/* Baslik bloku: pil ikonu + baslik + alt-aciklama */
-.project-settings-battery-head {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-.project-settings-battery-icon {
-  font-size: 32px;
-  color: #ff8c00;
-  flex-shrink: 0;
-  background: #fff6e6;
-  border-radius: 10px;
-  padding: 6px;
-}
-.project-settings-battery-head h4 {
-  margin: 0 0 2px;
-  font-size: 14px;
-  color: #0f172a;
-  font-weight: 600;
-}
-.project-settings-battery-head .helper-text {
-  margin: 0;
-  font-size: 11.5px;
-  line-height: 1.4;
-}
-
-.project-settings-battery-box h4 {
-  margin: 0;
-  font-size: 14px;
-  color: #0f172a;
-}
-
-.project-settings-battery-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-top: 4px;
-}
-
 .project-settings-battery-grid label,
-.project-settings-battery-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-  color: #334155;
-}
-.project-settings-battery-label {
-  font-weight: 600;
-  font-size: 12.5px;
-  color: #475569;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-/* Input + birim "V" rozeti yan yana */
-.project-settings-battery-input-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-.project-settings-battery-input-wrap input {
-  flex: 1;
-  padding: 11px 42px 11px 14px;
-  border: 1px solid #fde4c8;
-  border-radius: 10px;
-  font-size: 15px;
-  font-weight: 600;
-  color: #0f172a;
-  background: #ffffff;
-  font-variant-numeric: tabular-nums;
-}
-.project-settings-battery-input-wrap input:focus {
-  outline: none;
-  border-color: #ff8c00;
-  box-shadow: 0 0 0 3px rgba(255, 140, 0, 0.15);
-}
-.project-settings-battery-unit {
-  position: absolute;
-  right: 14px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #ff8c00;
-  pointer-events: none;
-}
-
-.project-settings-battery-grid input {
-  padding: 9px 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  font-size: 13px;
-}
-
-/* Bildirim baloncugu (toast) ayarlari — batarya kutusuyla ayni yapi,
-   ayirt edici mavi vurgu. */
-.project-settings-toast-box {
-  background: linear-gradient(135deg, #f5f9ff, #ffffff);
-  border: 1px solid #d5e3f7;
-  border-radius: 12px;
-  padding: 18px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.project-settings-toast-head {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-.project-settings-toast-icon {
-  font-size: 32px;
-  color: #2563eb;
-  flex-shrink: 0;
-  background: #eaf1fe;
-  border-radius: 10px;
-  padding: 6px;
-}
-.project-settings-toast-head h4 {
-  margin: 0 0 2px;
-  font-size: 14px;
-  color: #0f172a;
-  font-weight: 600;
-}
-.project-settings-toast-head .helper-text {
-  margin: 0;
-  font-size: 11.5px;
-  line-height: 1.4;
-}
-.project-settings-toast-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-top: 4px;
-  align-items: start;
-}
-.project-settings-toast-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-  color: #334155;
-}
-.project-settings-toast-label {
-  font-weight: 600;
-  font-size: 12.5px;
-  color: #475569;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-.project-settings-toast-field select {
-  padding: 11px 14px;
-  border: 1px solid #d5e3f7;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
-  background: #ffffff;
-}
-.project-settings-toast-field select:focus {
-  outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
-}
-.project-settings-toast-check {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  font-size: 13px;
-  color: #334155;
-  background: #ffffff;
-  border: 1px solid #d5e3f7;
-  border-radius: 10px;
-  padding: 12px 14px;
-  cursor: pointer;
-}
-.project-settings-toast-check input {
-  margin-top: 2px;
-  width: 16px;
-  height: 16px;
-  accent-color: #2563eb;
-  flex-shrink: 0;
-}
-.project-settings-toast-check strong {
-  display: block;
-  font-size: 13px;
-  color: #0f172a;
-}
-.project-settings-toast-check small {
-  display: block;
-  margin-top: 3px;
-  font-size: 11.5px;
-  color: #64748b;
-  line-height: 1.4;
-}
-/* Susturmanin NEYI kapsamadigi ekranda yazili dursun — kullanici "her sey
-   susar" sanip kaydet hatalarini kacirmasin. */
-.project-settings-toast-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: #475569;
-  background: #eff6ff;
-  border-left: 3px solid #2563eb;
-  border-radius: 0 8px 8px 0;
-  padding: 10px 12px;
-}
-.project-settings-toast-note .material-symbols-outlined {
-  font-size: 16px;
-  color: #2563eb;
-  flex-shrink: 0;
-}
-
 @media (max-width: 1200px) {
   .project-settings-logo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .project-settings-panel { overflow-y: auto; }
@@ -41835,13 +41579,7 @@ th.event-col-category {
 
 /* CIHAZ PROFILLERI — model bazli ayar listesi. Ustteki proje-geneli batarya
    kutusuyla ayni gorsel dili kullanir; buradaki her satir bir ISTISNADIR. */
-.device-profiles-box { display: block; }
-.device-profiles-hint {
-  margin: 0 0 10px;
-  font-size: 12px;
-  color: #64748b;
-  line-height: 1.5;
-}
+/* Ipucu artik kart basliginda (ps-hint); ayri bir kural gerekmiyor. */
 .device-profiles-list { display: flex; flex-direction: column; gap: 10px; }
 .device-profile-row {
   display: grid;
@@ -41849,10 +41587,10 @@ th.event-col-category {
   grid-template-areas: "name fields" "resolved resolved";
   gap: 6px 14px;
   align-items: center;
-  padding: 10px 12px;
-  border: 1px solid #e2e8f0;
+  padding: 11px 13px;
+  border: 1px solid #e6ebf2;
   border-radius: 12px;
-  background: #fff;
+  background: #fbfcfe;
 }
 .device-profile-name { grid-area: name; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .device-profile-name strong { font-size: 13px; color: #0f172a; }
@@ -42410,4 +42148,550 @@ th.event-col-category {
   font-size: 12px;
   text-align: left;
   word-break: break-word;
+}
+
+/* ===========================================================================
+   PROJE AYARLARI — SISTEM SEKMESI (ps-*)
+   ---------------------------------------------------------------------------
+   ONCEKI HALI: tek bir dikey yigin. Uc bagimsiz konu (kimlik, olcum, bildirim)
+   arka arkaya diziliyor, her alan satirin TAMAMINA yayiliyordu — 1900 px genis
+   bir ekranda iki haneli bir voltaj icin 900 px'lik bir kutu vardi. Etiket
+   birimi ("... - V") alanin icindeki "V" cipiyle tekrar ediyor, secim kutulari
+   tarayici varsayilaniydi.
+   BURADAKI DIL: uygulamanin geri kalaniyla ayni (turuncu vurgu, 12-14 px
+   yaricap, slate metin, material-symbols). Yenilik SUS DEGIL DUZEN: alan
+   genisligi icerigi kadar, her bolum kendi kartinda, sayilar tabular.
+   =========================================================================== */
+
+/* Alt sekmeler — segment cubugu. */
+.ps-tabs {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-bottom: 16px;
+  padding: 4px;
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+  background: #f8fafc;
+  overflow-x: auto;
+}
+
+.ps-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.ps-tab .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.ps-tab:hover {
+  color: #1f2937;
+}
+
+.ps-tab.is-active {
+  background: #fff;
+  color: var(--license-accent, #e97800);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1), 0 0 0 1px rgba(233, 120, 0, 0.16);
+}
+
+.ps-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Bolum karti. */
+.ps-card {
+  position: relative;
+  padding: 18px 20px 20px;
+  border: 1px solid #e6ebf2;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.ps-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.ps-card-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  /* Vurgu rengi ZEMINDE, metinde degil: baslik siyah kalsin, ikon konusu
+     tasisin. Tum kartlarda ayni ton — bolumler renkle degil YERLE ayrilir. */
+  background: linear-gradient(180deg, #fff4e6, #ffe8cc);
+  color: #b45309;
+  font-size: 19px;
+}
+
+.ps-card-head h4 {
+  margin: 0 0 2px;
+  font-size: 14.5px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  color: #0f172a;
+}
+
+.ps-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #64748b;
+  max-width: 78ch;
+}
+
+/* Alan: etiket + girdi. Genislik ICERIK kadar. */
+.ps-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ps-label {
+  font-size: 12px;
+  font-weight: 650;
+  color: #475569;
+}
+
+.ps-field input[type="text"],
+.ps-field input[type="number"] {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #d8e0ea;
+  border-radius: 9px;
+  background: #fff;
+  font-size: 13px;
+  color: #0f172a;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.ps-field input::placeholder {
+  color: #a3aec0;
+}
+
+.ps-field input:focus-visible,
+.ps-select select:focus-visible {
+  outline: none;
+  border-color: var(--license-accent, #e97800);
+  box-shadow: 0 0 0 3px rgba(233, 120, 0, 0.14);
+}
+
+.ps-field-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  /* Uc kisa metin alani 1900 px'e yayilmaz. */
+  max-width: 980px;
+}
+
+@media (max-width: 1100px) {
+  .ps-field-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .ps-field-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.ps-field--narrow {
+  max-width: 240px;
+}
+
+/* Secim kutusu — tarayici oku yerine kendi chevron'u. */
+.ps-select {
+  position: relative;
+  display: block;
+}
+
+.ps-select select {
+  width: 100%;
+  padding: 9px 34px 9px 12px;
+  border: 1px solid #d8e0ea;
+  border-radius: 9px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  appearance: none;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.ps-select .material-symbols-outlined {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  font-size: 18px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+/* --- Unite -> faz eslemesi ------------------------------------------------ */
+.ps-unit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  max-width: 820px;
+}
+
+@media (max-width: 900px) {
+  .ps-unit-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.ps-unit {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid #e6ebf2;
+  border-radius: 11px;
+  background: #fbfcfe;
+}
+
+.ps-unit-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.ps-unit-name {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: #334155;
+}
+
+/* Faz rozeti: kapali bir acilir listenin ICINDEKI degeri okumak zorunda
+   kalmadan "hangi unite hangi fazda" bir bakista gorunur. Renkler ariza
+   analizindeki faz paletiyle ayni aileden. */
+.ps-phase {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.ps-phase--a {
+  background: #d97706;
+}
+
+.ps-phase--b {
+  background: #0e7490;
+}
+
+.ps-phase--c {
+  background: #6d28d9;
+}
+
+/* --- Batarya hucreleri ---------------------------------------------------- */
+.ps-cells {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  max-width: 900px;
+}
+
+@media (max-width: 1000px) {
+  .ps-cells {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.ps-cell {
+  padding: 14px;
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+  background: #fbfcfe;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+/* Ters ya da sifir aralik yuzdeyi anlamsiz kilar. Kaydetmeyi denemeden once
+   goze carpsin — uyari sonradan gelen bir toast'tan daha erken. */
+.ps-cell.is-invalid {
+  border-color: #fca5a5;
+  background: #fff5f5;
+}
+
+.ps-cell-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.ps-cell-head h5 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ps-cell-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ps-cell-fields {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.ps-field--num {
+  width: 118px;
+  flex: 0 0 auto;
+}
+
+/* Iki degerin ARASINDAKI serit: pencerenin kendisi. Bos -> dolu yonu
+   soldan saga; iki sayinin bir ARALIK oldugu boylece okunur. */
+.ps-cell-bar {
+  position: relative;
+  flex: 1 1 auto;
+  height: 6px;
+  margin-bottom: 12px;
+  border-radius: 999px;
+  background: #e8edf4;
+  overflow: hidden;
+}
+
+.ps-cell-bar-fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #f87171, #fbbf24 45%, #34d399);
+  opacity: 0.85;
+}
+
+.ps-cell.is-invalid .ps-cell-bar-fill {
+  background: repeating-linear-gradient(
+    -45deg,
+    #fca5a5,
+    #fca5a5 4px,
+    #fee2e2 4px,
+    #fee2e2 8px
+  );
+}
+
+.ps-num {
+  position: relative;
+  display: block;
+}
+
+.ps-num input {
+  padding-right: 30px !important;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* Tarayici artirma oklari 118 px'lik bir alanda sayiyi kirpiyordu. */
+.ps-num input::-webkit-outer-spin-button,
+.ps-num input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.ps-num input[type="number"] {
+  appearance: textfield;
+}
+
+.ps-num-unit {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.ps-cell-note {
+  margin-top: 10px;
+  font-size: 11.5px;
+}
+
+/* --- Bildirimler ---------------------------------------------------------- */
+.ps-toast-grid {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+/* Kose onizlemesi: "sag alt" yazisini okumak yerine gorulur. */
+.ps-corner {
+  position: relative;
+  width: 92px;
+  height: 58px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: repeating-linear-gradient(
+      0deg,
+      #f8fafc,
+      #f8fafc 7px,
+      #f1f5f9 7px,
+      #f1f5f9 8px
+    );
+}
+
+.ps-corner-dot {
+  position: absolute;
+  width: 26px;
+  height: 9px;
+  border-radius: 3px;
+  background: var(--license-accent, #e97800);
+  transition: inset 0.18s ease;
+}
+
+.ps-corner--bottom-right .ps-corner-dot {
+  right: 6px;
+  bottom: 6px;
+}
+.ps-corner--bottom-left .ps-corner-dot {
+  left: 6px;
+  bottom: 6px;
+}
+.ps-corner--top-right .ps-corner-dot {
+  right: 6px;
+  top: 6px;
+}
+.ps-corner--top-left .ps-corner-dot {
+  left: 6px;
+  top: 6px;
+}
+
+/* Anahtar (switch) — kutucuk yerine, "susturuldu" durumu uzaktan okunsun. */
+.ps-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid #e6ebf2;
+  border-radius: 11px;
+  background: #fbfcfe;
+  cursor: pointer;
+  max-width: 620px;
+}
+
+.ps-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.ps-switch-track {
+  position: relative;
+  flex-shrink: 0;
+  width: 38px;
+  height: 22px;
+  margin-top: 1px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  transition: background 0.18s;
+}
+
+.ps-switch-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
+  transition: transform 0.18s;
+}
+
+.ps-switch input:checked + .ps-switch-track {
+  background: var(--license-accent, #e97800);
+}
+
+.ps-switch input:checked + .ps-switch-track .ps-switch-knob {
+  transform: translateX(16px);
+}
+
+.ps-switch input:focus-visible + .ps-switch-track {
+  box-shadow: 0 0 0 3px rgba(233, 120, 0, 0.18);
+}
+
+.ps-switch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ps-switch-text strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ps-switch-text small {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+.ps-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: #475569;
+  max-width: 78ch;
+}
+
+.ps-note .material-symbols-outlined {
+  flex-shrink: 0;
+  font-size: 16px;
+  color: #94a3b8;
+}
+
+/* Aksiyon cubugu: Kaydet TUM sekmeleri yazar, bunu soylemek gerekiyor. */
+.ps-save-note {
+  margin-right: auto;
+  font-size: 11.5px;
+  color: #64748b;
 }

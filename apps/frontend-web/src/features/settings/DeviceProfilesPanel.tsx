@@ -102,24 +102,23 @@ export function DeviceProfilesPanel({ token, canEdit }: Props) {
 
   if (loading) {
     return (
-      <div className="project-settings-battery-box">
+      <section className="ps-card">
         <p className="device-profiles-empty">{t("common.loading")}</p>
-      </div>
+      </section>
     );
   }
 
   return (
-    <div className="project-settings-battery-box device-profiles-box">
-      <div className="project-settings-battery-head">
-        <span
-          className="project-settings-battery-icon material-symbols-outlined"
-          aria-hidden="true"
-        >
+    <section className="ps-card device-profiles-box">
+      <header className="ps-card-head">
+        <span className="ps-card-icon material-symbols-outlined" aria-hidden="true">
           tune
         </span>
-        <h4>{t("engineering.deviceProfiles.title")}</h4>
-      </div>
-      <p className="device-profiles-hint">{t("engineering.deviceProfiles.hint")}</p>
+        <div>
+          <h4>{t("engineering.deviceProfiles.title")}</h4>
+          <p className="ps-hint">{t("engineering.deviceProfiles.hint")}</p>
+        </div>
+      </header>
 
       <div className="device-profiles-list">
         {rows.map((row) => {
@@ -136,11 +135,11 @@ export function DeviceProfilesPanel({ token, canEdit }: Props) {
                 </small>
               </div>
               <div className="device-profile-fields">
-                <label className="project-settings-battery-field">
-                  <span className="project-settings-battery-label">
+                <label className="ps-field ps-field--num">
+                  <span className="ps-label">
                     {t("engineering.projectSettings.batteryLow")}
                   </span>
-                  <div className="project-settings-battery-input-wrap">
+                  <span className="ps-num">
                     <input
                       type="number"
                       step="0.01"
@@ -156,14 +155,14 @@ export function DeviceProfilesPanel({ token, canEdit }: Props) {
                         }))
                       }
                     />
-                    <span className="project-settings-battery-unit">V</span>
-                  </div>
+                    <span className="ps-num-unit">V</span>
+                  </span>
                 </label>
-                <label className="project-settings-battery-field">
-                  <span className="project-settings-battery-label">
+                <label className="ps-field ps-field--num">
+                  <span className="ps-label">
                     {t("engineering.projectSettings.batteryFull")}
                   </span>
-                  <div className="project-settings-battery-input-wrap">
+                  <span className="ps-num">
                     <input
                       type="number"
                       step="0.01"
@@ -179,8 +178,8 @@ export function DeviceProfilesPanel({ token, canEdit }: Props) {
                         }))
                       }
                     />
-                    <span className="project-settings-battery-unit">V</span>
-                  </div>
+                    <span className="ps-num-unit">V</span>
+                  </span>
                 </label>
                 {canEdit ? (
                   <button
@@ -205,6 +204,6 @@ export function DeviceProfilesPanel({ token, canEdit }: Props) {
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }

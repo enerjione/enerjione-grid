@@ -31,6 +31,14 @@ type Props = {
   accessToken: string;
 };
 
+type BolumKey = "kimlik" | "olcum" | "bildirim";
+
+const BOLUMLER: { key: BolumKey; icon: string }[] = [
+  { key: "kimlik", icon: "badge" },
+  { key: "olcum", icon: "battery_charging_full" },
+  { key: "bildirim", icon: "notifications" }
+];
+
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -46,6 +54,9 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
   // Hata/basari mesajlari sayfanin altinda satir olarak degil toast ile
   // gosterilir — uzun formda alta scroll etmeden geri bildirim alinir.
   const toast = useToast();
+
+  /** Alt sekmeler — uc bagimsiz soru, uc ayri ekran (bkz. render). */
+  const [bolum, setBolum] = useState<BolumKey>("kimlik");
 
   const [projectName, setProjectName] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -220,279 +231,326 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
 
   return (
     <section className="tab-panel project-settings-panel project-settings-panel--wide">
-      {/* Sayfa basligi kaldirildi — sekme cubugu zaten "Proje Ayarlari"
-          diyor. Icerik kendi icinde kayar, Kaydet butonu altta sabit bir
-          aksiyon cubugunda durur; boylece uzun formun neresinde olursaniz
-          olun buton gorunur kalir. */}
-      <div className="project-settings-body">
-        <div className="project-settings-grid">
-        <div className="project-settings-field">
-          <label>
-            {t("engineering.projectSettings.projectName")}
-            <input
-              type="text"
-              value={projectName}
-              onChange={(event) => setProjectName(event.target.value)}
-              placeholder={t("engineering.projectSettings.projectNamePlaceholder")}
-            />
-          </label>
-          <label>
-            {t("engineering.projectSettings.customerName")}
-            <input
-              type="text"
-              value={customerName}
-              onChange={(event) => setCustomerName(event.target.value)}
-              placeholder={t("engineering.projectSettings.customerNamePlaceholder")}
-            />
-          </label>
-          <label>
-            {t("engineering.projectSettings.siteTitle")}
-            <input
-              type="text"
-              value={siteTitle}
-              onChange={(event) => setSiteTitle(event.target.value)}
-              placeholder={t("engineering.projectSettings.siteTitlePlaceholder")}
-              maxLength={200}
-            />
-          </label>
-        </div>
-
-        <div className="project-settings-logo-grid">
-          <LogoBox
-            title={t("engineering.projectSettings.loginLogoTitle")}
-            value={customerLogo}
-            onPick={(file) => void handlePickLogo(file, setCustomerLogo)}
-            onClear={() => setCustomerLogo(null)}
-            previewClass="project-settings-logo-preview project-settings-logo-preview--light"
-            buttonLabel={t("engineering.projectSettings.pickLogoBtn")}
-            emptyLabel={t("engineering.projectSettings.emptyLogo")}
-            removeLabel={t("engineering.projectSettings.remove")}
-          />
-          <LogoBox
-            title={t("engineering.projectSettings.headerLogoTitle")}
-            value={customerLogoLight}
-            onPick={(file) => void handlePickLogo(file, setCustomerLogoLight)}
-            onClear={() => setCustomerLogoLight(null)}
-            previewClass="project-settings-logo-preview project-settings-logo-preview--dark"
-            buttonLabel={t("engineering.projectSettings.pickLogoBtn")}
-            emptyLabel={t("engineering.projectSettings.emptyLogo")}
-            removeLabel={t("engineering.projectSettings.remove")}
-          />
-          <LogoBox
-            title={t("engineering.projectSettings.faviconTitle")}
-            value={favicon}
-            onPick={(file) => void handlePickLogo(file, setFavicon, MAX_FILE_SIZE)}
-            onClear={() => setFavicon(null)}
-            previewClass="project-settings-logo-preview project-settings-favicon-preview"
-            accept={ACCEPT_FAVICON}
-            buttonLabel={t("engineering.projectSettings.pickFaviconBtn")}
-            emptyLabel={t("engineering.projectSettings.emptyFavicon")}
-            removeLabel={t("engineering.projectSettings.remove")}
-          />
-          <LogoBox
-            title={t("engineering.projectSettings.loginImageTitle")}
-            value={loginImage}
-            onPick={(file) => void handlePickLogo(file, setLoginImage, MAX_LOGIN_IMAGE_SIZE)}
-            onClear={() => setLoginImage(null)}
-            previewClass="project-settings-logo-preview project-settings-login-image-preview"
-            buttonLabel={t("engineering.projectSettings.pickImageBtn")}
-            emptyLabel={t("engineering.projectSettings.emptyImage")}
-            removeLabel={t("engineering.projectSettings.remove")}
-          />
-        </div>
-
-        {/* Unite -> faz eslemesi: kurulumun GENEL konvansiyonu.
-            SN2'nin uc unitesi hattin uc ayri fazina kelepcelenir ve bu
-            ayrim ariza sebebi cikariminin belirleyici girdisi (tek
-            faz-toprak cogunlukla dis etken, uc faz ekipman/asiri yuk).
-            Istisna cihazlar Cihaz Yonetimi'nden ayrica ezilir. */}
-        <div className="project-settings-battery-box">
-          <div className="project-settings-battery-head">
-            <span
-              className="project-settings-battery-icon material-symbols-outlined"
-              aria-hidden="true"
-            >
-              electric_meter
+      {/* ALT SEKMELER — sayfa tek bir yigin halindeydi.
+          Kurulumcu "logo" ile "batarya esigi"ni ayni kaydirmada ariyordu ve
+          uzun formda hangi bolumun nerede bittigi belirsizdi. Uc grup birbirinden
+          BAGIMSIZ sorular soruyor:
+            Kimlik   -> bu kurulum kime ait, nasil gorunuyor
+            Olcum    -> cihazdan gelen sayi neye gore yorumlanacak
+            Bildirim -> uyari nerede ve nasil cikacak
+          KAYDET TEK: form tek bir istek gonderir, sekme degistirmek girdiyi
+          KAYBETTIRMEZ. Aksiyon cubugunda bunu soyleyen bir not var. */}
+      <div className="ps-tabs" role="tablist" aria-label={t("engineering.projectSettings.sectionsLabel")}>
+        {BOLUMLER.map((b) => (
+          <button
+            key={b.key}
+            type="button"
+            role="tab"
+            aria-selected={bolum === b.key}
+            className={`ps-tab${bolum === b.key ? " is-active" : ""}`}
+            onClick={() => setBolum(b.key)}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">
+              {b.icon}
             </span>
-            <h4>{t("engineering.projectSettings.phaseTitle")}</h4>
-          </div>
-          <p className="helper-text">{t("engineering.projectSettings.phaseHint")}</p>
-          <div className="project-settings-battery-grid">
-            {(
-              [
-                ["master", phaseMaster, setPhaseMaster],
-                ["sat01", phaseSat01, setPhaseSat01],
-                ["sat02", phaseSat02, setPhaseSat02]
-              ] as const
-            ).map(([unite, deger, setter]) => (
-              <label className="project-settings-battery-field" key={unite}>
-                {t(`engineering.projectSettings.phaseUnit.${unite}`)}
-                <select
-                  value={deger}
-                  onChange={(event) => setter((event.target.value || "") as "" | PhaseCode)}
-                >
-                  <option value="">
-                    {t("engineering.projectSettings.phaseDefault", {
-                      phase: unite === "master" ? "A" : unite === "sat01" ? "B" : "C"
-                    })}
-                  </option>
-                  <option value="a">A (L1)</option>
-                  <option value="b">B (L2)</option>
-                  <option value="c">C (L3)</option>
-                </select>
+            {t(`engineering.projectSettings.section.${b.key}`)}
+          </button>
+        ))}
+      </div>
+
+      <div className="project-settings-body ps-body">
+        {bolum === "kimlik" ? (
+          <>
+            <section className="ps-card">
+              <header className="ps-card-head">
+                <span className="ps-card-icon material-symbols-outlined" aria-hidden="true">
+                  badge
+                </span>
+                <div>
+                  <h4>{t("engineering.projectSettings.identityTitle")}</h4>
+                  <p className="ps-hint">{t("engineering.projectSettings.identityHint")}</p>
+                </div>
+              </header>
+              <div className="ps-field-row">
+                <label className="ps-field">
+                  <span className="ps-label">{t("engineering.projectSettings.projectName")}</span>
+                  <input
+                    type="text"
+                    value={projectName}
+                    onChange={(event) => setProjectName(event.target.value)}
+                    placeholder={t("engineering.projectSettings.projectNamePlaceholder")}
+                  />
+                </label>
+                <label className="ps-field">
+                  <span className="ps-label">{t("engineering.projectSettings.customerName")}</span>
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(event) => setCustomerName(event.target.value)}
+                    placeholder={t("engineering.projectSettings.customerNamePlaceholder")}
+                  />
+                </label>
+                <label className="ps-field">
+                  <span className="ps-label">{t("engineering.projectSettings.siteTitle")}</span>
+                  <input
+                    type="text"
+                    value={siteTitle}
+                    onChange={(event) => setSiteTitle(event.target.value)}
+                    placeholder={t("engineering.projectSettings.siteTitlePlaceholder")}
+                    maxLength={200}
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="ps-card">
+              <header className="ps-card-head">
+                <span className="ps-card-icon material-symbols-outlined" aria-hidden="true">
+                  image
+                </span>
+                <div>
+                  <h4>{t("engineering.projectSettings.brandTitle")}</h4>
+                  <p className="ps-hint">{t("engineering.projectSettings.brandHint")}</p>
+                </div>
+              </header>
+              <div className="project-settings-logo-grid">
+                <LogoBox
+                  title={t("engineering.projectSettings.loginLogoTitle")}
+                  value={customerLogo}
+                  onPick={(file) => void handlePickLogo(file, setCustomerLogo)}
+                  onClear={() => setCustomerLogo(null)}
+                  previewClass="project-settings-logo-preview project-settings-logo-preview--light"
+                  buttonLabel={t("engineering.projectSettings.pickLogoBtn")}
+                  emptyLabel={t("engineering.projectSettings.emptyLogo")}
+                  removeLabel={t("engineering.projectSettings.remove")}
+                />
+                <LogoBox
+                  title={t("engineering.projectSettings.headerLogoTitle")}
+                  value={customerLogoLight}
+                  onPick={(file) => void handlePickLogo(file, setCustomerLogoLight)}
+                  onClear={() => setCustomerLogoLight(null)}
+                  previewClass="project-settings-logo-preview project-settings-logo-preview--dark"
+                  buttonLabel={t("engineering.projectSettings.pickLogoBtn")}
+                  emptyLabel={t("engineering.projectSettings.emptyLogo")}
+                  removeLabel={t("engineering.projectSettings.remove")}
+                />
+                <LogoBox
+                  title={t("engineering.projectSettings.faviconTitle")}
+                  value={favicon}
+                  onPick={(file) => void handlePickLogo(file, setFavicon, MAX_FILE_SIZE)}
+                  onClear={() => setFavicon(null)}
+                  previewClass="project-settings-logo-preview project-settings-favicon-preview"
+                  accept={ACCEPT_FAVICON}
+                  buttonLabel={t("engineering.projectSettings.pickFaviconBtn")}
+                  emptyLabel={t("engineering.projectSettings.emptyFavicon")}
+                  removeLabel={t("engineering.projectSettings.remove")}
+                />
+                <LogoBox
+                  title={t("engineering.projectSettings.loginImageTitle")}
+                  value={loginImage}
+                  onPick={(file) => void handlePickLogo(file, setLoginImage, MAX_LOGIN_IMAGE_SIZE)}
+                  onClear={() => setLoginImage(null)}
+                  previewClass="project-settings-logo-preview project-settings-login-image-preview"
+                  buttonLabel={t("engineering.projectSettings.pickImageBtn")}
+                  emptyLabel={t("engineering.projectSettings.emptyImage")}
+                  removeLabel={t("engineering.projectSettings.remove")}
+                />
+              </div>
+            </section>
+          </>
+        ) : null}
+
+        {bolum === "olcum" ? (
+          <>
+            {/* Unite -> faz eslemesi: kurulumun GENEL konvansiyonu. SN2'nin uc
+                unitesi hattin uc ayri fazina kelepcelenir ve bu ayrim ariza
+                sebebi cikariminin belirleyici girdisi (tek faz-toprak cogunlukla
+                dis etken, uc faz ekipman/asiri yuk). Istisna cihazlar Cihaz
+                Yonetimi'nden ayrica ezilir. */}
+            <section className="ps-card">
+              <header className="ps-card-head">
+                <span className="ps-card-icon material-symbols-outlined" aria-hidden="true">
+                  electric_meter
+                </span>
+                <div>
+                  <h4>{t("engineering.projectSettings.phaseTitle")}</h4>
+                  <p className="ps-hint">{t("engineering.projectSettings.phaseHint")}</p>
+                </div>
+              </header>
+              <div className="ps-unit-grid">
+                {(
+                  [
+                    ["master", "a", phaseMaster, setPhaseMaster],
+                    ["sat01", "b", phaseSat01, setPhaseSat01],
+                    ["sat02", "c", phaseSat02, setPhaseSat02]
+                  ] as const
+                ).map(([unite, varsayilan, deger, setter]) => (
+                  <label className="ps-unit" key={unite}>
+                    <span className="ps-unit-head">
+                      {/* Rozet SECILI fazi gosterir; secim bos ise varsayilani.
+                          Eskiden hangi unitenin hangi fazda oldugu yalnizca
+                          acilir listenin icinde yaziyordu, kapaliyken kurulum
+                          bir bakista okunamiyordu. */}
+                      <span className={`ps-phase ps-phase--${deger || varsayilan}`}>
+                        {(deger || varsayilan).toUpperCase()}
+                      </span>
+                      <span className="ps-unit-name">
+                        {t(`engineering.projectSettings.phaseUnit.${unite}`)}
+                      </span>
+                    </span>
+                    <span className="ps-select">
+                      <select
+                        value={deger}
+                        onChange={(event) => setter((event.target.value || "") as "" | PhaseCode)}
+                      >
+                        <option value="">
+                          {t("engineering.projectSettings.phaseDefault", {
+                            phase: varsayilan.toUpperCase()
+                          })}
+                        </option>
+                        <option value="a">A (L1)</option>
+                        <option value="b">B (L2)</option>
+                        <option value="c">C (L3)</option>
+                      </select>
+                      <span className="material-symbols-outlined" aria-hidden="true">
+                        expand_more
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </section>
+
+            <section className="ps-card">
+              <header className="ps-card-head">
+                <span className="ps-card-icon material-symbols-outlined" aria-hidden="true">
+                  battery_charging_full
+                </span>
+                <div>
+                  <h4>{t("engineering.projectSettings.batteryTitle")}</h4>
+                  <p className="ps-hint">{t("engineering.projectSettings.batteryHint")}</p>
+                </div>
+              </header>
+
+              <div className="ps-cells">
+                <BatteryRange
+                  title={t("engineering.projectSettings.batteryCellMaster")}
+                  note={t("engineering.projectSettings.batteryCellMasterNote")}
+                  lowLabel={t("engineering.projectSettings.batteryLow")}
+                  fullLabel={t("engineering.projectSettings.batteryFull")}
+                  low={batteryLow}
+                  full={batteryFull}
+                  onLow={setBatteryLow}
+                  onFull={setBatteryFull}
+                  lowPlaceholder="3.40"
+                  fullPlaceholder="3.71"
+                  fallback={t("engineering.projectSettings.batteryFallbackCode", {
+                    low: "3.40",
+                    full: "3.71"
+                  })}
+                />
+                {/* UYDU HUCRELERI AYRI OLCULUR: uydunun bataryasi RTU'yu besleyen
+                    master hucresiyle ayni voltaj araliginda calismaz. Tek cift
+                    esikle olculunce uydular sahada saglamken ekranda surekli %0
+                    gorunuyordu (olculen ~3,05 V, master esigi 3,40 V) — sessiz
+                    bir yanlislik: gercekten biten bir hucreyi de gizler.
+                    BOS BIRAKMAK GECERLI: uydular master esigini kullanir. */}
+                <BatteryRange
+                  title={t("engineering.projectSettings.batteryCellSat")}
+                  note={t("engineering.projectSettings.batterySatHint")}
+                  lowLabel={t("engineering.projectSettings.batteryLow")}
+                  fullLabel={t("engineering.projectSettings.batteryFull")}
+                  low={batteryLowSat}
+                  full={batteryFullSat}
+                  onLow={setBatteryLowSat}
+                  onFull={setBatteryFullSat}
+                  lowPlaceholder="3.00"
+                  fullPlaceholder="3.30"
+                  fallback={t("engineering.projectSettings.batteryFallbackMaster")}
+                />
+              </div>
+            </section>
+
+            {/* Model bazli ayarlar: ustteki batarya kutusu proje GENELI
+                varsayilanidir, burasi modele ozel istisnadir. */}
+            <DeviceProfilesPanel token={accessToken} canEdit />
+          </>
+        ) : null}
+
+        {bolum === "bildirim" ? (
+          <section className="ps-card">
+            <header className="ps-card-head">
+              <span className="ps-card-icon material-symbols-outlined" aria-hidden="true">
+                notifications
+              </span>
+              <div>
+                <h4>{t("engineering.projectSettings.toastTitle")}</h4>
+                <p className="ps-hint">{t("engineering.projectSettings.toastHint")}</p>
+              </div>
+            </header>
+            <div className="ps-toast-grid">
+              <label className="ps-field ps-field--narrow">
+                <span className="ps-label">
+                  {t("engineering.projectSettings.toastPosition")}
+                </span>
+                <span className="ps-select">
+                  <select
+                    value={toastPos}
+                    onChange={(event) => setToastPos(event.target.value as ToastPosition)}
+                  >
+                    <option value="bottom-right">
+                      {t("engineering.projectSettings.toastPositionBottomRight")}
+                    </option>
+                    <option value="bottom-left">
+                      {t("engineering.projectSettings.toastPositionBottomLeft")}
+                    </option>
+                    <option value="top-right">
+                      {t("engineering.projectSettings.toastPositionTopRight")}
+                    </option>
+                    <option value="top-left">
+                      {t("engineering.projectSettings.toastPositionTopLeft")}
+                    </option>
+                  </select>
+                  <span className="material-symbols-outlined" aria-hidden="true">
+                    expand_more
+                  </span>
+                </span>
               </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="project-settings-battery-box">
-          <div className="project-settings-battery-head">
-            <span className="project-settings-battery-icon material-symbols-outlined" aria-hidden="true">
-              battery_charging_full
-            </span>
-            <h4>{t("engineering.projectSettings.batteryTitle")}</h4>
-          </div>
-          <div className="project-settings-battery-grid">
-            <label className="project-settings-battery-field">
-              <span className="project-settings-battery-label">
-                {t("engineering.projectSettings.batteryLow")}
-              </span>
-              <div className="project-settings-battery-input-wrap">
-                <input
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  max={10}
-                  placeholder="3.40"
-                  value={batteryLow}
-                  onChange={(event) => setBatteryLow(event.target.value)}
-                />
-                <span className="project-settings-battery-unit">V</span>
+              {/* Kose secimi SOYUT bir tercih; kucuk bir onizleme "hangi kose"
+                  sorusunu okumadan cevapliyor. */}
+              <div className={`ps-corner ps-corner--${toastPos}`} aria-hidden="true">
+                <span className="ps-corner-dot" />
               </div>
-            </label>
-            <label className="project-settings-battery-field">
-              <span className="project-settings-battery-label">
-                {t("engineering.projectSettings.batteryFull")}
-              </span>
-              <div className="project-settings-battery-input-wrap">
-                <input
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  max={10}
-                  placeholder="3.71"
-                  value={batteryFull}
-                  onChange={(event) => setBatteryFull(event.target.value)}
-                />
-                <span className="project-settings-battery-unit">V</span>
-              </div>
-            </label>
-          </div>
-
-          {/* UYDU HUCRELERI AYRI OLCULUR: uydunun bataryasi RTU'yu besleyen
-              master hucresiyle ayni voltaj araliginda calismaz. Tek cift
-              esikle olculunce uydular sahada saglamken ekranda surekli %0
-              gorunuyordu (olculen ~3,05 V, master esigi 3,40 V) — sessiz bir
-              yanlislik: gercekten biten bir hucreyi de gizler.
-              BOS BIRAKMAK GECERLI: uydular master esigini kullanmaya devam
-              eder, guncelleyen kurulumda hicbir sey degismez. */}
-          <p className="helper-text">{t("engineering.projectSettings.batterySatHint")}</p>
-          <div className="project-settings-battery-grid">
-            <label className="project-settings-battery-field">
-              <span className="project-settings-battery-label">
-                {t("engineering.projectSettings.batteryLowSat")}
-              </span>
-              <div className="project-settings-battery-input-wrap">
-                <input
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  max={10}
-                  placeholder={t("engineering.projectSettings.batterySatPlaceholder")}
-                  value={batteryLowSat}
-                  onChange={(event) => setBatteryLowSat(event.target.value)}
-                />
-                <span className="project-settings-battery-unit">V</span>
-              </div>
-            </label>
-            <label className="project-settings-battery-field">
-              <span className="project-settings-battery-label">
-                {t("engineering.projectSettings.batteryFullSat")}
-              </span>
-              <div className="project-settings-battery-input-wrap">
-                <input
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  max={10}
-                  placeholder={t("engineering.projectSettings.batterySatPlaceholder")}
-                  value={batteryFullSat}
-                  onChange={(event) => setBatteryFullSat(event.target.value)}
-                />
-                <span className="project-settings-battery-unit">V</span>
-              </div>
-            </label>
-          </div>
-          </div>
-
-        {/* Model bazli ayarlar: ustteki batarya kutusu proje GENELI
-            varsayilanidir, burasi modele ozel istisnadir. */}
-        <DeviceProfilesPanel token={accessToken} canEdit />
-
-        <div className="project-settings-toast-box">
-          <div className="project-settings-toast-head">
-            <span className="project-settings-toast-icon material-symbols-outlined" aria-hidden="true">
-              notifications
-            </span>
-            <div>
-              <h4>{t("engineering.projectSettings.toastTitle")}</h4>
-              <p className="helper-text">{t("engineering.projectSettings.toastHint")}</p>
             </div>
-          </div>
-          <div className="project-settings-toast-grid">
-            <label className="project-settings-toast-field">
-              <span className="project-settings-toast-label">
-                {t("engineering.projectSettings.toastPosition")}
-              </span>
-              <select
-                value={toastPos}
-                onChange={(event) => setToastPos(event.target.value as ToastPosition)}
-              >
-                <option value="bottom-right">
-                  {t("engineering.projectSettings.toastPositionBottomRight")}
-                </option>
-                <option value="bottom-left">
-                  {t("engineering.projectSettings.toastPositionBottomLeft")}
-                </option>
-                <option value="top-right">
-                  {t("engineering.projectSettings.toastPositionTopRight")}
-                </option>
-                <option value="top-left">
-                  {t("engineering.projectSettings.toastPositionTopLeft")}
-                </option>
-              </select>
-            </label>
-            <label className="project-settings-toast-check">
+            <label className="ps-switch">
               <input
                 type="checkbox"
                 checked={toastMuted}
                 onChange={(event) => setToastMuted(event.target.checked)}
               />
-              <span>
+              <span className="ps-switch-track" aria-hidden="true">
+                <span className="ps-switch-knob" />
+              </span>
+              <span className="ps-switch-text">
                 <strong>{t("engineering.projectSettings.toastMute")}</strong>
                 <small>{t("engineering.projectSettings.toastMuteHint")}</small>
               </span>
             </label>
-          </div>
-          <p className="project-settings-toast-note">
-            <span className="material-symbols-outlined" aria-hidden="true">info</span>
-            {t("engineering.projectSettings.toastScopeNote")}
-          </p>
-        </div>
-        </div>
+            <p className="ps-note">
+              <span className="material-symbols-outlined" aria-hidden="true">
+                info
+              </span>
+              {t("engineering.projectSettings.toastScopeNote")}
+            </p>
+          </section>
+        ) : null}
       </div>
 
       <div className="project-settings-actions">
+        {/* Kaydet TUM sekmeleri birden yazar: form tek bir PUT gonderir.
+            Sekme degistirince girdinin kaybolmadigini soylemek gerekiyor,
+            aksi halde kullanici her sekmede ayri ayri kaydetmeye calisir. */}
+        <span className="ps-save-note">{t("engineering.projectSettings.saveScopeNote")}</span>
         <button
           type="button"
           className="primary-btn project-settings-save"
@@ -504,6 +562,87 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
         </button>
       </div>
     </section>
+  );
+}
+
+/** Bir HUCRE TIPININ bos/dolu voltaj penceresi.
+ *
+ *  Iki sayi tek basina "bu deger makul mu" sorusunu cevaplamiyordu. Kucuk
+ *  gradyan serit pencereyi GORSEL olarak gosterir: sol uc bos, sag uc dolu.
+ *  Boylece ters girilmis (dolu < bos) ya da cok dar bir aralik goze carpar —
+ *  kaydetmeyi denemeden once. */
+function BatteryRange({
+  title,
+  note,
+  lowLabel,
+  fullLabel,
+  low,
+  full,
+  onLow,
+  onFull,
+  lowPlaceholder,
+  fullPlaceholder,
+  fallback
+}: {
+  title: string;
+  note: string;
+  lowLabel: string;
+  fullLabel: string;
+  low: string;
+  full: string;
+  onLow: (v: string) => void;
+  onFull: (v: string) => void;
+  lowPlaceholder: string;
+  fullPlaceholder: string;
+  fallback: string;
+}) {
+  const lowNum = Number(low);
+  const fullNum = Number(full);
+  const dolu = low.trim() !== "" && full.trim() !== "";
+  const gecerli = dolu && Number.isFinite(lowNum) && Number.isFinite(fullNum) && fullNum > lowNum;
+  return (
+    <div className={`ps-cell${dolu && !gecerli ? " is-invalid" : ""}`}>
+      <div className="ps-cell-head">
+        <h5>{title}</h5>
+        {!dolu ? <span className="ps-cell-tag">{fallback}</span> : null}
+      </div>
+      <div className="ps-cell-fields">
+        <label className="ps-field ps-field--num">
+          <span className="ps-label">{lowLabel}</span>
+          <span className="ps-num">
+            <input
+              type="number"
+              step="0.01"
+              min={0}
+              max={10}
+              placeholder={lowPlaceholder}
+              value={low}
+              onChange={(event) => onLow(event.target.value)}
+            />
+            <span className="ps-num-unit">V</span>
+          </span>
+        </label>
+        <span className="ps-cell-bar" aria-hidden="true">
+          <span className="ps-cell-bar-fill" />
+        </span>
+        <label className="ps-field ps-field--num">
+          <span className="ps-label">{fullLabel}</span>
+          <span className="ps-num">
+            <input
+              type="number"
+              step="0.01"
+              min={0}
+              max={10}
+              placeholder={fullPlaceholder}
+              value={full}
+              onChange={(event) => onFull(event.target.value)}
+            />
+            <span className="ps-num-unit">V</span>
+          </span>
+        </label>
+      </div>
+      <p className="ps-hint ps-cell-note">{note}</p>
+    </div>
   );
 }
 
