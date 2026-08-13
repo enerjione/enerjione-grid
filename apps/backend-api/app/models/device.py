@@ -87,6 +87,14 @@ class Device(Base):
     communication_status: Mapped[CommunicationStatus] = mapped_column(
         Enum(CommunicationStatus), default=CommunicationStatus.UNKNOWN
     )
+    #: KOLONDAKI DEGERE GUVENME — okurken uzerine yazilir.
+    #:
+    #: Bu kolonu hicbir yol yazmiyor: alarm acan kod True yapmiyor, kapanan
+    #: alarm False'a cekmiyor. Yillarca her cihaz "alarm yok" dedi ve bunu
+    #: okuyan her ekran yanildi. Dogru cevap zaten `alarm_events`te; cihaz
+    #: serialize edilirken oradan doldurulur (bkz.
+    #: `device_kit_service.annotate`). Kolon, semayi ve API sozlesmesini
+    #: bozmamak icin duruyor.
     alarm_active: Mapped[bool] = mapped_column(default=False)
     last_update_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

@@ -40,6 +40,7 @@ from app.schemas.alarm import AlarmEventRead
 from app.schemas.device import DeviceRead
 from app.schemas.gateway import GatewayRead
 from app.schemas.signal_catalog import SignalCatalogRead
+from app.services import device_kit_service
 
 # Tum endpoint'ler bu prefix altinda. Tag = OpenAPI dokumantasyonunda gruplama.
 router = APIRouter(prefix="/public", tags=["public-api"])
@@ -109,7 +110,10 @@ def list_devices(
     base = base.order_by(Device.code.asc()).limit(limit).offset(offset)
     total = db.scalar(count_q) or 0
     response.headers["X-Total-Count"] = str(total)
-    return list(db.scalars(base).all())
+    # `annotate`: `alarm_active` KOLONDAN okunamaz, canli alarmdan turer
+    # (bkz. models/device.py). Bu ucu atlarsak dis entegrasyon her cihazi
+    # sonsuza kadar "alarm yok" gorurdu.
+    return device_kit_service.annotate(db, list(db.scalars(base).all()))
 
 
 @router.get(
@@ -125,7 +129,7 @@ def get_device(
     row = db.scalar(select(Device).where(Device.code == code))
     if row is None:
         raise HTTPException(status_code=404, detail="Cihaz bulunamadı")
-    return row
+    return device_kit_service.annotate_one(db, row)
 
 
 # ---------------------------------------------------------------------------

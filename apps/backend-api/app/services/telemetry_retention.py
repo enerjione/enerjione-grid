@@ -624,8 +624,25 @@ class RetentionWorker:
         en onemli seydir; retention onu goturemez.
 
         Yorumlar ONCE dusulur (FK) — ve yalnizca silinecek alarmlarinki.
+
+        SAYAC ONCE ONARILIR, SILME SONRA. Ariza analizi takvimi
+        `alarm_daily_counts` okuyor ve o sayacin gecmisi olay kaydindan
+        tamamlaniyor (bkz. `alarm_counter_service`). Sirayi ters cevirmek —
+        once budayip sonra onarmak — her turda bir parca gecmisi kalici
+        olarak kaybettirirdi.
         """
         from app.models.alarm import AlarmComment, AlarmEvent
+        from app.services.alarm_counter_service import arsivden_onar
+
+        db = SessionLocal()
+        try:
+            arsivden_onar(db, gun_sayisi=settings.system_events_retention_days)
+        except Exception:  # noqa: BLE001
+            # Onarim, TEMIZLIGI engellememeli: sayac eksik kalirsa grafik
+            # eksik cizer, budama duraklarsa disk dolar.
+            logger.exception("alarm_daily_counts_onarim_basarisiz")
+        finally:
+            db.close()
 
         removed = 0
         cutoff = datetime.now(timezone.utc) - timedelta(

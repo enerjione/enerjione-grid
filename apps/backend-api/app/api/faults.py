@@ -55,6 +55,24 @@ from app.services.scope_service import get_visible_line_ids
 
 router = APIRouter(prefix="/faults", tags=["faults"])
 
+#: "Arizayi acan alarm" penceresinin tolerans payi.
+#
+#: Alarm ile ariza kaydi ayni olayin iki yuzu ama ayni anda dogmuyorlar:
+#: alarm sinyal geldigi anda, ariza kaydi ise kirmizi/yesil cihaz dizilimi
+#: cozuldukten sonra yazilir. Aradaki fark saniyeler mertebesinde; pay
+#: olmadan aciliste bir kac saniye once dusen alarm pencerenin disinda
+#: kalirdi. Ust sinirda da ayni pay var: ariza normale dondukten hemen
+#: sonra gelen "reset" alarmi hala O arizanin kaydidir.
+_ALARM_PENCERE = timedelta(minutes=10)
+
+
+def _utc(dt: datetime | None) -> datetime | None:
+    """Naive damgayi UTC kabul eder — SQLite testlerinde tzinfo geri gelmez
+    ve ciplak karsilastirma patlar (bkz. fault_recompute_service._yas_sn)."""
+    if dt is None:
+        return None
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
 
 def _device_scope_from_lines(db: Session, line_scope) -> set[int] | None:  # noqa: ANN001
     """Hat kapsamini CIHAZ kapsamina cevirir.
@@ -184,14 +202,30 @@ def _load_fault_refs(db: Session, faults: list[FaultEvent]) -> _FaultRefs:
         }
 
     # Arizayi doguran alarmlar — yalnizca "gordum" diyen (last_red) cihazlar
-    # icin ve yalnizca ACIK olanlar (reset=False). Liste basina TEK sorgu;
-    # sayfa 5 sn'de bir polling yaptigi icin satir basina sorgu kabul edilemez.
+    # icin. Liste basina TEK sorgu; sayfa 5 sn'de bir polling yaptigi icin
+    # satir basina sorgu kabul edilemez.
+    #
+    # NORMALE DONEN ALARM DA KALIR (`reset=True`).
+    # Onceden sorgu `reset.is_(False)` ile yalnizca ACIK alarmlari aliyordu:
+    # ariza hala ekranda dururken onu ACAN alarm normale doner donmez blok
+    # bosaliyor ve kart "arizayi acan alarm normale donmus" demekten baska
+    # bir sey soyleyemiyordu. Oysa sorulan sey "su an alarm var mi" degil,
+    # "bu arizayi NE acti" — o kayit alarm sifirlansa da gecerlidir.
+    #
+    # Filtre kalkinca cihazin TUM alarm gecmisi gelmesin diye pencere
+    # zaman ile sinirlaniyor: en eski arizanin acilisindan `_ALARM_PENCERE`
+    # kadar oncesi. Alt sinir burada (sorguda), ust sinir kayit basina
+    # `_trigger_alarms`'ta — cihaz ayni yerde birden fazla kez arizalanabilir
+    # ve eski arizanin alarmi yenisinin kartina dusmemeli.
     red_ids = {f.last_red_device_id for f in faults if f.last_red_device_id is not None}
     if red_ids:
+        en_eski = min(
+            _utc(f.opened_at) for f in faults if f.last_red_device_id is not None
+        )
         for row in db.scalars(
             select(AlarmEvent)
             .where(AlarmEvent.device_id.in_(red_ids))
-            .where(AlarmEvent.reset.is_(False))
+            .where(AlarmEvent.created_at >= en_eski - _ALARM_PENCERE)
             .order_by(AlarmEvent.created_at.desc())
         ).all():
             refs.alarms.setdefault(row.device_id, []).append(row)
@@ -254,6 +288,48 @@ def _signal_source(signal_key: str | None) -> str | None:
     return signal_key.split(".", 1)[0].lower()
 
 
+def _trigger_alarms(
+    f: FaultEvent, refs: "_FaultRefs", last_red: Device | None
+) -> list[FaultTriggerAlarm]:
+    """Bu arizayi acan alarmlar — normale donmus olanlar DAHIL.
+
+    Kayit alarmin o anki durumuna degil, arizanin ZAMAN PENCERESINE gore
+    secilir: alarm sifirlansa bile "bu arizayi ne acti" sorusunun cevabi
+    degismez. Ust sinir sart — ayni cihaz aylar icinde defalarca arizalanir
+    ve eski arizanin alarmi yeni kaydin kartinda gorunmemeli.
+    """
+    bitis = _utc(f.closed_at or f.resolved_at)
+    alt = _utc(f.opened_at) - _ALARM_PENCERE
+    ust = bitis + _ALARM_PENCERE if bitis else None
+    secilen: list[FaultTriggerAlarm] = []
+    for a in refs.alarms.get(f.last_red_device_id, []):
+        dogus = _utc(a.created_at)
+        if dogus is None or dogus < alt:
+            continue
+        if ust is not None and dogus > ust:
+            continue
+        secilen.append(
+            FaultTriggerAlarm(
+                id=a.id,
+                title=a.title,
+                description=a.description or None,
+                level=a.level,
+                signal_key=a.signal_key,
+                signal_source=_signal_source(a.signal_key),
+                device_id=a.device_id,
+                device_code=last_red.code if last_red else None,
+                device_name=last_red.name if last_red else None,
+                acknowledged=bool(a.acknowledged),
+                # Alarm normale dondu mu — arayuz kaydi gostermeye devam
+                # eder ama "normale dondu" damgasiyla.
+                reset=bool(a.reset),
+                reset_at=a.reset_at,
+                created_at=a.created_at,
+            )
+        )
+    return secilen
+
+
 def _serialize_fault(db: Session, f: FaultEvent, refs: _FaultRefs | None = None) -> FaultEventRead:
     """Tek ariza -> FaultEventRead.
 
@@ -270,22 +346,7 @@ def _serialize_fault(db: Session, f: FaultEvent, refs: _FaultRefs | None = None)
     )
     assigned_user = refs.users.get(f.assigned_to_username) if f.assigned_to_username else None
     comment_count = refs.comment_counts.get(f.id, 0)
-    triggers = [
-        FaultTriggerAlarm(
-            id=a.id,
-            title=a.title,
-            description=a.description or None,
-            level=a.level,
-            signal_key=a.signal_key,
-            signal_source=_signal_source(a.signal_key),
-            device_id=a.device_id,
-            device_code=last_red.code if last_red else None,
-            device_name=last_red.name if last_red else None,
-            acknowledged=bool(a.acknowledged),
-            created_at=a.created_at,
-        )
-        for a in refs.alarms.get(f.last_red_device_id, [])
-    ]
+    triggers = _trigger_alarms(f, refs, last_red)
 
     # --- Ariza araliginin ICINDE kalan bransman kollari -------------------
     # Aralik direk sira numarasiyla ifade edilir; aradaki her direk icin

@@ -1270,9 +1270,20 @@ export function FaultDetailPage({
           ) : (
             <ul className="fd-alarms">
               {triggerAlarms.map((a) => (
-                <li key={a.id} className={`fd-alarm fd-alarm--${a.level}`}>
+                <li
+                  key={a.id}
+                  className={`fd-alarm fd-alarm--${a.level}${
+                    a.reset ? " is-reset" : ""
+                  }`}
+                >
                   <div className="fd-alarm-top">
                     <strong>{a.title}</strong>
+                    {/* Alarm normale donse de kayit kalir — bkz. ActiveFaultCard. */}
+                    {a.reset ? (
+                      <span className="fd-alarm-reset">
+                        {t("faults.card.alarmReset")}
+                      </span>
+                    ) : null}
                     {a.signal_source ? (
                       <span className="fd-phase">
                         <Radio size={10} strokeWidth={2.6} />

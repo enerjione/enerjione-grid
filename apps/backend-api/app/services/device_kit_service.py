@@ -56,6 +56,7 @@ from app.data.device_models import (
     resolve_subunit_satellites,
     subunit_model_for,
 )
+from app.models.alarm import AlarmEvent
 from app.models.device import Device
 
 log = logging.getLogger(__name__)
@@ -398,11 +399,11 @@ def sync_subunits(db: Session, parent: Device, set_count: int) -> dict[str, list
 
 
 def annotate(db: Session, devices: list[Device]) -> list[Device]:
-    """`parent_device_code` ve `satellite_set_count` alanlarini doldurur.
+    """`parent_device_code`, `satellite_set_count` ve `alarm_active` doldurur.
 
-    Ikisi de KOLON DEGIL, turetilmis alandir. Iliski (relationship) ile
-    cozmek cazip ama 600+ cihazli listede satir basina bir sorgu demekti;
-    burada TOPLAM IKI sorgu ile hallediliyor.
+    Hicbiri gercek anlamda KOLON DEGIL, turetilmis alandir. Iliski
+    (relationship) ile cozmek cazip ama 600+ cihazli listede satir basina bir
+    sorgu demekti; burada TOPLAM birkac sorgu ile hallediliyor.
     """
     if not devices:
         return devices
@@ -445,7 +446,37 @@ def annotate(db: Session, devices: list[Device]) -> list[Device]:
             ).all()
         }
 
+    # ALARM DURUMU CANLI ALARMDAN OKUNUR, KOLONDAN DEGIL.
+    #
+    # `devices.alarm_active` bir kolon olarak duruyordu ama HICBIR YERDE
+    # yazilmiyordu: alarm acan yollarin hicbiri onu True yapmiyor, kapanan
+    # alarm da False'a cekmiyordu. Yani her cihaz sonsuza kadar "alarm yok"
+    # diyordu. Bunu okuyan her ekran yaniliyordu — haritadaki cihaz karti
+    # ("Normal / Aktif alarm yok"), anasayfanin "alarmli" filtresi ve
+    # sayaci, ust arama, sebeke yonetimi cipleri, cihaz ozeti KPI'i.
+    # Haritanin PIN rengi dogruydu cunku o, alarm listesinden kendi
+    # kumesini cikariyordu; ayni ekranda pin kirmizi, kart yesil oluyordu.
+    #
+    # Kolonu canli tutmaya calismak (her alarm yolunda yaz, her kapanista
+    # sil, bir de kacanlar icin mutabakat) ayni gercegi iki yerde tutmak
+    # olurdu. Cevap zaten alarm tablosunda; tek DISTINCT sorgu ile okunuyor.
+    #
+    # OLCUT: canli (`superseded_at IS NULL`) ve normale donmemis
+    # (`reset = false`) alarm. Kartin metni de bunu soyluyor ("aktif alarm").
+    # Haritanin kirmizi pini bundan DAHA DAR bir kume kullanir
+    # (`produces_fault != false`) — o soru "hat arizasi var mi", bu soru
+    # "cihazda aktif alarm var mi".
+    alarmli: set[int] = set(
+        db.scalars(
+            select(AlarmEvent.device_id)
+            .where(AlarmEvent.reset.is_(False))
+            .where(AlarmEvent.superseded_at.is_(None))
+            .distinct()
+        ).all()
+    )
+
     for d in devices:
+        d.alarm_active = d.id in alarmli
         d.parent_device_code = kodlar.get(d.parent_device_id) if d.parent_device_id else None
         if d.parent_device_id in kit_durumu:
             durum, son_guncelleme = kit_durumu[d.parent_device_id]

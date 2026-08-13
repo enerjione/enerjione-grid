@@ -29,6 +29,11 @@ class FaultTriggerAlarm(BaseModel):
     device_code: str | None = None
     device_name: str | None = None
     acknowledged: bool = False
+    #: Alarm normale dondu mu. Kayit BUNA RAGMEN listede kalir: "bu arizayi
+    #: ne acti" sorusunun cevabi alarm sifirlaninca degismez — eskiden
+    #: sifirlanan alarm listeden dusuyor ve blok bosaliyordu.
+    reset: bool = False
+    reset_at: datetime | None = None
     created_at: datetime
 
 
@@ -105,8 +110,9 @@ class FaultEventRead(BaseModel):
 
     comment_count: int = 0
 
-    #: Arizayi doguran ACIK alarmlar (son "gordum" diyen cihazdan), en yeni
-    #: once. Bos liste: alarm bu arada normale dondu ya da kayit eski.
+    #: Arizayi doguran alarmlar (son "gordum" diyen cihazdan), en yeni once.
+    #: NORMALE DONMUS ALARM DA BURADA — kayit `reset` bayragiyla gelir.
+    #: Bos liste: arizanin zaman penceresinde o cihazda alarm yok.
     trigger_alarms: list[FaultTriggerAlarm] = []
 
     #: Ariza araliginin icinde kalan bransman kollari — sahada kontrol

@@ -531,9 +531,26 @@ export function ActiveFaultCard({
             ) : (
               <ul className="fx-alarm-list">
                 {alarms.slice(0, 4).map((a) => (
-                  <li key={a.id} className={`fx-alarm fx-alarm--${a.level}`}>
+                  <li
+                    key={a.id}
+                    className={`fx-alarm fx-alarm--${a.level}${
+                      a.reset ? " is-reset" : ""
+                    }`}
+                  >
                     <span className="fx-alarm-top">
                       <strong className="fx-alarm-title">{a.title}</strong>
+                      {/* NORMALE DONMUS ALARM LISTEDEN DUSMEZ.
+                          Onceden yalnizca acik alarmlar geliyordu; alarm
+                          sifirlanir sifirlanmaz blok bosaliyor ve kart
+                          "arizayi acan alarm normale donmus" demekten baska
+                          bir sey soyleyemiyordu. Ariza hala ekranda dururken
+                          onu ACAN kaydin kaybolmasi, sorulan sorunun cevabini
+                          siliyordu. Artik kayit kalir, uzerinde damgasi olur. */}
+                      {a.reset ? (
+                        <span className="fx-alarm-reset">
+                          {t("faults.card.alarmReset")}
+                        </span>
+                      ) : null}
                       {a.signal_source ? (
                         <span className={`fx-phase fx-phase--${a.signal_source}`}>
                           <Radio size={10} strokeWidth={2.6} />

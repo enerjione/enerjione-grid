@@ -38,6 +38,7 @@ import {
   KATEGORIK,
   TAKVIM_BOS,
   TAKVIM_RAMPA,
+  TAKVIM_VERI_YOK,
   TEK_SERI,
   cubuk,
   degerEkseni,
@@ -481,6 +482,12 @@ type TakvimProps = {
   end: string;
   max: number;
   birim: string;
+  /** `YYYY-MM-DD` — izlemenin basladigi gun (ilk alarm). Bundan ONCEKI
+   *  kareler "veri yok"tur, "sessiz gun" DEGIL; ikisi ayni renkte cizilirse
+   *  takvim, hic izlenmemis bir donemi "sorunsuz gecti" diye okutur. */
+  ilkVeriGunu?: string | null;
+  /** Veri oncesi kareler icin ipucu metni. */
+  veriYokLabel?: string;
   /** Kart kalan dikey alani dolduruyorsa hucreler o alana gore buyur. */
   dolduran?: boolean;
 };
@@ -499,6 +506,10 @@ const TAKVIM = {
   enBuyuk: 40
 } as const;
 
+/** Izleme baslamadan onceki gunun karesine yazilan deger. Gercek bir adet
+ *  olamayacagi icin (alarm sayisi negatif olmaz) kademe eslesmesi tekildir. */
+const VERI_YOK_DEGERI = -1;
+
 /** Sayiyi 5 kademeye ayirir: 0 ayri, kalani rampanin dort adimi.
  *
  *  Esikler MAKSIMUMA gore orantili; sabit esik (1/3/5/10) bir sahada tum
@@ -510,6 +521,10 @@ function takvimKademeleri(max: number): { min: number; max?: number; color: stri
   const k2 = Math.max(k1 + 1, Math.ceil(t * 0.5));
   const k3 = Math.max(k2 + 1, Math.ceil(t * 0.75));
   return [
+    // IZLEME ONCESI (`VERI_YOK_DEGERI`): o gun alarm gelmedigi icin degil,
+    // o gun HENUZ KAYIT TUTULMADIGI icin bos. Ayri renk olmazsa takvim
+    // izlenmemis bir donemi "sorunsuz gecti" diye okutur.
+    { min: VERI_YOK_DEGERI, max: VERI_YOK_DEGERI, color: TAKVIM_VERI_YOK },
     // "Alarm yok" rampanin en acik adimi DEGIL, ayri bir notr renk:
     // sessiz bir gun ile "en az alarmli" gun ayni gorunmemeli.
     { min: 0, max: 0, color: TAKVIM_BOS },
@@ -532,7 +547,16 @@ function takvimKademeleri(max: number): { min: number; max?: number; color: stri
  * ETKILESIM: her kare kendi ipucunu tasir (tarih + kesin adet). Koyuluk
  * deseni verir, isaretci SAYIYI verir; goz kestirmek zorunda kalmaz.
  */
-export function AlarmTakvimi({ days, start, end, max, birim, dolduran }: TakvimProps) {
+export function AlarmTakvimi({
+  days,
+  start,
+  end,
+  max,
+  birim,
+  ilkVeriGunu,
+  veriYokLabel,
+  dolduran
+}: TakvimProps) {
   const { i18n } = useTranslation();
   const [kapRef, kap] = useKapOlcusu();
 
@@ -576,7 +600,12 @@ export function AlarmTakvimi({ days, start, end, max, birim, dolduran }: TakvimP
                 month: "short",
                 year: "numeric"
               });
-          return `<b>${bicim}</b><br/>${adet} ${birim}`;
+          // Izleme oncesi kare "0 alarm" demez — bilmiyoruz demek.
+          const alt =
+            adet === VERI_YOK_DEGERI
+              ? (veriYokLabel ?? "—")
+              : `${adet} ${birim}`;
+          return `<b>${bicim}</b><br/>${alt}`;
         }
       },
       visualMap: {
@@ -619,13 +648,16 @@ export function AlarmTakvimi({ days, start, end, max, birim, dolduran }: TakvimP
         {
           type: "heatmap",
           coordinateSystem: "calendar",
-          data: days.map((g) => [g.date, g.count]),
+          data: days.map((g) => [
+            g.date,
+            ilkVeriGunu && g.date < ilkVeriGunu ? VERI_YOK_DEGERI : g.count
+          ]),
           itemStyle: { borderRadius: 2, borderColor: "#fff", borderWidth: 2 },
           emphasis: { itemStyle: { borderColor: "#0f172a", borderWidth: 1.5 } }
         }
       ]
     };
-  }, [days, start, end, max, birim, i18n.language, hucre]);
+  }, [days, start, end, max, birim, ilkVeriGunu, veriYokLabel, i18n.language, hucre]);
 
   // Dikeyde her zaman 7 satir; yukseklik hucre kenarindan turer. Dolduran
   // kartta kap yuksekligini olcup hucreyi buyutuyoruz — cizim alani yine

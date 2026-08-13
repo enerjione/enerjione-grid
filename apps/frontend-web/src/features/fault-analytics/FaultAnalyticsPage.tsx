@@ -720,12 +720,17 @@ function Takvim({
 
       {takvim.days.length ? (
         <>
+          {/* `ilkVeriGunu`: izleme baslamadan onceki gunler "0 alarm" DEGIL
+              "veri yok". Ikisi ayni renkte cizilince takvim, kayit
+              tutulmayan bir donemi "sorunsuz gecti" diye okutuyordu. */}
           <AlarmTakvimi
             days={takvim.days}
             start={takvim.start}
             end={takvim.end}
             max={takvim.max}
             birim={t("faultAnalytics.alarmUnit")}
+            ilkVeriGunu={takvim.first_alarm_at?.slice(0, 10) ?? null}
+            veriYokLabel={t("faultAnalytics.calendarNoData")}
             dolduran
           />
           <TakvimSeridi

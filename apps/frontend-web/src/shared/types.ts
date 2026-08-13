@@ -623,6 +623,10 @@ export type FaultTriggerAlarm = {
   device_code?: string | null;
   device_name?: string | null;
   acknowledged: boolean;
+  /** Alarm normale döndü mü. Kayıt buna rağmen listede kalır — "bu arızayı
+      ne açtı" sorusunun cevabı alarm sıfırlanınca değişmez. */
+  reset?: boolean;
+  reset_at?: string | null;
   created_at: string;
 };
 

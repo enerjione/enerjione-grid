@@ -56,6 +56,10 @@ export const FAZ_RENK: Record<string, string> = {
  * "en az alarm" ayni gorunmemeli.
  */
 export const TAKVIM_BOS = "#eef2f7";
+/** IZLEME ONCESI gun — "alarm yok" DEGIL, "veri yok". Sessiz gunun grisinden
+ *  belirgin sekilde soluk: takvim, hic izlenmemis bir donemi "sorunsuz
+ *  gecti" diye okutmamali. */
+export const TAKVIM_VERI_YOK = "#fbfcfe";
 export const TAKVIM_RAMPA = ["#fee2e2", "#fca5a5", "#ef4444", "#b91c1c"] as const;
 
 /**
