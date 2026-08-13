@@ -7,11 +7,16 @@ backend'i veya telemetri akisini etkilemez.
 ```
 tag-engine → NATS (telemetry.normalized) → modbus-outbound (bellek) → SCADA okumasi
                                                 ▲
-                                    backend /internal/modbus-plans (adres plani)
+                            backend /internal/modbus-plans   (adres plani)
+                                   /internal/modbus-values   (son bilinen degerler)
 ```
 
 SCADA istedigi hizda okur; her okuma bellekten cevaplanir, DB'ye veya
 backend'e hic dokunulmaz.
+
+**Iki besleme kanali var.** Canli akis (NATS) yalnizca cihaz yeni olcum
+yayinladikca akar; degismeyen sinyaller icin bu yeterli DEGILDIR (bkz.
+[6. Son bilinen deger tazelemesi](#6-son-bilinen-deger-tazelemesi)).
 
 ---
 
@@ -105,9 +110,16 @@ atanir; silinen cihazin yeri bosalir ve yeni cihaza verilir.
 
 ### Kalite (quality)
 
-Modbus'ta kalite biti yoktur. Bozuk kaliteli olcum geldiginde **son iyi deger
-korunur**; 0 yazmak SCADA'da "gerilim sifira dustu" gibi gercek bir olay gibi
-gorunur ve yanlis alarm uretir.
+Modbus'ta kalite biti yoktur. Bu yuzden davranis **Canlı Değerler ekraniyla
+birebir aynidir**: o an gelen deger, kalitesi ne olursa olsun yazilir. Kalite
+yalnizca teshis icin sayilir (`bad_quality_count`), yazmayi **engellemez**.
+
+> Onceden "bozuk kaliteli olcumu atla, son iyi degeri koru" davranisi vardi.
+> Bir sinyal HIC iyi kaliteli gelmezse (sahada goruldu: bir hedefte 10K+
+> mesajin 6K+'si surekli `bad`, bir kez bile `good` degil) register hicbir
+> zaman yazilmiyor ve SCADA sonsuza dek varsayilan **0** goruyordu — sistemin
+> geri kalani gercek degeri gosterirken. Yani "koruma" yaniltici olani
+> koruyordu.
 
 ---
 
@@ -160,7 +172,63 @@ container namespace'ine ozeldir, **host'un port politikasini degistirmez**.
 
 ---
 
-## 6. Tanilama
+## 6. Son bilinen deger tazelemesi
+
+Modbus'ta **"deger henuz gelmedi" diye bir hal yoktur**: SCADA ne sorarsa
+depoda ne varsa onu okur ve yazilmamis adres **0** doner. Canli telemetri
+akisi ise yalnizca cihaz **yeni olcum yayinladikca** akar. Bu ikisi bir arada
+sessiz bir ariza uretir:
+
+| Durum | Canli akista ne olur | Register |
+|---|---|---|
+| Sinyal degismiyor (ariza bayragi, nominal degerler, konum) | gunlerce mesaj gelmez | **0** kalir |
+| Servis/konteyner yeniden basladi | tuketici `DeliverPolicy.NEW` — gecmis oynatilmaz | **0** kalir |
+| Yeni hedef / yeni cihaz plana girdi | ilk olcume kadar bos | **0** kalir |
+
+Yani SCADA "gerilim 0", "ariza yok" okur; ekran ise gercek degeri gosterir.
+
+**Cozum:** worker her `MODBUS_SNAPSHOT_REFRESH_SEC` saniyede (varsayilan **30**)
+`/internal/modbus-values` ucundan **son bilinen degerleri** ceker ve eksik
+register'lari doldurur. Kaynak backend'in `telemetry_latest` tablosudur —
+**Canli Degerler ekraninin okudugu ayni satirlar**. Boylece "ekranda var,
+SCADA'da yok" ayrismasi yapisal olarak ortadan kalkar.
+
+Tazeleme canli akisin yerine gecmez, **boslugu doldurur**:
+
+- Her (cihaz, sinyal) icin register'a yazilan son degerin **kaynak damgasi**
+  tutulur. DB'den gelen **bayat** bir satir, daha yeni bir canli degeri
+  **ezemez** — aksi halde SCADA'da gorunur bir geri sicrama olurdu.
+- Plan degistiginde (yeni cihaz/hedef/adres) tazeleme **beklemeden** tetiklenir,
+  yeni adresler bir sonraki periyodu beklemez.
+- `MODBUS_SNAPSHOT_REFRESH_SEC=0` tazelemeyi kapatir. Kapatilirsa degismeyen
+  sinyaller SCADA'da yeniden 0 gorunur; bilerek yapilmadikca dokunmayin.
+
+### Cekim artimlidir
+
+600 cihaz x 193 sinyal = **~115.000 satir**. Bunu her 30 saniyede tam cekmek,
+`/signals/live` ucunda backend'i OOM'a goturen desenin aynisi olurdu. Bu yuzden:
+
+| Tur | Ne cekilir |
+|---|---|
+| Ilk tur (servis basladi) | **tam liste** — tohumlama |
+| Plan degisti | **tam liste** — adresler kaymis olabilir |
+| Her 20. tur (~10 dk) | **tam liste** — saat geri alinmasina karsi kendini onarim |
+| Diger turlar | yalnizca `updated_at >= since` satirlari (genelde birkac yuz) |
+
+Esik worker'in kendi saatinden DEGIL, backend'in yanitindaki
+`max_updated_at`ten gelir; iki taraf arasindaki saat kaymasi satir
+kaybettirmez. `/health` icindeki `snapshot_full_refreshes` kacinin tam tur
+oldugunu soyler — her tur tam cikiyorsa esik ilerlemiyor demektir.
+
+Sayaclar `/health` ve **SCADA Çıkışları ▸ Modbus Yayın Durumu** ekraninda:
+`snapshot_seeded` (ilk kez yazilan nokta — asil kazanc), `snapshot_refreshed`
+(canli akisin kacirdigi, DB'si daha yeni), `snapshot_stale_skipped` (canli
+deger daha taze, dokunulmadi), `snapshot_unmapped` (planda yok — string
+sinyaller icin normal).
+
+---
+
+## 7. Tanilama
 
 ```bash
 # Servis sagligi + hedef bazinda runtime (bagli SCADA, istek sayisi)
@@ -176,17 +244,30 @@ docker compose logs -f modbus-outbound
 curl -s -H "X-Service-Token: $INTERNAL_SERVICE_TOKEN" \
      http://localhost:8000/api/v1/internal/modbus-plans | python3 -m json.tool
 
+# Worker'in tazelemede kullandigi son bilinen degerler
+curl -s -H "X-Service-Token: $INTERNAL_SERVICE_TOKEN" \
+     http://localhost:8000/api/v1/internal/modbus-values | python3 -m json.tool
+
 # Elle Modbus okumasi (mbpoll varsa)
 mbpoll -m tcp -a 1 -r 1 -c 10 -t 4 <host>
 ```
 
 `/health` alanlari: `active_servers`, `deployed_targets`, `messages_processed`,
-`points_written`, `skipped_bad_quality`, hedef bazinda `connected_clients` /
-`requests_served` / `rejected_peers` / `updates_unmapped`.
+`points_written`, `bad_quality_count`, `snapshot_enabled` / `snapshot_refreshes`
+/ `snapshot_seeded` / `snapshot_refreshed`, hedef bazinda `connected_clients` /
+`requests_served` / `rejected_peers` / `updates_applied` / `updates_unmapped`.
 
-`updates_unmapped` surekli artiyorsa: telemetri geliyor ama planda karsiligi
-yok — cihaz plana girmemis olabilir (kapasite dolu) veya sinyal Modbus'a dahil
-edilmeyen bir tip (string).
+**"SCADA sifir goruyor" karar agaci**
+
+| Belirti | Anlami |
+|---|---|
+| `messages_processed = 0` | NATS'tan hic telemetri gelmiyor (gateway/NATS/abonelik) |
+| `updates_unmapped` artiyor, `updates_applied = 0` | telemetri geliyor ama plandaki (cihaz, sinyal) anahtarlariyla eslesmiyor — plan eski ya da cihaz kodlari farkli |
+| `updates_uncoercible` artiyor | eslesme var, deger sayiya/bit'e cevrilemiyor |
+| `updates_applied = 0`, `snapshot_seeded > 0` | canli akis susuyor, register'lar son bilinen degerlerle besleniyor — veri **var** ama tazelenmiyor |
+| ikisi de 0, `snapshot_enabled = false` | tazeleme kapali; degismeyen sinyaller 0 kalir (`MODBUS_SNAPSHOT_REFRESH_SEC`) |
+| `updates_applied` artiyor, `requests_served = 0` | degerler yaziliyor, SCADA hic okumuyor (port/baglanti) |
+| ikisi de artiyor ama SCADA 0 gosteriyor | istemci tarafi: FC3/FC4, unit id, 40001 taban kaymasi, int16/float32 |
 
 ### Guncelleme
 
@@ -196,7 +277,7 @@ sudo bash update.sh modbus
 
 ---
 
-## 7. Sinirlar
+## 8. Sinirlar
 
 - **Salt okunur.** SCADA'dan komut gonderme yok.
 - **String sinyaller disarida** (30 adet: seri no, firmware surumu vb.) —
@@ -204,5 +285,8 @@ sudo bash update.sh modbus
 - Plan degisikligi worker'a **30 saniyede** yansir (`MODBUS_CATALOG_REFRESH_SEC`).
   Bu sirada yayin kesilmez; yeni plan hazir olunca sunucu tek seferde yenilenir
   ve mevcut degerler yeni registry'ye tasinir.
+- Degismeyen sinyaller **en fazla `MODBUS_SNAPSHOT_REFRESH_SEC`** kadar gecikmeyle
+  register'a duser (varsayilan 30 sn). Canli akan sinyaller bundan etkilenmez;
+  onlar geldigi an yazilir.
 - Ayni anda bir cihaz **tek slot** alir; iki farkli Modbus hedefinde ayni cihaz
   farkli adreslerde yayinlanabilir (her hedefin kendi slot tablosu var).

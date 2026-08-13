@@ -821,8 +821,12 @@ export function OutboundTargetsPanel({
           updates[id] = {
             running: r.server_running,
             clients: r.connected_clients,
-            // "Akis var" = telemetri register'lara gercekten yaziliyor.
-            flowing: r.updates_applied > 0
+            // "Akis var" = register'lara gercekten deger yaziliyor. Iki kanal
+            // da sayilir: canli telemetri VE son bilinen deger tazelemesi.
+            // Sadece canliya bakmak, degismeyen sinyallerle beslenen (ama
+            // SCADA'ya dogru veri veren) bir hedefi "akis yok" gosterirdi.
+            flowing:
+              r.updates_applied + r.snapshot.seeded + r.snapshot.refreshed > 0
           };
         } catch {
           // ignore
@@ -1931,6 +1935,12 @@ export function OutboundTargetsPanel({
                   // Sayaclardan tek cumlelik teshis — "deger neden yok"
                   // sorusunun cevabi operatorun onunde dursun.
                   const c = mbRuntime.consumer;
+                  const snap = mbRuntime.snapshot;
+                  // Register'a yazan IKI kanal var: canli akis (updates_applied)
+                  // ve son bilinen deger tazelemesi (snapshot). "Hic deger yok"
+                  // teshisi ikisinin TOPLAMINA bakmali; aksi halde tazeleme
+                  // register'lari doldurmus olsa bile ekran "yazilmadi" derdi.
+                  const yazilan = mbRuntime.updates_applied + snap.seeded + snap.refreshed;
                   let key = "ok";
                   let tone: "ok" | "warn" | "bad" = "ok";
                   if (!mbRuntime.worker_reachable) {
@@ -1939,14 +1949,18 @@ export function OutboundTargetsPanel({
                     key = "serverDown"; tone = "bad";
                   } else if (c.last_error) {
                     key = "consumerError"; tone = "bad";
-                  } else if (c.messages_processed === 0) {
-                    key = "noTelemetry"; tone = "warn";
-                  } else if (mbRuntime.updates_applied === 0 && mbRuntime.updates_unmapped > 0) {
+                  } else if (yazilan === 0 && mbRuntime.updates_unmapped > 0) {
                     key = "unmapped"; tone = "warn";
-                  } else if (mbRuntime.updates_applied === 0 && mbRuntime.updates_uncoercible > 0) {
+                  } else if (yazilan === 0 && mbRuntime.updates_uncoercible > 0) {
                     key = "uncoercible"; tone = "warn";
-                  } else if (mbRuntime.updates_applied === 0) {
+                  } else if (yazilan === 0 && !snap.enabled) {
+                    key = "snapshotDisabled"; tone = "warn";
+                  } else if (yazilan === 0 && c.messages_processed === 0) {
+                    key = "noTelemetry"; tone = "warn";
+                  } else if (yazilan === 0) {
                     key = "noWrites"; tone = "warn";
+                  } else if (mbRuntime.updates_applied === 0) {
+                    key = "snapshotOnly"; tone = "warn";
                   } else if (mbRuntime.requests_served === 0) {
                     key = "noReads"; tone = "warn";
                   }
@@ -1991,6 +2005,14 @@ export function OutboundTargetsPanel({
                     <tr>
                       <td>{t("engineering.outbound.mbRuntime.updatesApplied")}</td>
                       <td>{mbRuntime.updates_applied.toLocaleString()}</td>
+                    </tr>
+                    <tr>
+                      <td>{t("engineering.outbound.mbRuntime.snapshotWrites")}</td>
+                      <td>
+                        {mbRuntime.snapshot.enabled
+                          ? (mbRuntime.snapshot.seeded + mbRuntime.snapshot.refreshed).toLocaleString()
+                          : t("engineering.outbound.mbRuntime.snapshotOff")}
+                      </td>
                     </tr>
                     <tr>
                       <td>{t("engineering.outbound.mbRuntime.updatesUnmapped")}</td>

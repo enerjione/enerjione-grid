@@ -204,7 +204,12 @@ class TelemetryConsumer:
         if raw_value is None:
             raw_value = payload.get("value_string")
 
+        # Kaynak damgasi da gecer: son bilinen deger tazelemesi (DB'den gelen
+        # snapshot) bu damgaya bakip TAZE olan canli degeri ezmez.
         written = self.manager.update_point(
-            str(device_code), str(signal_key), raw_value
+            str(device_code),
+            str(signal_key),
+            raw_value,
+            payload.get("source_timestamp"),
         )
         self._points_written += written
