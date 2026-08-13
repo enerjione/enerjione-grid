@@ -25721,6 +25721,71 @@ th.event-col-category {
   pointer-events: none;
 }
 
+/* ---- Cozum karti ---------------------------------------------------------
+   Kapanista girilen sebep + cozum notu. Bu bilgiler daha once HICBIR YERDE
+   gorunmuyordu: kapatma diyalogunda yazilip kaydediliyor, ariza kapaninca da
+   diyalog salt-okunur kural geregi bir daha acilamadigi icin yazilan sey
+   ekrandan kayboluyordu.
+   YESIL YALNIZCA KAPANMISTA: acik bir kayitta (eski verideki sebep etiketi)
+   yesil bir kutu, ariza cozulmus gibi okunurdu. */
+.fd-resolution .fd-card-head h2 svg {
+  color: #059669;
+  opacity: 1;
+}
+
+.fd-resolution.is-closed {
+  border-color: #bbf7d0;
+  background: linear-gradient(180deg, #f4fdf8, var(--fd-surface) 70%);
+}
+
+.fd-res-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+/* Sebep bir SINIFLANDIRMA: serbest metinden ayrilsin diye rozet. */
+.fd-res-cause {
+  align-self: flex-start;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: #e8edf4;
+  color: #334155;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.fd-resolution.is-closed .fd-res-cause {
+  background: #dcfce7;
+  color: #065f46;
+}
+
+/* Sahanin yazdigi metin: satir sonlari korunur (madde madde yazilmis
+   olabilir), uzun kelime kutuyu tasirmaz. */
+.fd-res-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--fd-ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* COZUM NOTU kapatmanin ZORUNLU alani — arizanin kalici cevabi; sebep ve
+   ayrintidan daha belirgin dursun diye kendi kutusunda. */
+.fd-res-row--note {
+  padding: 10px 12px;
+  border-radius: 11px;
+  border: 1px solid var(--fd-line);
+  background: #f8fafc;
+}
+
+.fd-resolution.is-closed .fd-res-row--note {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
 /* ---- Ariza kunyesi (cihaz olcumleri) ------------------------------------ */
 .fd-spec {
   margin: 0;
