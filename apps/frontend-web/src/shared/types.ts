@@ -347,6 +347,17 @@ export type FaultEvent = {
   is_branch_line?: boolean;
   parent_line_id?: number | null;
   parent_line_name?: string | null;
+  /**
+   * BAĞLANTI TELİ: arıza, iki hattı birleştiren tek açıklığın üzerinde.
+   *
+   * Böyle bir kayıtta `from_pole_seq` **ana hattın**, `to_pole_seq` ise
+   * **kolun** direk numarasıdır — ikisi tek bir aralık değildir. Aralık
+   * sanan kod ("Direk #7 — Direk #1", `alt < seq < üst` taramaları) sessizce
+   * yanlış sonuç üretir; bu yüzden uç bunu açıkça işaretler.
+   */
+  is_link_span?: boolean;
+  /** Aralığın BAŞLANGIÇ direği hangi hatta — `is_link_span` iken ana hat. */
+  from_pole_line_name?: string | null;
 
   // ---- Analiz alanları ----
   /** Sahanın girdiği sebep (katalogdan). NULL = henüz doldurulmadı. */

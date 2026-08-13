@@ -44,26 +44,22 @@ import { formatDistanceM } from "../../shared/lineDistance";
 import type { FaultRecurrence } from "./faultRecurrence";
 import { bashafler } from "./FaultFieldReportModal";
 import { FaultPoleStrip } from "./FaultPoleStrip";
-import type {
-  StripBranchRow,
-  StripDeviceAlarms,
-  StripPole,
-  StripSegment
-} from "./FaultPoleStrip";
+import type { StripDeviceAlarms } from "./FaultPoleStrip";
+import type { SeritGirdileri } from "./faultStripInputs";
+import { aralikMetni } from "./faultRangeText";
 
 type Props = {
   fault: FaultEvent;
-  /** Hattin tum direk sira numaralari (sematik serit icin). */
-  poleSeqs: number[];
-  /** Direk ad/rol bilgisi â€” etiketlerde sira numarasi yerine AD gosterilir. */
-  poles?: StripPole[];
-  /** Ariza bolgesine denk gelen ADAY hat kesimleri (bransman kollari).
-   *  Cizimde her biri AYRI BIR SATIR olarak tam hat halinde gosterilir. */
-  branchRows?: StripBranchRow[];
-  /** Sigmadigi icin cizilemeyen kol sayisi â€” cizimde "+N" notu. */
-  hiddenBranchCount?: number;
-  /** Hattin segmentleri â€” cihazlari TELIN UZERINDE cizmek icin. */
-  segments: StripSegment[];
+  /**
+   * SEMATIK CIZIMIN TUM GIRDILERI (bkz. `faultStripInputs`).
+   *
+   * Once bu turetmeler burada ve liste sayfasinda ayri ayri yapiliyordu;
+   * ariza detay sayfasi da ayni cizimi isteyince ucuncu bir kopya gerekti.
+   * Tek kaynak: hangi hat ana satir, hangi kol supheli, cihazlar nerede —
+   * hepsi o modulden gelir. Ozellikle BAGLANTI TELI arizasinda ana satir
+   * kolun kendisi DEGIL, ana hattir.
+   */
+  strip: SeritGirdileri | null;
   localeTag: string;
   /** Canli sure sayaci icin ortak "now" (parent 30sn'de bir gunceller). */
   now: number;
@@ -117,11 +113,7 @@ function fmtElapsed(fromIso: string, endMs: number): string {
 
 export function ActiveFaultCard({
   fault: f,
-  poleSeqs,
-  poles,
-  branchRows,
-  hiddenBranchCount = 0,
-  segments,
+  strip,
   localeTag,
   now,
   canAssign,
@@ -165,22 +157,7 @@ export function ActiveFaultCard({
   // bunu okur. Ayni cihazda birden fazla faz alarmi olabilir.
   /** Direk araligi basligi: direklerin ADI varsa onu kullan, yoksa "#3 â€” #4".
    *  Saha ekibi direkleri sira numarasiyla degil adiyla taniyor. */
-  const rangeText = useMemo(() => {
-    const adOf = (seq: number | null | undefined): string | null => {
-      if (seq == null) return null;
-      const ad = (poles?.find((p) => p.seq === seq)?.name ?? "").trim();
-      return ad || null;
-    };
-    const fromAd = adOf(f.from_pole_seq);
-    const toAd = adOf(f.to_pole_seq);
-    if (fromAd && toAd) {
-      return t("faults.card.rangeTextNamed", { from: fromAd, to: toAd });
-    }
-    return t("faults.card.rangeText", {
-      from: f.from_pole_seq ?? "?",
-      to: f.to_pole_seq ?? "?"
-    });
-  }, [poles, f.from_pole_seq, f.to_pole_seq, t]);
+  const rangeText = useMemo(() => aralikMetni(f, strip?.poles, t), [f, strip, t]);
 
   const alarmsByDevice = useMemo(() => {
     const map: Record<string, StripDeviceAlarms> = {};
@@ -400,10 +377,10 @@ export function ActiveFaultCard({
             {/* Ariza tek bir hat kesiminde olmayabilir: bolge bir dallanma
                 diregini kapsiyorsa kol da adaydir. Kac aday oldugu cizime
                 bakmadan once soylenir â€” ekip kac yer gezecegini bilsin. */}
-            {(branchRows?.length ?? 0) > 0 ? (
+            {(strip?.branchRows.length ?? 0) > 0 ? (
               <span className="fx-zone-candidates">
                 {t("faults.card.candidateSections", {
-                  count: (branchRows?.length ?? 0) + 1
+                  count: (strip?.branchRows.length ?? 0) + 1
                 })}
               </span>
             ) : null}
@@ -415,24 +392,26 @@ export function ActiveFaultCard({
               </span>
             ) : null}
           </div>
-          <FaultPoleStrip
-            lineName={f.line_name}
-            poleSeqs={poleSeqs}
-            poles={poles}
-            branchRows={branchRows}
-            hiddenBranchCount={hiddenBranchCount}
-            segments={segments}
-            fromSeq={f.from_pole_seq}
-            toSeq={f.to_pole_seq}
-            lastRedDeviceCode={f.last_red_device_code}
-            firstGreenDeviceCode={f.first_green_device_code}
-            zoneStartM={f.zone_start_m}
-            zoneEndM={f.zone_end_m}
-            alarmsByDevice={alarmsByDevice}
-            faultPhases={faultPhases}
-            onOpenDevice={onOpenDevice}
-            active
-          />
+          {strip ? (
+            <FaultPoleStrip
+              lineName={strip.lineName}
+              poleSeqs={strip.poleSeqs}
+              poles={strip.poles}
+              branchRows={strip.branchRows}
+              hiddenBranchCount={strip.hiddenBranchCount}
+              segments={strip.segments}
+              fromSeq={strip.fromSeq}
+              toSeq={strip.toSeq}
+              lastRedDeviceCode={strip.lastRedDeviceCode}
+              firstGreenDeviceCode={strip.firstGreenDeviceCode}
+              zoneStartM={strip.zoneStartM}
+              zoneEndM={strip.zoneEndM}
+              alarmsByDevice={strip.alarmsByDevice}
+              faultPhases={strip.faultPhases}
+              onOpenDevice={onOpenDevice}
+              active
+            />
+          ) : null}
         </section>
 
         <aside className="fx-evidence">
@@ -636,14 +615,14 @@ export function ActiveFaultCard({
               geliyordu ve ayrisiyorlardi: cizimde olmayan bir kol panelde
               "kontrol edin" diye duruyordu. Panel ile cizim artik tanim
               geregi ayni seyi soyler; ic ice kollar da listeye girer. */}
-          {(branchRows?.length ?? 0) > 0 ? (
+          {(strip?.branchRows.length ?? 0) > 0 ? (
             <div className="fx-ev-block">
               <h4 className="fx-ev-title">
                 <GitBranch size={13} strokeWidth={2.3} />
                 {t("faults.card.branchesTitle")}
               </h4>
               <ul className="fx-branch-list">
-                {branchRows!.map((b) => (
+                {strip!.branchRows.map((b) => (
                   <li
                     key={b.lineId}
                     className={`fx-branch${b.confirmed ? " is-confirmed" : ""}`}

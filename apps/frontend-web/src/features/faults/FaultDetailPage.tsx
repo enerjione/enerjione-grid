@@ -92,6 +92,7 @@ import { LayersControl, MapContainer, Marker, Polyline, Tooltip } from "react-le
 import L from "leaflet";
 
 import { buildFaultMapView } from "./faultMapView";
+import { aralikMetni } from "./faultRangeText";
 import { buildFaultRecurrence } from "./faultRecurrence";
 import { buildFaultStripInputs } from "./faultStripInputs";
 import { FaultPoleStrip } from "./FaultPoleStrip";
@@ -641,10 +642,7 @@ export function FaultDetailPage({
                     ·
                   </em>
                   <span className="fd-title-span">
-                    {t("faults.card.rangeText", {
-                      from: fault.from_pole_seq,
-                      to: fault.to_pole_seq
-                    })}
+                    {aralikMetni(fault, stripInputs?.poles, t)}
                   </span>
                 </>
               ) : null}

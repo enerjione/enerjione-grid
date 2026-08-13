@@ -987,6 +987,7 @@
       "alarmAcked": "onaylandı",
       "alarmMore": "+{{count}} alarm daha",
       "boundsTitle": "Arıza Bölgesi Sınırları",
+      "rangeTextLink": "{{fromLine}} #{{from}} ↔ {{toLine}} #{{to}}",
       "rangeTextNamed": "{{from}} — {{to}}",
       "deckHint": "{{count}} arıza — yana kaydırarak geçin",
       "branchesTitle": "Etkilenen Branşman Kolları",

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { aralikMetni } from "./faultRangeText";
 import { LayersControl, MapContainer, Marker, Polyline, Tooltip, useMap } from "react-leaflet";
 import { MAP_LAYERS } from "../../shared/mapTiles";
 import { ResilientTileLayer } from "../../components/ResilientTileLayer";
@@ -610,7 +611,7 @@ export function FaultDetailModal({
               <span>{fault.line_name}</span>
               <span className="fault-modal-bc-sep">·</span>
               <strong>
-                {t("faults.card.rangeText", { from: fault.from_pole_seq, to: fault.to_pole_seq })}
+                {aralikMetni(fault, undefined, t)}
               </strong>
             </div>
           </div>

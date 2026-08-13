@@ -20,6 +20,7 @@
  */
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { aralikMetni } from "./faultRangeText";
 import { CheckCircle2, ChevronRight, FilterX, Search } from "lucide-react";
 
 import type { FaultEvent } from "../../shared/types";
@@ -189,10 +190,7 @@ export function FaultHistoryTable({ faults, localeTag, onOpenFault }: Props) {
                     <small className="fx-history-region">{f.region_name}</small>
                   </td>
                   <td className="fx-history-range">
-                    {t("faults.card.rangeText", {
-                      from: f.from_pole_seq ?? "?",
-                      to: f.to_pole_seq ?? "?"
-                    })}
+                    {aralikMetni(f, undefined, t)}
                   </td>
                   <td className="fx-history-date">
                     {fmtDateTime(f.closed_at ?? f.resolved_at ?? f.opened_at, localeTag)}

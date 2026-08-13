@@ -239,6 +239,123 @@ test("KAPATILMIS kol kaydi adayligi kesinlestirmez", () => {
   assert.equal(g.branchRows[0].confirmed, false);
 });
 
+// ---------------------------------------------------------------------------
+// BAGLANTI TELI ARIZASI
+//
+// Kayit "hat=BR-2, direk 7 -> direk 1" der; 7 ANA HATTIN, 1 kolun diregidir.
+// Kolu tek basina cizmek bu ikisini tek bir hattin araligi sanmak demek: tel
+// havada asili kaliyor, cihaz kolun tek diregine yapisiyor ve cizim
+// okunamiyordu. Dogru cizim ANA HATTAN baslar; ariza ikisini birlestiren
+// telin uzerindedir.
+// ---------------------------------------------------------------------------
+
+const TEL_ARIZASI: SeritAriza = {
+  ...ARIZA,
+  line_id: 2,
+  line_name: "BR-3",
+  from_pole_seq: 3, // ANA HATTIN dallanma diregi
+  to_pole_seq: 1, // KOLUN ilk diregi
+  last_red_device_code: "BR-DEV",
+  first_green_device_code: null,
+  is_link_span: true,
+  parent_line_id: 1,
+  parent_line_name: "ANA HAT",
+  trigger_alarms: [
+    { device_code: "BR-DEV", signal_source: "master", title: "Faz-toprak arizasi" }
+  ]
+};
+
+const telKur = (alarms: SeritAlarm[] = [{ device_id: 103, reset: false }]) =>
+  buildFaultStripInputs({
+    lines: HATLAR,
+    poles: DIREKLER,
+    segments: SEGMENTLER,
+    fault: TEL_ARIZASI,
+    faults: [TEL_ARIZASI],
+    alarms,
+    devices: CIHAZLAR,
+    lineFallback: "Hat"
+  });
+
+test("tel arizasinda ANA SATIR ana hattir — kol tek basina cizilmez", () => {
+  const g = telKur()!;
+  assert.equal(g.lineName, "ANA HAT");
+  assert.deepEqual(g.poleSeqs, [1, 2, 3, 4, 5]);
+});
+
+test("tel arizasinda ANA HATTA kirmizi parca YOKTUR — ariza teldedir", () => {
+  const g = telKur()!;
+  // Bu dort alan ana satira uygulanir; kaydin degerleri kolun/ana hattin
+  // KARISIK numaralarindan geliyor, ana satira tasinirsa yanlis yeri boyar.
+  assert.equal(g.fromSeq, null);
+  assert.equal(g.toSeq, null);
+  assert.equal(g.lastRedDeviceCode, null);
+  assert.equal(g.firstGreenDeviceCode, null);
+});
+
+test("kol, DALLANMA DIREGINDEN sarkan bir satir olarak cizilir", () => {
+  const g = telKur()!;
+  assert.equal(g.branchRows.length, 1);
+  const kol = g.branchRows[0];
+  assert.equal(kol.lineId, 2);
+  assert.equal(kol.name, "BR-3");
+  assert.equal(kol.atSeq, 3, "kol ana hattaki yanlis direge baglanmis");
+  assert.equal(kol.atPoleName, "D3");
+  assert.deepEqual(kol.poleSeqs, [1, 2]);
+});
+
+test("tel arizasinda kolun KENDI bolgesi bos kalir", () => {
+  // Kaydin from/to'su kolun icinde bir aralik DEGIL; oraya tasinirsa kolun
+  // ortasinda uydurma bir kirmizi parca cikar.
+  const kol = telKur()!.branchRows[0];
+  assert.equal(kol.fromSeq ?? null, null);
+  assert.equal(kol.toSeq ?? null, null);
+  assert.equal(kol.confirmed, false, "kol kendi icinde dogrulanmis gibi isaretlenmis");
+});
+
+test("telin uzerindeki cihaz TELE cizilir ve arizayi GORMUS isaretlenir", () => {
+  const kol = telKur()!.branchRows[0];
+  assert.equal(kol.linkDevice?.code, "BR-DEV");
+  assert.equal(kol.linkDevice?.tone, "red");
+  assert.equal(kol.clearedByLink, false);
+  // Telin gercek uzunlugu da yazar; "0 m" degil.
+  assert.ok((kol.linkDistanceM ?? 0) > 500, `tel uzunlugu: ${kol.linkDistanceM}`);
+});
+
+test("KAPANMIS kayitta bile telin cihazi kirmizi kalir — kayit degismez", () => {
+  // Alarm normale donmus olabilir; kayit "arizayi goren son cihaz BR-DEV"
+  // diyorsa cizim onu yesile cevirmemeli. Ayni kural haritada da var:
+  // ayni ekranda iki farkli cevap olmaz.
+  const kol = telKur([{ device_id: 103, reset: true }])!.branchRows[0];
+  assert.equal(kol.linkDevice?.tone, "red");
+  assert.equal(kol.clearedByLink, false);
+});
+
+test("tel cihazi hicbir sey GORMEDIYSE kol temiz, supheli olan yalnizca tel", () => {
+  const g = buildFaultStripInputs({
+    lines: HATLAR,
+    poles: DIREKLER,
+    segments: SEGMENTLER,
+    // Ne kayitta son kirmizi var ne de canli alarm: cihaz "gormedim" diyor.
+    fault: { ...TEL_ARIZASI, last_red_device_code: null, trigger_alarms: [] },
+    faults: [],
+    alarms: [],
+    devices: CIHAZLAR,
+    lineFallback: "Hat"
+  })!;
+  const kol = g.branchRows[0];
+  assert.equal(kol.linkDevice?.tone, "green");
+  assert.equal(kol.clearedByLink, true);
+});
+
+test("tel kaydi ana hattin ADAY KOL taramasini kirletmez", () => {
+  // Kayit `openFaultByLine`a girseydi kolun bolgesi "direk 3 -> direk 1"
+  // araligindan cizilir, iki numaralandirma tek aralik sanilirdi.
+  const g = telKur()!;
+  assert.equal(g.branchRows.length, 1);
+  assert.equal(g.hiddenBranchCount, 0);
+});
+
 test("hatta direk yoksa null — bos bir cizim hatti SAGLAM gosterirdi", () => {
   const g = buildFaultStripInputs({
     lines: HATLAR,

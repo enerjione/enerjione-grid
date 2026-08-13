@@ -990,6 +990,7 @@
       "alarmAcked": "acknowledged",
       "alarmMore": "+{{count}} more alarms",
       "boundsTitle": "Fault Zone Bounds",
+      "rangeTextLink": "{{fromLine}} #{{from}} ↔ {{toLine}} #{{to}}",
       "rangeTextNamed": "{{from}} — {{to}}",
       "deckHint": "{{count}} faults — swipe to browse",
       "branchesTitle": "Affected Branches",

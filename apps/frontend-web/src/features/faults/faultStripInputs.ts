@@ -50,6 +50,14 @@ export type SeritAriza = BranchScanFault & {
   status: string;
   line_id: number;
   line_name?: string | null;
+  /**
+   * BAGLANTI TELI: ariza iki hatti birlestiren tek acikligin uzerinde.
+   * `from_pole_seq` ANA HATTIN, `to_pole_seq` KOLUN numarasidir — ikisi tek
+   * bir aralik degildir (bkz. backend `is_link_span`).
+   */
+  is_link_span?: boolean;
+  parent_line_id?: number | null;
+  parent_line_name?: string | null;
 };
 
 export type SeritAlarm = {
@@ -96,15 +104,32 @@ export function buildFaultStripInputs(input: {
 }): SeritGirdileri | null {
   const { lines, poles, segments, fault, faults, alarms, devices } = input;
 
+  /**
+   * BAGLANTI TELI ARIZASI — cizimin ANA SATIRI kolun kendisi OLAMAZ.
+   *
+   * Kayit "hat=KOL, direk 7 -> direk 1" der; 7 ANA HATTIN, 1 kolun diregidir.
+   * Kolu tek basina cizmek bu araligi tek bir hattin araligi sanmak demek:
+   * tel havada asili kaliyor, cihaz kolun tek diregine yapisiyor ve cizim
+   * okunmaz hale geliyordu (sahadan gelen sikayet tam olarak buydu).
+   *
+   * Dogru cizim ana hattan baslar: ANA HAT satiri + oradan sarkan KOL satiri,
+   * ariza da ikisini birlestiren TELIN uzerinde. Bu, cizimin zaten bildigi bir
+   * sekil (bag teli + uzerindeki giris cihazi) — burada yalnizca hangi hattin
+   * "ana satir" olacagi degisiyor.
+   */
+  const telArizasi = Boolean(fault.is_link_span);
+  const anaHatId = telArizasi ? (fault.parent_line_id ?? fault.line_id) : fault.line_id;
+  const anaHat = lines.find((l) => l.id === anaHatId) ?? null;
+
   const hatDirekleri = poles
-    .filter((p) => p.line_id === fault.line_id)
+    .filter((p) => p.line_id === anaHatId)
     .sort((a, b) => a.sequence_no - b.sequence_no);
   // Direksiz hatta cizilecek bir sey yok; bos bir SVG cercevesi gostermek
   // "veri yok" demekten daha kotu, cunku hat saglam gorunur.
   if (hatDirekleri.length === 0) return null;
 
   const hatSegmentleri: StripSegment[] = segments
-    .filter((s) => s.line_id === fault.line_id)
+    .filter((s) => s.line_id === anaHatId)
     .map((s) => ({
       from_pole_seq: s.from_pole_seq ?? null,
       to_pole_seq: s.to_pole_seq ?? null,
@@ -128,9 +153,20 @@ export function buildFaultStripInputs(input: {
   const acikArizaHatta = new Map<number, BranchScanFault>();
   for (const f of faults) {
     if (!AKTIF_DURUMLAR.has(f.status)) continue;
+    // TELIN KENDI KAYDI KOLUN KAYDI DEGILDIR: ariza kolun ICINDE bulunmus
+    // gibi islenirse kolun bolgesi "direk 7 -> direk 1" araligindan cizilir
+    // ve iki ayri numaralandirma tek aralik sanilir. Tel arizasinda kol,
+    // bag teli uzerinden supheli kalir.
+    if (f.is_link_span) continue;
     // Ayni hatta birden fazla bolge olabilir; listedeki ilki (en yeni) yeterli.
     if (!acikArizaHatta.has(f.line_id)) acikArizaHatta.set(f.line_id, f);
   }
+
+  // Tel arizasinda ana hattin KENDI arizasi yoktur: ana satirda kirmizi bir
+  // parca cizilmemeli, aday kol taramasi da ana hattan baslamamali.
+  const anaSatirArizasi: BranchScanFault = telArizasi
+    ? { line_id: anaHatId, trigger_alarms: fault.trigger_alarms }
+    : fault;
 
   const sahne = buildBranchRows({
     lines: lines.map((l) => ({
@@ -147,13 +183,32 @@ export function buildFaultStripInputs(input: {
       device_name: s.device_name ?? null,
       device_position_t: s.device_position_t ?? null
     })),
-    fault,
+    fault: anaSatirArizasi,
     openFaultByLine: acikArizaHatta,
     alarmedDeviceCodes: alarmliKodlar
   });
 
+  const kolSatirlari = [...sahne.rows];
+  if (telArizasi) {
+    const telSatiri = telKoluSatiri({
+      fault,
+      poles,
+      segments,
+      alarmliKodlar,
+      alarmsByDevice,
+      faultPhases
+    });
+    // Tarama ayni kolu zaten bulduysa (ana hatta baska bir kayit varsa)
+    // ikinci kez eklenmez; elle kurulan satir ONCELIKLI.
+    if (telSatiri) {
+      const i = kolSatirlari.findIndex((r) => r.lineId === telSatiri.lineId);
+      if (i >= 0) kolSatirlari[i] = telSatiri;
+      else kolSatirlari.unshift(telSatiri);
+    }
+  }
+
   return {
-    lineName: fault.line_name ?? input.lineFallback,
+    lineName: (telArizasi ? anaHat?.name : fault.line_name) ?? input.lineFallback,
     poleSeqs: hatDirekleri.map((p) => p.sequence_no),
     poles: hatDirekleri.map((p) => ({
       seq: p.sequence_no,
@@ -161,16 +216,111 @@ export function buildFaultStripInputs(input: {
       role: p.topology_role ?? null
     })),
     segments: hatSegmentleri,
-    fromSeq: fault.from_pole_seq ?? null,
-    toSeq: fault.to_pole_seq ?? null,
-    lastRedDeviceCode: fault.last_red_device_code ?? null,
-    firstGreenDeviceCode: fault.first_green_device_code ?? null,
-    zoneStartM: fault.zone_start_m ?? null,
-    zoneEndM: fault.zone_end_m ?? null,
+    // Tel arizasinda bu dort alan ANA HATTA ait olurdu — degil. Bos birakmak
+    // "ana hatta arizali parca yok" demek; ariza teldedir ve orada cizilir.
+    fromSeq: telArizasi ? null : fault.from_pole_seq ?? null,
+    toSeq: telArizasi ? null : fault.to_pole_seq ?? null,
+    lastRedDeviceCode: telArizasi ? null : fault.last_red_device_code ?? null,
+    firstGreenDeviceCode: telArizasi ? null : fault.first_green_device_code ?? null,
+    zoneStartM: telArizasi ? null : fault.zone_start_m ?? null,
+    zoneEndM: telArizasi ? null : fault.zone_end_m ?? null,
     alarmsByDevice,
     faultPhases,
-    branchRows: bagMesafesiEkle(sahne.rows, poles, segments),
+    branchRows: bagMesafesiEkle(kolSatirlari, poles, segments),
     hiddenBranchCount: sahne.hidden
+  };
+}
+
+/**
+ * BAGLANTI TELI ARIZASININ KOL SATIRI.
+ *
+ * Aday kol taramasi bu satiri uretemez: tarama ana hattaki ARIZA BOLGESINDEN
+ * yola cikar, tel arizasinda ise ana hatta bolge yoktur. Oysa hangi kol
+ * oldugunu kaydin kendisi zaten soyluyor. Satir elle kurulur ve kolun kendi
+ * bolgesi BOS birakilir: ariza kolun icinde degil, telin uzerindedir.
+ *
+ * Telin hangi yarisinin supheli oldugunu cizim, giris cihazinin durumundan
+ * cikarir (bkz. `FaultPoleStrip` > bagDurumu):
+ *   * cihaz "gordum" -> alt yari (kola dogru) + kolun ilk diregi
+ *   * "gormedim"     -> ust yari (ana hattan cihaza kadar)
+ */
+function telKoluSatiri(g: {
+  fault: SeritAriza;
+  poles: readonly SeritDirek[];
+  segments: readonly SeritSegment[];
+  alarmliKodlar: ReadonlySet<string>;
+  alarmsByDevice: Record<string, StripDeviceAlarms>;
+  faultPhases: string[];
+}): StripBranchRow | null {
+  const { fault, poles, segments, alarmliKodlar } = g;
+  const kolDirekleri = poles
+    .filter((p) => p.line_id === fault.line_id)
+    .sort((a, b) => a.sequence_no - b.sequence_no);
+  if (kolDirekleri.length === 0) return null;
+
+  const kolDirekIdleri = new Set(kolDirekleri.map((p) => p.id));
+  // BAG TELI: bir ucu kolda, digeri ana hatta olan segment.
+  const tel =
+    segments.find(
+      (s) =>
+        s.line_id === fault.line_id &&
+        kolDirekIdleri.has(s.from_pole_id) !== kolDirekIdleri.has(s.to_pole_id)
+    ) ?? null;
+  const dallanmaDiregi = tel
+    ? poles.find(
+        (p) => p.id === (kolDirekIdleri.has(tel.from_pole_id) ? tel.to_pole_id : tel.from_pole_id)
+      ) ?? null
+    : null;
+  // Dallanma diregi cozulemezse kaydin verdigi numaraya duselim: satirin ana
+  // hatta bir yere baglanmasi sart, yoksa cizim havada kalir.
+  const atSeq = dallanmaDiregi?.sequence_no ?? fault.from_pole_seq ?? null;
+  if (atSeq == null) return null;
+
+  const kod = (tel?.device_code ?? "").trim();
+  const gordu = kod ? alarmliKodlar.has(kod) || fault.last_red_device_code === kod : false;
+
+  return {
+    lineId: fault.line_id,
+    name: fault.line_name ?? "",
+    atSeq,
+    atPoleName: dallanmaDiregi?.name ?? null,
+    atPoleId: dallanmaDiregi?.id ?? null,
+    poleSeqs: kolDirekleri.map((p) => p.sequence_no),
+    poles: kolDirekleri.map((p) => ({
+      seq: p.sequence_no,
+      name: p.name ?? null,
+      role: p.topology_role ?? null
+    })),
+    // Kolun KENDI acikliklari (bag teli haric): ariza orada degil ama kol
+    // cizilirken direk araliklari ve uzerlerindeki cihazlar gorunmeli.
+    segments: segments
+      .filter((s) => s.line_id === fault.line_id && s !== tel)
+      .map((s) => ({
+        from_pole_seq: s.from_pole_seq ?? null,
+        to_pole_seq: s.to_pole_seq ?? null,
+        device_code: s.device_code ?? null,
+        device_name: s.device_name ?? null,
+        device_position_t: s.device_position_t ?? null
+      })),
+    // Kolun icinde BULUNMUS bir bolge yok — ariza telin uzerinde.
+    fromSeq: null,
+    toSeq: null,
+    lastRedDeviceCode: null,
+    firstGreenDeviceCode: null,
+    faultPhases: g.faultPhases,
+    alarmsByDevice: g.alarmsByDevice,
+    confirmed: false,
+    linkDevice: kod
+      ? {
+          code: kod,
+          label: tel?.device_name || kod,
+          tone: gordu ? "red" : "green",
+          sources: g.alarmsByDevice[kod]?.sources
+        }
+      : null,
+    // Giris cihazi "gormedim" dediyse ariza kolda olamaz; supheli olan
+    // yalnizca telin o cihaza kadarki parcasidir.
+    clearedByLink: Boolean(kod) && !gordu
   };
 }
 

@@ -32,7 +32,6 @@ import {
 } from "lucide-react";
 
 import { fetchFaultCauses, type GridSnapshot } from "../../shared/api";
-import { haversineM } from "../../shared/lineDistance";
 import type {
   FaultCauseCatalog,
   AlarmEvent,
@@ -41,8 +40,7 @@ import type {
   FaultStats
 } from "../../shared/types";
 import { ActiveFaultCard } from "./ActiveFaultCard";
-import type { StripPole } from "./FaultPoleStrip";
-import { buildBranchRows } from "./branchRows";
+import { buildFaultStripInputs } from "./faultStripInputs";
 import { buildFaultRecurrence } from "./faultRecurrence";
 import { FaultHistoryTable } from "./FaultHistoryTable";
 
@@ -188,63 +186,13 @@ export function FaultListPage({
     [faults]
   );
 
-  /** line_id -> hattin tum direk sira numaralari (sematik serit icin). */
-  const poleSeqsByLine = useMemo(() => {
-    const m = new Map<number, number[]>();
-    for (const p of gridSnapshot?.poles ?? []) {
-      const arr = m.get(p.line_id);
-      if (arr) arr.push(p.sequence_no);
-      else m.set(p.line_id, [p.sequence_no]);
-    }
-    for (const arr of m.values()) arr.sort((a, b) => a - b);
-    return m;
-  }, [gridSnapshot]);
-
-  /** line_id -> direk AD ve ROL bilgisi. Cizimde sira numarasi yerine ad
-   *  gosterilir (saha ekibi direkleri adiyla taniyor) ve bransman direkleri
-   *  ayri bir sembolle isaretlenir. */
-  const polesByLine = useMemo(() => {
-    const m = new Map<number, StripPole[]>();
-    for (const p of gridSnapshot?.poles ?? []) {
-      const item: StripPole = {
-        seq: p.sequence_no,
-        name: p.name ?? null,
-        role: p.topology_role ?? null
-      };
-      const arr = m.get(p.line_id);
-      if (arr) arr.push(item);
-      else m.set(p.line_id, [item]);
-    }
-    for (const arr of m.values()) arr.sort((a, b) => a.seq - b.seq);
-    return m;
-  }, [gridSnapshot]);
-
-  /** line_id -> hattin segmentleri. Cihazlar TELIN UZERINDE bunlardan cizilir
-   *  (`device_position_t` segment icindeki gercek konumu verir). */
-  const segmentsByLine = useMemo(() => {
-    type Seg = NonNullable<typeof gridSnapshot>["segments"][number];
-    const m = new Map<number, Seg[]>();
-    for (const s of gridSnapshot?.segments ?? []) {
-      const arr = m.get(s.line_id);
-      if (arr) arr.push(s);
-      else m.set(s.line_id, [s]);
-    }
-    return m;
-  }, [gridSnapshot]);
-
-  /** line_id -> o hatta ACIK ariza kaydi. Aday kollarin kendi bolgesi
-   *  buradan gelir: kolun kaydi varsa cizimde kesin aralik, yoksa kol
-   *  bastan sona aday olarak cizilir. */
-  const openFaultByLine = useMemo(() => {
-    const m = new Map<number, FaultEvent>();
-    for (const f of faults) {
-      if (!ACTIVE_STATUSES.has(f.status)) continue;
-      // Ayni hatta birden fazla bolge olabilir; ilki (en yeni) yeterli —
-      // liste zaten opened_at'e gore sirali gelir.
-      if (!m.has(f.line_id)) m.set(f.line_id, f);
-    }
-    return m;
-  }, [faults]);
+  /** SEMATIK CIZIMIN GIRDILERI — turetmeler `faultStripInputs`'te.
+   *
+   *  Burada alti ayri `useMemo` vardi (direk siralari, direk ad/rolleri,
+   *  segmentler, acik kayitlar, alarmli cihaz kodlari, aday kol sahnesi +
+   *  bag teli mesafesi). Ayni cizim ariza DETAY sayfasina da konulunca
+   *  hepsinin kopyasi gerekecekti; kopya ayrisirsa iki ekran ayni arizada
+   *  farkli kol gosterir ve ekip yanlis yere gider. Tek kaynak: modul. */
 
   /** Sekmelerde secili aktif ariza. Kayit listeden dusunce (cozuldu) ilk
    *  siradakine duser — bos ekran gostermek yerine. */
@@ -255,91 +203,19 @@ export function FaultListPage({
     [activeFaults, activeFaultId]
   );
 
-  /** O AN alarmi olan cihaz KODLARI — haritadaki kuralla AYNI
-   *  (`!reset` ve `produces_fault !== false`). Aday bir kolun kendi ariza
-   *  kaydi olmasa da uzerindeki cihazlarin ne dedigi buradan okunur; alarmi
-   *  olmayan cihaz "arizayi gormedim" sayilir. */
-  const alarmliCihazKodlari = useMemo(() => {
-    const idKod = new Map((devices ?? []).map((d) => [d.id, d.code]));
-    const kume = new Set<string>();
-    for (const a of alarms ?? []) {
-      if (a.reset || a.produces_fault === false) continue;
-      const kod = idKod.get(a.device_id);
-      if (kod) kume.add(kod);
-    }
-    return kume;
-  }, [alarms, devices]);
-
-  /** ADAY HAT KESIMLERI — ariza bolgesindeki dallanma direklerinden cikan
-   *  kollar. Cizimde her biri AYRI SATIR olarak tam hat halinde gosterilir;
-   *  ekip kac yeri gezecegini cizimden okur (bkz. branchRows.ts). */
-  const branchScene = useMemo(() => {
-    if (!shownFault || !gridSnapshot) return { rows: [], hidden: 0 };
-    return buildBranchRows({
-      alarmedDeviceCodes: alarmliCihazKodlari,
+  const stripInputs = useMemo(() => {
+    if (!shownFault || !gridSnapshot) return null;
+    return buildFaultStripInputs({
       lines: gridSnapshot.lines,
       poles: gridSnapshot.poles,
-      segments: gridSnapshot.segments.map((s) => ({
-        line_id: s.line_id,
-        from_pole_seq: s.from_pole_seq ?? null,
-        to_pole_seq: s.to_pole_seq ?? null,
-        device_code: s.device_code ?? null,
-        device_name: s.device_name ?? null,
-        device_position_t: s.device_position_t ?? null
-      })),
+      segments: gridSnapshot.segments,
       fault: shownFault,
-      openFaultByLine
+      faults,
+      alarms: alarms ?? [],
+      devices: devices ?? [],
+      lineFallback: t("common.line")
     });
-  }, [shownFault, gridSnapshot, openFaultByLine, alarmliCihazKodlari]);
-
-  /** Kol satirlarina BAG TELININ gercek uzunlugunu ekle.
-   *
-   *  NEDEN INDEKSTEN DEGIL: `buildLineDistanceIndex` kolu, asili oldugu
-   *  direkten BASLATIR — kolun ilk direginin "hat basindan mesafesi" ile
-   *  dallanma direginin mesafesi AYNIDIR. Bag telinin kendi uzunlugu o
-   *  modelde hic yoktur, dolayisiyla fark her zaman 0 cikiyordu ("0 m").
-   *  Gercek uzunluk iki direk arasindaki cografi mesafedir; cihaz da o telin
-   *  uzerinde `t` oraninda oturur. */
-  const branchRowsWithDistance = useMemo(() => {
-    if (!gridSnapshot || branchScene.rows.length === 0) return branchScene.rows;
-    const poleById = new Map(gridSnapshot.poles.map((p) => [p.id, p]));
-    return branchScene.rows.map((r) => {
-      const kod = r.linkDevice?.code;
-      if (!kod || r.atPoleId == null) return r;
-      const direk = poleById.get(r.atPoleId);
-      if (!direk) return r;
-      // Bag segmenti: kolun, bir ucu ana hatta olan girisi.
-      const kolDirekIdleri = new Set(
-        gridSnapshot.poles.filter((p) => p.line_id === r.lineId).map((p) => p.id)
-      );
-      const giris = gridSnapshot.segments.find(
-        (sg) =>
-          sg.line_id === r.lineId &&
-          sg.device_code === kod &&
-          kolDirekIdleri.has(sg.from_pole_id) !== kolDirekIdleri.has(sg.to_pole_id)
-      );
-      if (!giris) return r;
-      const otekiId = giris.from_pole_id === direk.id ? giris.to_pole_id : giris.from_pole_id;
-      const oteki = poleById.get(otekiId);
-      if (!oteki) return r;
-      const telBoyu = haversineM(
-        direk.latitude,
-        direk.longitude,
-        oteki.latitude,
-        oteki.longitude
-      );
-      const t =
-        giris.device_position_t != null &&
-        giris.device_position_t >= 0 &&
-        giris.device_position_t <= 1
-          ? giris.device_position_t
-          : 0.5;
-      // Kolun ilk diregi dallanma diregiyle AYNI koordinattaysa (veri girisi)
-      // mesafe anlamsizdir; "0 m" yazmak yerine hic yazma.
-      const m = telBoyu * t;
-      return m >= 1 ? { ...r, linkDistanceM: m } : r;
-    });
-  }, [branchScene.rows, gridSnapshot]);
+  }, [shownFault, gridSnapshot, faults, alarms, devices, t]);
 
   /** SEBEP ETIKETI — insanin girdigi kod yoksa cihazin onerisi.
    *  Kod ("tree_contact") operatore hicbir sey soylemez; katalogdan
@@ -545,11 +421,7 @@ export function FaultListPage({
             <ActiveFaultCard
               key={shownFault.id}
               fault={shownFault}
-              poleSeqs={poleSeqsByLine.get(shownFault.line_id) ?? []}
-              poles={polesByLine.get(shownFault.line_id) ?? []}
-              branchRows={branchRowsWithDistance}
-              hiddenBranchCount={branchScene.hidden}
-              segments={segmentsByLine.get(shownFault.line_id) ?? []}
+              strip={stripInputs}
               localeTag={localeTag}
               now={now}
               canAssign={canAssign}
