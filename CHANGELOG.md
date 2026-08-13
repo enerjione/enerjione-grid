@@ -14,6 +14,25 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.81.1] — 2026-08-13
+
+### Düzeltildi
+
+- **Hattan kaldırılan cihaz haritada eski yerinde durmaya devam ediyordu.** Bir
+  cihaz hat üzerindeki açıklığa oturduğunda koordinatı **o açıklıktan türetilip**
+  cihaz kaydına yazılıyor — yani sahadan girilmiş bağımsız bir ölçüm değil,
+  aralığın kopyası. Atama kaldırılınca bu kopyayı kimse temizlemiyordu; harita
+  konumu aralıktan türetemeyince cihazın kendi koordinatına düşüyor ve pin eski
+  yerinde kalıyordu. Artık cihaz hiçbir açıklığa bağlı kalmadığında konumu
+  bırakılıyor ve haritadan düşüyor. **Cihazı başka bir açıklığa taşımak
+  etkilenmez:** taşıma sırasında konum hedef aralığa göre yeniden hesaplanıyor.
+
+  2.81.0'daki düzeltmeyle birlikte çalışır: o, hâlihazırda eski koordinatı olan
+  kayıtları da ana sayfada gizler; bu ise bundan sonra kaldırılan cihazların
+  geride yanlış koordinat bırakmasını önler.
+
+---
+
 ## [2.81.0] — 2026-08-13
 
 ### Eklendi
