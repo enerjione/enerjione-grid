@@ -724,21 +724,36 @@ def _fill_signal_groups(
                 values[source] = (text or "Veri yok", None if text else C_MUTED)
                 continue
             if trust == "missing":
+                # Deger HIC yoksa gosterilecek bir sey de yok.
                 values[source] = ("Veri yok", C_MUTED)
                 continue
             dolu = True
-            if trust == "untrusted":
-                values[source] = ("Güvenilmez", C_WARN)
-                continue
+            bayat = trust == "untrusted"
             if tipler[key] in ("binary", "binary_output"):
-                aktif = value == 1
-                values[source] = (
-                    ("Aktif", C_ALARM) if aktif else ("Normal", C_OK)
-                )
+                # GUVENILMEZ OLCUM DEGERI GIZLEMEZ, DAMGALAR.
+                #
+                # Rapor once yalnizca "Guvenilmez" yaziyordu ve SON DEGER
+                # kayboluyordu — ekranda da oyleydi ve kullanici bunu
+                # duzelttirdi: "canli degerler sayfasinda sinyalin son
+                # degerini nasil gorebiliyorsam burada da gorebilmeliyim".
+                #
+                # Kural yine de korunuyor: bayat bir okuma duz YESIL "Normal"
+                # basilmaz (yesil yalan). Deger notr renkte ve "son bilinen"
+                # damgasiyla cikar; okuyan hem son durumu gorur hem tazeligini
+                # bilir.
+                metin = "Aktif" if value == 1 else "Normal"
+                if bayat:
+                    values[source] = (f"{metin} · son bilinen", C_MUTED)
+                else:
+                    values[source] = (metin, C_ALARM if value == 1 else C_OK)
                 continue
             unit = birimler.get(key)
             text = _num(value, 0) if tipler[key] == "counter" else _num(value)
-            values[source] = (f"{text} {unit}" if unit else text, None)
+            text = f"{text} {unit}" if unit else text
+            # Analog/sayacta da ayni ilke: sayi durur, tazeligi damgalanir.
+            values[source] = (
+                (f"{text} · son bilinen", C_MUTED) if bayat else (text, None)
+            )
         if not dolu:
             gizli += 1
             continue
@@ -920,9 +935,9 @@ def build_device_report_pdf(
         Paragraph(
             "Bu rapor, oluşturulduğu anda sistemde kayıtlı SON değerlerden "
             "üretilmiştir; cihazın canlı durumu bu andan sonra değişmiş olabilir. "
-            "Haberleşmesi kopmuş bir cihazın gönderdiği son okuma "
-            "&quot;Güvenilmez&quot; olarak işaretlenir — değerin kendisi basılır "
-            "ama ona dayanarak karar verilmemelidir.",
+            "Haberleşmesi kopmuş bir cihazın gönderdiği son okuma &quot;son "
+            "bilinen&quot; olarak damgalanır — değerin kendisi basılır ama ona "
+            "dayanarak karar verilmemelidir.",
             st.caption,
         )
     )
@@ -1232,10 +1247,11 @@ def _signal_sections(st: ReportStyles, data: DeviceReportData) -> list:
         out.append(Spacer(1, 4))
         out.append(
             Paragraph(
-                "&quot;·&quot; işareti o noktanın ilgili ünitede tanımlı olmadığını, "
-                "&quot;Veri yok&quot; hiç telemetri gelmediğini, &quot;Güvenilmez&quot; "
-                "ise değerin geldiğini ama haberleşme kalitesi nedeniyle karar "
-                "dayanağı yapılamayacağını gösterir.",
+                "Boş hücre (&quot;·&quot;) o noktanın ilgili ünitede tanımlı "
+                "olmadığını, &quot;Veri yok&quot; hiç telemetri gelmediğini gösterir. "
+                "&quot;son bilinen&quot; damgalı değerler cihazdan gelmiştir ama "
+                "haberleşme kalitesi nedeniyle güncel olmayabilir — okunur, karar "
+                "dayanağı yapılmaz.",
                 st.caption,
             )
         )

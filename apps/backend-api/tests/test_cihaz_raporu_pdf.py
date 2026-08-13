@@ -308,9 +308,15 @@ def test_setin_pili_FIZIKSEL_uydudan_okunur(db):
 # ---------------------------------------------------------------------------
 # 3. Yesil yalan yok
 # ---------------------------------------------------------------------------
-def test_comm_lost_okumasi_NORMAL_yazilmaz(db):
-    """`comm_lost` kalitesiyle gelen 0.0 "Guvenilmez" basilir, "Normal" degil."""
-    from app.services.device_report_service import collect_device_report
+def test_comm_lost_okumasi_YESIL_Normal_basilmaz(db):
+    """`comm_lost` ile gelen 0.0 "son bilinen" damgasi ve NOTR renkle basilir.
+
+    Deger GIZLENMEZ (ekranda da oyle: "canli degerler sayfasinda sinyalin
+    son degerini nasil gorebiliyorsam burada da gorebilmeliyim") ama duz
+    yesil "Normal" de yazilmaz — yesil "sorun yok" der, oysa bu okuma taze
+    degil.
+    """
+    from app.services.device_report_service import C_MUTED, C_OK, collect_device_report
 
     _sebeke(db)
     device = _sn2(db)
@@ -321,8 +327,10 @@ def test_comm_lost_okumasi_NORMAL_yazilmaz(db):
     satir = next(
         r for r in data.groups["protection"] if r.suffix == "overcurrent_tripped"
     )
-    assert satir.values["master"][0] == "Güvenilmez"
-    assert satir.values["sat01"][0] == "Normal"
+    metin, renk = satir.values["master"]
+    assert metin == "Normal · son bilinen"
+    assert renk == C_MUTED
+    assert satir.values["sat01"] == ("Normal", C_OK)
 
 
 def test_veri_gelmeyen_sinyal_satiri_BASILMAZ(db):
