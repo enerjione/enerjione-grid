@@ -35,6 +35,11 @@ import "./faultMapView.test";
 // firlatir ve TUM arayuz kitlenir (2026-08-12'de yasandi).
 import "./hookSirasi.test";
 
+// Hat Yonetimi haritasinda cihaz etiketi: cihaz listesi bos/eksik olsa da
+// isaretcinin ustunde bir ad yazmali. Adsiz elmaslar "hangi cihaz ne"
+// sorusunu cevapsiz birakiyordu.
+import "./gridDeviceLabel.test";
+
 // Bransman baglantilari: "Diger hatlar" acikken kollar sisteme bagli
 // gorunmeli. Bagli gorunmeyen bir kola kimse cihaz yerlestirmez.
 import "./branchConnectors.test";

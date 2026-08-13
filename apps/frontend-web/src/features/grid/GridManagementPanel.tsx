@@ -54,6 +54,7 @@ import {
 } from "../../shared/api";
 import { isKitModel } from "../../shared/types";
 import type { DeviceRow, Line, LineDetail, LineSegment, Pole, Region, TopologyRole } from "../../shared/types";
+import { cihazEtiketi, cihazKodu } from "./deviceLabel";
 import type { GridSnapshot } from "../../shared/api";
 import { useToast } from "../../components/ToastProvider";
 import { LineWizardModal } from "./LineWizardModal";
@@ -1288,6 +1289,10 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                       const lat = ax + dx * tParam;
                       const lon = ay + dy * tParam;
                       const dev = devices.find((d) => d.id === seg.device_id);
+                      // Etiket cihaz listesine BAGLI DEGIL: segment adi kendi
+                      // tasiyor (bkz. deviceLabel — regresyonun aciklamasi orada).
+                      const adEtiketi = cihazEtiketi(dev, seg);
+                      const kodEtiketi = cihazKodu(dev, seg);
                       const openMenu = (event: L.LeafletMouseEvent) => {
                         event.originalEvent.preventDefault();
                         event.originalEvent.stopPropagation();
@@ -1339,21 +1344,19 @@ export function GridManagementPanel({ accessToken, devices, gridSnapshot }: Prop
                             dragend: handleDragEnd
                           }}
                         >
-                          {/* Cihaz adi her zaman kalici etiket olarak gozuksun
-                              (edit modunda olmasak da). Yakindan bakanlar
-                              hangi cihazin nerede oldugunu hizla gorur. */}
-                          {dev ? (
-                            <Tooltip
-                              permanent
-                              direction="top"
-                              offset={[0, -8]}
-                              className="grid-device-name-label"
-                            >
-                              {dev.name}
-                            </Tooltip>
-                          ) : null}
+                          {/* Cihaz adi HER ZAMAN kalici etiket olarak gozukur
+                              (duzenleme modunda olmasak da): haritanin cevabini
+                              verdigi soru "hangi cihaz nerede". */}
+                          <Tooltip
+                            permanent
+                            direction="top"
+                            offset={[0, -9]}
+                            className="grid-device-name-label"
+                          >
+                            {adEtiketi}
+                          </Tooltip>
                           <Tooltip sticky direction="bottom" offset={[0, 8]}>
-                            {dev ? `${dev.name} (${dev.code})` : `Cihaz #${seg.device_id}`}
+                            {kodEtiketi ? `${adEtiketi} (${kodEtiketi})` : adEtiketi}
                             <br />
                             {slot.fromPole.sequence_no} ↔ {slot.toPole.sequence_no}
                             {total > 1 ? ` · ${idx + 1}/${total}` : ""}
