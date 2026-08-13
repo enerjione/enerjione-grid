@@ -209,6 +209,7 @@ import type {
   UserRole
 } from "../shared/types";
 import { isKitModel } from "../shared/types";
+import { anaSayfadaGorunur } from "../features/dashboard/dashboardVisibility";
 
 // PageMode / EngineeringPage tipleri tabModel'den geliyor (tek kaynak). Sekme
 // sistemi bunlari uretir; App aktif sekmeden turetir.
@@ -2482,12 +2483,22 @@ export function App() {
       // Kit seviyesindeki olcumler kaybolmuyor: her setin "Pole Master"
       // sekmesinde gosteriliyor. Kitin kendisi Muhendislik > Cihazlar
       // ekraninda duruyor (baglanti ayarlari ve yapilandirma orada).
-      if (isKitModel(d.model)) return false;
-      // ESKI: atanmamis cihazlari listeden tamamen gizliyorduk. YENI:
-      // hepsi gozuksun ama DeviceSidebar atanmamislari 'Hatta atanmadi'
-      // rozeti ile isaretler (deviceTopology null kontrolu). Boylece
-      // operator silinmis/yeni eklenmis cihazi anasayfada ariza tespit
-      // etmek icin atayabilir/teshis edebilir.
+      // YAPISAL GORUNURLUK (kit / hatta atanmamis) tek yerde ve testli:
+      // bkz. features/dashboard/dashboardVisibility.ts. Kural bir kez ters
+      // cevrilip geri alindi; arada "hattan kaldir" ana sayfada hicbir sey
+      // degistirmez oldu.
+      if (
+        !anaSayfadaGorunur({
+          kit: isKitModel(d.model),
+          topolojiYuklendi: Boolean(gridSnapshot),
+          hattaAtanmis: Boolean(deviceTopologyInfo.get(d.id)),
+          atanmamisIsteniyor:
+            dashboardRegionId === "unassigned" || dashboardLineId === "unassigned",
+        })
+      ) {
+        return false;
+      }
+
       if (dashboardStatusFilter === "online" && d.communicationStatus !== "online") return false;
       if (dashboardStatusFilter === "offline" && d.communicationStatus === "online") return false;
       if (dashboardStatusFilter === "alarm" && !d.alarmActive) return false;
@@ -2528,7 +2539,8 @@ export function App() {
     deviceLocationLabel,
     dashboardRegionId,
     dashboardLineId,
-    deviceTopologyInfo
+    deviceTopologyInfo,
+    gridSnapshot
   ]);
 
   // Filtre çubuğu için ham sayım rozetleri (filtre uygulanmamış toplam).
