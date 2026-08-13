@@ -23159,19 +23159,25 @@ th.event-col-category {
 
 /* Hat Yonetimi haritasinda cihaz uzeri kalici cihaz adi etiketi
    (sadece duzenleme modunda gorunur) */
+/* Cihaz adi etiketi — artik HER cihazin uzerinde kalici.
+   Uydu/sokak karolarinin uzerinde de okunabilmesi icin koyu zemin + hafif
+   halka; `pointer-events: none` cunku etiket haritanin tiklamasini yemez
+   (etiketler surekli acik oldugundan bu sart, yoksa cihaza tiklanamaz). */
 .grid-device-name-label.leaflet-tooltip {
-  background: rgba(15, 23, 42, 0.85);
+  background: rgba(15, 23, 42, 0.88);
   color: #fff;
   border: none;
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-size: 10px;
-  font-weight: 600;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  border-radius: 5px;
+  padding: 2px 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.55);
   white-space: nowrap;
+  pointer-events: none;
 }
 .grid-device-name-label.leaflet-tooltip-top::before {
-  border-top-color: rgba(15, 23, 42, 0.85);
+  border-top-color: rgba(15, 23, 42, 0.88);
 }
 /* ===========================================================================
    Kullanici Bildirim Tercihleri (Profil > Ayarlar > Bildirimler)
