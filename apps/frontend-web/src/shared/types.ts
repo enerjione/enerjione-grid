@@ -532,6 +532,9 @@ export type DeviceHealth = {
     device_id: number;
     code: string;
     name: string;
+    /** Batarya yüzdesi eşiği cihaz TÜRÜNE bağlı; dönüşüm `shared/battery.ts`
+     *  içinde tek kaynakta yapılır (bkz. `thresholdsFor`). */
+    model: string | null;
     /** "online" | "offline" | "unknown" */
     comm_status: string;
     alarms: number;
@@ -539,6 +542,9 @@ export type DeviceHealth = {
     faults: number;
     avg_dbm: number | null;
     worst_dbm: number | null;
+    /** Master ünitenin SON ölçülen batarya voltajı (V). Trend sorgusundan
+     *  bağımsızdır: yeni kurulan cihazda eğim yoktur ama voltaj bellidir. */
+    battery_v: number | null;
     drop_per_day_v: number | null;
     days_to_low: number | null;
   }[];

@@ -4705,6 +4705,8 @@
     "colOutages": "Kesinti",
     "colFaults": "Arıza",
     "colRssi": "Sinyal",
+    "colBattery": "Batarya",
+    "colVoltage": "Gerilim",
     "colDrain": "Tükenme",
     "tabDensity": "Hat Arıza Yoğunluğu",
     "viewMap": "Harita",

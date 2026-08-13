@@ -322,9 +322,10 @@ def cihaz_karsilastirmasi(
     from sqlalchemy import select
 
     from app.models.device import Device
+    from app.models.telemetry_latest import TelemetryLatest
 
     stmt = select(
-        Device.id, Device.code, Device.name, Device.communication_status
+        Device.id, Device.code, Device.name, Device.communication_status, Device.model
     ).where(Device.parent_device_id.is_(None))
     if visible_device_ids is not None:
         if not visible_device_ids:
@@ -352,8 +353,26 @@ def cihaz_karsilastirmasi(
         )
     }
 
+    # SON BATARYA VOLTAJI — `telemetry_latest`ten, trend sorgusundan DEGIL.
+    #
+    # `batarya_tukenme` bir EGIM hesaplar ve bunun icin en az `MIN_TREND_DAYS`
+    # gunluk gozlem ister; yeni kurulmus ya da yeni eklenmis cihazda hicbir
+    # sey donmez. Tabloda "su an batarya ne durumda" sorusunun cevabi bundan
+    # bagimsiz olmali — cihaz dun takilmis olsa bile voltaji bellidir.
+    # Okuma (device_id, signal_key) birincil anahtari uzerinden gider.
+    voltajlar: dict[int, float] = {}
+    if cihazlar:
+        kimlikler = [int(c[0]) for c in cihazlar]
+        for dev_id, deger in db.execute(
+            select(TelemetryLatest.device_id, TelemetryLatest.value)
+            .where(TelemetryLatest.device_id.in_(kimlikler))
+            .where(TelemetryLatest.signal_key == BATTERY_SIGNAL)
+            .where(TelemetryLatest.value.is_not(None))
+        ).all():
+            voltajlar[int(dev_id)] = float(deger)
+
     out: list[dict] = []
-    for dev_id, kod, ad, durum in cihazlar:
+    for dev_id, kod, ad, durum, model in cihazlar:
         alarm = alarm_sayilari.get(int(dev_id), {})
         s = sinyal.get(int(dev_id))
         b = batarya.get(int(dev_id))
@@ -362,12 +381,20 @@ def cihaz_karsilastirmasi(
                 "device_id": int(dev_id),
                 "code": kod,
                 "name": ad,
+                # Yuzde arayuzde hesaplanir (bkz. `shared/battery.ts`): esikler
+                # cihaz TURUNE bagli ve donusum orada TEK kaynakta duruyor.
+                # Burada ikinci bir formul tutmak, ayni bataryayi iki ekranda
+                # farkli yuzdeyle gostermenin bilinen yoluydu.
+                "model": model,
                 "comm_status": str(getattr(durum, "value", durum) or "unknown"),
                 "alarms": int(alarm.get("alarms", 0)),
                 "outages": int(alarm.get("outages", 0)),
                 "faults": int(ariza_sayilari.get(int(dev_id), 0)),
                 "avg_dbm": s["avg_dbm"] if s else None,
                 "worst_dbm": s["worst_dbm"] if s else None,
+                "battery_v": round(voltajlar[int(dev_id)], 3)
+                if int(dev_id) in voltajlar
+                else None,
                 "drop_per_day_v": b["drop_per_day_v"] if b else None,
                 "days_to_low": b["days_to_low"] if b else None,
             }

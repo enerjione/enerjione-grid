@@ -99,6 +99,8 @@ import type {
   SystemHealth
 } from "../../shared/types";
 import { usePolling } from "../../shared/usePolling";
+import { voltageToPercent } from "../../shared/battery";
+import { useDeviceModelSettings } from "../../components/DeviceModelSettingsProvider";
 
 /** Harita Leaflet + karo katmani getirir; yalnizca kendi sekmesi acilinca
  *  yuklensin. Analiz sayfasinin ilk acilisi bunu odemesin. */
@@ -880,7 +882,17 @@ function kovala(
   }));
 }
 
-type Siralama = "alarms" | "outages" | "faults" | "avg_dbm" | "drop_per_day_v";
+type Siralama = "alarms" | "outages" | "faults" | "avg_dbm" | "battery_pct";
+
+/** Sutun -> siralanacak SAYI.
+ *
+ *  Dogrudan `c[anahtar]` okunmuyor cunku batarya sutununda GOSTERILEN sey
+ *  yuzde, satirda duran sey voltaj. Esikler cihaz TURUNE bagli oldugundan
+ *  (bkz. `shared/battery.ts`) karisik modelli bir filoda voltaja gore
+ *  siralamak ekrandaki yuzde sirasiyla ayrisirdi: 3,45 V bir modelde %20,
+ *  digerinde %60 olabilir. Siralama her zaman GORULEN degere gore. */
+type KiyasSatiri = DeviceHealth["device_comparison"][number];
+type OlcuHaritasi = Record<Siralama, (c: KiyasSatiri) => number | null>;
 
 /** Tabloda gosterilen satir sayisi. Tamami (600'e kadar) grafiklerde ve
  *  dagilimlarda zaten var; tablo KARAR icin, tarama icin degil. */
@@ -900,6 +912,27 @@ function CihazSagligi({ accessToken, days }: { accessToken: string; days: number
   );
 
   const kiyas = useMemo(() => veri?.device_comparison ?? [], [veri]);
+
+  // Voltaj -> yuzde donusumu TEK kaynakta (`shared/battery.ts`) ve esikler
+  // cihaz turunden cozuluyor; boylece bu tablo ile cihaz listesi/harita ayni
+  // bataryaya ayni yuzdeyi yaziyor. Olculen sinyal master unitesinin
+  // bataryasi (backend `BATTERY_SIGNAL`), o yuzden unite sabit "master".
+  const { thresholdsFor } = useDeviceModelSettings();
+  const bataryaYuzdesi = useCallback(
+    (c: KiyasSatiri) => voltageToPercent(c.battery_v, thresholdsFor(c.model, "master")),
+    [thresholdsFor]
+  );
+
+  const olcu = useMemo<OlcuHaritasi>(
+    () => ({
+      alarms: (c) => c.alarms,
+      outages: (c) => c.outages,
+      faults: (c) => c.faults,
+      avg_dbm: (c) => c.avg_dbm,
+      battery_pct: (c) => bataryaYuzdesi(c) ?? null
+    }),
+    [bataryaYuzdesi]
+  );
 
   const rssiKovalari = useMemo(
     () =>
@@ -937,14 +970,15 @@ function CihazSagligi({ accessToken, days }: { accessToken: string; days: number
   );
 
   const siraliKiyas = useMemo(() => {
-    // dBm'de KUCUK olan kotudur; digerlerinde BUYUK olan kotu. Tablo her
-    // zaman "en kotu ustte" okunmali, yoksa sutun degistikce anlam terse
-    // doner.
-    const yon = sirala === "avg_dbm" ? 1 : -1;
+    // dBm ve BATARYA YUZDESINDE kucuk olan kotudur; digerlerinde buyuk olan
+    // kotu. Tablo her zaman "en kotu ustte" okunmali, yoksa sutun degistikce
+    // anlam terse doner.
+    const yon = sirala === "avg_dbm" || sirala === "battery_pct" ? 1 : -1;
+    const deger = olcu[sirala];
     return [...kiyas]
       .sort((a, b) => {
-        const av = a[sirala];
-        const bv = b[sirala];
+        const av = deger(a);
+        const bv = deger(b);
         // Olcusu olmayan cihaz listenin SONUNA duser; basa koymak "en kotu"
         // sutununu bilinmeyenlerle doldururdu.
         if (av == null && bv == null) return 0;
@@ -953,7 +987,7 @@ function CihazSagligi({ accessToken, days }: { accessToken: string; days: number
         return (av - bv) * yon;
       })
       .slice(0, TABLO_SATIR);
-  }, [kiyas, sirala]);
+  }, [kiyas, sirala, olcu]);
 
   const durumlar = useMemo(
     () =>
@@ -1068,7 +1102,7 @@ function CihazSagligi({ accessToken, days }: { accessToken: string; days: number
                       ["outages", t("faultAnalytics.colOutages")],
                       ["faults", t("faultAnalytics.colFaults")],
                       ["avg_dbm", t("faultAnalytics.colRssi")],
-                      ["drop_per_day_v", t("faultAnalytics.colDrain")]
+                      ["battery_pct", t("faultAnalytics.colBattery")]
                     ] as [Siralama, string][]
                   ).map(([anahtar, baslik]) => (
                     <th key={anahtar} scope="col" className="fa-th-num">
@@ -1083,6 +1117,12 @@ function CihazSagligi({ accessToken, days }: { accessToken: string; days: number
                       </button>
                     </th>
                   ))}
+                  {/* Gerilim SIRALANMAZ: batarya sutunuyla ayni olcunun iki
+                      gosterimi, ikisini de siralanabilir yapmak ayni islem
+                      icin iki dugme demekti. */}
+                  <th scope="col" className="fa-th-num">
+                    {t("faultAnalytics.colVoltage")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1103,12 +1143,19 @@ function CihazSagligi({ accessToken, days }: { accessToken: string; days: number
                     <td className="fa-td-num">{c.outages}</td>
                     <td className="fa-td-num">{c.faults}</td>
                     {/* Olcu yoksa "—": 0 dBm "mukemmel sinyal" demektir ve
-                        tam ters okunurdu. */}
-                    <td className="fa-td-num">{c.avg_dbm ?? "—"}</td>
+                        tam ters okunurdu. Birim YAZILIYOR: ciplak "-31.2"
+                        hangi olcek oldugunu soylemiyordu. */}
                     <td className="fa-td-num">
-                      {c.drop_per_day_v != null
-                        ? `${Math.round(c.drop_per_day_v * 1000)} mV`
-                        : "—"}
+                      {c.avg_dbm != null ? `${c.avg_dbm} dBm` : "—"}
+                    </td>
+                    <td className="fa-td-num">
+                      {bataryaYuzdesi(c) != null ? `%${bataryaYuzdesi(c)}` : "—"}
+                    </td>
+                    {/* Ham voltaj yuzdenin YANINDA durur: esik cihaz turune
+                        gore degistigi icin "%40" tek basina hangi hucrede ne
+                        demek oldugunu soylemiyor; saha ekibi voltaji okuyor. */}
+                    <td className="fa-td-num">
+                      {c.battery_v != null ? `${c.battery_v.toFixed(2)} V` : "—"}
                     </td>
                   </tr>
                 ))}

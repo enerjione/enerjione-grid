@@ -4712,6 +4712,8 @@
     "colOutages": "Outages",
     "colFaults": "Faults",
     "colRssi": "Signal",
+    "colBattery": "Battery",
+    "colVoltage": "Voltage",
     "colDrain": "Drain",
     "tabDensity": "Line Fault Density",
     "viewMap": "Map",
