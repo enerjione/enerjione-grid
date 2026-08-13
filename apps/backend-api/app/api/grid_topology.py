@@ -735,6 +735,50 @@ def _resync_slot(db: Session, from_pole_id: int, to_pole_id: int) -> None:
         dev.longitude = lon
 
 
+def _konumu_birak(db: Session, device_id: int | None) -> None:
+    """Hicbir segmente bagli kalmayan cihazin TURETILMIS konumunu birakir.
+
+    NEDEN VERI KAYBI DEGIL
+    ----------------------
+    Cihaz bir slot'a oturdugu anda koordinati zaten SEGMENTTEN TURETILIP
+    cihaz satirina yaziliyor (bkz. `_resync_slot`: `dev.latitude = lat`).
+    Yani hatta bagli bir cihazin koordinati sahadan girilmis bagimsiz bir
+    olcum degil, iki direk arasindaki interpolasyonun kopyasi. Atama
+    kalkinca o kopya ANLAMSIZ kalir — ait oldugu aralik artik yok.
+
+    ONCEDEN NE OLUYORDU
+    -------------------
+    Kimse temizlemedigi icin bayat turev yerinde kaliyordu. Ana sayfa
+    haritasi konumu once segmentten turetir, segment yoksa cihazin kendi
+    koordinatina duser — pin eski yerinin yakininda, hatta bagli cihazlarla
+    BIREBIR AYNI cizilmeye devam ediyordu. Kullanicinin gozunde hat atamasi
+    kaldirilamiyordu.
+
+    NEDEN (0, 0)
+    ------------
+    Arayuzde "konum yok"un zaten kabul edilmis karsiligi (bkz. DeviceMapTab
+    `gecerliKonum`: 0,0 GECERSIZ sayilir ve marker cizilmez). Ayri bir
+    "konumsuz" bayragi eklemek ayni bilgiyi ikinci kez tutmak olurdu.
+
+    TASIMA AKISINI BOZMAZ: cihazi baska slot'a tasima once eski segmentten
+    dusurup sonra hedefe yaziyor; hedefe yazilirken `_resync_slot` konumu
+    yeniden hesapliyor. Bu yuzden temizlik yalnizca cihaz ARTIK HICBIR
+    segmentte degilse yapilir.
+    """
+    if device_id is None:
+        return
+    hala_bagli = db.scalar(
+        select(LineSegment.id).where(LineSegment.device_id == device_id).limit(1)
+    )
+    if hala_bagli is not None:
+        return
+    dev = db.get(Device, device_id)
+    if dev is None:
+        return
+    dev.latitude = 0.0
+    dev.longitude = 0.0
+
+
 def _sync_device_position_from_segment(
     db: Session, *, device_id: int | None, from_pole_id: int, to_pole_id: int
 ) -> None:
@@ -910,6 +954,7 @@ def update_segment(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Bu cihaz zaten başka bir segmente bağlı.",
             )
+    eski_device_id = row.device_id
     for key, value in changes.items():
         setattr(row, key, value)
     # Cihaz veya direk degisikliginde cihaz konumunu senkronize et.
@@ -917,6 +962,12 @@ def update_segment(
         db, device_id=row.device_id,
         from_pole_id=row.from_pole_id, to_pole_id=row.to_pole_id,
     )
+    # Segmentten DUSURULEN cihaz varsa (device_id: null ya da baska cihazla
+    # degistirildi) turetilmis konumunu birak. `_konumu_birak` cihaz baska bir
+    # segmentte duruyorsa dokunmaz — tasima akisi bu yuzden bozulmuyor.
+    if eski_device_id is not None and eski_device_id != row.device_id:
+        db.flush()
+        _konumu_birak(db, eski_device_id)
     record_event(
         db, category="grid", event_type="segment_updated", severity="info",
         actor_username=current_user.username,
@@ -942,10 +993,14 @@ def delete_segment(
     line_id = row.line_id
     from_id = row.from_pole_id
     to_id = row.to_pole_id
+    dusen_device_id = row.device_id
     db.delete(row)
     db.flush()
     # Slot'ta kalan diger cihazlari yeniden dagit (orta noktalari yeniden hesaplansin).
     _resync_slot(db, from_id, to_id)
+    # Hattan dusen cihazin turetilmis konumunu birak — yoksa bayat koordinat
+    # ana sayfada pini eski yerinde tutmaya devam eder (bkz. `_konumu_birak`).
+    _konumu_birak(db, dusen_device_id)
     record_event(
         db, category="grid", event_type="segment_deleted", severity="warning",
         actor_username=current_user.username,
