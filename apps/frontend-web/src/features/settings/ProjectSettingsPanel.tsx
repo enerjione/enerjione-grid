@@ -39,6 +39,16 @@ const BOLUMLER: { key: BolumKey; icon: string }[] = [
   { key: "bildirim", icon: "notifications" }
 ];
 
+/** Baloncuk koseleri — ekrandaki YERLESIMLE ayni sirada (ust satir, alt
+ *  satir). Acilir listede sira alfabetikti ve "sag alt" ile "sol ust"
+ *  arasindaki iliski okunmuyordu. */
+const TOAST_KOSELERI: { value: ToastPosition; labelKey: string }[] = [
+  { value: "top-left", labelKey: "toastPositionTopLeft" },
+  { value: "top-right", labelKey: "toastPositionTopRight" },
+  { value: "bottom-left", labelKey: "toastPositionBottomLeft" },
+  { value: "bottom-right", labelKey: "toastPositionBottomRight" }
+];
+
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -261,7 +271,10 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
       <div className="project-settings-body ps-body">
         {bolum === "kimlik" ? (
           <>
-            <section className="ps-card">
+            {/* Uc kisa metin alani dar sutunda, dort gorsel onizleme genis
+                sutunda: yan yana durduklarinda ikisi de kendi olcusunde
+                kalir, satir sonunda bos alan birakmaz. */}
+            <section className="ps-card ps-card--w4 ps-card--xl3">
               <header className="ps-card-head">
                 <span className="ps-card-icon material-symbols-outlined" aria-hidden="true">
                   badge
@@ -303,7 +316,7 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
               </div>
             </section>
 
-            <section className="ps-card">
+            <section className="ps-card ps-card--w8 ps-card--xl9">
               <header className="ps-card-head">
                 <span className="ps-card-icon material-symbols-outlined" aria-hidden="true">
                   image
@@ -367,7 +380,7 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
                 sebebi cikariminin belirleyici girdisi (tek faz-toprak cogunlukla
                 dis etken, uc faz ekipman/asiri yuk). Istisna cihazlar Cihaz
                 Yonetimi'nden ayrica ezilir. */}
-            <section className="ps-card">
+            <section className="ps-card ps-card--w5 ps-card--xl4">
               <header className="ps-card-head">
                 <span className="ps-card-icon material-symbols-outlined" aria-hidden="true">
                   electric_meter
@@ -421,7 +434,7 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
               </div>
             </section>
 
-            <section className="ps-card">
+            <section className="ps-card ps-card--w7 ps-card--xl4">
               <header className="ps-card-head">
                 <span className="ps-card-icon material-symbols-outlined" aria-hidden="true">
                   battery_charging_full
@@ -472,8 +485,14 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
             </section>
 
             {/* Model bazli ayarlar: ustteki batarya kutusu proje GENELI
-                varsayilanidir, burasi modele ozel istisnadir. */}
-            <DeviceProfilesPanel token={accessToken} canEdit />
+                varsayilanidir, burasi modele ozel istisnadir. Genis ekranda
+                ucu bir satirda; dar ekranda faz+batarya ikilisinin altina
+                tam genislikte gecer. */}
+            <DeviceProfilesPanel
+              token={accessToken}
+              canEdit
+              className="ps-card--xl4"
+            />
           </>
         ) : null}
 
@@ -488,60 +507,65 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
                 <p className="ps-hint">{t("engineering.projectSettings.toastHint")}</p>
               </div>
             </header>
-            <div className="ps-toast-grid">
-              <label className="ps-field ps-field--narrow">
-                <span className="ps-label">
+            {/* Iki ayri soru YAN YANA: "nerede cikacak" ve "hic cikacak mi".
+                Alt alta olduklarinda ikisi de satirin solunda kalip sagda
+                genis bir bosluk birakiyordu. */}
+            <div className="ps-toast-layout">
+              {/* Kose secimi SOYUT bir tercih: acilir listedeki "sag alt"
+                  yazisini okuyup zihinde canlandirmak gerekiyordu. Dort kucuk
+                  ekran maketi hem secim hem onizleme — secili olan zaten
+                  sonucu gosteriyor. */}
+              <fieldset className="ps-pos-group">
+                <legend className="ps-label">
                   {t("engineering.projectSettings.toastPosition")}
-                </span>
-                <span className="ps-select">
-                  <select
-                    value={toastPos}
-                    onChange={(event) => setToastPos(event.target.value as ToastPosition)}
-                  >
-                    <option value="bottom-right">
-                      {t("engineering.projectSettings.toastPositionBottomRight")}
-                    </option>
-                    <option value="bottom-left">
-                      {t("engineering.projectSettings.toastPositionBottomLeft")}
-                    </option>
-                    <option value="top-right">
-                      {t("engineering.projectSettings.toastPositionTopRight")}
-                    </option>
-                    <option value="top-left">
-                      {t("engineering.projectSettings.toastPositionTopLeft")}
-                    </option>
-                  </select>
-                  <span className="material-symbols-outlined" aria-hidden="true">
-                    expand_more
+                </legend>
+                <div className="ps-pos-grid">
+                  {TOAST_KOSELERI.map((kose) => (
+                    <label
+                      key={kose.value}
+                      className={`ps-pos${toastPos === kose.value ? " is-active" : ""}`}
+                    >
+                      <input
+                        type="radio"
+                        name="ps-toast-position"
+                        value={kose.value}
+                        checked={toastPos === kose.value}
+                        onChange={() => setToastPos(kose.value)}
+                      />
+                      <span className={`ps-corner ps-corner--${kose.value}`} aria-hidden="true">
+                        <span className="ps-corner-dot" />
+                      </span>
+                      <span className="ps-pos-name">
+                        {t(`engineering.projectSettings.${kose.labelKey}`)}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              <div className="ps-toast-side">
+                <label className="ps-switch">
+                  <input
+                    type="checkbox"
+                    checked={toastMuted}
+                    onChange={(event) => setToastMuted(event.target.checked)}
+                  />
+                  <span className="ps-switch-track" aria-hidden="true">
+                    <span className="ps-switch-knob" />
                   </span>
-                </span>
-              </label>
-              {/* Kose secimi SOYUT bir tercih; kucuk bir onizleme "hangi kose"
-                  sorusunu okumadan cevapliyor. */}
-              <div className={`ps-corner ps-corner--${toastPos}`} aria-hidden="true">
-                <span className="ps-corner-dot" />
+                  <span className="ps-switch-text">
+                    <strong>{t("engineering.projectSettings.toastMute")}</strong>
+                    <small>{t("engineering.projectSettings.toastMuteHint")}</small>
+                  </span>
+                </label>
+                <p className="ps-note">
+                  <span className="material-symbols-outlined" aria-hidden="true">
+                    info
+                  </span>
+                  {t("engineering.projectSettings.toastScopeNote")}
+                </p>
               </div>
             </div>
-            <label className="ps-switch">
-              <input
-                type="checkbox"
-                checked={toastMuted}
-                onChange={(event) => setToastMuted(event.target.checked)}
-              />
-              <span className="ps-switch-track" aria-hidden="true">
-                <span className="ps-switch-knob" />
-              </span>
-              <span className="ps-switch-text">
-                <strong>{t("engineering.projectSettings.toastMute")}</strong>
-                <small>{t("engineering.projectSettings.toastMuteHint")}</small>
-              </span>
-            </label>
-            <p className="ps-note">
-              <span className="material-symbols-outlined" aria-hidden="true">
-                info
-              </span>
-              {t("engineering.projectSettings.toastScopeNote")}
-            </p>
           </section>
         ) : null}
       </div>

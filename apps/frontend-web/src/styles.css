@@ -12170,12 +12170,27 @@ th.event-col-category {
   }
 }
 
+/* Dort onizleme kutusu: genis ekranda tek satir, dar ekranda 2+2, telefonda
+   alt alta. auto-fit KULLANILMIYOR — dort kutu uc sutuna dustugunde 3+1
+   kirik satir olusuyor; sutun sayisi hep 4'un boleni olmali. */
 .project-settings-logo-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: stretch;
   min-height: 0;
   gap: 16px;
+}
+
+@media (min-width: 1430px) {
+  .project-settings-logo-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .project-settings-logo-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .project-settings-logo-box {
@@ -12327,17 +12342,12 @@ th.event-col-category {
   margin: 8px 0;
 }
 
-.project-settings-battery-grid label,
+/* NOT: burada onceden askida kalmis bir secici (`.project-settings-battery-grid
+   label,`) vardi ve hemen ardindaki @media blogunu gecersiz kiliyordu — kural
+   hic uygulanmiyordu. Sutun sayilari artik auto-fit ile kendiliginden
+   ayarlandigi icin yalnizca kaydirma kurali kaldi. */
 @media (max-width: 1200px) {
-  .project-settings-logo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .project-settings-panel { overflow-y: auto; }
-}
-@media (max-width: 768px) {
-  .project-settings-field,
-  .project-settings-logo-grid,
-  .project-settings-toast-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 .signal-card-name {
@@ -41580,33 +41590,50 @@ th.event-col-category {
 /* CIHAZ PROFILLERI — model bazli ayar listesi. Ustteki proje-geneli batarya
    kutusuyla ayni gorsel dili kullanir; buradaki her satir bir ISTISNADIR. */
 /* Ipucu artik kart basliginda (ps-hint); ayri bir kural gerekmiyor. */
-.device-profiles-list { display: flex; flex-direction: column; gap: 10px; }
-.device-profile-row {
+/* Her model bir KART. Eskiden tam genislikte bir satirdi: model adi en solda,
+   voltaj alanlari 1500 px otede en sagda kaliyor, hangi sayinin hangi modele
+   ait oldugu goz taramasi gerektiriyordu. Kart icinde ad ile alan alt alta,
+   iki modelde de ayni yerde. */
+.device-profiles-list {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) auto;
-  grid-template-areas: "name fields" "resolved resolved";
-  gap: 6px 14px;
-  align-items: center;
-  padding: 11px 13px;
+  /* auto-FILL: iki model varken kartlar 900 px'e sisemez, kendi olculerinde
+     kalir ve soldan dizilir. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr));
+  gap: 12px;
+}
+.device-profile-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 13px;
   border: 1px solid #e6ebf2;
   border-radius: 12px;
   background: #fbfcfe;
 }
-.device-profile-name { grid-area: name; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.device-profile-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .device-profile-name strong { font-size: 13px; color: #0f172a; }
 .device-profile-name small { font-size: 11px; color: #94a3b8; }
-.device-profile-fields { grid-area: fields; display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
-.device-profile-save { align-self: flex-end; white-space: nowrap; }
-.device-profile-resolved { grid-area: resolved; font-size: 11px; color: #94a3b8; }
-.device-profiles-empty { margin: 0; font-size: 12px; color: #94a3b8; }
-
-@media (max-width: 720px) {
-  .device-profile-row {
-    grid-template-columns: 1fr;
-    grid-template-areas: "name" "fields" "resolved";
-    align-items: stretch;
-  }
+.device-profile-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
 }
+/* Kart icinde alanlar sutunu paylasir; sabit 104 px kartin kalanini bos
+   birakirdi. */
+.device-profile-fields .ps-field--num { width: auto; }
+/* Alt satir: miras/ozel bilgisi ile Kaydet ayni hizada — kaydin neyi
+   degistirdigi butonun yanindan okunur. */
+.device-profile-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+}
+.device-profile-save { white-space: nowrap; padding: 7px 14px; font-size: 12.5px; }
+.device-profile-resolved { font-size: 11px; line-height: 1.4; color: #94a3b8; }
+.device-profiles-empty { margin: 0; font-size: 12px; color: #94a3b8; }
 
 /* Kunye + atama alt alta, harita ile ayni yukseklikte. */
 .fd-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
@@ -42206,20 +42233,47 @@ th.event-col-category {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1), 0 0 0 1px rgba(233, 120, 0, 0.16);
 }
 
+/* GOVDE — 12 SUTUNLU IZGARA.
+   Onceki hali tek dikey yigindi: her kart 1900 px'e yayiliyor, icindeki iki
+   haneli voltaj alani solda kaliyor, sagda 1400 px bos duruyordu; uc bolum
+   goruntuye sigmadigi icin ayrica kaydirma gerekiyordu. Kartlar artik yan
+   yana dizilir — genislik BOSA degil KOMSU KARTA gider, sekme tek ekrana
+   siger. Dar ekranda her kart 12 sutunu birden alir (tek sutun). */
 .ps-body {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 16px;
+  align-content: start;
+  /* Kartlar KENDI boylarinda kalir. Esitlenselerdi kisa kartin altinda
+     (orn. uc metin alani ile dort logo kutusu yan yana) yine buyuk bir bos
+     alan kalirdi — kacinilan sey tam olarak buydu. */
+  align-items: start;
 }
 
 /* Bolum karti. */
 .ps-card {
   position: relative;
+  grid-column: 1 / -1;
   padding: 18px 20px 20px;
   border: 1px solid #e6ebf2;
   border-radius: 14px;
   background: #fff;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+/* Kart genislikleri iki kademede verilir: orta ekranda ikili satirlar,
+   genis ekranda uclu. Sayilar 12'lik izgaranin sutun adedi. */
+@media (min-width: 1200px) {
+  .ps-card--w4 { grid-column: span 4; }
+  .ps-card--w5 { grid-column: span 5; }
+  .ps-card--w7 { grid-column: span 7; }
+  .ps-card--w8 { grid-column: span 8; }
+}
+
+@media (min-width: 1760px) {
+  .ps-card--xl3 { grid-column: span 3; }
+  .ps-card--xl4 { grid-column: span 4; }
+  .ps-card--xl9 { grid-column: span 9; }
 }
 
 .ps-card-head {
@@ -42251,12 +42305,14 @@ th.event-col-category {
   color: #0f172a;
 }
 
+/* Ipucu artik kartin genisligi kadar akar. Sabit 78ch, 1900 px'lik bir kartin
+   icinde ortada asili kalan bir metin blogu uretiyordu. */
 .ps-hint {
   margin: 0;
   font-size: 12px;
   line-height: 1.55;
   color: #64748b;
-  max-width: 78ch;
+  max-width: 70ch;
 }
 
 /* Alan: etiket + girdi. Genislik ICERIK kadar. */
@@ -42296,28 +42352,13 @@ th.event-col-category {
   box-shadow: 0 0 0 3px rgba(233, 120, 0, 0.14);
 }
 
+/* Alanlar KARTIN genisligine gore sarar (auto-fit), ekranin degil: ayni kural
+   dar kartta tek sutun, genis kartta uc sutun verir — ayri kirilim noktasi
+   tanimlamaya gerek kalmaz. */
 .ps-field-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  /* Uc kisa metin alani 1900 px'e yayilmaz. */
-  max-width: 980px;
-}
-
-@media (max-width: 1100px) {
-  .ps-field-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 700px) {
-  .ps-field-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.ps-field--narrow {
-  max-width: 240px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 14px 16px;
 }
 
 /* Secim kutusu — tarayici oku yerine kendi chevron'u. */
@@ -42353,15 +42394,10 @@ th.event-col-category {
 /* --- Unite -> faz eslemesi ------------------------------------------------ */
 .ps-unit-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* 130 px: uc unite kartin icine TEK satirda sigsin — 150'de dar kartta
+     2+1 kirik satir oluyordu. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr));
   gap: 12px;
-  max-width: 820px;
-}
-
-@media (max-width: 900px) {
-  .ps-unit-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .ps-unit {
@@ -42416,15 +42452,8 @@ th.event-col-category {
 /* --- Batarya hucreleri ---------------------------------------------------- */
 .ps-cells {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
   gap: 14px;
-  max-width: 900px;
-}
-
-@media (max-width: 1000px) {
-  .ps-cells {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .ps-cell {
@@ -42473,9 +42502,12 @@ th.event-col-category {
   gap: 10px;
 }
 
+/* Sayi alani 104 px'te durur ama SIKISABILIR: dar bir hucrede (iki alan +
+   aradaki serit) sabit genislik kutuyu tasiriyordu. */
 .ps-field--num {
-  width: 118px;
-  flex: 0 0 auto;
+  width: 104px;
+  flex: 0 1 auto;
+  min-width: 76px;
 }
 
 /* Iki degerin ARASINDAKI serit: pencerenin kendisi. Bos -> dolu yonu
@@ -42483,6 +42515,7 @@ th.event-col-category {
 .ps-cell-bar {
   position: relative;
   flex: 1 1 auto;
+  min-width: 18px;
   height: 6px;
   margin-bottom: 12px;
   border-radius: 999px;
@@ -42546,18 +42579,100 @@ th.event-col-category {
 }
 
 /* --- Bildirimler ---------------------------------------------------------- */
-.ps-toast-grid {
-  display: flex;
-  align-items: flex-end;
-  gap: 18px;
-  flex-wrap: wrap;
+/* Iki bagimsiz soru yan yana durur: "nerede cikacak" ve "hic cikacak mi".
+   Eskiden alt alta idiler ve ikisi de satirin solunda kaliyordu. */
+.ps-toast-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 20px 28px;
+  align-items: start;
 }
 
-/* Kose onizlemesi: "sag alt" yazisini okumak yerine gorulur. */
+.ps-pos-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ps-toast-side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ps-pos-group > .ps-label {
+  display: block;
+  margin-bottom: 10px;
+  padding: 0;
+}
+
+/* KOSE SECIMI ARTIK ACILIR LISTE DEGIL: dort kose dort kucuk ekran maketi.
+   "Sag alt" yazisini okuyup zihinde canlandirmak yerine dogrudan secilir;
+   secili kutu zaten onizlemenin kendisi oldugu icin ayrica onizleme
+   kutusu tutmak gerekmiyor. */
+.ps-pos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr));
+  gap: 10px;
+  max-width: 400px;
+}
+
+.ps-pos {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 8px;
+  border: 1px solid #e6ebf2;
+  border-radius: 11px;
+  background: #fbfcfe;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.ps-pos input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.ps-pos:hover {
+  border-color: #cbd5e1;
+}
+
+.ps-pos.is-active {
+  border-color: var(--license-accent, #e97800);
+  background: #fff8f1;
+  box-shadow: inset 0 0 0 1px rgba(233, 120, 0, 0.22);
+}
+
+.ps-pos:focus-within {
+  box-shadow: 0 0 0 3px rgba(233, 120, 0, 0.16);
+}
+
+.ps-pos-name {
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 1.35;
+  color: #64748b;
+}
+
+.ps-pos.is-active .ps-pos-name {
+  color: #b45309;
+}
+
+/* Kose onizlemesi: "sag alt" yazisini okumak yerine gorulur.
+   display:block sart — eleman bir <span>, satir ici kalirsa olculeri
+   yok sayilir. */
 .ps-corner {
   position: relative;
-  width: 92px;
-  height: 58px;
+  display: block;
+  width: 100%;
+  height: 54px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: repeating-linear-gradient(
@@ -42567,6 +42682,14 @@ th.event-col-category {
       #f1f5f9 7px,
       #f1f5f9 8px
     );
+}
+
+.ps-pos .ps-corner-dot {
+  background: #cbd5e1;
+}
+
+.ps-pos.is-active .ps-corner-dot {
+  background: var(--license-accent, #e97800);
 }
 
 .ps-corner-dot {
@@ -42600,13 +42723,11 @@ th.event-col-category {
   display: flex;
   align-items: flex-start;
   gap: 11px;
-  margin-top: 16px;
   padding: 12px 14px;
   border: 1px solid #e6ebf2;
   border-radius: 11px;
   background: #fbfcfe;
   cursor: pointer;
-  max-width: 620px;
 }
 
 .ps-switch input {
@@ -42680,7 +42801,6 @@ th.event-col-category {
   font-size: 11.5px;
   line-height: 1.55;
   color: #475569;
-  max-width: 78ch;
 }
 
 .ps-note .material-symbols-outlined {

@@ -26,6 +26,9 @@ import { useToast } from "../../components/ToastProvider";
 type Props = {
   token: string;
   canEdit: boolean;
+  /** Kartin izgaradaki genisligi cagiran sayfanin karari (bkz. ps-card--*).
+   *  Panel kendi yerlesimini bilmez, sadece kendi icini dizer. */
+  className?: string;
 };
 
 /** Bos string -> null; "3,40" gibi virgullu girisi de kabul et. */
@@ -36,7 +39,7 @@ function sayiya(value: string): number | null {
   return Number.isFinite(n) ? n : Number.NaN;
 }
 
-export function DeviceProfilesPanel({ token, canEdit }: Props) {
+export function DeviceProfilesPanel({ token, canEdit, className = "" }: Props) {
   const { t } = useTranslation();
   const toast = useToast();
   const [rows, setRows] = useState<DeviceModelSettingsRow[]>([]);
@@ -102,14 +105,14 @@ export function DeviceProfilesPanel({ token, canEdit }: Props) {
 
   if (loading) {
     return (
-      <section className="ps-card">
+      <section className={`ps-card ${className}`.trim()}>
         <p className="device-profiles-empty">{t("common.loading")}</p>
       </section>
     );
   }
 
   return (
-    <section className="ps-card device-profiles-box">
+    <section className={`ps-card device-profiles-box ${className}`.trim()}>
       <header className="ps-card-head">
         <span className="ps-card-icon material-symbols-outlined" aria-hidden="true">
           tune
@@ -181,6 +184,18 @@ export function DeviceProfilesPanel({ token, canEdit }: Props) {
                     <span className="ps-num-unit">V</span>
                   </span>
                 </label>
+              </div>
+              {/* Kaydet, "su an neyi kullaniyor" bilgisinin YANINDA: butona
+                  basmadan once neyin degisecegi ayni satirdan okunur. */}
+              <div className="device-profile-foot">
+                <small className="device-profile-resolved">
+                  {ozel
+                    ? t("engineering.deviceProfiles.custom")
+                    : t("engineering.deviceProfiles.inherited", {
+                        low: row.resolved_battery_voltage_low,
+                        full: row.resolved_battery_voltage_full
+                      })}
+                </small>
                 {canEdit ? (
                   <button
                     type="button"
@@ -192,14 +207,6 @@ export function DeviceProfilesPanel({ token, canEdit }: Props) {
                   </button>
                 ) : null}
               </div>
-              <small className="device-profile-resolved">
-                {ozel
-                  ? t("engineering.deviceProfiles.custom")
-                  : t("engineering.deviceProfiles.inherited", {
-                      low: row.resolved_battery_voltage_low,
-                      full: row.resolved_battery_voltage_full
-                    })}
-              </small>
             </div>
           );
         })}
