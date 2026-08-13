@@ -3053,6 +3053,8 @@
         "requestsServed": "Cevaplanan SCADA isteği",
         "rejectedPeers": "IP listesi nedeniyle reddedilen bağlantı",
         "badQualityCount": "Kötü kaliteli alınan ölçüm (yine de yazıldı)",
+        "snapshotWrites": "Son bilinen değerle tazelenen register",
+        "snapshotOff": "kapalı",
         "lastSyncError": "Son plan senkron hatası",
         "diag": {
           "ok": "Akış sağlıklı: telemetri register'lara yazılıyor ve SCADA okuma yapıyor. Değer hâlâ görünmüyorsa istemci tarafındaki adres/format ayarını kontrol edin (FC3/FC4, unit ID, 40001 taban kayması, int16-float32 seçimi).",
@@ -3063,7 +3065,9 @@
           "unmapped": "Telemetri geliyor ama bu hedefin adres planındaki cihaz/sinyal anahtarlarıyla eşleşmiyor — plan eski olabilir (30 sn'de bir tazelenir) ya da cihaz kodları farklı.",
           "uncoercible": "Telemetri geliyor, eşleşme sorunu yok ama değer sayıya/bit'e çevrilemiyor — sinyalin sayısal alanı boş gelmiş olabilir (bkz. çevrilemeyen ölçüm sayacı).",
           "noWrites": "Telemetri işleniyor ama bu hedefe henüz değer yazılmadı — gelen sinyaller plan dışı olabilir ya da bu hedefin sinyalleri için henüz hiç ölçüm gelmedi.",
-          "noReads": "Değerler register'lara yazılıyor ama SCADA henüz hiç okuma yapmadı — istemci bağlantı kurup sorgu göndermiyor ya da yanlış porta bağlı."
+          "noReads": "Değerler register'lara yazılıyor ama SCADA henüz hiç okuma yapmadı — istemci bağlantı kurup sorgu göndermiyor ya da yanlış porta bağlı.",
+          "snapshotOnly": "Canlı telemetri bu hedefe hiç yazmadı; register'lar son bilinen değerlerle besleniyor. SCADA veri okur ama değerler yalnızca tazeleme turlarında güncellenir — cihaz/gateway akışını kontrol edin.",
+          "snapshotDisabled": "Register'lara hiç değer yazılmadı ve son bilinen değer tazelemesi KAPALI (MODBUS_SNAPSHOT_REFRESH_SEC=0). Değişmeyen sinyaller SCADA'da sonsuza dek 0 görünür; tazelemeyi açın."
         }
       },
       "table": {

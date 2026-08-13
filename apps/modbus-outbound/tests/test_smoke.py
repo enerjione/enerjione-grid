@@ -19,6 +19,7 @@ import sys
 from types import SimpleNamespace
 
 from modbus_outbound import codec
+from modbus_outbound.catalog import SnapshotSyncer
 from modbus_outbound.consumer import TelemetryConsumer
 from modbus_outbound.registry import build_registry_from_plan
 from modbus_outbound.server import (
@@ -196,6 +197,191 @@ def test_consumer_kalite_ve_deger_cozumu() -> None:
           reg2.read(1, 3, 100, 1) == [450], str(reg2.read(1, 3, 100, 1)))
 
 
+def test_snapshot_tazeleme() -> None:
+    """DEGISMEYEN SINYAL: son bilinen deger register'a yazilmali.
+
+    YASANAN SORUN (2026-08-13): SCADA Modbus'tan hicbir deger alamiyordu.
+    Worker'in tek besleme kanali canli NATS akisiydi ve o akis ancak cihaz
+    YENI OLCUM yayinladiginda akar. Modbus'ta "deger henuz gelmedi" hali
+    olmadigi icin yazilmamis her adres 0 doner ve SCADA bunu gercek bir olcum
+    sanar. Degismeyen sinyaller (ariza bayragi, nominal degerler), yeniden
+    baslatilmis servis (`DeliverPolicy.NEW` -> gecmis oynatilmaz) ve yeni
+    kurulan hedefler bu yuzden sonsuza dek 0 gorunuyordu.
+
+    Bu test tazelemenin dort davranisini kilitler:
+      1. hic yazilmamis nokta DB'deki son degerle DOLDURULUR (asil kazanc)
+      2. daha TAZE canli deger bayat DB satiriyla EZILMEZ
+      3. DB satiri gercekten daha yeniyse yazilir (canli akis kacirmis)
+      4. planda olmayan satirlar canli akis teshisini (updates_unmapped)
+         KIRLETMEZ — ayri sayilir
+    """
+    print("\n7) Son bilinen deger tazelemesi")
+    reg = build_registry_from_plan(PLAN)
+
+    # 1) Hic yazilmamis nokta: DB'deki son deger yazilir.
+    sonuc = reg.apply_snapshot([
+        {"device_code": "DEV-001", "signal_key": "master.actual_voltage",
+         "value": 231.0, "quality": "good",
+         "source_timestamp": "2026-08-13T10:00:00+00:00"},
+        {"device_code": "DEV-001", "signal_key": "master.fault_flag",
+         "value": 1.0, "quality": "good",
+         "source_timestamp": "2026-08-13T10:00:00+00:00"},
+    ])
+    check("ilk tazelemede iki nokta yazildi", sonuc["seeded"] == 2, str(sonuc))
+    check("degismeyen analog register'a dustu",
+          reg.read(1, 3, 0, 1) == [2310], str(reg.read(1, 3, 0, 1)))
+    check("degismeyen bit discrete input'a dustu", reg.read(1, 2, 3, 1) == [True])
+
+    # 2) Canli akis daha YENI bir deger yazdi -> bayat DB satiri ezmemeli.
+    reg.update("DEV-001", "master.actual_voltage", 240.0,
+               "2026-08-13T10:05:00+00:00")
+    sonuc = reg.apply_snapshot([
+        {"device_code": "DEV-001", "signal_key": "master.actual_voltage",
+         "value": 231.0, "quality": "good",
+         "source_timestamp": "2026-08-13T10:00:00+00:00"},
+    ])
+    check("bayat DB satiri atlandi", sonuc["stale"] == 1, str(sonuc))
+    check("taze canli deger korundu",
+          reg.read(1, 3, 0, 1) == [2400], str(reg.read(1, 3, 0, 1)))
+
+    # 3) DB daha yeni (canli akis o olcumu kacirmis) -> yazilir.
+    sonuc = reg.apply_snapshot([
+        {"device_code": "DEV-001", "signal_key": "master.actual_voltage",
+         "value": 250.0, "quality": "good",
+         "source_timestamp": "2026-08-13T10:09:00+00:00"},
+    ])
+    check("daha yeni DB satiri yazildi", sonuc["refreshed"] == 1, str(sonuc))
+    check("register yeni degeri gosteriyor",
+          reg.read(1, 3, 0, 1) == [2500], str(reg.read(1, 3, 0, 1)))
+
+    # 4) Planda olmayan satir canli akis teshisini kirletmemeli.
+    unmapped_once = reg.updates_unmapped
+    sonuc = reg.apply_snapshot([
+        {"device_code": "DEV-001", "signal_key": "master.serial_number",
+         "value": None, "value_string": "SN-42", "quality": "good",
+         "source_timestamp": "2026-08-13T10:10:00+00:00"},
+    ])
+    check("planda olmayan satir ayri sayilir", sonuc["unmapped"] == 1, str(sonuc))
+    check("updates_unmapped (canli akis teshisi) BOZULMADI",
+          reg.updates_unmapped == unmapped_once, str(reg.updates_unmapped))
+
+    # Damgasiz canli yazim da korunmali: "su an gorduk" kabul edilir, DB'den
+    # gelen eski bir satir uzerine yazamaz.
+    reg2 = build_registry_from_plan(PLAN)
+    reg2.update("DEV-002", "master.actual_voltage", 400.0)  # damga YOK
+    sonuc = reg2.apply_snapshot([
+        {"device_code": "DEV-002", "signal_key": "master.actual_voltage",
+         "value": 100.0, "quality": "good",
+         "source_timestamp": "2020-01-01T00:00:00Z"},
+    ])
+    check("damgasiz canli deger de bayat satirla ezilmez",
+          reg2.read(1, 3, 100, 1) == [4000], str(reg2.read(1, 3, 100, 1)))
+    check("bozuk/eksik damga tazelemeyi dusurmuyor", sonuc["stale"] == 1, str(sonuc))
+
+    # value ve value_string ikisi de bos -> 0 YAZILMAZ ("olcum sifirlandi"
+    # gibi okunurdu).
+    reg3 = build_registry_from_plan(PLAN)
+    sonuc = reg3.apply_snapshot([
+        {"device_code": "DEV-001", "signal_key": "master.actual_voltage",
+         "value": None, "value_string": None, "quality": "bad",
+         "source_timestamp": "2026-08-13T10:00:00+00:00"},
+    ])
+    check("bos deger icin register'a 0 yazilmaz", sonuc["seeded"] == 0, str(sonuc))
+
+    # Manager seviyesi: birden fazla hedefe ayni satirlar uygulanir.
+    mgr = ModbusServerManager()
+    mgr._servers[1] = SimpleNamespace(registry=build_registry_from_plan(PLAN))  # noqa: SLF001
+    mgr._servers[2] = SimpleNamespace(registry=build_registry_from_plan(PLAN))  # noqa: SLF001
+    toplam = mgr.apply_snapshot([
+        {"device_code": "DEV-001", "signal_key": "master.actual_voltage",
+         "value": 231.0, "quality": "good",
+         "source_timestamp": "2026-08-13T10:00:00+00:00"},
+    ])
+    check("iki hedefin ikisine de uygulandi",
+          toplam["targets"] == 2 and toplam["seeded"] == 2, str(toplam))
+
+
+def test_snapshot_syncer_artimli_cekim() -> None:
+    """Tazeleme dongusu: ilk tur TAM, sonrasi ARTIMLI, periyodik TAM tur.
+
+    NEDEN ONEMLI: 600 cihazda tam liste ~115.000 satirdir. Her 30 saniyede
+    tam cekmek, `/signals/live` ucunda backend'i OOM'a goturen desenin
+    (istek basina yuz megabaytlik yanit) aynisi olurdu. Ama artimli cekim de
+    tek basina yeterli degil: esik `updated_at`e dayanir ve sunucu saati
+    GERI alinirsa (NTP adimi) esigin altinda kalan satirlar bir daha hic
+    gelmez — bu yuzden periyodik tam tur sart.
+    """
+    print("\n8) SnapshotSyncer artimli cekim")
+
+    cagrilar: list[str | None] = []
+
+    class _Sahte:
+        """CatalogClient yerine: hangi `since` ile cagrildigini kaydeder."""
+
+        def fetch_values(self, since=None):  # noqa: ANN001
+            cagrilar.append(since)
+            return {
+                "values": [
+                    {"device_code": "DEV-001",
+                     "signal_key": "master.actual_voltage",
+                     "value": 231.0, "quality": "good",
+                     "source_timestamp": "2026-08-13T10:00:00+00:00"},
+                ],
+                "max_updated_at": f"2026-08-13T10:00:{len(cagrilar):02d}+00:00",
+                "full": since is None,
+            }
+
+    mgr = ModbusServerManager()
+    mgr._servers[1] = SimpleNamespace(registry=build_registry_from_plan(PLAN))  # noqa: SLF001
+    syncer = SnapshotSyncer(catalog=_Sahte(), manager=mgr, refresh_sec=30)
+
+    async def _turlar(adet: int) -> None:
+        for _ in range(adet):
+            await syncer.tick()
+
+    asyncio.run(_turlar(3))
+    check("ilk tur TAM (since yok)", cagrilar[0] is None, str(cagrilar[0]))
+    check("ikinci tur ARTIMLI (backend'in verdigi esikle)",
+          cagrilar[1] == "2026-08-13T10:00:01+00:00", str(cagrilar[1]))
+    check("esik her turda ilerliyor",
+          cagrilar[2] == "2026-08-13T10:00:02+00:00", str(cagrilar[2]))
+    check("tam tur sayaci yalnizca ilk turu saydi",
+          syncer.full_refreshes == 1, str(syncer.full_refreshes))
+
+    # TAM_TUR_PERIYODU'na gelince esik sifirlanmali (saat geri alinmasi
+    # senaryosunun kendiliginden onarimi).
+    asyncio.run(_turlar(SnapshotSyncer.TAM_TUR_PERIYODU - 3 + 1))
+    check("periyot dolunca yeniden TAM tur cekildi",
+          syncer.full_refreshes == 2, str(syncer.full_refreshes))
+
+    # Plan degisimi: esik sifirlanir, cunku adresler kaymis olabilir ve
+    # butun noktalarin yeniden yazilmasi gerekir.
+    syncer.request_refresh()
+    asyncio.run(_turlar(1))
+    check("plan degisiminde esik sifirlandi (TAM tur)",
+          cagrilar[-1] is None, str(cagrilar[-1]))
+
+    # Hedef ayaga kalkmadiysa hic cekim yapilmamali (bos yere on binlerce
+    # satir tasima yok).
+    bos_mgr = ModbusServerManager()
+    bos_cagri: list[str | None] = []
+
+    class _Sayan:
+        def fetch_values(self, since=None):  # noqa: ANN001
+            bos_cagri.append(since)
+            return {"values": [], "max_updated_at": None, "full": True}
+
+    bos = SnapshotSyncer(catalog=_Sayan(), manager=bos_mgr, refresh_sec=30)
+    asyncio.run(bos.tick())
+    check("hedef yokken deger cekilmiyor", bos_cagri == [], str(bos_cagri))
+
+    # refresh_sec=0 -> dongu hic kurulmaz.
+    kapali = SnapshotSyncer(catalog=_Sayan(), manager=mgr, refresh_sec=0)
+    check("refresh_sec=0 tazelemeyi kapatir", kapali.enabled is False)
+    asyncio.run(kapali.run_forever())
+    check("kapali dongu hic cekim yapmadan doner", bos_cagri == [], str(bos_cagri))
+
+
 def test_pdu() -> None:
     print("\n3) PDU isleme")
     reg = build_registry_from_plan(PLAN)
@@ -365,6 +551,8 @@ def main() -> int:
         test_codec()
         test_registry()
         test_consumer_kalite_ve_deger_cozumu()
+        test_snapshot_tazeleme()
+        test_snapshot_syncer_artimli_cekim()
         test_pdu()
         test_tcp_end_to_end()
     except AssertionError as exc:

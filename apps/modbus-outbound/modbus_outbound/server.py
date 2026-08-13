@@ -275,6 +275,11 @@ class ModbusServerManager:
                 "updates_applied": s.registry.updates_applied,
                 "updates_unmapped": s.registry.updates_unmapped,
                 "updates_uncoercible": s.registry.updates_uncoercible,
+                # Son bilinen deger tazelemesi (bkz. registry.apply_snapshot).
+                "snapshot_seeded": s.registry.snapshot_seeded,
+                "snapshot_refreshed": s.registry.snapshot_refreshed,
+                "snapshot_stale_skipped": s.registry.snapshot_stale_skipped,
+                "snapshot_unmapped": s.registry.snapshot_unmapped,
             }
             for s in self._servers.values()
         ]
@@ -318,12 +323,33 @@ class ModbusServerManager:
         for target_id in list(self._servers.keys()):
             await self.undeploy(target_id)
 
-    def update_point(self, device_code: str, signal_key: str, value) -> int:
+    def update_point(
+        self, device_code: str, signal_key: str, value, source_timestamp=None
+    ) -> int:
         """Tum hedeflerde bu sinyali guncelle. Thread-safe (registry kilitli)."""
         total = 0
         for server in list(self._servers.values()):
-            total += server.registry.update(device_code, signal_key, value)
+            total += server.registry.update(
+                device_code, signal_key, value, source_timestamp
+            )
         return total
+
+    def apply_snapshot(self, rows: list[dict]) -> dict:
+        """Son bilinen degerleri TUM hedeflere uygula; toplam sayaclari doner.
+
+        Her hedefin kendi adres plani ve kendi damga defteri var; ayni satir
+        bir hedefte "ilk deger" digerinde "bayat" olabilir.
+        """
+        toplam = {
+            "targets": 0, "seeded": 0, "refreshed": 0,
+            "stale": 0, "unmapped": 0, "uncoercible": 0,
+        }
+        for server in list(self._servers.values()):
+            sonuc = server.registry.apply_snapshot(rows)
+            toplam["targets"] += 1
+            for anahtar in ("seeded", "refreshed", "stale", "unmapped", "uncoercible"):
+                toplam[anahtar] += sonuc[anahtar]
+        return toplam
 
 
 def _carry_over_values(old: PointRegistry, new: PointRegistry) -> None:
@@ -332,6 +358,12 @@ def _carry_over_values(old: PointRegistry, new: PointRegistry) -> None:
     Adresler degismis olabilir; bu yuzden ham store kopyalanmaz, eski
     store'daki degerler AYNI (unit, fonksiyon, adres) uclusune yazilir.
     Adresi degisen noktalar bir sonraki telemetride yerine oturur.
+
+    DAMGA DEFTERI (`_last_ts`) BILINCLI OLARAK TASINMAZ. Tasinsa, adresi
+    degisen bir nokta icin snapshot tazelemesi "bu deger zaten guncel" der ve
+    YENI adres bir sonraki canli olcume kadar 0 kalirdi — duzeltmeye
+    calistigimiz arizanin ta kendisi. Bos defterle bir sonraki tazeleme tur
+    (plan degisiminden hemen sonra zorlanir) her noktayi yeniden yazar.
     """
     for unit_id, store in old.stores.items():
         target_store = new.stores.get(unit_id)

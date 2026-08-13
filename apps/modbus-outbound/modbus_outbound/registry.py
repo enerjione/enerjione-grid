@@ -13,11 +13,24 @@ adres arasinda ayrisma imkansizdir.
 Depolama sparse (dict): 65536'lik dizi ayirmak yerine sadece dolu adresler
 tutulur. Okunmamis adres 0 doner (SCADA blok halinde okurken bosluklar
 hataya degil sifira denk gelsin).
+
+IKI BESLEME KANALI VAR
+----------------------
+  update()         canli akis (NATS) — cihaz yeni olcum yayinladikca
+  apply_snapshot() son bilinen degerler (backend `/internal/modbus-values`)
+
+Ikincisi olmadan bir sinyal DEGISMEDIGI surece register'a HIC yazilmiyor ve
+SCADA sonsuza dek 0 goruyordu; Modbus'ta "deger henuz gelmedi" diye bir hal
+olmadigi icin bu 0 gercek bir olcum gibi okunur. Snapshot BOSLUGU DOLDURUR,
+canli akisin yerine gecmez: her (cihaz, sinyal) icin en son yazilan degerin
+kaynak damgasi tutulur ve DB'den gelen BAYAT bir satir daha yeni bir canli
+degeri EZEMEZ.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from threading import RLock
 
 from modbus_outbound.codec import coerce_bool, coerce_number, encode_registers
@@ -28,6 +41,34 @@ FC_HOLDING_REGISTER = 3
 FC_INPUT_REGISTER = 4
 
 MODBUS_ADDRESS_SPACE = 65_536
+
+
+def parse_timestamp(raw) -> datetime | None:
+    """ISO 8601 metni / datetime -> UTC-aware datetime. Cozulemezse None.
+
+    Naive damga UTC kabul edilir: karsilastirmaya girecek iki damganin biri
+    naive digeri aware olursa Python `TypeError` firlatir ve tazeleme turu
+    tek bozuk satir yuzunden komple duserdi.
+    """
+    if raw is None or raw == "":
+        return None
+    if isinstance(raw, datetime):
+        ts = raw
+    else:
+        text = str(raw).strip()
+        if not text:
+            return None
+        # `fromisoformat` 3.11'de 'Z' kabul eder ama eski yorumlayicida
+        # etmez; donusum bedava, riski ortadan kaldiralim.
+        if text[-1] in ("Z", "z"):
+            text = text[:-1] + "+00:00"
+        try:
+            ts = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return ts
 
 
 @dataclass(frozen=True)
@@ -93,6 +134,17 @@ class PointRegistry:
         # metin, vb.) — eskiden burada SESSIZCE `continue` vardi ve
         # "yazilan=0" teshis edilemiyordu (bkz. consumer.py docstring'i).
         self.updates_uncoercible = 0
+        # (cihaz, sinyal) -> o noktaya YAZILMIS son degerin kaynak damgasi.
+        # Yalnizca planda karsiligi olan ciftler girer, yani boyutu nokta
+        # sayisiyla sinirlidir (sinirsiz buyume yok).
+        self._last_ts: dict[tuple[str, str], datetime] = {}
+        # Son bilinen deger (snapshot) tazelemesi sayaclari — "SCADA neden 0
+        # goruyor" sorusu tek bakista cevaplanabilsin.
+        self.snapshot_seeded = 0        # ilk kez yazilan nokta (asil kazanc)
+        self.snapshot_refreshed = 0     # canli akisin kacirdigi, DB'si daha yeni
+        self.snapshot_stale_skipped = 0  # canli deger daha yeni -> dokunulmadi
+        self.snapshot_unmapped = 0      # planda yok (string sinyal vb.) — normal
+        self.snapshot_uncoercible = 0
 
     # ---- Kurulum ----------------------------------------------------------
     def add_point(
@@ -127,44 +179,134 @@ class PointRegistry:
         return sorted(self.stores.keys())
 
     # ---- Calisma zamani ---------------------------------------------------
-    def update(self, device_code: str, signal_key: str, value) -> int:
-        """Bir sinyal degerini ilgili tum adreslere yaz. Yazilan nokta sayisi doner."""
-        placements = self.lookup.get((device_code, signal_key))
+    def _write_locked(self, placements: list[Placement], value) -> tuple[int, int]:
+        """Degeri verilen yerlesimlere yaz. (yazilan, cevrilemeyen) doner.
+
+        Kilit CAGIRANDA tutulur. Canli akis ile snapshot tazelemesi ayni
+        kodlama yolunu paylasir; sayaclari cagiran ayirir (birinin gurultusu
+        digerinin teshisini bozmasin).
+        """
+        written = 0
+        uncoercible = 0
+        for p in placements:
+            store = self.stores.get(p.unit_id)
+            if store is None:
+                continue
+            if p.function == FC_DISCRETE_INPUT:
+                store.discrete_inputs[p.address] = coerce_bool(value)
+                written += 1
+            elif p.function == FC_COIL:
+                store.coils[p.address] = coerce_bool(value)
+                written += 1
+            else:
+                number = coerce_number(value)
+                if number is None:
+                    uncoercible += 1
+                    continue
+                words = encode_registers(
+                    number,
+                    data_type=p.data_type,
+                    value_format=self.value_format,
+                    word_order=self.word_order,
+                    scale=p.scale,
+                    offset=p.offset,
+                )
+                for i, word in enumerate(words[: p.word_count or len(words)]):
+                    store.registers[p.address + i] = word
+                written += 1
+        return written, uncoercible
+
+    def update(
+        self, device_code: str, signal_key: str, value, source_timestamp=None
+    ) -> int:
+        """Bir sinyal degerini ilgili tum adreslere yaz. Yazilan nokta sayisi doner.
+
+        `source_timestamp` olcumun kaynak damgasi (canli akista her zaman
+        dolu gelir). Snapshot tazelemesinin bu degeri EZMEMESI icin saklanir;
+        damga yoksa "su an gorduk" kabul edilir — DB'den donen bir satir
+        ancak GERCEKTEN daha yeniyse uzerine yazabilir.
+        """
+        pair = (device_code, signal_key)
+        placements = self.lookup.get(pair)
         if not placements:
             with self._lock:
                 self.updates_unmapped += 1
             return 0
 
-        written = 0
         with self._lock:
-            for p in placements:
-                store = self.stores.get(p.unit_id)
-                if store is None:
-                    continue
-                if p.function == FC_DISCRETE_INPUT:
-                    store.discrete_inputs[p.address] = coerce_bool(value)
-                    written += 1
-                elif p.function == FC_COIL:
-                    store.coils[p.address] = coerce_bool(value)
-                    written += 1
-                else:
-                    number = coerce_number(value)
-                    if number is None:
-                        self.updates_uncoercible += 1
-                        continue
-                    words = encode_registers(
-                        number,
-                        data_type=p.data_type,
-                        value_format=self.value_format,
-                        word_order=self.word_order,
-                        scale=p.scale,
-                        offset=p.offset,
-                    )
-                    for i, word in enumerate(words[: p.word_count or len(words)]):
-                        store.registers[p.address + i] = word
-                    written += 1
+            written, uncoercible = self._write_locked(placements, value)
             self.updates_applied += written
+            self.updates_uncoercible += uncoercible
+            if written:
+                self._last_ts[pair] = (
+                    parse_timestamp(source_timestamp) or datetime.now(timezone.utc)
+                )
         return written
+
+    def apply_snapshot(self, rows) -> dict:
+        """Son bilinen degerleri (backend `telemetry_latest`) register'lara yaz.
+
+        SADECE BOSLUGU DOLDURUR. Uc durum ayri ayri sayilir:
+
+          seeded    nokta HIC yazilmamisti -> ilk deger. Asil kazanc bu:
+                    degismeyen sinyaller ve yeni baslatilmis servis.
+          refreshed nokta yazilmis ama DB'deki damga DAHA YENI -> canli akis
+                    o olcumu kacirmis (anahtar ayrismasi, mesaj kaybi,
+                    kapasite disi kalmis cihaz...). Yine de yaziyoruz.
+          stale     canli deger daha yeni -> DOKUNULMAZ. Kalicilastirma
+                    akistan saniyeler geride olabilir; bayat satirin taze
+                    degeri ezmesi Modbus'ta gorunur bir geri sicrama olurdu.
+
+        Planda karsiligi olmayan satirlar (string sinyaller, Modbus'a dahil
+        edilmeyen tipler) NORMAL kabul edilir; `updates_unmapped` canli akis
+        teshisi oldugu icin ona dokunulmaz, ayri sayilir.
+        """
+        seeded = refreshed = stale = unmapped = uncoercible = 0
+        with self._lock:
+            for row in rows:
+                device_code = str(row.get("device_code") or "")
+                signal_key = str(row.get("signal_key") or "")
+                if not device_code or not signal_key:
+                    continue
+                pair = (device_code, signal_key)
+                placements = self.lookup.get(pair)
+                if not placements:
+                    unmapped += 1
+                    continue
+                value = row.get("value")
+                if value is None:
+                    value = row.get("value_string")
+                if value is None:
+                    # DB'de de deger yok — yazacak bir sey yok. 0 yazmak
+                    # "olcum sifirlandi" gibi okunurdu.
+                    continue
+                ts = parse_timestamp(row.get("source_timestamp"))
+                onceki = self._last_ts.get(pair)
+                if onceki is not None and (ts is None or ts <= onceki):
+                    stale += 1
+                    continue
+                written, cevrilemeyen = self._write_locked(placements, value)
+                uncoercible += cevrilemeyen
+                if not written:
+                    continue
+                if onceki is None:
+                    seeded += 1
+                else:
+                    refreshed += 1
+                self._last_ts[pair] = ts or datetime.now(timezone.utc)
+
+            self.snapshot_seeded += seeded
+            self.snapshot_refreshed += refreshed
+            self.snapshot_stale_skipped += stale
+            self.snapshot_unmapped += unmapped
+            self.snapshot_uncoercible += uncoercible
+        return {
+            "seeded": seeded,
+            "refreshed": refreshed,
+            "stale": stale,
+            "unmapped": unmapped,
+            "uncoercible": uncoercible,
+        }
 
     # ---- Okuma (Modbus server tarafi) -------------------------------------
     def read(self, unit_id: int, function: int, address: int, count: int):
