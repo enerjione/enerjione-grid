@@ -236,14 +236,14 @@ export const ENGINEERING_NAV_GROUPS: NavGroup[] = [
       },
       {
         // Guvenlik duvari: mini PC'nin host firewall'u (iptables, e1-fwd
-        // ajani). Durumu GORME genis (ops_manager dahil — neyin acik olduguna
-        // bakabilmeli); DEGISTIRME backend'de engineer/installer ve sayfa
-        // bunu `can_manage` ile kendisi uygular. Kilitlenme korumasi ajanda:
-        // 22/80/443 hep acik, yanlis kural cihaza erisimi kapatamaz.
+        // ajani). YALNIZCA INSTALLER — gorme de dahil. Kural listesi cihazin
+        // ag yuzeyidir (hangi port disariya acik, hangi adres gecebiliyor);
+        // tek basina bir kesif haritasi, "sadece bakma" diye dagitilmaz.
+        // Ag Ayarlari ile ayni siniftan yetki. Bkz. backend api/firewall.py.
         page: "firewall",
         labelKey: "engineering.nav.firewall",
         descKey: "engineering.navDesc.firewall",
-        canSee: isTeamManager,
+        canSee: isInstaller,
       },
       {
         // Saha araclari: mini PC'den saha cihazlarina erisim testleri

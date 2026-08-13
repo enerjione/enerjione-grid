@@ -6,16 +6,25 @@ Endpoint'ler:
 
 YETKI
 ------
-  okuma (status)      : engineer, installer, ops_manager
-  yapilandirma (PUT)  : engineer, installer
+  okuma (status)      : installer
+  yapilandirma (PUT)  : installer
 
-Ag Ayarlari'nin (yalnizca installer) aksine engineer'a da acik: kilitlenme
-korumasi AJANDA sabittir (22/80/443 + uzaktan bakim tuneli her zaman acik,
-kullanici kurali ezemez), yani en kotu yapilandirma bile cihaza erisimi
-kapatamaz. Buna karsilik yanlis kural saha telemetrisini (NATS 4222) kesebilir
-— o da operasyonel bir hata, geri donusu tek tik ve kim yaptiginiz denetimde.
-ops_manager durumu GOREBILIR (uzaktan bakimla ayni gerekce: musteri tarafi
-neyin acik olduguna bakabilmeli); degistiremez.
+YALNIZCA INSTALLER — GORME DE DAHIL.
+Once okuma engineer + ops_manager'a da acikti ("gormek degistirmek degildir"),
+yapilandirma engineer'a acikti. Ikisi de daraltildi:
+
+  * Guvenlik duvari kurallari sahadaki mini PC'nin AG YUZEYIDIR — hangi
+    portun disariya acik oldugu, hangi adresin gecebildigi. Bu liste tek
+    basina bir kesif haritasi; "sadece bakma" yetkisi diye dagitilacak bir
+    bilgi degil. Ag Ayarlari zaten yalnizca installer'da ve ayni siniftan
+    bir yetki.
+  * Degistirme tarafinda kilitlenme korumasi ajanda sabit (22/80/443 +
+    uzaktan bakim tuneli hep acik), yani cihaz erisilemez hale gelmez; ama
+    yanlis kural saha telemetrisini (NATS 4222) kesebilir ve bunu fark
+    etmek dakikalar alir. Kurulumu yapan kisi bu sorumlulugu tasir.
+
+Rol daraltmasi UC yerde birden yasar: burasi, `EngineeringNav.canSee` ve
+`tabModel` rol listeleri. Biri unutulursa menu gorunur ama sayfa 403 alir.
 
 Rol kontrolu HIYERARSIK DEGILDIR: `require_roles` tam-eslesme yapar
 (app/api/deps.py). Yeni rol eklenirse listeye ACIKCA yazilir.
@@ -52,11 +61,11 @@ from app.services import firewall_service
 from app.services.event_service import record_event
 from app.services.firewall_service import FirewallError
 
-# Durumu GORMEK daha genis: ops_manager neyin acik olduguna bakabilmeli.
-# Gormek DEGISTIRMEK degildir.
-_VIEW_ROLES = [UserRole.ENGINEER, UserRole.INSTALLER, UserRole.OPS_MANAGER]
-# Yapilandirma: engineer + installer (gerekce dosya basinda).
-_MANAGE_ROLES = [UserRole.ENGINEER, UserRole.INSTALLER]
+# Gorme de yapilandirma da YALNIZCA installer (gerekce dosya basinda).
+# Iki liste ayni ama AYRI durmaya devam ediyor: `can_manage` bayragi ve
+# ileride gorme/degistirme tekrar ayrilirsa tek satirlik degisiklik olsun.
+_VIEW_ROLES = [UserRole.INSTALLER]
+_MANAGE_ROLES = [UserRole.INSTALLER]
 
 router = APIRouter(
     prefix="/firewall",

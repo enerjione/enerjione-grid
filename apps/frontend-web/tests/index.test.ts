@@ -72,6 +72,10 @@ import "./deviceFocus.test";
 // koru bir operator icin sessizce okunamaz hale gelir.
 import "./faultChartTheme.test";
 
+// Rol erisim sozlesmesi: menude gorunen sayfa acilinca 403 almasin, rolun
+// goremeyecegi bir sayfa da acilis sayfasi olmasin.
+import "./rolErisimi.test";
+
 // Ariza isi haritasi olcegi: "her yer kirmizi" ya da "hicbir yer sicak degil"
 // yalanlarinin ikisi de bakim butcesini yanlis yonlendirir.
 import "./heatField.test";

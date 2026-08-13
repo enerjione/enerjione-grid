@@ -13,7 +13,12 @@ import { DashboardFilterBar, type StatusFilter } from "../features/dashboard/Das
 import { TabBar } from "../features/tabs/TabBar";
 import { EngineeringNav } from "../features/tabs/EngineeringNav";
 
-import { routeToPageState, type PageMode, type EngineeringPage } from "../features/tabs/tabModel";
+import {
+  defaultEngineeringPage,
+  routeToPageState,
+  type PageMode,
+  type EngineeringPage
+} from "../features/tabs/tabModel";
 
 import { GlobalLoading } from "../components/GlobalLoading";
 import { DeviceModelSettingsProvider } from "../components/DeviceModelSettingsProvider";
@@ -663,7 +668,17 @@ export function App() {
         // Bu dizideki herhangi bir istek patlayinca ardindaki her sey atlanir;
         // lisans durumu buraya bagli oldugunda `null` kalip lisans kilidini
         // sessizce devre disi birakiyordu.
-        if (session.role === "engineer" || session.role === "installer") {
+        // OPS_MANAGER DA CEKER. Backend zaten rolun gorebilecegi kadarini
+        // donuyor (`/users` ops_manager'a YALNIZCA operator satirlarini
+        // verir, bkz. api/users.py) — ama istek hic atilmadigi icin
+        // Kullanicilar sayfasi bos aciliyordu. Operasyon Yoneticisinin
+        // asil isi operator hesaplarini yonetmek; liste olmadan sayfanin
+        // hicbir anlami yok.
+        if (
+          session.role === "engineer" ||
+          session.role === "installer" ||
+          session.role === "ops_manager"
+        ) {
           try {
             setUsers(await fetchUsers(session.accessToken));
           } catch {
@@ -899,13 +914,19 @@ export function App() {
         if (existingEng) {
           tabsApi.activateTab(existingEng.key);
         } else {
-          openTab({ kind: "engineering", page: "devices" });
+          // Acilis sayfasi ROLE gore: Operasyon Yoneticisi cihaz sayfasini
+          // hic goremiyor, sabit "devices" ile acilan sekme aninda eleniyor
+          // ve menuye basmak hicbir sey yapmiyor gibi gorunuyordu.
+          openTab({
+            kind: "engineering",
+            page: defaultEngineeringPage(session?.role ?? "operator"),
+          });
         }
         return;
       }
       openTab({ kind: "page", page });
     },
-    [openTab, tabsApi]
+    [openTab, tabsApi, session?.role]
   );
   // Engineering alt sayfasi ac (sekme).
   const openEng = useCallback(
@@ -3088,14 +3109,13 @@ export function App() {
               session.role === "ops_manager") ? (
               <RemoteAccessPage accessToken={session.accessToken} />
             ) : null}
-            {/* Guvenlik duvari. Gorunurluk UC yerde tanimli ve ayni olmali:
+            {/* Guvenlik duvari — YALNIZCA INSTALLER, gorme de dahil.
+                Gorunurluk UC yerde tanimli ve ayni olmali:
                 EngineeringNav.canSee, tabModel rol listeleri ve buradaki
-                kosul. DEGISTIRME yetkisi ayrica backend'de (engineer/
-                installer) — sayfa `can_manage` ile kendini kisitlar. */}
-            {engineeringPage === "firewall" &&
-            (session.role === "installer" ||
-              session.role === "engineer" ||
-              session.role === "ops_manager") ? (
+                kosul; dordunculer backend'de (api/firewall.py). Kural
+                listesi cihazin ag yuzeyidir — "sadece bakma" diye
+                dagitilmaz; Ag Ayarlari ile ayni siniftan yetki. */}
+            {engineeringPage === "firewall" && session.role === "installer" ? (
               <FirewallPage accessToken={session.accessToken} />
             ) : null}
             {engineeringPage === "offline-map" &&

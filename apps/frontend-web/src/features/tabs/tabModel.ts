@@ -199,10 +199,8 @@ const OPS_MANAGER_ENG: EngineeringPage[] = [
   // (kim, ne zamana kadar izin vermis). Izin VERME yetkisi backend'de
   // yalnizca engineer'dadir; sayfa `can_grant` ile kendini kisitlar.
   "remote-access",
-  // Guvenlik duvari: durumu GORMEK genis (neyin acik olduguna bakabilmeli);
-  // DEGISTIRME yetkisi backend'de engineer/installer — sayfa `can_manage`
-  // ile kendini kisitlar (bkz. backend api/firewall.py).
-  "firewall",
+  // Guvenlik duvari BURADA YOK: gorme de dahil yalnizca installer
+  // (bkz. backend api/firewall.py — kural listesi cihazin ag yuzeyi).
 ];
 const ENGINEER_ENG: EngineeringPage[] = [
   "devices",
@@ -220,12 +218,27 @@ const ENGINEER_ENG: EngineeringPage[] = [
   // Uzaktan bakim iznini VEREN tek rol engineer (bkz. backend
   // api/remote_access.py: _GRANT_ROLES).
   "remote-access",
-  // Guvenlik duvari: backend /firewall yapilandirmasi engineer+installer.
-  "firewall",
+  // Guvenlik duvari BURADA YOK: yalnizca installer (bkz. api/firewall.py).
   // Saha araclari (ping testi): backend /field-tools installer+engineer.
   "field-tools",
 ];
 // installer: tum engineering sayfalari.
+
+/** Rol "Mühendislik"e girdiğinde açılacak ilk sayfa.
+ *
+ * NEDEN SABIT "devices" DEGIL: Operasyon Yöneticisi cihaz sayfasını hiç
+ * göremiyor (yukarıdaki `OPS_MANAGER_ENG` listesinde yok). Menüye basınca
+ * açılan `devices` sekmesi `visibleTabs` tarafından anında eleniyor, yani
+ * ekranda hiçbir şey olmuyordu — düğme çalışmıyor gibi görünüyordu.
+ * Rolün gerçekten girebildiği ilk sayfayı burada tek yerden veriyoruz;
+ * `canAccessRoute` ile aynı listeleri okuduğu için ikisi ayrışamaz.
+ */
+export function defaultEngineeringPage(role: UserRole): EngineeringPage {
+  // "users": Operasyon Yöneticisinin işi ekip yönetimi — operatör hesapları.
+  // Rolün erişebildiği bir sayfa olmak ZORUNDA; test bunu doğruluyor.
+  if (role === "ops_manager") return "users";
+  return "devices";
+}
 
 export function canAccessRoute(route: TabRoute, role: UserRole): boolean {
   switch (route.kind) {
