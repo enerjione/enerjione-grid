@@ -25755,6 +25755,35 @@ th.event-col-category {
   }
 }
 
+/* SEMATIK CIZIM: haritanin ikinci gorunumu. Harita gibi kartin bos yerini
+   doldurur; cizim SVG oldugu icin kendi kutusuna oranli olcekleniyor
+   (bkz. .fx-strip-wrap). Min yukseklik haritayla AYNI: gorunum degistirince
+   kart ziplayip sayfayi kaydirmasin. */
+.fd-strip-wrap {
+  display: flex;
+  flex: 1;
+  min-height: 340px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--fd-line);
+  background: var(--fd-sunken);
+  overflow: hidden;
+}
+
+@media (max-width: 900px) {
+  .fd-strip-wrap {
+    min-height: 290px;
+  }
+}
+
+/* Kart basligindaki iki secici (gorunum + odak) yan yana. */
+.fd-card-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* ODAK SECICI: ariza araligina zoom yapinca "bu hattin neresi?" belirsiz
    kaliyor, tum hatta bakinca ariza noktasi igne ucu kadar kaliyordu. */
 .fd-focus {

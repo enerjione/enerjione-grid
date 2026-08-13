@@ -93,6 +93,8 @@ import L from "leaflet";
 
 import { buildFaultMapView } from "./faultMapView";
 import { buildFaultRecurrence } from "./faultRecurrence";
+import { buildFaultStripInputs } from "./faultStripInputs";
+import { FaultPoleStrip } from "./FaultPoleStrip";
 import { FitFocus } from "./FaultMapFocus";
 import { FaultResolveModal } from "./FaultResolveModal";
 import { bashafler, FaultFieldReportModal } from "./FaultFieldReportModal";
@@ -274,6 +276,13 @@ export function FaultDetailPage({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [mapFocus, setMapFocus] = useState<"zone" | "line" | "grid">("zone");
+  /** AYNI KARTIN IKI GORUNUMU: cografi harita / sematik cizim.
+   *
+   *  Harita "nereye gidilecek" sorusunu, sematik cizim ise "hangi direkler ve
+   *  hangi kollar supheli" sorusunu cevapliyor. Ikisi liste sayfasinda ayri
+   *  ekranlardaydi; detay sayfasinda cizim HIC yoktu. Yan yana koymak yerine
+   *  ayni yerde sekme: harita zaten kartin tamamini istiyor. */
+  const [mapMode, setMapMode] = useState<"map" | "strip">("map");
   /** PDF sunucuda uretilir (uydu karolari + reportlab); bir kac saniye
    *  surebilir, o yuzden dugme beklemede kilitlenir. */
   const [raporUretiliyor, setRaporUretiliyor] = useState(false);
@@ -347,6 +356,23 @@ export function FaultDetailPage({
     for (const a of alarms ?? []) if (!a.reset) s.add(a.device_id);
     return s;
   }, [alarms]);
+  /** SEMATIK CIZIM GIRDILERI — liste sayfasindaki cizimin aynisi.
+   *
+   *  Turetmeler `faultStripInputs`'te: iki ekran ayni arizayi ayni cizmeli,
+   *  ozellikle "hangi kol supheli" kararini. */
+  const stripInputs = useMemo(() => {
+    if (!gridSnapshot || !fault) return null;
+    return buildFaultStripInputs({
+      lines: gridSnapshot.lines ?? [],
+      poles: gridSnapshot.poles,
+      segments: gridSnapshot.segments,
+      fault,
+      faults,
+      alarms: alarms ?? [],
+      devices: devices ?? [],
+      lineFallback: t("common.line")
+    });
+  }, [gridSnapshot, fault, faults, alarms, devices, t]);
 
   const mapView = useMemo(() => {
     if (!gridSnapshot || !fault) return null;
@@ -357,10 +383,19 @@ export function FaultDetailPage({
       fault,
       devices: devices ?? [],
       alarmActiveDeviceIds,
+      // KOLLAR CIZIMLE AYNI KAYNAKTAN: harita kendi hesabini yapsa "sema bu
+      // kol temiz derken harita supheli gosteriyor" durumu dogardi.
+      branches: (stripInputs?.branchRows ?? []).map((r) => ({
+        lineId: r.lineId,
+        name: r.name,
+        confirmed: r.confirmed,
+        cleared: r.clearedByLink
+      })),
       poleFallback: t("faults.detail.tooltipPole"),
       deviceFallback: t("common.device")
     });
-  }, [gridSnapshot, fault, devices, alarmActiveDeviceIds, t]);
+  }, [gridSnapshot, fault, devices, alarmActiveDeviceIds, stripInputs, t]);
+
 
   /** BU HAT DAHA ONCE DE ARIZALANDI MI — tekrar eden ariza baska bir istir:
    *  gecici bir olay degil, cozulmemis bir kok sebep vardir. */
@@ -573,6 +608,9 @@ export function FaultDetailPage({
    *  yazar (alarm kalkinca otomatik); backend de ayni kurali dogrular. */
   const normaleDondu = Boolean(fault.resolved_at);
   const islemYapilabilir = canEdit && !kapali;
+  /** Serit secili AMA cizilebilir mi: baska bir arizaya gecildiginde girdiler
+   *  bosa duserse harita gorunumune donulur, kart bos kalmaz. */
+  const seritGorunuyor = mapMode === "strip" && stripInputs !== null;
 
   return (
     <div className="fd-page">
@@ -746,29 +784,67 @@ export function FaultDetailPage({
         <section className="fd-card fd-card--map">
           <header className="fd-card-head">
             <h2>
-              <MapPin size={15} />
-              {t("faults.detail.mapTitle")}
+              {seritGorunuyor ? <Route size={15} /> : <MapPin size={15} />}
+              {seritGorunuyor ? t("faults.detail.stripTitle") : t("faults.detail.mapTitle")}
             </h2>
-            {/* ODAK SECICI: ariza bolgesine zoom yapinca "bu hattin
-                neresi?" belirsiz kaliyor, tum hatta bakinca ariza noktasi
-                kayboluyordu. Ucu de ayni haritada. */}
-            {mapView ? (
-              <div className="fd-focus" role="group">
-                {(["zone", "line", "grid"] as const).map((k) => (
-                  <button
-                    key={k}
-                    type="button"
-                    className={mapFocus === k ? "is-active" : undefined}
-                    onClick={() => setMapFocus(k)}
-                  >
-                    {t(`faults.detail.focus.${k}`)}
-                  </button>
-                ))}
-              </div>
-            ) : null}
+            <div className="fd-card-tools">
+              {/* GORUNUM SECICI: sematik cizim liste sayfasinda vardi, burada
+                  yoktu. Harita ile ayni yerde duruyor cunku ikisi de kartin
+                  tamamini istiyor. */}
+              {stripInputs ? (
+                <div className="fd-focus" role="group">
+                  {(["map", "strip"] as const).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      className={mapMode === k ? "is-active" : undefined}
+                      onClick={() => setMapMode(k)}
+                    >
+                      {t(`faults.detail.view.${k}`)}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {/* ODAK SECICI: ariza bolgesine zoom yapinca "bu hattin
+                  neresi?" belirsiz kaliyor, tum hatta bakinca ariza noktasi
+                  kayboluyordu. Ucu de ayni haritada. */}
+              {mapView && !seritGorunuyor ? (
+                <div className="fd-focus" role="group">
+                  {(["zone", "line", "grid"] as const).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      className={mapFocus === k ? "is-active" : undefined}
+                      onClick={() => setMapFocus(k)}
+                    >
+                      {t(`faults.detail.focus.${k}`)}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </header>
 
-          {mapView ? (
+          {seritGorunuyor && stripInputs ? (
+            <div className="fd-strip-wrap">
+              <FaultPoleStrip
+                lineName={stripInputs.lineName}
+                poleSeqs={stripInputs.poleSeqs}
+                poles={stripInputs.poles}
+                segments={stripInputs.segments}
+                fromSeq={stripInputs.fromSeq}
+                toSeq={stripInputs.toSeq}
+                lastRedDeviceCode={stripInputs.lastRedDeviceCode}
+                firstGreenDeviceCode={stripInputs.firstGreenDeviceCode}
+                zoneStartM={stripInputs.zoneStartM}
+                zoneEndM={stripInputs.zoneEndM}
+                alarmsByDevice={stripInputs.alarmsByDevice}
+                faultPhases={stripInputs.faultPhases}
+                branchRows={stripInputs.branchRows}
+                hiddenBranchCount={stripInputs.hiddenBranchCount}
+              />
+            </div>
+          ) : mapView ? (
             <>
               <div className="fd-map-wrap">
                 <MapContainer
@@ -824,6 +900,42 @@ export function FaultDetailPage({
                         </Polyline>
                       ))
                     : null}
+                  {/* ARIZANIN SICRADIGI KOLLAR — ariza araliginin icindeki bir
+                      dallanma diregine asili kol da enerjisiz kalir; ekip onu
+                      da gezmek zorunda. Bu kollar haritada HIC cizilmiyordu:
+                      yalnizca "Tum sebeke" odaginda, komsu hatlarla ayni soluk
+                      gri ile gorunuyorlardi. Kolun KENDI ariza kaydi varsa
+                      ariza orada DOGRULANDI (kirmizi); yoksa supheli (amber).
+                      Ikisi de ana hattaki kesikten daha ince cizilir — ana
+                      bolge yine baskin kalsin. */}
+                  {mapView.branchLines.map((k) => (
+                    <Polyline
+                      key={`br-${k.lineId}`}
+                      positions={k.path}
+                      pathOptions={{
+                        color: k.temiz ? "#22c55e" : k.dogrulandi ? "#ef4444" : "#f59e0b",
+                        weight: 4,
+                        opacity: 0.95,
+                        dashArray: k.temiz ? undefined : "6 5"
+                      }}
+                    >
+                      <Tooltip>
+                        <strong>{k.name}</strong>
+                        <br />
+                        <em
+                          style={{
+                            color: k.temiz ? "#10b981" : k.dogrulandi ? "#dc2626" : "#b45309"
+                          }}
+                        >
+                          {k.temiz
+                            ? t("faults.detail.deviceNoFault")
+                            : k.dogrulandi
+                              ? t("faults.card.branchConfirmed")
+                              : t("faults.card.branchCheck")}
+                        </em>
+                      </Tooltip>
+                    </Polyline>
+                  ))}
                   {mapView.preGreen.length >= 2 ? (
                     <Polyline
                       positions={mapView.preGreen}
@@ -898,6 +1010,12 @@ export function FaultDetailPage({
                   <i className="fd-legend-line" style={{ background: "#22c55e" }} />
                   {t("faults.detail.mapLegendOk")}
                 </span>
+                {mapView.branchLines.some((k) => !k.temiz) ? (
+                  <span>
+                    <i className="fd-legend-line" style={{ background: "#f59e0b" }} />
+                    {t("faults.detail.mapLegendBranch")}
+                  </span>
+                ) : null}
                 <span>
                   <i className="fd-legend-dot" style={{ background: "#dc2626" }} />
                   {t("faults.detail.mapLegendDeviceRed")}

@@ -51,6 +51,10 @@ import "./autoGrow.test";
 // Gezilmesi gereken bir kolun ekrandan dusmesi sessiz ve agir bir hatadir.
 import "./faultBranchRows.test";
 
+// Sematik cizimin girdi hazirligi: liste ve detay sayfasi AYNI arizada ayni
+// kolu gostermeli. Iki ekranin ayrisan kopyasi ekibi yanlis kola gonderir.
+import "./faultStripInputs.test";
+
 // Ikon subset'i: kodda kullanilan ikon fonta girmediyse ekranda ikon yerine
 // ADI cikiyor ("solar_power" -> "solar_" + guc simgesi). Derleme de tip
 // kontrolu de bunu gormez.

@@ -1113,6 +1113,12 @@
       "mapLegendOk": "Hat sağlıklı bölüm",
       "mapLegendDeviceRed": "Arıza algılayan cihaz",
       "mapLegendDeviceGreen": "Algılamayan cihaz",
+      "mapLegendBranch": "Arızanın sıçradığı kol",
+      "stripTitle": "Şematik Çizim",
+      "view": {
+        "map": "Harita",
+        "strip": "Şema"
+      },
       "tooltipPole": "Direk",
       "tooltipFaultStart": "Arıza başlangıcı",
       "tooltipFaultEnd": "Arıza bitişi",

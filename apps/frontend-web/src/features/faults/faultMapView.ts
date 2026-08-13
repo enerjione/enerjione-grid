@@ -24,6 +24,7 @@
  * arizanin yerini daraltmanin tek dogru yoludur.
  */
 
+import { branchConnectors } from "../grid/branchConnectors";
 import { bolgeSiniriCoz } from "./faultZone";
 
 export type Nokta = { latitude: number; longitude: number };
@@ -44,7 +45,14 @@ export type SegmentGirdi = {
   device_position_t?: number | null;
 };
 
-export type HatGirdi = { id: number; name: string };
+export type HatGirdi = {
+  id: number;
+  name: string;
+  /** Kol ise ana hattaki dallanma diregi. Bransman baglantisini (kolun ana
+   *  hatta yapistigi parca) cizebilmek icin gerekli; cagiran taraf
+   *  `gridSnapshot.lines` gonderiyor ve alan orada zaten var. */
+  branched_from_pole_id?: number | null;
+};
 
 export type ArizaGirdi = {
   line_id: number;
@@ -64,7 +72,45 @@ export type ArizaGirdi = {
   first_green_device_id?: number | null;
 };
 
+/**
+ * Arizanin sicradigi/sicramis olabilecegi kol — cizimle AYNI kaynaktan.
+ *
+ * Cagiran taraf bunu `buildFaultStripInputs` ciktisindan verir. Haritanin
+ * kendi kol hesabini yapmasi (ornegin backend'in `affected_branches` alani)
+ * IKI FARKLI CEVAP uretirdi: o alan yalnizca ana hattin DOGRUDAN cocuklarini
+ * tasiyor ve kolun uzerindeki cihazlarin ne dedigine bakmiyor. Sema "bu kol
+ * temiz" derken haritanin ayni kolu supheli gostermesi, tam olarak
+ * `branchRows.ts`'in kapattigi hata sinifi.
+ */
+export type KolGirdisi = {
+  lineId: number;
+  name: string;
+  /** Kolda KENDI ariza kaydi var — ariza orada DOGRULANDI. */
+  confirmed?: boolean;
+  /** Kolun giris cihazi "gormedim" dedi — kol SAGLAM sayilir. */
+  cleared?: boolean;
+};
+
 export type CihazGirdi = { id: number; name?: string | null; code?: string | null };
+
+/**
+ * Ariza bolgesinin ICINDEN cikan bransman kolu — cizilmeye hazir.
+ *
+ * Detay haritasi kollari HIC cizmiyordu: bir kol yalnizca "Tum sebeke"
+ * odaginda, diger butun hatlarla ayni SOLUK GRI ile gorunuyordu. Oysa ana
+ * hattaki ariza bir dallanma diregini kapsadiginda o kol da enerjisiz kalir
+ * ve ekip sahaya cikarken kolu da gezmek zorunda.
+ */
+export type SicrayanKol = {
+  lineId: number;
+  name: string;
+  /** Ana hattaki dallanma direginden baslayip kolun direklerini izler. */
+  path: LatLon[];
+  /** Kolda KENDI ariza kaydi var mi — true ise ariza kolda DOGRULANDI. */
+  dogrulandi: boolean;
+  /** Giris cihazi arizayi gormedi — kol saglam, yalnizca bag teli supheli. */
+  temiz: boolean;
+};
 
 export type HaritaGorunumu = {
   preGreen: LatLon[];
@@ -77,6 +123,8 @@ export type HaritaGorunumu = {
   lineBounds: LatLon[];
   gridBounds: LatLon[];
   otherLines: { lineId: number; name: string; path: LatLon[] }[];
+  /** Arizanin SICRADIGI kollar — bolge odaginda da cizilir ve kutuya girer. */
+  branchLines: SicrayanKol[];
   polesWithRole: {
     p: DirekGirdi;
     isFromFault: boolean;
@@ -190,6 +238,8 @@ export function buildFaultMapView(input: {
   devices: readonly CihazGirdi[];
   /** Su an alarmi RESETLENMEMIS cihazlar — "ariza algiladi" demek. */
   alarmActiveDeviceIds: ReadonlySet<number>;
+  /** Arizanin sicradigi kollar — cizimle ayni kaynaktan (bkz. KolGirdisi). */
+  branches?: readonly KolGirdisi[];
   /** Adi olmayan direk/cihaz icin yedek etiketler (i18n cagiranda). */
   poleFallback: string;
   deviceFallback: string;
@@ -359,6 +409,32 @@ export function buildFaultMapView(input: {
     if (pts.length >= 2) otherLines.push({ lineId: ln.id, name: ln.name, path: pts });
   }
 
+  // --- ARIZANIN SICRADIGI KOLLAR -----------------------------------------
+  // Kolun yolu ana hattaki DALLANMA DIREGINDEN baslar; aksi halde cizim
+  // havada asili duruyor ve "bu kol sisteme bagli degil" gibi okunuyor
+  // (ayni tuzak Hat Yonetimi haritasinda yasandi, bkz. branchConnectors).
+  // TEK DIREKLI kol da bu sayede cizilebilir: polyline en az iki nokta
+  // ister, dallanma diregi ikinci noktayi verir.
+  const kolBaglantilari = branchConnectors({ lines, poles, segments });
+  const branchLines: SicrayanKol[] = [];
+  for (const kol of input.branches ?? []) {
+    const kolDirekleri = poles
+      .filter((p) => p.line_id === kol.lineId)
+      .sort((a, b) => a.sequence_no - b.sequence_no)
+      .map((p) => [p.latitude, p.longitude] as LatLon);
+    const baglanti = kolBaglantilari.find((b) => b.lineId === kol.lineId);
+    const path = baglanti ? [baglanti.from, ...kolDirekleri] : kolDirekleri;
+    if (path.length < 2) continue; // cizilecek bir sey yok
+    branchLines.push({
+      lineId: kol.lineId,
+      name: kol.name,
+      path,
+      dogrulandi: Boolean(kol.confirmed),
+      temiz: Boolean(kol.cleared)
+    });
+  }
+  const kolNoktalari = branchLines.flatMap((k) => k.path);
+
   return {
     // Sifir uzunluklu parcalar elenir: hattin ucunde sahte bir yesil nokta
     // birakiyorlardi (bkz. `anlamli`).
@@ -367,10 +443,17 @@ export function buildFaultMapView(input: {
     postGreen: anlamli(postGreen),
     center,
     zoom: zoomFor(span),
-    zoneBounds: anlamli(faultRed).length >= 2 ? anlamli(faultRed) : fullLine,
-    lineBounds: fullLine,
+    // BOLGE KUTUSU KOLU DA KAPSAR: ariza kola sicradiysa "Ariza bolgesi"
+    // odagi yalnizca ana hattaki kesime zoom yapiyordu ve kol cercevenin
+    // disinda kaliyordu — ekranda cizilse bile gorunmuyordu.
+    zoneBounds: [
+      ...(anlamli(faultRed).length >= 2 ? anlamli(faultRed) : fullLine),
+      ...kolNoktalari
+    ],
+    lineBounds: [...fullLine, ...kolNoktalari],
     gridBounds: [...fullLine, ...otherLines.flatMap((l) => l.path)],
     otherLines,
+    branchLines,
     polesWithRole: linePoles.map((p) => ({
       p,
       isFromFault: p.id === fault.from_pole_id,

@@ -351,3 +351,140 @@ test("lerp uc noktalari tam verir", () => {
   assert.deepEqual(lerp(a, b, 1), [10, 20]);
   assert.deepEqual(lerp(a, b, 0.5), [5, 10]);
 });
+
+// ---------------------------------------------------------------------------
+// Arizanin SICRADIGI kollar
+//
+// Kollar cizimle AYNI kaynaktan gelir (`buildFaultStripInputs`); harita kendi
+// hesabini yapsaydi "sema bu kol temiz derken harita supheli gosteriyor"
+// durumu dogardi. Harita bu kollari HIC cizmiyordu: kol yalnizca "Tum sebeke"
+// odaginda, diger butun hatlarla ayni soluk gri ile gorunuyordu. Ekip ise
+// sahaya cikarken kolu da gezmek zorunda.
+// ---------------------------------------------------------------------------
+
+/** Ana hattin 3. diregine bagli, iki direkli bir kol. */
+const KOL_HATLARI = [
+  { id: 1, name: "ANA HAT" },
+  { id: 7, name: "BR-3", branched_from_pole_id: 3 }
+];
+const KOL_DIREKLERI = [
+  { id: 70, line_id: 7, sequence_no: 1, latitude: 39.05, longitude: 35.2, name: null },
+  { id: 71, line_id: 7, sequence_no: 2, latitude: 39.1, longitude: 35.22, name: null }
+];
+
+test("kol DALLANMA DIREGINDEN baslar — cizim havada asili kalmaz", () => {
+  const v = buildFaultMapView({
+    ...TEMEL,
+    lines: KOL_HATLARI,
+    poles: [...DIREKLER, ...KOL_DIREKLERI],
+    segments: [SEG(2, 3, 101), SEG(3, 4, 102)],
+    fault: { line_id: 1, from_pole_seq: 2, to_pole_seq: 4 },
+    branches: [{ lineId: 7, name: "BR-3" }],
+    alarmActiveDeviceIds: new Set([101])
+  })!;
+  assert.equal(v.branchLines.length, 1);
+  const kol = v.branchLines[0];
+  assert.equal(kol.name, "BR-3");
+  // Ilk nokta ana hattin 3. diregi; kolun kendi ilk diregi degil.
+  assert.deepEqual(kol.path[0], [39, 35.2]);
+  assert.deepEqual(kol.path.at(-1), [39.1, 35.22]);
+  assert.equal(kol.path.length, 3);
+});
+
+test("kol ARIZA BOLGESI kutusuna girer — yoksa odakta cerceve disinda kalir", () => {
+  const ortak = {
+    ...TEMEL,
+    lines: KOL_HATLARI,
+    poles: [...DIREKLER, ...KOL_DIREKLERI],
+    segments: [SEG(2, 3, 101), SEG(3, 4, 102)],
+    alarmActiveDeviceIds: new Set([101])
+  };
+  const kolsuz = buildFaultMapView({
+    ...ortak,
+    fault: { line_id: 1, from_pole_seq: 2, to_pole_seq: 4 }
+  })!;
+  const kollu = buildFaultMapView({
+    ...ortak,
+    fault: { line_id: 1, from_pole_seq: 2, to_pole_seq: 4 },
+    branches: [{ lineId: 7, name: "BR-3" }]
+  })!;
+  assert.equal(kolsuz.branchLines.length, 0);
+  const kuzey = (kutu: [number, number][]) => Math.max(...kutu.map(([lat]) => lat));
+  assert.ok(
+    kuzey(kollu.zoneBounds) >= 39.1 - 1e-9,
+    "bolge kutusu kolun ucunu kapsamiyor"
+  );
+  assert.ok(kuzey(kolsuz.zoneBounds) < 39.05, "kolsuz kutu kuzeye tasmis");
+  assert.ok(kuzey(kollu.lineBounds) >= 39.1 - 1e-9, "hat kutusu kolu kapsamiyor");
+});
+
+test("TEK DIREKLI kol da cizilebilir — ikinci noktayi dallanma diregi verir", () => {
+  const v = buildFaultMapView({
+    ...TEMEL,
+    lines: KOL_HATLARI,
+    poles: [...DIREKLER, KOL_DIREKLERI[0]],
+    segments: [SEG(2, 3, 101), SEG(3, 4, 102)],
+    fault: { line_id: 1, from_pole_seq: 2, to_pole_seq: 4 },
+    branches: [{ lineId: 7, name: "BR-3" }],
+    alarmActiveDeviceIds: new Set([101])
+  })!;
+  assert.equal(v.branchLines.length, 1);
+  assert.deepEqual(v.branchLines[0].path, [
+    [39, 35.2],
+    [39.05, 35.2]
+  ]);
+});
+
+test("kolda KENDI ariza kaydi varsa dogrulandi isaretlenir", () => {
+  const kur = (has_own_fault: boolean) =>
+    buildFaultMapView({
+      ...TEMEL,
+      lines: KOL_HATLARI,
+      poles: [...DIREKLER, ...KOL_DIREKLERI],
+      segments: [SEG(2, 3, 101), SEG(3, 4, 102)],
+      fault: { line_id: 1, from_pole_seq: 2, to_pole_seq: 4 },
+      branches: [{ lineId: 7, name: "BR-3", confirmed: has_own_fault }],
+      alarmActiveDeviceIds: new Set([101])
+    })!.branchLines[0];
+  assert.equal(kur(true).dogrulandi, true);
+  assert.equal(kur(false).dogrulandi, false);
+});
+
+test("giris cihazi GORMEDIM diyen kol temiz isaretlenir", () => {
+  // Kolun basindaki cihaz arizayi gormediyse ariza kolda olamaz; harita onu
+  // supheli (amber) degil saglam (yesil) gostermeli — sema da oyle gosteriyor.
+  const kol = buildFaultMapView({
+    ...TEMEL,
+    lines: KOL_HATLARI,
+    poles: [...DIREKLER, ...KOL_DIREKLERI],
+    segments: [SEG(2, 3, 101), SEG(3, 4, 102)],
+    fault: { line_id: 1, from_pole_seq: 2, to_pole_seq: 4 },
+    branches: [{ lineId: 7, name: "BR-3", cleared: true }],
+    alarmActiveDeviceIds: new Set([101])
+  })!.branchLines[0];
+  assert.equal(kol.temiz, true);
+  assert.equal(kol.dogrulandi, false);
+  // Temiz olsa da bolge kutusuna girer: ekip yine o kolun onunden geciyor.
+  assert.equal(kol.path.length, 3);
+});
+
+test("cizilemeyecek kol SESSIZCE atlanir — bozuk kayit haritayi dusurmez", () => {
+  const v = buildFaultMapView({
+    ...TEMEL,
+    // Dallanma diregi bilinmiyor ve kolun tek diregi var: polyline icin
+    // ikinci nokta yok. Tek noktali cizgi haritada gorunmez bir artiktir.
+    lines: [
+      { id: 1, name: "ANA HAT" },
+      { id: 7, name: "BR-3" }
+    ],
+    poles: [...DIREKLER, KOL_DIREKLERI[0]],
+    segments: [SEG(2, 3, 101)],
+    fault: { line_id: 1, from_pole_seq: 2, to_pole_seq: 4 },
+    branches: [
+      { lineId: 7, name: "BR-3" },
+      { lineId: 99, name: "YOK" }
+    ],
+    alarmActiveDeviceIds: new Set([101])
+  })!;
+  assert.equal(v.branchLines.length, 0);
+});

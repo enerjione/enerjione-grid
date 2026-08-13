@@ -1115,6 +1115,12 @@
       "mapLegendFault": "Fault range (red dashed)",
       "mapLegendOk": "Healthy line section",
       "mapLegendDeviceRed": "Device detecting fault",
+      "mapLegendBranch": "Affected branch",
+      "stripTitle": "Schematic",
+      "view": {
+        "map": "Map",
+        "strip": "Schematic"
+      },
       "mapLegendDeviceGreen": "Device without fault",
       "tooltipPole": "Pole",
       "tooltipFaultStart": "Fault start",
