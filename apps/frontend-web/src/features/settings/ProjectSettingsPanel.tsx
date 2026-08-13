@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { DeviceProfilesPanel } from "./DeviceProfilesPanel";
+import { PsInfo } from "./PsInfo";
 
 import { useProjectSettings } from "../../components/ProjectSettingsProvider";
 import { DEFAULT_TOAST_POSITION, toastPosition, useToast } from "../../components/ToastProvider";
@@ -268,7 +269,7 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
         ))}
       </div>
 
-      <div className="project-settings-body ps-body">
+      <div className={`project-settings-body ps-body${bolum === "olcum" ? " ps-body--esit" : ""}`}>
         {bolum === "kimlik" ? (
           <>
             {/* Uc kisa metin alani dar sutunda, dort gorsel onizleme genis
@@ -279,12 +280,12 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
                 <span className="ps-card-icon material-symbols-outlined" aria-hidden="true">
                   badge
                 </span>
-                <div>
-                  <h4>{t("engineering.projectSettings.identityTitle")}</h4>
-                  <p className="ps-hint">{t("engineering.projectSettings.identityHint")}</p>
-                </div>
+                <h4>{t("engineering.projectSettings.identityTitle")}</h4>
+                <PsInfo text={t("engineering.projectSettings.identityHint")} />
               </header>
-              <div className="ps-field-row">
+              {/* Uc alan ALT ALTA: ikisi yan yana durunca satir sonunda tek
+                  basina kalan ucuncu alan izgarayi kirik gosteriyordu. */}
+              <div className="ps-field-row ps-field-row--dikey">
                 <label className="ps-field">
                   <span className="ps-label">{t("engineering.projectSettings.projectName")}</span>
                   <input
@@ -321,10 +322,8 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
                 <span className="ps-card-icon material-symbols-outlined" aria-hidden="true">
                   image
                 </span>
-                <div>
-                  <h4>{t("engineering.projectSettings.brandTitle")}</h4>
-                  <p className="ps-hint">{t("engineering.projectSettings.brandHint")}</p>
-                </div>
+                <h4>{t("engineering.projectSettings.brandTitle")}</h4>
+                <PsInfo text={t("engineering.projectSettings.brandHint")} />
               </header>
               <div className="project-settings-logo-grid">
                 <LogoBox
@@ -380,15 +379,13 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
                 sebebi cikariminin belirleyici girdisi (tek faz-toprak cogunlukla
                 dis etken, uc faz ekipman/asiri yuk). Istisna cihazlar Cihaz
                 Yonetimi'nden ayrica ezilir. */}
-            <section className="ps-card ps-card--w5 ps-card--xl4">
+            <section className="ps-card ps-card--w4 ps-card--xl4">
               <header className="ps-card-head">
                 <span className="ps-card-icon material-symbols-outlined" aria-hidden="true">
                   electric_meter
                 </span>
-                <div>
-                  <h4>{t("engineering.projectSettings.phaseTitle")}</h4>
-                  <p className="ps-hint">{t("engineering.projectSettings.phaseHint")}</p>
-                </div>
+                <h4>{t("engineering.projectSettings.phaseTitle")}</h4>
+                <PsInfo text={t("engineering.projectSettings.phaseHint")} />
               </header>
               <div className="ps-unit-grid">
                 {(
@@ -434,15 +431,13 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
               </div>
             </section>
 
-            <section className="ps-card ps-card--w7 ps-card--xl4">
+            <section className="ps-card ps-card--w4 ps-card--xl4">
               <header className="ps-card-head">
                 <span className="ps-card-icon material-symbols-outlined" aria-hidden="true">
                   battery_charging_full
                 </span>
-                <div>
-                  <h4>{t("engineering.projectSettings.batteryTitle")}</h4>
-                  <p className="ps-hint">{t("engineering.projectSettings.batteryHint")}</p>
-                </div>
+                <h4>{t("engineering.projectSettings.batteryTitle")}</h4>
+                <PsInfo text={t("engineering.projectSettings.batteryHint")} />
               </header>
 
               <div className="ps-cells">
@@ -491,7 +486,7 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
             <DeviceProfilesPanel
               token={accessToken}
               canEdit
-              className="ps-card--xl4"
+              className="ps-card--w4 ps-card--xl4"
             />
           </>
         ) : null}
@@ -502,10 +497,8 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
               <span className="ps-card-icon material-symbols-outlined" aria-hidden="true">
                 notifications
               </span>
-              <div>
-                <h4>{t("engineering.projectSettings.toastTitle")}</h4>
-                <p className="ps-hint">{t("engineering.projectSettings.toastHint")}</p>
-              </div>
+              <h4>{t("engineering.projectSettings.toastTitle")}</h4>
+              <PsInfo text={t("engineering.projectSettings.toastHint")} />
             </header>
             {/* Iki ayri soru YAN YANA: "nerede cikacak" ve "hic cikacak mi".
                 Alt alta olduklarinda ikisi de satirin solunda kalip sagda
@@ -543,7 +536,11 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
                 </div>
               </fieldset>
 
-              <div className="ps-toast-side">
+              {/* Susturmanin NEYI KAPSAMADIGI uzun bir metin ve her bakista
+                  okunmasi gerekmiyor; anahtarin yanindaki ikonda duruyor.
+                  Bilgi ikonu label'in DISINDA: label'in icinde olsaydi
+                  ustune tiklamak anahtari da cevirirdi. */}
+              <div className="ps-switch-row">
                 <label className="ps-switch">
                   <input
                     type="checkbox"
@@ -555,15 +552,15 @@ export function ProjectSettingsPanel({ onSave, accessToken }: Props) {
                   </span>
                   <span className="ps-switch-text">
                     <strong>{t("engineering.projectSettings.toastMute")}</strong>
-                    <small>{t("engineering.projectSettings.toastMuteHint")}</small>
                   </span>
                 </label>
-                <p className="ps-note">
-                  <span className="material-symbols-outlined" aria-hidden="true">
-                    info
-                  </span>
-                  {t("engineering.projectSettings.toastScopeNote")}
-                </p>
+                <PsInfo
+                  yon="sag"
+                  text={[
+                    t("engineering.projectSettings.toastMuteHint"),
+                    t("engineering.projectSettings.toastScopeNote")
+                  ]}
+                />
               </div>
             </div>
           </section>
@@ -628,6 +625,7 @@ function BatteryRange({
     <div className={`ps-cell${dolu && !gecerli ? " is-invalid" : ""}`}>
       <div className="ps-cell-head">
         <h5>{title}</h5>
+        <PsInfo text={note} />
         {!dolu ? <span className="ps-cell-tag">{fallback}</span> : null}
       </div>
       <div className="ps-cell-fields">
@@ -665,7 +663,6 @@ function BatteryRange({
           </span>
         </label>
       </div>
-      <p className="ps-hint ps-cell-note">{note}</p>
     </div>
   );
 }
