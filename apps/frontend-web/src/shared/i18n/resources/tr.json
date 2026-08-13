@@ -4108,6 +4108,8 @@
       "active": "Aktif",
       "noData": "Veri yok",
       "normal": "Normal",
+      "lastKnown": "son bilinen",
+      "lastKnownHint": "Bu, sinyalin son bilinen değeri. Ölçümün kalitesi \"{{quality}}\" olduğu için güncel olmayabilir.",
       "untrusted": "Güvenilmez"
     },
     "online": "Çevrimiçi",

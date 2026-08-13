@@ -33644,6 +33644,25 @@ th.event-col-category {
    0.0 degeri eskiden yesil 'Normal' gorunuyordu. Gri, operatore
    'bilmiyoruz' der; yesil 'sorun yok' der. Ikisi ayni sey degil. */
 .device-status-badge.is-unknown { color: #94a3b8; }
+/* SON BILINEN DEGER — deger GORUNUR ama taze degil.
+   Onceden guvenilmez okumada satir yalnizca "Güvenilmez" yazip degeri
+   GIZLIYORDU; operator sinyalin Normal mi Aktif mi oldugunu goremiyordu.
+   Oysa Canli Degerler sayfasi ayni veriyi hep gosterir (deger ve kalite
+   AYRI sutunlar) — ayni okuma, iki ekranda iki farkli cevap veriyordu.
+   Renk yine NOTR: yesil "sorun yok" der, bu ise "en son boyleydi" der.
+   NOT: `.device-status-badge` bu dosyada IKI kez tanimli (bkz. ~32757);
+   bu kural, kazanan ikinci blogun yanina konuldu. */
+.device-status-badge.is-stale { color: #64748b; }
+.device-status-stale {
+  font-size: 10.5px;
+  font-weight: 600;
+  font-style: normal;
+  color: #94a3b8;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  white-space: nowrap;
+}
 .device-status-itemval {
   font-size: 13px;
   font-weight: 800;

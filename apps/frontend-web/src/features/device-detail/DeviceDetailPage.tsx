@@ -867,7 +867,9 @@ function StatusItem({
     // degerlendirmesine SOKMUYOR; arayuz ise onu "taze" sanip yesil
     // gosterip sunucunun kararini gecersiz kiliyordu.
     const trust = signalTrust(row.value, row.effQuality, true);
-    if (trust !== "trusted") {
+
+    // DEGER HIC YOKSA gosterilecek bir sey de yok.
+    if (trust === "missing") {
       return (
         <div className="device-status-item">
           <span className="device-status-name" title={row.signal_key}>
@@ -876,24 +878,56 @@ function StatusItem({
           </span>
           <span className="device-status-badge is-unknown">
             <span className="material-symbols-outlined">help</span>
-            {trust === "missing"
-              ? t("deviceDetail.status.noData")
-              : t("deviceDetail.status.untrusted")}
+            {t("deviceDetail.status.noData")}
           </span>
         </div>
       );
     }
 
+    // GUVENILMEZ OLCUM DEGERI GIZLEMEZ, DAMGALAR.
+    //
+    // Onceden kalite engelleyiciyse satir yalnizca "Güvenilmez" yaziyor ve
+    // SON DEGER kayboluyordu: operator sinyalin Normal mi Aktif mi oldugunu
+    // goremiyordu. Oysa Canli Degerler sayfasi ayni veriyi hep gosteriyor —
+    // orada deger ve kalite AYRI sutunlar. Ayni cihaz, ayni okuma, iki
+    // ekranda iki farkli cevap.
+    //
+    // Kural yine de korunuyor: bayat bir okuma duz yesil "Normal" olarak
+    // GOSTERILMEZ (bkz. shared/signalQuality.ts — yesil yalan). Deger
+    // notr renkte ve "son bilinen" etiketiyle cikiyor; boylece operator
+    // hem son durumu gorur hem de bunun taze olmadigini bilir. Ayni desen
+    // bu dosyadaki KPI kartlarinda zaten var (`is-stale`, "son bilinen
+    // deger").
     const active = row.value === 1;
+    const bayat = trust !== "trusted";
+    const durumMetni = active
+      ? t("deviceDetail.status.active")
+      : t("deviceDetail.status.normal");
     return (
       <div className="device-status-item">
         <span className="device-status-name" title={row.signal_key}>
           <span className="material-symbols-outlined">{icon}</span>
           {label}
         </span>
-        <span className={`device-status-badge ${active ? "is-active" : "is-normal"}`}>
-          <span className="material-symbols-outlined">{active ? "warning" : "check_circle"}</span>
-          {active ? t("deviceDetail.status.active") : t("deviceDetail.status.normal")}
+        <span
+          className={`device-status-badge ${
+            bayat ? "is-stale" : active ? "is-active" : "is-normal"
+          }`}
+          title={
+            bayat
+              ? t("deviceDetail.status.lastKnownHint", {
+                  quality: row.effQuality ?? "?"
+                })
+              : undefined
+          }
+        >
+          <span className="material-symbols-outlined">
+            {bayat ? "history" : active ? "warning" : "check_circle"}
+          </span>
+          {durumMetni}
+          {bayat ? (
+            <em className="device-status-stale">{t("deviceDetail.status.lastKnown")}</em>
+          ) : null}
         </span>
       </div>
     );
