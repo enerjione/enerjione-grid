@@ -85,6 +85,10 @@ import "./rolErisimi.test";
 // sayfadan da dusmeli (bir kez ters cevrilip geri alinmis kural).
 import "./anaSayfaGorunurluk.test";
 
+// Kaynak kodlamasi: cift-kodlanmis metin ("Â°C", "â€”") ekrana dusuyordu ve
+// derleyici sikayet etmedigi icin sessizce kaliyordu.
+import "./kaynakKodlamasi.test";
+
 // Ariza isi haritasi olcegi: "her yer kirmizi" ya da "hicbir yer sicak degil"
 // yalanlarinin ikisi de bakim butcesini yanlis yonlendirir.
 import "./heatField.test";

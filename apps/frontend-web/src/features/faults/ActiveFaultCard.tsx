@@ -1,25 +1,25 @@
-﻿/**
- * ActiveFaultCard â€” "Aktif ArÄ±za" sekmesindeki tek ariza karti.
+/**
+ * ActiveFaultCard — "Aktif Arıza" sekmesindeki tek ariza karti.
  *
  * Bir hatta birden fazla bagimsiz ariza bolgesi olabildigi icin (bkz.
  * backend `fault_recompute_service._compute_line_zones`) bu kart her BOLGE
  * icin bir kez render edilir; ayni hattan iki kart yan yana cikabilir.
- * O yuzden basligin yaninda direk araligi da vurgulu gosterilir â€” iki karti
+ * O yuzden basligin yaninda direk araligi da vurgulu gosterilir — iki karti
  * birbirinden ayiran sey odur.
  *
  * DUZEN (yeniden tasarim)
  * -----------------------
  * Onceki surum uc esit sutundu: solda etiket/deger listesi, ortada kucuk bir
  * cizim, sagda butonlar. Cizim dar kaliyor, mesafe ve cihaz bilgisi cizimin
- * ALTINDA ayri kutucuklarda tekrar ediliyordu â€” operator ayni bilgiyi uc
+ * ALTINDA ayri kutucuklarda tekrar ediliyordu — operator ayni bilgiyi uc
  * yerde okuyup kafasinda birlestirmek zorundaydi.
  *
  * Simdi bilgi TEK YONDE akiyor:
- *   1. Ust serit  â€” NEREDE ve NE DURUMDA (hat, aralik, durum, sure)
- *   2. Cizim      â€” arizanin fiziksel yeri, olcusu, hangi cihazlar arasinda
- *   3. Yan panel  â€” NEDEN acildi: arizayi doguran ALARMLAR + faz + sinirlar
+ *   1. Ust serit  — NEREDE ve NE DURUMDA (hat, aralik, durum, sure)
+ *   2. Cizim      — arizanin fiziksel yeri, olcusu, hangi cihazlar arasinda
+ *   3. Yan panel  — NEDEN acildi: arizayi doguran ALARMLAR + faz + sinirlar
  *
- * Ikonografi: lucide-react (material-symbols DEGIL) â€” sematik direk seridi
+ * Ikonografi: lucide-react (material-symbols DEGIL) — sematik direk seridi
  * cizgisel oldugu icin ayni gorsel dil.
  */
 import { useMemo, useState } from "react";
@@ -67,9 +67,9 @@ type Props = {
   /** Sebep etiketi (katalogdan cozulmus). `suggested` = cihaz onerisi,
    *  insan henuz onaylamadi. */
   cause?: { label: string; suggested: boolean } | null;
-  /** AYNI HATTA gecmis arizalar â€” tekrar eden ariza baska bir istir. */
+  /** AYNI HATTA gecmis arizalar — tekrar eden ariza baska bir istir. */
   history?: FaultRecurrence | null;
-  /** Sebep katalogu â€” kartta SEBEP SECILEBILSIN diye. */
+  /** Sebep katalogu — kartta SEBEP SECILEBILSIN diye. */
   causeOptions?: { code: string; label: string; group: string }[];
   /** Sebep secildiginde kaydet. Verilmezse alan salt okunur kalir. */
   onSaveCause?: (code: string | null) => void | Promise<void>;
@@ -80,7 +80,7 @@ type Props = {
 };
 
 function fmtDateTime(iso: string | null | undefined, localeTag: string): string {
-  if (!iso) return "â€”";
+  if (!iso) return "—";
   return new Date(iso).toLocaleString(localeTag, {
     day: "2-digit",
     month: "2-digit",
@@ -91,7 +91,7 @@ function fmtDateTime(iso: string | null | undefined, localeTag: string): string 
 }
 
 function fmtClock(iso: string | null | undefined, localeTag: string): string {
-  if (!iso) return "â€”";
+  if (!iso) return "—";
   return new Date(iso).toLocaleTimeString(localeTag, {
     hour: "2-digit",
     minute: "2-digit"
@@ -153,9 +153,9 @@ export function ActiveFaultCard({
   const sureDurdu = bitisMs != null;
   const sureText = fmtElapsed(f.opened_at, bitisMs ?? now);
 
-  // Cihaz koduna gore alarm ozeti â€” cizimdeki faz noktalari ve tooltip
+  // Cihaz koduna gore alarm ozeti — cizimdeki faz noktalari ve tooltip
   // bunu okur. Ayni cihazda birden fazla faz alarmi olabilir.
-  /** Direk araligi basligi: direklerin ADI varsa onu kullan, yoksa "#3 â€” #4".
+  /** Direk araligi basligi: direklerin ADI varsa onu kullan, yoksa "#3 — #4".
    *  Saha ekibi direkleri sira numarasiyla degil adiyla taniyor. */
   const rangeText = useMemo(() => aralikMetni(f, strip?.poles, t), [f, strip, t]);
 
@@ -173,13 +173,13 @@ export function ActiveFaultCard({
     return map;
   }, [alarms]);
 
-  /** ARIZALI FAZLAR â€” cizimde yalnizca bu fazlarin teli kirmizi cizilir.
+  /** ARIZALI FAZLAR — cizimde yalnizca bu fazlarin teli kirmizi cizilir.
    *
    *  Bir SN2 govdesindeki uc sensor hattin uc ayri fazina kelepcelenir;
    *  alarm hangi kaynaktan geldiyse ariza o fazdadir. Onceki cizim uc telin
    *  hepsini kirmiziya boyuyordu: "uc faz birden arizali" demek, tek fazli
    *  bir ariza icin YANLIS bir ifade ve ekibi gereksiz genis bir kontrole
-   *  gonderiyor. Liste bos kalirsa (eski kayit) uc tel de vurgulanir â€”
+   *  gonderiyor. Liste bos kalirsa (eski kayit) uc tel de vurgulanir —
    *  "bilmiyorum"u tek bir faza indirgemek daha kotu olurdu. */
   const faultPhases = useMemo(() => {
     const set = new Set<string>();
@@ -189,12 +189,12 @@ export function ActiveFaultCard({
     return Array.from(set);
   }, [alarms]);
 
-  /** ARIZA KUNYESI â€” yalnizca DOLU alanlar.
+  /** ARIZA KUNYESI — yalnizca DOLU alanlar.
    *
-   *  Bos alan satiri hic cizilmez: "â€”" ile dolu bir tablo bilgi tasimadigi
+   *  Bos alan satiri hic cizilmez: "—" ile dolu bir tablo bilgi tasimadigi
    *  gibi, gercekten bilinen iki degeri de gorunmez kilar. Cihaz analiz
    *  alanlarini (tur/faz/yon/akim) hic doldurmadiysa bolum "veri gelmedi"
-   *  der â€” bos birakip "sorun yok" izlenimi vermez. */
+   *  der — bos birakip "sorun yok" izlenimi vermez. */
   const spec = useMemo(() => {
     const rows: { key: string; label: string; value: string; tone?: "red" | "green" }[] = [];
     const ekle = (
@@ -230,10 +230,10 @@ export function ActiveFaultCard({
       ekle("il", t("faults.card.specLoadCurrent"), `${f.load_current_before_a.toFixed(1)} A`);
     }
     if (f.conductor_temp_c != null) {
-      ekle("temp", t("faults.card.specTemp"), `${f.conductor_temp_c.toFixed(0)} Â°C`);
+      ekle("temp", t("faults.card.specTemp"), `${f.conductor_temp_c.toFixed(0)} °C`);
     }
     // Bolgeyi ceviren iki cihaz: cizimde kirmizi/yesil olarak duruyor ama
-    // ADI yalnizca burada yaziyor â€” telsizle "hangi cihaz" diye sorulur.
+    // ADI yalnizca burada yaziyor — telsizle "hangi cihaz" diye sorulur.
     ekle(
       "red",
       t("faults.card.specLastRed"),
@@ -251,8 +251,8 @@ export function ActiveFaultCard({
     }
     // ARALIK KODU KUNYEDE YAZILMIYOR (kullanici karari): "L13/D21>D10" bir
     // ic anahtar; sahadaki kisiye bir sey soylemiyor, ustelik ayni bilgi
-    // baslikta okunur haliyle ("G_Ckl14 â€” G_Ckl21") zaten duruyor. Alan
-    // DB'de kaliyor â€” tekrar sayimi ve risk puani hala bu kodla tutulur.
+    // baslikta okunur haliyle ("G_Ckl14 — G_Ckl21") zaten duruyor. Alan
+    // DB'de kaliyor — tekrar sayimi ve risk puani hala bu kodla tutulur.
     if (f.measured_at) {
       ekle("at", t("faults.card.specMeasuredAt"), fmtClock(f.measured_at, localeTag));
     }
@@ -376,7 +376,7 @@ export function ActiveFaultCard({
             <span className="fx-zone-title">{t("faults.card.zoneTitle")}</span>
             {/* Ariza tek bir hat kesiminde olmayabilir: bolge bir dallanma
                 diregini kapsiyorsa kol da adaydir. Kac aday oldugu cizime
-                bakmadan once soylenir â€” ekip kac yer gezecegini bilsin. */}
+                bakmadan once soylenir — ekip kac yer gezecegini bilsin. */}
             {(strip?.branchRows.length ?? 0) > 0 ? (
               <span className="fx-zone-candidates">
                 {t("faults.card.candidateSections", {
@@ -453,7 +453,7 @@ export function ActiveFaultCard({
               ve arizanin KENDISI hakkinda tek bir sey yazmiyordu: turu,
               fazi, akimi, yonu cihazdan geliyor ama hicbiri gorunmuyordu.
               Kunye bunlari tek bir okunur listede toplar; olmayan satir hic
-              cizilmez â€” "â€”" ile dolu bir tablo bilgi tasimaz. */}
+              cizilmez — "—" ile dolu bir tablo bilgi tasimaz. */}
           <div className="fx-ev-block">
             <h4 className="fx-ev-title">
               <Activity size={13} strokeWidth={2.3} />
@@ -474,7 +474,7 @@ export function ActiveFaultCard({
               </dl>
             )}
 
-            {/* SEBEP â€” SALT OKUNUR DEGIL.
+            {/* SEBEP — SALT OKUNUR DEGIL.
                 Kart, cihaz verisinden turetilen oneriyi ("Agac / dal temasi")
                 gosteriyor ama degistirilemiyordu; sahada gercek sebebi goren
                 kisi onu girmek icin detay ekranini acmak zorundaydi. Sebep
@@ -503,7 +503,7 @@ export function ActiveFaultCard({
                   ))}
                 </select>
               ) : (
-                <span className="fx-cause-plain">{cause?.label ?? "â€”"}</span>
+                <span className="fx-cause-plain">{cause?.label ?? "—"}</span>
               )}
               {/* Cihazin onerisi, insan henuz onaylamadiysa. Oneriyi tek
                   tikla kabul etmek, secim listesini acmaktan hizli. */}
@@ -561,12 +561,12 @@ export function ActiveFaultCard({
                       ) : null}
                     </span>
                     <span className="fx-alarm-sub">
-                      {a.device_name ?? a.device_code ?? "â€”"}
-                      <span className="fx-alarm-dot">Â·</span>
+                      {a.device_name ?? a.device_code ?? "—"}
+                      <span className="fx-alarm-dot">·</span>
                       {fmtClock(a.created_at, localeTag)}
                       {a.acknowledged ? (
                         <>
-                          <span className="fx-alarm-dot">Â·</span>
+                          <span className="fx-alarm-dot">·</span>
                           {t("faults.card.alarmAcked")}
                         </>
                       ) : null}

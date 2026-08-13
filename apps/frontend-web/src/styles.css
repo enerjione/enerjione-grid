@@ -24127,14 +24127,31 @@ th.event-col-category {
 .fx-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  /* SATIR KARTIN BOYUNU ASMAZ — sag panel kendi icinde kayar.
+     `.fx-evidence` zaten `overflow-y: auto` tasiyordu ama HIC tetiklenmiyordu:
+     ortulu satir `auto` yuksekliktedir, yani icerik kadar uzar. Panel uzadikca
+     satir da uzuyor, kart taşiyor ve `.fx-card`in `overflow: hidden`i alttaki
+     alarmlari kirpiyordu — dort alarmli bir arizada son satir yarida
+     kesiliyordu ve ulasmanin yolu yoktu.
+     `minmax(0, 1fr)`: satir kalan alani alir, ASMAZ; boylece panelin kendi
+     kaydirmasi devreye girer. */
+  grid-template-rows: minmax(0, 1fr);
   gap: 0;
 }
 @media (max-width: 1180px) {
-  .fx-body { grid-template-columns: minmax(0, 1fr); }
+  .fx-body {
+    grid-template-columns: minmax(0, 1fr);
+    /* Tek sutuna dusunce panel cizimin ALTINA gecer; iki bolumu tek ekrana
+       sikistirmak ikisini de okunmaz yapardi. Dar ekranda sayfa kayar. */
+    grid-template-rows: auto;
+  }
 }
 
 .fx-zone {
   min-width: 0;
+  /* Grid satiri `1fr` oldugu icin cizim de satiri ASMAMALI; aksi halde
+     sag panelin kaydirmasi yerine kart yine taşardi. */
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -24382,10 +24399,15 @@ th.event-col-category {
   min-width: 0;
   /* Sabit 620px tavan KALKTI: panelin altinda bos yer varken kaydirma cubugu
      cikiyordu. Artik satirin tamamini kullanir; kaydirma yalnizca gercekten
-     sigmadiginda (kucuk ekran) devreye girer — aksi halde `.fx-card`
-     icerigi kirpardi. */
+     sigmadiginda devreye girer — aksi halde `.fx-card` icerigi kirpardi.
+     Tavanin gelmesi `.fx-body`nin `grid-template-rows: minmax(0, 1fr)`
+     kuralindan: o olmadan satir icerik kadar uzuyor ve buradaki `auto`
+     hicbir zaman tetiklenmiyordu. */
   min-height: 0;
   overflow-y: auto;
+  /* Panelin sonuna gelince kaydirma SAYFAYA sicramasin: operator alarm
+     listesini kaydirirken ariza karti altindan kayardi. */
+  overscroll-behavior: contain;
   scrollbar-width: thin;
 }
 /* Bloklar BENZER YUKSEKLIKTE dursun: alarm/sure/gecmis bloklari icerik
