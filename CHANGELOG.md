@@ -12,6 +12,32 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ## [Yayınlanmamış]
 
+### Düzeltildi
+
+- **Hat Yönetimi'nde sürüklenen cihaz bıraktığınız yerde kalmıyordu.** Düzenleme
+  modunda cihaz işaretçisini taşıyıp bırakınca eski konumuna dönüyor, ama aynı
+  cihaz ana sayfa haritasında doğru yerde görünüyordu. Sebep haritanın çizim
+  katmanıydı: sürükleme boyunca işaretçi her karede zorla hat üzerine
+  oturtulmaya çalışılıyor ve bu, haritanın kendi sürükleme motoruyla
+  çakışıyordu. Kaydedilen değer baştan beri doğruydu — yanlış olan ekrandı.
+  Artık işaretçi bırakıldığı anda hattın üzerine oturuyor ve orada kalıyor.
+- **Cihaz işaretçisi bıraktığınız noktadan biraz kaymış bir yere oturuyordu.**
+  Hat üzerindeki en yakın nokta hesabı enlem ile boylamı aynı ölçekte
+  sanıyordu; haritada bir boylam derecesi bir enlem derecesinden kısa görünür.
+  Sapma hat ne kadar çapraz ise o kadar büyüktü. Hesap düzeltildi.
+- **Cihaz detay sayfasında dijital sinyaller bir süre sonra "Güvenilmez"e
+  dönüyordu** — cihaz çevrimiçi ve son iletişim "az önce" iken bile. Sayfa,
+  ölçümlerin güvenilirliğine gateway'in en son ne zaman haber verdiğine bakarak
+  karar veriyor; ancak gateway listesi açılıştan sonra hiç tazelenmiyordu, yani
+  tarayıcıdaki bilgi donuyordu. Bir dakika sonra koşul kaçınılmaz olarak
+  sağlanıyor ve bir daha da bozulmuyordu. Liste artık düzenli tazeleniyor.
+- **Güvenilmez bir dijital sinyalde son değer artık görünüyor.** Ölçümün
+  kalitesi bozuksa satır sinyalin Normal mi Aktif mi olduğunu tamamen
+  gizliyordu; oysa Canlı Değerler sayfası aynı veriyi her zaman gösteriyor.
+  Aynı okuma iki ekranda iki farklı cevap veriyordu. Artık son durum yazıyor,
+  yanında **"son bilinen"** etiketi ve ölçüm kalitesini açıklayan bir ipucu
+  duruyor — yani değer görünür ama güncel olmadığı da belli.
+
 ---
 
 ## [2.83.0] — 2026-08-13
