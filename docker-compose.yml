@@ -142,6 +142,38 @@ x-alarm-resources: &alarm-resources
       reservations:
         memory: 128M
 
+# Worker healthcheck zamanlamasi — TEK YERDEN yonetilir.
+#
+# NEDEN COMPOSE'DA: bu probe'lar 2.92.0'dan beri IMAJ katmaninda
+# (`HEALTHCHECK` yonergesi) zaten vardi ve calisiyordu. Ama docker-compose.yml
+# operatorun okudugu TEK sozlesme; burada gorunmedigi icin "worker'larda
+# healthcheck yok" sonucuna varmak mumkundu (bu denetim sirasinda tam olarak
+# bu hata yapildi). Compose tanimi imajdakini EZER, yani artik tek otorite
+# burasi ve `docker compose config` ile denetlenebilir.
+#
+# DEGERLERIN GEREKCESI (imajdaki kanitlanmis degerlerle AYNI birakildi):
+#   interval 20s     — takilma bir sonraki turda gorunur; 3 tur = ~60 sn.
+#   timeout  5s      — saglik sunuculari TEK IPLIKLI `HTTPServer`; yavas bir
+#                      istemci probe'u bekletirse dar bir timeout SAHTE
+#                      unhealthy uretir. 5 sn, 3 sn'lik istemci timeout'unun
+#                      uzerinde pay birakir.
+#   retries  3       — tek bir kacirilan probe unhealthy yapmasin.
+#   start_period 15s — saglik sunucusu ana dongudEN ONCE ayaga kalkiyor
+#                      (or. tag-engine main.py: _start_health_server() katalog
+#                      beklemesinden once). Bu yuzden 15 sn bol; katalog
+#                      beklemesi (KATALOG_BEKLE_SEC=20) probe'u geciktirmez.
+#
+# BU HEALTHCHECK RESTART ETTIRMEZ. Docker `unhealthy` bir container'i yalnizca
+# ISARETLER. Kilitlenmeden kendiliginden toparlanma her serviste AYRI bir
+# mekanizmanin, bekcinin (watchdog) isidir: bekci sureci sonlandirir,
+# `restart: unless-stopped` geri kaldirir. Ikisi birbirinin yerine gecmez —
+# healthcheck GORUNURLUK, bekci KURTARMA saglar.
+x-worker-healthcheck: &worker-healthcheck
+  interval: 20s
+  timeout: 5s
+  retries: 3
+  start_period: 15s
+
 # Container hardening — stateless worker'lar icin defense-in-depth.
 # `no-new-privileges`: setuid binary'leri ile yetki yukseltme blok.
 # `cap_drop: ALL`: Linux capability'leri (CAP_NET_BIND, CAP_SYS_ADMIN, ...) sifirla.
@@ -594,6 +626,21 @@ services:
       DISK_GUARD_RESERVE_MIN_GB: ${DISK_GUARD_RESERVE_MIN_GB:-5}
       DISK_GUARD_INTERVAL_SEC: ${DISK_GUARD_INTERVAL_SEC:-300}
       DISK_GUARD_EMERGENCY_BACKUP_KEEP: ${DISK_GUARD_EMERGENCY_BACKUP_KEEP:-2}
+      # --- Kritik altyapi olaylarinin operatore bildirilmesi -------------
+      # BU SATIRLAR SART: compose'da `env_file` YOK; burada listelenmeyen
+      # bir ayar container'a HIC ULASMAZ ve operator degistirdigini SANIR
+      # (ayni tuzak daha once BACKUP_OFFSITE_DIR, ACCESS_TOKEN_MINUTES,
+      # OUTBOX_* ve NATS_STREAM_*_MAX_AGE_DAYS'te yasandi).
+      #
+      # Hangi olaylarin bildirim uretecegi ACIK LISTE ile belirlenir
+      # (infra_notification_service.ACIK_LISTE); bu ayarlar yalnizca
+      # sikligi ve sogumayi yonetir.
+      # Soguma YALNIZCA GONDERIME uygulanir — denetim kaydi (`system_events`)
+      # her zaman eksiksiz yazilir.
+      INFRA_NOTIFY_ENABLED: ${INFRA_NOTIFY_ENABLED:-true}
+      INFRA_NOTIFY_SWEEP_SEC: ${INFRA_NOTIFY_SWEEP_SEC:-60}
+      INFRA_NOTIFY_COOLDOWN_MINUTES: ${INFRA_NOTIFY_COOLDOWN_MINUTES:-15}
+      INFRA_NOTIFY_LOOKBACK_MINUTES: ${INFRA_NOTIFY_LOOKBACK_MINUTES:-60}
       # Bos ise BACKUP_DIR olculur (gercek volume mount'u; container'in `/`
       # overlay'i yaniltici olabilir).
       DISK_GUARD_PATH: ${DISK_GUARD_PATH:-}
@@ -953,6 +1000,14 @@ services:
       # Backend system-status, tag-engine icin 8011 portunu probe eder.
       WORKER_HEALTH_HOST: 0.0.0.0
       WORKER_HEALTH_PORT: 8011
+    # `python` — imajda KANITLANMIS tek HTTP istemcisi. Taban imaj
+    # python:3.11-slim ve Dockerfile HICBIR paket kurmuyor; curl da wget de
+    # YOKTUR. Bunlardan biri yazilsaydi probe "executable file not found" ile
+    # HER TURDA duser ve servis KALICI unhealthy gorunurdu.
+    # Uc, bekcinin son kalp atisini okur (200/503), kosulsuz 200 DEGIL.
+    healthcheck:
+      <<: *worker-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request as u,sys;sys.exit(0 if u.urlopen('http://127.0.0.1:8011/health',timeout=3).status==200 else 1)"]
     networks:
       - e1-net
     logging: *default-logging
@@ -1021,6 +1076,10 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
       WORKER_HEALTH_HOST: 0.0.0.0
       WORKER_HEALTH_PORT: 8012
+    # python:3.11-slim — curl/wget YOK, `python` var (bkz. tag-engine notu).
+    healthcheck:
+      <<: *worker-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request as u,sys;sys.exit(0 if u.urlopen('http://127.0.0.1:8012/health',timeout=3).status==200 else 1)"]
     networks:
       - e1-net
     logging: *default-logging
@@ -1052,6 +1111,10 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
       WORKER_HEALTH_HOST: 0.0.0.0
       WORKER_HEALTH_PORT: 8013
+    # python:3.11-slim — curl/wget YOK, `python` var (bkz. tag-engine notu).
+    healthcheck:
+      <<: *worker-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request as u,sys;sys.exit(0 if u.urlopen('http://127.0.0.1:8013/health',timeout=3).status==200 else 1)"]
     networks:
       - e1-net
     logging: *default-logging
@@ -1086,6 +1149,10 @@ services:
       WORKER_HEALTH_HOST: 0.0.0.0
       WORKER_HEALTH_PORT: 8014
       IEC104_DEFAULT_LISTEN_HOST: 0.0.0.0
+    # python:3.11-slim — curl/wget YOK, `python` var (bkz. tag-engine notu).
+    healthcheck:
+      <<: *worker-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request as u,sys;sys.exit(0 if u.urlopen('http://127.0.0.1:8014/health',timeout=3).status==200 else 1)"]
     # IEC 104 outbound master sistemler bu portlara baglanir.
     # Buradaki aralik (2404 standart, 2405-2410 ek hedefler) kullaniciya gore
     # genisletilebilir; backend'deki outbound_targets icindeki listen_port
@@ -1139,6 +1206,10 @@ services:
       # eksik register'lari doldurur. Taze canli deger EZILMEZ.
       # 0 = kapali (degismeyen sinyaller SCADA'da sonsuza dek 0 gorunur).
       MODBUS_SNAPSHOT_REFRESH_SEC: ${MODBUS_SNAPSHOT_REFRESH_SEC:-30}
+    # python:3.11-slim — curl/wget YOK, `python` var (bkz. tag-engine notu).
+    healthcheck:
+      <<: *worker-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request as u,sys;sys.exit(0 if u.urlopen('http://127.0.0.1:8017/health',timeout=3).status==200 else 1)"]
     # Modbus standart portu 502'dir ve <1024'tur. Servis non-root (uid 10001)
     # calistigi ve `cap_drop: ALL` uygulandigi icin bu sysctl olmadan bind
     # edemez. Namespace'e ozel bir ayardir; host'un port politikasini
@@ -1183,6 +1254,12 @@ services:
       FTP_MASQUERADE_ADDRESS: ${FTP_MASQUERADE_ADDRESS:-}
       WORKER_HEALTH_HOST: 0.0.0.0
       WORKER_HEALTH_PORT: 8015
+    # python:3.11-slim — curl/wget YOK, `python` var (bkz. tag-engine notu).
+    # NOT: bu servis `*hardened-worker` KULLANMAZ (FTP yazilabilir volume ve
+    # port 21 ister); probe icin fark etmez, python yine imajda.
+    healthcheck:
+      <<: *worker-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request as u,sys;sys.exit(0 if u.urlopen('http://127.0.0.1:8015/health',timeout=3).status==200 else 1)"]
     ports:
       # Kontrol portu + pasif veri portu araligi (cihazlar bu araliga baglanir).
       - "${FTP_HOST_PORT:-21}:21"
@@ -1214,6 +1291,15 @@ services:
       SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
       WHATSAPP_SESSION_DIR: /data/session
       WORKER_HEALTH_PORT: 8016
+    # `node` — taban imaj node:20-slim (Debian). Dockerfile yalnizca git +
+    # ca-certificates kuruyor; curl da wget de YOK. Python da yok.
+    # UC KOSULSUZ 200 DONER, WhatsApp bagli olmasa bile — bu BILINCLI
+    # (kopma rutindir, yeniden baglanma zinciri kendi ele alir). Yani bu
+    # probe "surec istekleri isleyebiliyor mu" sorusunu cevaplar; WhatsApp
+    # oturum durumu yanit govdesinde tasinir ve Sistem Durumu'ndan izlenir.
+    healthcheck:
+      <<: *worker-healthcheck
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:8016/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
     volumes:
       - whatsapp-session-data:/data/session
     networks:
@@ -1240,6 +1326,25 @@ services:
       # blokaj Postgres'tir; o da gercekten dustuyse uygulama zaten calisamaz.
       backend-api:
         condition: service_healthy
+    # `wget` — Alpine (nginx-unprivileged) tabaninda BusyBox applet'i olarak
+    # VAR; curl YOK. Digerlerinden farkli olarak burada python da yok.
+    #
+    # YOL `/` — `/health` DEGIL. nginx.conf'ta adanmis bir health location'i
+    # YOKTUR; `/health` istegi SPA fallback'ine (try_files ... /index.html)
+    # duser ve 200 doner. Yani `/health` yazmak VARMIS GIBI gorunen ama
+    # aslinda olcmeyen bir uc yaratirdi. `/` en azindan ne olctugu konusunda
+    # durust: "nginx ayakta ve index.html okunabiliyor".
+    #
+    # BU PROBE BACKEND'I OLCMEZ ve bilerek olcmuyor: `/api/` proxy'sini
+    # probe'a baglamak, backend her yeniden baslatildiginda calisan statik
+    # arayuzu unhealthy isaretlerdi. Backend'in sagligi kendi healthcheck'inde.
+    #
+    # start_period 10s — imajdaki degerle ayni; SPA statik servis, acilisi
+    # worker'lardan hizli.
+    healthcheck:
+      <<: *worker-healthcheck
+      start_period: 10s
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
     ports:
       # VDS'in 80 portu — kullanici browser'i buraya baglanir; nginx hem SPA'i
       # serve eder hem /api/* isteklerini backend-api:8000'e proxy eder.

@@ -589,6 +589,27 @@ class Settings(BaseSettings):
     # korunur; bu deger onun altina inemez.
     disk_guard_emergency_backup_keep: int = 2
 
+    # --- Kritik ALTYAPI olaylarinin operatore bildirilmesi ----------------
+    # Kritik olaylar (`system_events`) eskiden YALNIZCA tabloya yaziliyor,
+    # kimseye gonderilmiyordu; bildirim zinciri sadece cihaz alarmlari icin
+    # isliyordu. Saha IPC'sinde "sistem ayakta ama telemetri kayboluyor"
+    # durumu birinin arayuze bakmasina bagliydi.
+    # Hangi olaylarin bildirim uretecegi ACIK LISTE ile belirlenir
+    # (services/infra_notification_service.py ACIK_LISTE) — seviye tek
+    # basina yeterli DEGILDIR.
+    infra_notify_enabled: bool = True
+    # Tarama araligi. Kodda alt sinir 15 sn ile korunur.
+    infra_notify_sweep_sec: int = 60
+    # AYNI (olay tipi + kaynak) icin iki bildirim arasindaki asgari sure.
+    # Bu bastirma YALNIZCA GONDERIME uygulanir; `system_events` denetim
+    # kayitlarinin hicbiri atlanmaz. Disk her 5 dakikada bir acil olay
+    # uretirse operator 15 dakikada bir tek uyari alir, olay tablosunda ise
+    # tum kayitlar durur.
+    infra_notify_cooldown_minutes: int = 15
+    # Taramanin geriye baktigi pencere. Tarama araligindan BUYUK olmali,
+    # yoksa iki tur arasina dusen olay hic gorulmez.
+    infra_notify_lookback_minutes: int = 60
+
     # Manuel / yuklenen yedekler icin YAS bazli temizlik (gun).
     # 0 = KAPALI (varsayilan) — bilincli tercih: operator "buyuk degisiklik
     # oncesi" diye elle aldigi bir yedegi habersiz kaybetmemeli. Zamanlanmis

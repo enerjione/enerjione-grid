@@ -1260,6 +1260,24 @@ leader.register(
     "fault_notify_sweeper", fault_notify_sweeper.start, fault_notify_sweeper.stop
 )
 
+# Kritik ALTYAPI olaylarinin operatore bildirilmesi. `record_event(...)` tek
+# basina kimseye bir sey gondermiyordu: bildirim zinciri yalnizca CIHAZ
+# ALARMLARI icin isliyordu. Yani "telemetri tamponu tasti, olcum kayboldu"
+# ya da "disk kritik" olaylari, birinin arayuze girip Olaylar ekranina
+# bakmasina bagliydi (bkz. infra_notify_sweeper docstring'i).
+#
+# NEDEN BURADA (arka plan surecinde) ve NEDEN olayi URETEN yerde DEGIL:
+# gonderim ag I/O'sudur; disk_guard'in ya da telemetri tuketicisinin icine
+# konsaydi yanit vermeyen bir SMTP relay'i onlari bloke ederdi.
+#
+# Tek surecte kosmali: iki tarayici ayni olayi ayni anda gonderebilir ve
+# soguma damgasi yazilmadan once ikisi de "bildirilmemis" gorurdu.
+from app.services import infra_notify_sweeper  # noqa: E402
+
+leader.register(
+    "infra_notify_sweeper", infra_notify_sweeper.start, infra_notify_sweeper.stop
+)
+
 
 @app.on_event("startup")
 def start_background_jobs():

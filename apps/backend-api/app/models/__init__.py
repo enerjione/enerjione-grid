@@ -43,6 +43,7 @@ from app.models.fault import FaultComment, FaultEvent
 from app.models.ftp_settings import FtpSettings
 from app.models.gateway import Gateway
 from app.models.gateway_health import GatewayHealth
+from app.models.infra_notification import InfraNotificationState
 from app.models.gateway_ingest_batch import GatewayIngestBatch
 from app.models.grid_topology import Line, LineSegment, Pole, Region
 from app.models.notification import Notification
@@ -88,6 +89,7 @@ __all__ = [
     "FtpSettings",
     "Gateway",
     "GatewayHealth",
+    "InfraNotificationState",
     "GatewayIngestBatch",
     "Line",
     "LineSegment",
