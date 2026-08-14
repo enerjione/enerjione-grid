@@ -14,6 +14,30 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.95.1] — 2026-08-14
+
+### Düzeltildi
+
+- **Testleri başarısız olan bir sürüm artık yayınlanamıyor.** 2.95.0
+  yayınlanırken sürekli tümleştirme (CI) kontrollerinden biri başarısız
+  olmasına rağmen sürüm paketleri üretildi ve yayınlandı; yayın akışı CI
+  sonucuna hiç bakmıyordu. Saha cihazları sürümleri etiketten takip ettiği
+  için bu, doğrulanmamış bir sürümün sahaya inebilmesi anlamına geliyordu.
+
+  Artık yayın, etiketin işaret ettiği kodun CI sonucunu bekliyor; başarısız
+  ya da sonucu belirlenemeyen hiçbir durumda paket üretilmiyor ve sürüm
+  notu oluşturulmuyor.
+
+- **Geri yükleme testlerinden biri kararsızdı.** Elektrik kesintisi
+  benzetimi yapan test, sürecin çalışmakta olduğunu varsayıp zamana
+  dayanıyordu; hızlı bir makinede işlem daha erken bitince test asıl
+  senaryoyu üretmeden başarısız oluyordu. Test artık süreci gerçekten
+  çalışırken yakaladığını doğruladıktan sonra ilerliyor.
+
+  Geri yükleme davranışında **değişiklik yok**; yalnızca test düzeltildi.
+
+---
+
 ## [2.95.0] — 2026-08-14
 
 ### Değişti
