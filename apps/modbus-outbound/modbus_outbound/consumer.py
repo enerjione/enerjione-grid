@@ -85,6 +85,23 @@ class TelemetryConsumer:
     def stop(self) -> None:
         self._stop.set()
 
+    def is_alive(self) -> bool:
+        """Tuketici IPLIGI ayakta mi (mesaj akiyor mu DEGIL).
+
+        Bekci bunu kullanir: telemetri bu iplikten geliyor, iplik oldugunde
+        asyncio dongusu neseyle donmeye devam eder ve disaridan her sey
+        normal gorunur — ama register'lar guncellenmeyi birakmistir.
+        Trafikten BAGIMSIZ bir olcum oldugu icin sessiz gecede yanlis alarm
+        uretmez.
+
+        Durdurma istendiyse (kapanis) True doner: kapanirken bekcinin
+        sureci oldurmesi anlamsiz olurdu.
+        """
+        if self._stop.is_set():
+            return True
+        thread = self._thread
+        return thread is not None and thread.is_alive()
+
     @property
     def messages_processed(self) -> int:
         return self._messages_processed

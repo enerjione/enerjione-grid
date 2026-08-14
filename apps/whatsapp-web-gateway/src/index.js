@@ -3,6 +3,7 @@
 const http = require("http");
 const crypto = require("crypto");
 const baileys = require("./baileys-client");
+const watchdog = require("./watchdog");
 
 const PORT = parseInt(process.env.WORKER_HEALTH_PORT || "8016", 10);
 const SERVICE_TOKEN = process.env.SERVICE_TOKEN || "";
@@ -63,7 +64,24 @@ function readBody(req) {
 
 const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && req.url === "/health") {
-    sendJson(res, 200, { ok: true });
+    // 200 KALIR, WhatsApp bagli olmasa bile — ve bu bilincli.
+    //
+    // WA soketinin kopmasi RUTIN (ag dalgalanmasi, WA sunucu rotasyonu, ilk
+    // kurulumda QR bekleme) ve yeniden baglanma zinciri bunu kendi ele
+    // aliyor. Kopmada 503 donseydi container her rutin kopusta "unhealthy"
+    // damgasi yer, saglikli bir servis surekli arizali gorunurdu.
+    //
+    // Bu ucun cevapladigi soru: "surec istekleri isleyebiliyor mu". WA
+    // baglanti durumu AYRI bir bilgidir; govdede tasinir ki Sistem Durumu
+    // sayfasi "gecit ayakta ama WhatsApp bagli degil" ayrimini gosterebilsin
+    // (onceden govde kosulsuz {ok:true} idi, bu ayrim HIC gorunmuyordu).
+    let wa = null;
+    try {
+      wa = baileys.getStatus();
+    } catch (err) {
+      wa = { status: "unknown", error: err.message || String(err) };
+    }
+    sendJson(res, 200, { ok: true, service: "whatsapp-web-gateway", whatsapp: wa });
     return;
   }
 
@@ -114,6 +132,10 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`[whatsapp-web-gateway] listening on :${PORT}`);
 });
+
+// Bekci HTTP sunucusu dinlemeye basladiktan sonra: asil korunan sey olay
+// dongusudur ve dongu ancak buradan itibaren gercek is yapiyor.
+watchdog.baslat({ servis: "whatsapp-web-gateway" });
 
 baileys.connect().catch((err) => {
   console.error("[whatsapp-web-gateway] baglanti baslatilamadi:", err);
