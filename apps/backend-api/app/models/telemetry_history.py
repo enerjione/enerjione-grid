@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import DateTime, Float, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -24,9 +24,19 @@ class TelemetryHistory(Base):
 
     __tablename__ = "telemetry_history"
 
-    device_id: Mapped[int] = mapped_column(
-        ForeignKey("devices.id"), primary_key=True
-    )
+    # FOREIGN KEY YOK — BILEREK. Migration 0046 bu kisiti mevcut kurulumlarda
+    # dusuruyor: cihaz silme iki faza ayrildi (once `devices` satiri gider,
+    # arsiv satirlari `device_purge_jobs` kuyrugundan arka planda temizlenir).
+    # FK dursaydi silme bloke olurdu, CASCADE ise ayni dakikalarca suren
+    # silmeyi Postgres'e yaptirirdi.
+    #
+    # Kisit MODELDE de durmamali: temiz kurulumda sema `create_all` ile
+    # MODELDEN kuruluyor ve `stamp head` 0046'yi atliyor. Model FK'yi tarif
+    # ettigi surece sifirdan kurulan her sahada kisit geri geliyor ve cihaz
+    # silme FK ihlaliyle 500 donuyordu — yukseltilen sahada calisan islem
+    # temiz kurulanda patliyordu. Migration 0064 mevcut temiz kurulumlari
+    # onarir.
+    device_id: Mapped[int] = mapped_column(primary_key=True)
     signal_key: Mapped[str] = mapped_column(String(120), primary_key=True)
     source_timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), primary_key=True

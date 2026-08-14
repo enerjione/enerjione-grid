@@ -1,6 +1,7 @@
 """DB semasini legacy kurulumlardan Alembic head'e guvenle tasir."""
 
 import logging
+import os
 from pathlib import Path
 
 from alembic import command
@@ -87,6 +88,122 @@ def migrate() -> None:
                 log.debug("migration advisory unlock basarisiz", exc_info=True)
 
 
+def _atlanan_tablolari_geri_doldur() -> None:
+    """`stamp head` yuzunden hic olusmamis tablolari modelden kurar.
+
+    NEDEN GEREKLI
+    -------------
+    Temiz kurulum `create_all` + `stamp head` yapar; migration'lar KOSMAZ.
+    `create_all` yalnizca `Base.metadata`'ya KAYITLI modelleri kurar. Bu
+    liste eskiden `migrate_db.py` icinde elle tutuluyordu ve eksikti —
+    `gateway_health`, `device_purge_jobs`, `ftp_settings` ve
+    `device_model_settings` sifirdan kurulan sahalarda HIC olusmadi.
+    O sahalar `stamp head` yemis oldugu icin, tablolari kuran migration'lar
+    (0024/0039, 0046, 0053...) bir daha ASLA kosmayacak: `upgrade head`
+    zaten "head'deyim" der ve hicbir sey yapmaz.
+
+    Bu yuzden eksik tablo yalnizca BURADAN geri gelebilir.
+
+    NEDEN `upgrade`DEN SONRA
+    ------------------------
+    ONCE cagirmak tehlikeli olurdu: bekleyen bir migration'in yaratacagi
+    tabloyu `create_all` guncel (yani migration SONRASI) sekliyle kurar,
+    ardindan migration'in `op.create_table`'i "already exists" ile patlar —
+    dosyanin basindaki DuplicateColumn hikayesinin aynisi. `upgrade head`
+    bittikten SONRA ise sema zaten head'dedir; hala eksik olan her tablo,
+    tanimi gereği `stamp` yuzunden atlanmis olandir ve modelden kurulmasi
+    doğru sonucu verir.
+
+    `create_all` MEVCUT tablolara DOKUNMAZ (checkfirst): kolon eklemez,
+    kisit degistirmez. Yani bu adim yalnizca "hic yok"u onarir; sema
+    evrimi migration'larin isi olmaya devam eder.
+    """
+    inspector = inspect(engine)
+    mevcut = set(inspector.get_table_names())
+    eksik = [t for t in Base.metadata.sorted_tables if t.name not in mevcut]
+    if not eksik:
+        return
+    log.warning(
+        "Semada eksik tablo bulundu, modelden kuruluyor: %s",
+        ", ".join(t.name for t in eksik),
+    )
+    Base.metadata.create_all(bind=engine, tables=eksik)
+
+
+class SemaIleridedeHatasi(RuntimeError):
+    """Veritabani semasi, bu imajin tanidigi migration'lardan ILERIDE."""
+
+
+def _sema_ileride_mi_kontrol(config: Config) -> bool:
+    """Sema kodun ilerisindeyse anlasilir hata verir; crash-loop uretmez.
+
+    Donus: `True` ise migration ATLANMALI (operator devam etmeyi secti),
+    `False` ise normal `upgrade` yolu surdurulur.
+
+    SORUN
+    -----
+    Belgelenen geri alma yolu (`update.sh --version <eski>`) arada yeni bir
+    migration yayinlanmissa backend'i KALICI crash-loop'a sokuyordu:
+    `alembic_version` tablosunda YENI revizyon yazili, eski imajin
+    `versions/` dizininde o dosya YOK, `command.upgrade` soyle patliyordu:
+
+        alembic.util.exc.CommandError: Can't locate revision identified by '0064'
+
+    Traceback opaktir: operator "geri aldim, sistem acilmiyor" der ve
+    sebebini goremez. Container healthcheck'i dusurup surekli yeniden
+    baslar.
+
+    DAVRANIS
+    --------
+    Durum ONCEDEN tespit edilir ve NE YAPILACAGINI soyleyen bir hata
+    uretilir. Islem yine durur — durmak DOGRU: sema kodun tanimadigi bir
+    noktada ve otomatik "duzeltmek" (stamp/downgrade) veri kaybettirebilir.
+    Degisen sey, hatanin ANLASILIR olmasi.
+
+    `E1_ALLOW_SCHEMA_AHEAD=1` ile devam edilebilir: yalnizca EKLEMELI
+    migration'lardan sonra (yeni kolon/tablo) guvenlidir — eski kod fazladan
+    kolonu gormezden gelir. Kolon dusuren/yeniden adlandiran bir migration
+    varsa bu bayrak veri hatasi uretir.
+    """
+    from alembic.script import ScriptDirectory
+
+    with engine.connect() as conn:
+        mevcut = conn.execute(
+            text("SELECT version_num FROM alembic_version")
+        ).scalars().all()
+    if not mevcut:
+        return False
+
+    script = ScriptDirectory.from_config(config)
+    bilinen = {rev.revision for rev in script.walk_revisions()}
+    yabanci = [r for r in mevcut if r not in bilinen]
+    if not yabanci:
+        return False
+
+    mesaj = (
+        "Veritabani semasi bu surumden ILERIDE: alembic_version "
+        f"{yabanci} revizyon(lar)ini tasiyor ama bu imajda o migration "
+        "dosyalari YOK. Buyuk olasilikla daha yeni bir surumden GERI "
+        "DONULDU.\n"
+        "Yapilacaklar (birini secin):\n"
+        "  1) Yeniden ileri surume gecin (onerilen): "
+        "sudo bash update.sh --version <yeni-surum>\n"
+        "  2) Yukseltmeden ONCE alinan yedegi geri yukleyin, sonra bu "
+        "surume donun.\n"
+        "  3) Migration'lar yalnizca EKLEMELI ise (yeni kolon/tablo) "
+        "E1_ALLOW_SCHEMA_AHEAD=1 ile devam edin — kolon dusuren bir "
+        "migration varsa bu SECENEK VERI HATASI URETIR."
+    )
+    if os.getenv("E1_ALLOW_SCHEMA_AHEAD", "").strip() in {"1", "true", "yes"}:
+        log.warning(
+            "%s\nE1_ALLOW_SCHEMA_AHEAD ayarli — migration ATLANIYOR, "
+            "uygulama mevcut sema ile aciliyor.",
+            mesaj,
+        )
+        return True
+    raise SemaIleridedeHatasi(mesaj)
+
+
 def _migrate_locked() -> None:
     root = Path(__file__).resolve().parents[1]
     config = Config(str(root / "alembic.ini"))
@@ -112,7 +229,14 @@ def _migrate_locked() -> None:
         command.stamp(config, "head")
     else:
         # MEVCUT kurulum: gercek gecmisi oynat.
+        # Once sema bu imajin ILERISINDE mi bak (surum geri alindi mi):
+        # oyleyse `upgrade` "Can't locate revision" ile patlar ve container
+        # kalici crash-loop'a girer. Kontrol, opak traceback yerine ne
+        # yapilacagini soyleyen bir hata uretir.
+        if _sema_ileride_mi_kontrol(config):
+            return
         command.upgrade(config, "head")
+        _atlanan_tablolari_geri_doldur()
 
     # ---- Historian depolamasi: hypertable + saklama politikalari ----------
     #

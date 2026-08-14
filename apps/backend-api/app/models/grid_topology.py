@@ -72,8 +72,24 @@ class Line(Base):
     # Saglik bilgisi: bu direk hem ana hattin bir noktasi, hem bu hattin baslangici
     # gibi davranir. Frontend ariza algoritmasi ana hat -> bransman'a kadar
     # akimi takip ederken bransman'i da kontrol eder.
+    # use_alter: `lines.branched_from_pole_id -> poles.id` ile
+    # `poles.line_id -> lines.id` KARSILIKLI bagimli; SQLAlchemy bu donguyu
+    # cozemedigi icin "Cannot correctly sort tables ... constraints involving
+    # these tables will not be considered" uyarisi verip IKI FK'yi de atliyordu.
+    # Sonuc: create_all ile kurulan her semada (yani TUM kurulumlarda, cunku
+    # alembic baseline'i bos) sebeke topolojisinde referans butunlugu HIC
+    # kurulmuyordu — yetim `branched_from_pole_id` degerleri mumkundu.
+    # use_alter=True bu kisiti tablolar olustuktan SONRA ayri bir
+    # ALTER TABLE ile ekletir; dongu boylece kirilir.
     branched_from_pole_id: Mapped[int | None] = mapped_column(
-        ForeignKey("poles.id", ondelete="SET NULL"), nullable=True, index=True
+        ForeignKey(
+            "poles.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_lines_branched_from_pole_id",
+        ),
+        nullable=True,
+        index=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
