@@ -4126,6 +4126,26 @@
     "exportPdf": "PDF report",
     "exportPdfBusy": "Preparing PDF…",
     "exportPdfFailed": "Device report could not be generated.",
+    "report": {
+      "title": "PDF Report",
+      "sub": "Which sections should be included for {{name}}?",
+      "selectAll": "Select all",
+      "clearAll": "Clear selection",
+      "count": "{{count}} sections selected",
+      "download": "Download",
+      "sections": {
+        "ozet": "Status Summary",
+        "konum": "Location and Map",
+        "kunye": "Device Details",
+        "baglanti": "Connection and Network",
+        "kanallar": "Measurement Channels",
+        "sinyaller": "Signal Status",
+        "haberlesme": "Communication",
+        "setler": "Attached Sets",
+        "alarmlar": "Active Alarms",
+        "olaylar": "Recent Events"
+      }
+    },
     "chartsComingSoon": "Charts coming soon",
     "chartsHint": "Charts of telemetry data collected for this device will appear here.",
     "noSignals": "No signal data for {{source}}.",

@@ -533,6 +533,15 @@ def queue_device_command(
 @router.get("/{device_code}/report.pdf")
 def device_report_pdf(
     device_code: str,
+    sections: str | None = Query(
+        default=None,
+        description=(
+            "Virgulle ayrilmis bolum anahtarlari; yalnizca bu bolumler basilir. "
+            "Bos = hepsi. Gecerli anahtarlar: "
+            "ozet, konum, kunye, baglanti, kanallar, sinyaller, haberlesme, "
+            "setler, alarmlar, olaylar."
+        ),
+    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -560,7 +569,10 @@ def device_report_pdf(
     from app.services.device_report_service import (
         build_device_report_pdf,
         collect_device_report,
+        parse_sections,
     )
+
+    secili = parse_sections(sections)
 
     device = DeviceRepository(db).get_by_code(device_code)
     if device is None:
@@ -581,13 +593,17 @@ def device_report_pdf(
     # Harita ZORUNLU DEGIL: karo yoksa (cevrimdisi kurulum, indirilmemis alan)
     # ya da cihaz hatta yerlestirilmemisse rapor haritasiz cikar. Raporun hic
     # uretilmemesi, eksik bir figurden cok daha kotu olurdu.
-    map_image = render_device_map_for(db, device)
+    #
+    # Konum bolumu SECILMEDIYSE karo hic cekilmez: figur uretimi on kadar
+    # HTTP istegi ve birkac saniye demek, ve cikti zaten kullanilmayacak.
+    map_image = render_device_map_for(db, device) if "konum" in secili else None
 
     pdf = build_device_report_pdf(
         data,
         settings_row=db.get(ProjectSettings, 1),
         map_image=map_image,
         generated_by=current_user.full_name or current_user.username,
+        sections=secili,
     )
 
     stamp = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d-%H%M")

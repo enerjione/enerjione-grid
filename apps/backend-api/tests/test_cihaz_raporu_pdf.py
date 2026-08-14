@@ -204,10 +204,15 @@ def _telemetri(db, device_id: int, key: str, value=None, *, text=None, quality="
     db.commit()
 
 
-def _rapor(db, device_code: str, user: User):
+def _rapor(db, device_code: str, user: User, sections: str | None = None):
+    """Uc dogrudan cagrilir (Ariza Raporu testleriyle ayni usul).
+
+    `sections` ACIKCA gecilir: fonksiyon dogrudan cagrildiginda FastAPI
+    varsayilani cozmez ve parametre `Query(...)` NESNESI olarak gelir.
+    """
     from app.api.devices import device_report_pdf
 
-    return device_report_pdf(device_code, current_user=user, db=db)
+    return device_report_pdf(device_code, sections=sections, current_user=user, db=db)
 
 
 # ---------------------------------------------------------------------------
@@ -285,6 +290,49 @@ def test_setin_rtu_degerleri_KIT_kaydindan_gelir(db):
     # tanimlansaydi kitin gercek olcumleri (besleme, sicaklik) HIC gorunmezdi.
     assert "31,5 °C" in tum, tum
     assert "Aktif" in tum, tum
+
+
+def test_ayni_seyin_iki_noktasi_TEK_satir_basilir(db):
+    """Cihaz surumu hem ham sayi hem metin yayinliyor; ikisinin adi da AYNI.
+
+    Yan yana iki "Yazılım Sürümü" satiri cikiyordu — biri "2.338", digeri
+    "27,78". Raporu okuyan hangisinin dogru oldugunu bilemez; ikisi de dogru,
+    yalnizca biri ham. Tercih arayuzle ayni: metin surum kazanir.
+    """
+    from app.services.device_report_service import collect_device_report
+
+    _sebeke(db)
+    device = _sn2(db)
+    _telemetri(db, device.id, "master.info_fw_version", text="2.338")
+    _telemetri(db, device.id, "master.firmware_version", value=2338.0)
+
+    data = collect_device_report(db, device)
+    surumler = [
+        deger
+        for pairs in data.rtu_groups.values()
+        for etiket, deger in pairs
+        if etiket == "Yazılım Sürümü"
+    ]
+    assert surumler == ["2.338"]
+
+
+def test_ozet_seridindeki_deger_haberlesmede_TEKRAR_ETMEZ(db):
+    """RSSI ozet seridinde var; ayni sayiyi ikinci kez basmak okuyucuyu
+    "acaba farkli mi" diye durduruyor. GPS bilesenleri de Konum bolumunde."""
+    from app.services.device_report_service import collect_device_report
+
+    _sebeke(db)
+    device = _sn2(db)
+    _telemetri(db, device.id, "master.modem_rssi", value=-78.0)
+    _telemetri(db, device.id, "master.latitude_degrees", value=38.0)
+
+    data = collect_device_report(db, device)
+    etiketler = {etiket for pairs in data.rtu_groups.values() for etiket, _d in pairs}
+
+    assert "Modem Sinyal Gücü (RSSI)" not in etiketler
+    assert "Enlem (Derece)" not in etiketler
+    # Deger KAYBOLMUYOR, ozet seridinde duruyor.
+    assert data.network_dbm == -78.0
 
 
 def test_setin_pili_FIZIKSEL_uydudan_okunur(db):
@@ -506,6 +554,107 @@ def test_sozlukte_olmayan_sinyal_KIRILMAZ():
     assert signal_label("sat07.fault_current") == "Arıza Akımı"  # sonek uzerinden
     assert signal_label("master.yeni_nokta", "New Point") == "New Point"
     assert signal_label("master.yeni_nokta") == "yeni_nokta"
+
+
+# ---------------------------------------------------------------------------
+# Bolum secimi
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "girdi,beklenen",
+    [
+        (None, "hepsi"),
+        ("", "hepsi"),
+        ("   ", "hepsi"),
+        # Tanimsiz anahtar SESSIZCE atilir — eski bir arayuz surumu ya da
+        # kayitli bir yer imi yuzunden rapor HIC uretilmemesi orantisiz olurdu.
+        ("konum,yokboyle", {"konum"}),
+        ("KONUM, Kanallar ", {"konum", "kanallar"}),
+        # Secimin TAMAMI tanimsizsa bos belge yerine hepsine dusulur.
+        ("yokboyle,bunda", "hepsi"),
+    ],
+)
+def test_bolum_secimi_cozumleme(girdi, beklenen):
+    from app.services.device_report_service import ALL_SECTIONS, parse_sections
+
+    sonuc = parse_sections(girdi)
+    assert sonuc == (ALL_SECTIONS if beklenen == "hepsi" else beklenen)
+
+
+def test_secilmeyen_bolum_BASILMAZ(db):
+    """Yalnizca istenen bolumler cikar; belge gozle gorulur sekilde kisalir."""
+    _sebeke(db)
+    device = _sn2(db)
+    _telemetri(db, device.id, "master.actual_current", value=12.5)
+    kullanici = _kullanici(db, UserRole.ENGINEER)
+
+    tam = _rapor(db, device.code, kullanici)
+    dar = _rapor(db, device.code, kullanici, sections="kunye")
+
+    assert dar.body[:5] == b"%PDF-"
+    assert len(dar.body) < len(tam.body)
+
+
+def test_atlanan_bolumler_BELGEDE_yazar(db):
+    """Kisaltilmis rapor bunu SOYLER — arsivde "eksik mi, secim mi" kalmasin."""
+    from app.services.device_report_service import (
+        build_device_report_pdf,
+        collect_device_report,
+    )
+
+    _sebeke(db)
+    device = _sn2(db)
+    data = collect_device_report(db, device)
+
+    kisa = build_device_report_pdf(data, sections={"kunye"})
+    tam = build_device_report_pdf(data)
+
+    assert b"%PDF-" == kisa[:5]
+    # Not yalnizca KISALTILMIS belgede var.
+    assert len(kisa) < len(tam)
+
+
+def test_konum_secilmediyse_HARITA_CEKILMEZ(db, monkeypatch):
+    """Karo cekimi on kadar HTTP istegi ve birkac saniye; cikti kullanilmayacaksa
+    hic baslamamali."""
+    from app.api import devices as devices_api
+
+    _sebeke(db)
+    device = _sn2(db)
+    cagrildi: list[int] = []
+
+    def sayac(*_args, **_kwargs):
+        cagrildi.append(1)
+        return None
+
+    monkeypatch.setattr(devices_api, "render_device_map_for", sayac, raising=False)
+    import app.services.device_report_map as harita_modulu
+
+    monkeypatch.setattr(harita_modulu, "render_device_map_for", sayac)
+
+    _rapor(db, device.code, _kullanici(db, UserRole.ENGINEER), sections="kunye")
+    assert cagrildi == []
+
+    _rapor(db, device.code, _kullanici(db, UserRole.ENGINEER, username="eng2"), sections="konum")
+    assert len(cagrildi) == 1
+
+
+# ---------------------------------------------------------------------------
+# Bicimleme
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "deger,yon,beklenen",
+    [
+        (37.815387, ("K", "G"), "37° 48′ 55,4″ K"),
+        (41.573813, ("D", "B"), "41° 34′ 25,7″ D"),
+        (-33.5, ("K", "G"), "33° 30′ 0″ G"),
+        # Saniye 60'a yuvarlanirsa TASIMA yapilir: "59′ 60,0″" diye bir sey yok.
+        (10.999999, ("K", "G"), "11° 00′ 0″ K"),
+    ],
+)
+def test_derece_dakika_saniye(deger, yon, beklenen):
+    from app.services.device_report_service import format_dms
+
+    assert format_dms(deger, yon[0], yon[1]) == beklenen
 
 
 @pytest.mark.parametrize(

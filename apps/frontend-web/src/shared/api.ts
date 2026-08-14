@@ -1062,10 +1062,17 @@ export async function downloadFaultReport(
  */
 export async function downloadDeviceReport(
   token: string,
-  deviceCode: string
+  deviceCode: string,
+  /** Basilacak bolumler. Verilmezse (ya da bos) backend HEPSINI basar —
+   *  eski baglantilar ve "sadece rapor al" akisi bozulmasin. */
+  sections?: readonly string[]
 ): Promise<{ blob: Blob; filename: string }> {
+  const query =
+    sections && sections.length > 0
+      ? `?sections=${encodeURIComponent(sections.join(","))}`
+      : "";
   const response = await apiFetch(
-    `${API_BASE_URL}/devices/${encodeURIComponent(deviceCode)}/report.pdf`,
+    `${API_BASE_URL}/devices/${encodeURIComponent(deviceCode)}/report.pdf${query}`,
     { headers: authHeaders(token) }
   );
   if (!response.ok) throw await buildApiError(response, "Cihaz raporu oluşturulamadı.");

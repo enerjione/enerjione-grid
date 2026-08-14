@@ -37,6 +37,7 @@ import { DeviceCommandsPanel } from "./DeviceCommandsPanel";
 import { DeviceChartsPanel } from "./DeviceChartsPanel";
 import { DeviceConfigPanel } from "./DeviceConfigPanel";
 import { DeviceEventsTable } from "./DeviceEventsTable";
+import { DeviceReportModal, type ReportSection } from "./DeviceReportModal";
 import { DeviceSidebar } from "./DeviceSidebar";
 import { modemDurumuCoz } from "./modemStatus";
 import { Sparkline } from "./Sparkline";
@@ -188,6 +189,10 @@ export function DeviceDetailPage({
    *  saniye surebilir, o yuzden dugme beklemede kilitlenir. */
   const [raporUretiliyor, setRaporUretiliyor] = useState(false);
   const [raporHatasi, setRaporHatasi] = useState("");
+  /** Bolum secim penceresi acik mi. Dugme dogrudan indirmiyor: rapor kime
+   *  gittigine gore degisiyor ve secim her seferinde sorulmali (secilen
+   *  kume tarayicida hatirlaniyor, bkz. DeviceReportModal). */
+  const [raporSecimi, setRaporSecimi] = useState(false);
 
   const device = useMemo(() => devices.find((d) => d.id === deviceId), [devices, deviceId]);
 
@@ -241,12 +246,12 @@ export function DeviceDetailPage({
    *  genisligine bagli bicimde kagida dokerdi. Rapor gercek bir belge
    *  (`services/device_report_service.py`); iskeleti cihaz turune gore
    *  sunucuda kuruluyor ve dosya adi da oradan geliyor. */
-  const raporIndir = useCallback(async () => {
+  const raporIndir = useCallback(async (sections: ReportSection[]) => {
     if (!token || !device) return;
     setRaporUretiliyor(true);
     setRaporHatasi("");
     try {
-      const { blob, filename } = await downloadDeviceReport(token, device.code);
+      const { blob, filename } = await downloadDeviceReport(token, device.code, sections);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -259,6 +264,9 @@ export function DeviceDetailPage({
       // Hemen revoke etmek bazi tarayicilarda indirmeyi "network error"a
       // dusuruyor: click asenkron baslatiyor.
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      // Pencere yalnizca BASARIDA kapanir: hata olursa kullanici secimini
+      // kaybetmeden yeniden deneyebilsin.
+      setRaporSecimi(false);
     } catch (err) {
       setRaporHatasi(
         err instanceof Error ? err.message : t("deviceDetail.exportPdfFailed")
@@ -647,7 +655,10 @@ export function DeviceDetailPage({
               <button
                 type="button"
                 className="device-report-btn"
-                onClick={() => void raporIndir()}
+                onClick={() => {
+                  setRaporHatasi("");
+                  setRaporSecimi(true);
+                }}
                 disabled={raporUretiliyor}
                 aria-busy={raporUretiliyor}
               >
@@ -757,6 +768,15 @@ export function DeviceDetailPage({
           />
         ) : null}
       </div>
+
+      {raporSecimi ? (
+        <DeviceReportModal
+          device={device}
+          busy={raporUretiliyor}
+          onKapat={() => setRaporSecimi(false)}
+          onIndir={(sections) => void raporIndir(sections)}
+        />
+      ) : null}
     </div>
   );
 }

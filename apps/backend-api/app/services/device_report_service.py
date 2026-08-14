@@ -123,6 +123,51 @@ GATEWAY_LIVE_SEC = 60
 #: karti gibi: belge bir denetim dokumu degil, o anki durumun ozeti.
 MAX_EVENTS = 14
 
+#: SECILEBILIR BOLUMLER — (anahtar, arayuzde gorunecek ad). Sira RAPORDAKI
+#: siradir; arayuz de bu sirayla listeler.
+#:
+#: NEDEN SECILEBILIR: rapor kime gittigine gore degisiyor. Sahaya cikan
+#: ekibe konum + olcum kanallari yetiyor; musteriye giden ekte baglanti
+#: ayrintisi (IP, DNP3 adresi) hic istenmiyor; arizayi inceleyen muhendis
+#: ise sinyal tablolarini ve olaylari istiyor. Tek bir sabit belge bu
+#: uc ihtiyacin hicbirini tam karsilamiyor, en genisini basip gerisini
+#: okuyucuya atlatiyordu.
+#:
+#: Baslik blogu (cihaz adi, kod, durum rozeti) ve altbilgi HER ZAMAN basilir:
+#: onlarsiz belge kimin, ne zaman diye sorulur.
+REPORT_SECTIONS: tuple[tuple[str, str], ...] = (
+    ("ozet", "Durum Özeti"),
+    ("konum", "Konum ve Harita"),
+    ("kunye", "Cihaz Künyesi"),
+    ("baglanti", "Bağlantı ve Ağ"),
+    ("kanallar", "Ölçüm Kanalları"),
+    ("sinyaller", "Sinyal Durumu"),
+    ("haberlesme", "Haberleşme"),
+    ("setler", "Bağlı Setler"),
+    ("alarmlar", "Aktif Alarmlar"),
+    ("olaylar", "Son Olaylar"),
+)
+
+#: Hicbir secim gelmezse: HEPSI. Eski davranis (ve "rapor al" deyip
+#: dusunmek istemeyen kullanici) boyle korunur.
+ALL_SECTIONS: frozenset[str] = frozenset(key for key, _label in REPORT_SECTIONS)
+
+
+def parse_sections(raw: str | None) -> frozenset[str]:
+    """`"konum,kanallar"` -> {"konum", "kanallar"}. Bos/tanimsiz -> HEPSI.
+
+    Tanimsiz anahtar SESSIZCE ATILIR, hata verilmez: eski bir arayuz surumu
+    ya da kayitli bir yer imi, kaldirilmis bir bolum adiyla gelebilir ve o
+    yuzden raporun HIC uretilmemesi orantisiz olurdu. Ama secimin TAMAMI
+    tanimsizsa bos bir belge uretmek yerine hepsine duseriz — kullanici
+    "rapor bos geldi" demektense fazlasini gorsun.
+    """
+    if not raw:
+        return ALL_SECTIONS
+    istenen = {part.strip().lower() for part in raw.split(",") if part.strip()}
+    secilen = istenen & ALL_SECTIONS
+    return frozenset(secilen) if secilen else ALL_SECTIONS
+
 #: BILGI / ALTYAPI sinyalleri — kanal tablolarinda DEGIL, RTU bolumunde
 #: gorunur. Arayuzdeki `INFO_SUFFIX_RE` ile birebir ayni desen; ayrisirsa
 #: ayni sinyal ekranda bir bolumde, raporda baskasinda cikar.
@@ -175,6 +220,46 @@ _RTU_GRUPLARI: tuple[tuple[str, str, re.Pattern[str]], ...] = (
             r"|test|voltage_loss_all_units)"
         ),
     ),
+)
+
+#: Haberlesme bolumunde BASILMAYAN noktalar — degeri raporun BASKA bir
+#: yerinde zaten duruyor.
+#:
+#: Tekrar, raporu uzatmakla kalmiyor: ayni buyuklugu iki kez goren okuyucu
+#: "acaba farkli mi" diye durup karsilastiriyor. Ozellikle GPS: cihaz
+#: koordinati derece/dakika/saniye bilesenleri HALINDE ayri noktalar olarak
+#: yayinliyor ve bunlar alt alta ALTI satir tutuyordu — ustelik Konum
+#: bolumunde ayni koordinat hem ondalik hem DMS olarak zaten var.
+_TEKRAR_EDEN_NOKTALAR = frozenset(
+    {
+        # Ozet seridindeki "Sebeke sinyali" ile ayni deger.
+        "modem_rssi",
+        # Konum bolumu ile ayni koordinat.
+        "info_gps_latitude_longitude",
+        "info_gps_string",
+        "latitude_degrees",
+        "latitude_minutes",
+        "latitude_seconds",
+        "longitude_degrees",
+        "longitude_minutes",
+        "longitude_seconds",
+    }
+)
+
+#: AYNI SEYIN IKI NOKTASI — (tercih edilen, degeri varsa atlanacak).
+#:
+#: Cihaz bazi bilgileri HEM ham sayi HEM metin olarak yayinliyor ve ikisinin
+#: katalog adi ayni: yan yana iki "Yazılım Sürümü" satiri cikiyordu, biri
+#: "2.338" digeri "27,78". Raporu okuyan hangisinin dogru oldugunu bilemez —
+#: ve ikisi de dogru, yalnizca biri ham.
+#:
+#: Tercih sirasi ARAYUZLE AYNI: firmware'de metin surum kazanir (sidebar
+#: `fwStr ?? fmtFirmware(fwNum)`), seri numarasinda sayisal nokta kazanir
+#: (`serialOf`: once sayi, sonra metin).
+_ESDEGER_NOKTALAR: tuple[tuple[str, str], ...] = (
+    ("info_fw_version", "firmware_version"),
+    ("serial_number", "info_serial_number"),
+    ("info_hardware_revision", "hardware_revision"),
 )
 
 #: Alarm engelleyen kaliteler — `tag_engine_service.ALARM_BLOCKING_QUALITIES`
@@ -806,7 +891,10 @@ def _fill_rtu_groups(
         ).all()
     )
     master_kanal = "master" in kanal_kaynaklari
-    gruplar: dict[str, list[tuple[str, str]]] = {}
+    # ONCE degerleri cozup sonra grupla: esdeger nokta elemesi
+    # (`_ESDEGER_NOKTALAR`) "otekinin DEGERI var mi" sorusuna bakiyor ve bu,
+    # katalog sirasinda hangisinin once geldiginden bagimsiz olmali.
+    cozulen: list[tuple[str, str, str]] = []  # (sonek, etiket, deger)
     eksik = 0
     for row in catalog:
         suffix = row.key.split(".", 1)[-1]
@@ -814,6 +902,8 @@ def _fill_rtu_groups(
             continue
         if master_kanal and not _INFO_SUFFIX_RE.search(suffix):
             continue  # kanal tablosunda zaten basildi
+        if suffix in _TEKRAR_EDEN_NOKTALAR:
+            continue  # ozet seridinde ya da Konum bolumunde zaten var
         live = latest.get((rtu_device.id, row.key))
         if live is None:
             eksik += 1
@@ -830,9 +920,17 @@ def _fill_rtu_groups(
         if not text:
             eksik += 1
             continue
-        gruplar.setdefault(_rtu_grup_of(suffix), []).append(
-            (signal_label(row.key, row.label), text)
-        )
+        cozulen.append((suffix, signal_label(row.key, row.label), text))
+
+    dolu = {suffix for suffix, _etiket, _deger in cozulen}
+    elenen = {
+        alternatif for tercih, alternatif in _ESDEGER_NOKTALAR if tercih in dolu
+    }
+    gruplar: dict[str, list[tuple[str, str]]] = {}
+    for suffix, etiket, deger in cozulen:
+        if suffix in elenen:
+            continue
+        gruplar.setdefault(_rtu_grup_of(suffix), []).append((etiket, deger))
     data.rtu_groups = gruplar
     data.rtu_missing_count = eksik
 
@@ -885,8 +983,13 @@ def build_device_report_pdf(
     settings_row: ProjectSettings | None = None,
     map_image: bytes | None = None,
     generated_by: str = "",
+    sections: frozenset[str] | set[str] | None = None,
 ) -> bytes:
-    """Tek cihazin A4 dikey durum raporu -> PDF bayt dizisi."""
+    """Tek cihazin A4 dikey durum raporu -> PDF bayt dizisi.
+
+    `sections` verilmezse TUM bolumler basilir (bkz. `REPORT_SECTIONS`).
+    """
+    secili = frozenset(sections) if sections else ALL_SECTIONS
     st = ReportStyles()
     device = data.device
     customer_name = (settings_row.customer_name if settings_row else None) or ""
@@ -921,15 +1024,29 @@ def build_device_report_pdf(
         subject=f"{data.region_name} / {data.line_name}".strip(" /"),
     )
 
-    story: list = [_title_block(st, data), Spacer(1, 8), _summary_strip(st, data)]
-    story.extend(_location_section(st, data, map_image))
-    story.extend(_identity_section(st, data))
-    story.extend(_channels_section(st, data))
-    story.extend(_signal_sections(st, data))
-    story.extend(_rtu_section(st, data))
-    story.extend(_subunits_section(st, data))
-    story.extend(_alarms_section(st, data))
-    story.extend(_events_section(st, data))
+    # BASLIK BLOGU HER ZAMAN: cihaz adi, kodu ve haberlesme rozeti olmadan
+    # belgenin kime ait oldugu okunmaz. Gerisi secime bagli.
+    story: list = [_title_block(st, data)]
+    if "ozet" in secili:
+        story += [Spacer(1, 8), _summary_strip(st, data)]
+    if "konum" in secili:
+        story.extend(_location_section(st, data, map_image))
+    if "kunye" in secili:
+        story.extend(_identity_section(st, data))
+    if "baglanti" in secili:
+        story.extend(_connection_section(st, data))
+    if "kanallar" in secili:
+        story.extend(_channels_section(st, data))
+    if "sinyaller" in secili:
+        story.extend(_signal_sections(st, data))
+    if "haberlesme" in secili:
+        story.extend(_rtu_section(st, data))
+    if "setler" in secili:
+        story.extend(_subunits_section(st, data))
+    if "alarmlar" in secili:
+        story.extend(_alarms_section(st, data))
+    if "olaylar" in secili:
+        story.extend(_events_section(st, data))
     story.append(Spacer(1, 14))
     story.append(
         Paragraph(
@@ -941,6 +1058,19 @@ def build_device_report_pdf(
             st.caption,
         )
     )
+    # Belge KISALTILARAK alindiysa bunu SOYLE. Arsivde duran iki rapor
+    # arasindaki farkin "o gun eksik veri vardi" mi yoksa "o gun boyle
+    # secildi" mi oldugu, sonradan bakan icin turetilebilir bir bilgi degil.
+    if secili != ALL_SECTIONS:
+        atlanan = [label for key, label in REPORT_SECTIONS if key not in secili]
+        story.append(Spacer(1, 4))
+        story.append(
+            Paragraph(
+                "Bu rapor seçilen bölümlerle oluşturulmuştur; şu bölümler "
+                f"kapsam dışı bırakıldı: {esc(', '.join(atlanan))}.",
+                st.caption,
+            )
+        )
 
     doc.build(story, canvasmaker=ReportCanvas)
     return buffer.getvalue()
@@ -1033,23 +1163,58 @@ def _summary_strip(st: ReportStyles, data: DeviceReportData) -> Table:
     return stat_strip(st, cells)
 
 
+def format_dms(value: float, positive: str, negative: str) -> str:
+    """37.815387 -> `37° 48′ 55,4″ K`.
+
+    NEDEN ONDALIGIN YANINDA BU DA VAR: sahada kullanilan el GPS'leri ve
+    telsizle okunan koordinatlar derece-dakika-saniye; ondalik derece ise
+    haritaya/telefona yapistirmak icin. Birini digerine cevirmek sahada
+    yapilacak is degil — ikisi de yazar.
+    """
+    yon = positive if value >= 0 else negative
+    kalan = abs(value)
+    derece = int(kalan)
+    dakika_ondalik = (kalan - derece) * 60
+    dakika = int(dakika_ondalik)
+    saniye = (dakika_ondalik - dakika) * 60
+    # Saniye 60'a yuvarlanirsa tasima yapilir: "48′ 60,0″" diye bir sey yok.
+    if round(saniye, 1) >= 60:
+        saniye = 0.0
+        dakika += 1
+    if dakika >= 60:
+        dakika = 0
+        derece += 1
+    return f"{derece}° {dakika:02d}′ {_num(saniye, 1)}″ {yon}"
+
+
 def _location_section(st: ReportStyles, data: DeviceReportData, map_image: bytes | None) -> list:
     if data.latitude is None or data.longitude is None:
         return []
-    coords = f"{data.latitude:.6f}".replace(".", ",") + " / " + f"{data.longitude:.6f}".replace(".", ",")
+    # KOORDINAT KENDI IZGARASINDA, BOLUM BASLIGINDA DEGIL. Baslik ipucu
+    # olarak basildiginda kucuk ve soluk kaliyordu — oysa raporun sahada EN
+    # COK okunan satiri bu. Her eksen kendi satirinda, once ondalik (haritaya
+    # yapistirilan bicim), yaninda derece-dakika-saniye (el GPS'i bicimi).
+    pairs = [
+        (
+            "Enlem",
+            f"{_num(data.latitude, 6)}°   ({format_dms(data.latitude, 'K', 'G')})",
+        ),
+        (
+            "Boylam",
+            f"{_num(data.longitude, 6)}°   ({format_dms(data.longitude, 'D', 'B')})",
+        ),
+    ]
     if not map_image:
         # HARITA ZORUNLU DEGIL: karo yoksa (cevrimdisi kurulum, indirilmemis
         # alan) ya da cihaz hatta yerlestirilmemisse figur uretilmez.
-        # Koordinat tek basina da sahaya gidilebilir bilgidir — bolum
-        # basliginda tekrar etmez, tek satirlik izgara olarak durur.
-        return block(
-            section_head(st, "Konum"),
-            kv_grid(st, [("Enlem / Boylam", coords)], columns=1),
-        )
+        # Koordinat tek basina da sahaya gidilebilir bilgidir.
+        return block(section_head(st, "Konum"), kv_grid(st, pairs, columns=1))
     out: list = [
         Spacer(1, 12),
-        section_head(st, "Konum", "Enlem / Boylam: " + coords),
+        section_head(st, "Konum"),
         Spacer(1, 6),
+        kv_grid(st, pairs, columns=1),
+        Spacer(1, 7),
     ]
     figure = Image(io.BytesIO(map_image))
     ratio = figure.imageHeight / figure.imageWidth if figure.imageWidth else 0.55
@@ -1082,7 +1247,12 @@ def _location_section(st: ReportStyles, data: DeviceReportData, map_image: bytes
 
 
 def _identity_section(st: ReportStyles, data: DeviceReportData) -> list:
-    """Cihaz kunyesi + baglanti. Tur farki BURADA en gorunur olan sey."""
+    """Cihaz kunyesi. Tur farki BURADA en gorunur olan sey.
+
+    Baglanti/ag AYRI bir bolum (`_connection_section`): musteriye giden ekte
+    IP ve DNP3 adresi istenmiyor ama kunye istiyor. Ikisi tek blok oldugu
+    surece "birini al, otekini birak" mumkun degildi.
+    """
     device = data.device
     pairs: list[tuple[str, str]] = [
         ("Cihaz kodu", device.code),
@@ -1109,37 +1279,43 @@ def _identity_section(st: ReportStyles, data: DeviceReportData) -> list:
     elif data.kind == "kit":
         pairs.append(("Bağlı set sayısı", str(len(data.subunits))))
 
-    baglanti: list[tuple[str, str]] = []
+    return block(
+        section_head(st, "Cihaz Künyesi", _KIND_HINT.get(data.kind, "")),
+        kv_grid(st, pairs),
+    )
+
+
+def _connection_section(st: ReportStyles, data: DeviceReportData) -> list:
+    """Baglanti ve ag.
+
+    SORGU ARALIGI ve SINYAL PROFILI BILEREK YOK: ikisi de kurulum ayrintisi;
+    raporu okuyan (saha ekibi, musteri) icin bir sey ifade etmiyor ve
+    sayfada yer kapliyor. Degerleri Cihaz Ayarlari ekraninda duruyor.
+    """
+    device = data.device
+    pairs: list[tuple[str, str]] = []
     if data.kind == "set":
         # Setin baglanti alanlari kitten DEVRALINIR; kendi oturumu yoktur.
-        baglanti.append(("Bağlantı", "Kit üzerinden (setin kendi DNP3 oturumu yok)"))
-    baglanti += [
+        pairs.append(("Bağlantı", "Kit üzerinden (setin kendi DNP3 oturumu yok)"))
+    pairs += [
         ("Gateway", device.gateway_code or "—"),
         ("IP adresi", device.ip_address or "—"),
         ("DNP3 port / adres", f"{device.dnp3_outstation_port} / {device.dnp3_address}"),
-        ("Sorgu aralığı", f"{device.poll_interval_sec} sn"),
         ("Zaman aşımı / deneme", f"{device.timeout_ms} ms / {device.retry_count}"),
-        ("Sinyal profili", device.signal_profile or "—"),
         (
             "IEC 104 ortak adresi",
             str(device.iec104_common_address) if device.iec104_common_address else "Hedef varsayılanı",
         ),
     ]
-
-    out = block(
-        section_head(st, "Cihaz Künyesi", _KIND_HINT.get(data.kind, "")),
-        kv_grid(st, pairs),
-    )
-    out += block(
+    return block(
         section_head(
             st,
             "Bağlantı ve Ağ",
             "Gateway son görülme: "
             + (format_report_time(data.gateway.last_seen_at) if data.gateway else "—"),
         ),
-        kv_grid(st, baglanti),
+        kv_grid(st, pairs),
     )
-    return out
 
 
 #: Tur aciklamasi — raporu okuyan kisi "bu kayit tam olarak ne" bilsin.
@@ -1194,13 +1370,11 @@ def _channels_section(st: ReportStyles, data: DeviceReportData) -> list:
         ]
         rows.append(row)
 
-    hint = (
-        "Her ünite ayrı bir faza kelepçelenir"
-        if data.kind != "set"
-        else "Setin üç ünitesi de uydudur; kit RTU'su ölçüm yapmaz"
-    )
+    # Bolum basliginda ACIKLAMA YOK: "Her unite ayri bir faza kelepcelenir"
+    # gibi satirlar sistemi ANLATIYOR, cihazi degil — raporu okuyan zaten
+    # biliyor ve her sayfada tekrar okumak istemiyor.
     return block(
-        section_head(st, "Ölçüm Kanalları", hint),
+        section_head(st, "Ölçüm Kanalları"),
         data_table(st, headers, rows, [CONTENT_W * w for w in widths]),
     )
 
@@ -1233,11 +1407,14 @@ def _signal_sections(st: ReportStyles, data: DeviceReportData) -> list:
                     )
                 cells.append(Paragraph(esc(text), style))
             table_rows.append(cells)
+        # Ipucu yalnizca ELENEN nokta sayisini soyler. "Sutunlar cihazin
+        # olcum uniteleridir" gibi bir aciklama sutun basliklarinda zaten
+        # yaziyor; elenen sayisi ise BASKA hicbir yerde yok ve raporun eksik
+        # oldugunu ancak bu satir soyluyor.
         hint = ""
         if ilk:
-            hint = "Sütunlar cihazın ölçüm üniteleridir"
             if data.hidden_signal_count:
-                hint += f" · {data.hidden_signal_count} nokta veri gelmediği için listelenmedi"
+                hint = f"{data.hidden_signal_count} nokta veri gelmediği için listelenmedi"
             ilk = False
         out += block(
             section_head(st, title, hint),
@@ -1259,19 +1436,20 @@ def _signal_sections(st: ReportStyles, data: DeviceReportData) -> list:
 
 
 def _rtu_section(st: ReportStyles, data: DeviceReportData) -> list:
+    """Haberlesme ve cihaz bilgileri.
+
+    BASLIK "HABERLESME": once "RTU ve Haberlesme" idi. "RTU" bir ic terim —
+    raporu okuyan saha ekibi ya da musteri icin bir sey ifade etmiyor, ustelik
+    setin raporunda "Pole Master (Kit Seviyesi)" gibi daha da uzun bir baslik
+    cikiyordu. Degerlerin KIME ait oldugu zaten kunyede yaziyor ("Bagli
+    oldugu kit").
+
+    SAG IPUCU YOK: "Cihazin ana unitesinden okunan altyapi bilgileri" cumlesi
+    bolumun ne oldugunu degil sistemin nasil calistigini anlatiyordu.
+    """
     if not data.rtu_groups or data.rtu_device is None:
         return []
-    if data.kind == "set":
-        title = "Pole Master (Kit Seviyesi)"
-        hint = f"{data.rtu_device.code} kitine ait, tüm setlerde ortak"
-    elif data.kind == "kit":
-        title = "Kit Ölçümleri ve Haberleşme"
-        hint = "Kit tek DNP3 outstation'dır; bu değerler tüm setler için ortaktır"
-    else:
-        title = "RTU ve Haberleşme"
-        hint = "Cihazın ana ünitesinden okunan altyapı bilgileri"
-    if data.rtu_missing_count:
-        hint += f" · {data.rtu_missing_count} nokta boş"
+    title = "Haberleşme"
 
     blocks: list = []
     for key, group_title, _pattern in _RTU_GRUPLARI + (("other", "Diğer", re.compile("")),):
@@ -1280,17 +1458,22 @@ def _rtu_section(st: ReportStyles, data: DeviceReportData) -> list:
             continue
         if blocks:
             blocks.append(Spacer(1, 8))
+        # Alt baslik BOLUM BASLIGIYLA AYNIYSA basilmaz: "HABERLESME" bolumunun
+        # icinde ikinci bir "HABERLESME" ara basligi, okuyanda bir seyin
+        # kaydigi izlenimi birakiyor.
+        govde = kv_grid(st, pairs)
+        if upper_tr(group_title) == upper_tr(title):
+            blocks.append(govde)
+            continue
         # Alt baslik izgarasindan AYRILMASIN: "KIMLIK VE KONUM" sayfanin
         # dibinde tek basina kaldiginda, sonraki sayfadaki satirlarin neye
         # ait oldugu belirsiz kaliyordu.
         blocks.append(
-            KeepTogether(
-                [Paragraph(upper_tr(group_title), st.label), Spacer(1, 3), kv_grid(st, pairs)]
-            )
+            KeepTogether([Paragraph(upper_tr(group_title), st.label), Spacer(1, 3), govde])
         )
     if not blocks:
         return []
-    return block(section_head(st, title, hint), blocks[0], *blocks[1:])
+    return block(section_head(st, title), blocks[0], *blocks[1:])
 
 
 def _subunits_section(st: ReportStyles, data: DeviceReportData) -> list:
@@ -1382,8 +1565,12 @@ def _events_section(st: ReportStyles, data: DeviceReportData) -> list:
 
 
 __all__ = [
+    "ALL_SECTIONS",
+    "REPORT_SECTIONS",
     "DeviceReportData",
     "build_device_report_pdf",
     "collect_device_report",
+    "format_dms",
     "modem_durumu",
+    "parse_sections",
 ]

@@ -4123,6 +4123,26 @@
     "exportPdf": "PDF rapor",
     "exportPdfBusy": "PDF hazırlanıyor…",
     "exportPdfFailed": "Cihaz raporu oluşturulamadı.",
+    "report": {
+      "title": "PDF Rapor",
+      "sub": "{{name}} için hangi bölümler yer alsın?",
+      "selectAll": "Tümünü seç",
+      "clearAll": "Seçimi temizle",
+      "count": "{{count}} bölüm seçili",
+      "download": "İndir",
+      "sections": {
+        "ozet": "Durum Özeti",
+        "konum": "Konum ve Harita",
+        "kunye": "Cihaz Künyesi",
+        "baglanti": "Bağlantı ve Ağ",
+        "kanallar": "Ölçüm Kanalları",
+        "sinyaller": "Sinyal Durumu",
+        "haberlesme": "Haberleşme",
+        "setler": "Bağlı Setler",
+        "alarmlar": "Aktif Alarmlar",
+        "olaylar": "Son Olaylar"
+      }
+    },
     "chartsComingSoon": "Grafikler yakında",
     "chartsHint": "Bu cihaz için toplanan telemetri verilerinin grafikleri burada gösterilecek.",
     "noSignals": "{{source}} için sinyal verisi yok.",
