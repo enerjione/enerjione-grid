@@ -1030,6 +1030,22 @@ def _validate(request: dict) -> dict:
         # o durumda update yalnizca imaj ceker (eski davranis).
         clean["params"] = _validate_update_params(request.get("params"))
 
+    if action == "remove":
+        # `purge`: kalici silme mi, yoksa yalnizca bu makineden kaldirma mi?
+        #
+        # NEDEN AYRIM VAR: `docker compose down` adlandirilmis volume'u
+        # BIRAKIR. Gateway kaydi silindiginde volume'de kalan config
+        # onbellegi CIHAZ IP'LERINI tasimaya devam ediyordu; sahada bir
+        # yetim container o onbellekle ayni outstation'lara baglanmayi
+        # deneyebilir. Horstmann `CloseExisting` modunda oldugu icin her
+        # yeni baglanti calisani dusurur -> "haberlesme gidip geliyor".
+        #
+        # Ama volume'u HER kaldirmada silmek de yanlis olurdu: yalnizca
+        # "bu makineden kaldir" (kayit duruyor) durumunda outbox'ta
+        # gonderilmemis telemetri ve komut defteri bulunabilir.
+        # Varsayilan False -> eski davranis birebir korunur.
+        clean["purge"] = bool(request.get("purge"))
+
     if action == "logs":
         # `tail` docker'a ARGUMAN olarak gidiyor: tam sayiya cevrilip
         # sinirlara kelepcelenir. Metin asla gecmez.
@@ -1102,22 +1118,33 @@ def _do_remove(req: dict, compose_cmd: list[str]) -> dict:
     directory = os.path.join(GATEWAY_ROOT, code)
     path = _compose_path(code)
     project = _project_name(code)
+    purge = bool(req.get("purge"))
 
     if not os.path.isfile(path):
         # Zaten yok — kaldirma istegi idempotent olmali.
         return {"ok": True, "stage": "done", "message": "kurulu degil", "detail": ""}
 
-    rc, out = _run(
-        compose_cmd + ["-p", project, "-f", path, "down", "--remove-orphans"],
-        DOWN_TIMEOUT_SEC,
-    )
+    # `--volumes` YALNIZCA purge'de: state volume'u config onbellegini
+    # (cihaz IP'leri dahil) tasiyor ve kayit silindiginde geride kalmasi
+    # yetim container'in canli cihazlara baglanmasina zemin hazirliyordu.
+    # purge=False'ta volume KORUNUR — orada gonderilmemis telemetri
+    # (outbox) ve komut defteri olabilir (bkz. `_validate`).
+    asagi = compose_cmd + ["-p", project, "-f", path, "down", "--remove-orphans"]
+    if purge:
+        asagi.append("--volumes")
+    rc, out = _run(asagi, DOWN_TIMEOUT_SEC)
     if rc != 0:
         return {"ok": False, "stage": "down", "message": "container durdurulamadi", "detail": out}
     try:
         shutil.rmtree(directory)
     except OSError as exc:
         return {"ok": False, "stage": "cleanup", "message": f"dizin silinemedi: {exc}", "detail": out}
-    return {"ok": True, "stage": "done", "message": "gateway kaldirildi", "detail": out}
+    return {
+        "ok": True,
+        "stage": "done",
+        "message": "gateway kaldirildi (veri de silindi)" if purge else "gateway kaldirildi",
+        "detail": out,
+    }
 
 
 def _hedef_container(code: str) -> str:

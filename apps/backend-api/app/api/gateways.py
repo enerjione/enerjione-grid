@@ -375,6 +375,98 @@ def _cleanup_rabbitmq_user(gateway_code: str) -> None:
         logger.debug("rabbitmq_user_cleanup_skipped gateway=%s error=%s", gateway_code, exc)
 
 
+def _remove_local_container(gateway_code: str, gateway_name: str, actor_username: str) -> None:
+    """Kayit silindi -> bu makinedeki container'i da kaldir (best-effort).
+
+    NEDEN VAR (2026-08-13 saha bulgusu)
+    -----------------------------------
+    Gateway'i arayuzden silmek YALNIZCA veritabani satirini goturuyordu;
+    host'taki container calismaya devam ediyor ve backend'den 404 aliyordu.
+    Bir test kurulumunda dort container bulundu, ikisinin kaydi YOKTU; biri
+    696 kez ust uste 404 almisti.
+
+    Bu yetimler zararsiz DEGIL: state volume'undeki config onbellegi
+    CIHAZ IP'LERINI tasimaya devam ediyor. Yetim container o adreslere
+    baglanmayi denerse — Horstmann outstation `CloseExisting` modunda
+    oldugu icin — her yeni baglanti CALISAN oturumu dusurur. Sonuc tam
+    olarak sahada sikayet edilen "haberlesme gidip geliyor" tablosudur.
+    Bu yuzden kaldirma `purge=True` ile yapilir: volume da silinir.
+
+    UZAK GATEWAY'E DOKUNULMAZ: `is_installed_locally` bu makinede kurulu
+    olmayan gateway icin False doner ve hicbir istek yazilmaz.
+
+    BEST-EFFORT AMA SESSIZ DEGIL: silme ZATEN commit edildi, buradaki bir
+    hata kullaniciya 500 dondurmemeli. Ancak basarisizlik olay kaydina
+    yazilir — aksi halde operator yetim container'in kaldigini hic
+    ogrenemez ve sorun aylar sonra "haberlesme gidip geliyor" olarak geri
+    doner.
+    """
+    from app.db.session import SessionLocal
+
+    try:
+        if not gateway_agent_service.is_installed_locally(gateway_code):
+            return
+    except Exception:  # noqa: BLE001
+        logger.debug("gateway_local_probe_failed gateway=%s", gateway_code, exc_info=True)
+        return
+
+    hata: str | None = None
+    request_id: str | None = None
+    try:
+        request_id = gateway_agent_service.request_remove(
+            gateway_code, actor_username, purge=True
+        )
+    except GatewayAgentError as exc:
+        hata = str(exc)
+        logger.warning(
+            "gateway_local_remove_failed gateway=%s error=%s — container HALA CALISIYOR",
+            gateway_code,
+            hata,
+        )
+    except Exception as exc:  # noqa: BLE001
+        hata = f"{type(exc).__name__}: {exc}"
+        logger.warning("gateway_local_remove_error gateway=%s", gateway_code, exc_info=True)
+
+    db = SessionLocal()
+    try:
+        if hata is None:
+            record_event(
+                db,
+                category="gateway",
+                event_type="gateway_local_remove_requested",
+                severity="info",
+                actor_username=actor_username,
+                message=(
+                    f"{gateway_name} ({gateway_code}) — kayit silindi, "
+                    f"bu cihazdaki container da kaldiriliyor"
+                ),
+                metadata={"gateway_code": gateway_code, "request_id": request_id, "purge": True},
+                i18n_key="gateway_local_remove_requested",
+                i18n_params={"name": gateway_name, "code": gateway_code},
+            )
+        else:
+            record_event(
+                db,
+                category="gateway",
+                event_type="gateway_local_remove_failed",
+                severity="warning",
+                actor_username=actor_username,
+                message=(
+                    f"{gateway_name} ({gateway_code}) — kayit silindi ama bu cihazdaki "
+                    f"container KALDIRILAMADI ({hata}); elle temizlenmeli"
+                ),
+                metadata={"gateway_code": gateway_code, "error": hata},
+                i18n_key="gateway_local_remove_failed",
+                i18n_params={"name": gateway_name, "code": gateway_code, "error": hata},
+            )
+        db.commit()
+    except Exception:  # noqa: BLE001
+        logger.warning("gateway_local_remove_event_failed gateway=%s", gateway_code, exc_info=True)
+        db.rollback()
+    finally:
+        db.close()
+
+
 @router.delete("/{gateway_code}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_gateway(
     gateway_code: str,
@@ -409,6 +501,9 @@ def delete_gateway(
     db.commit()
     # Best-effort RabbitMQ user temizligi response sonrasina ertelenir.
     background_tasks.add_task(_cleanup_rabbitmq_user, gateway_code)
+    # Bu makinede kurulu ise container'i da kaldir — kayit silindiginde
+    # geride calisan bir yetim birakmamak icin (bkz. _remove_local_container).
+    background_tasks.add_task(_remove_local_container, code, name, current_user.username)
     return None
 
 
