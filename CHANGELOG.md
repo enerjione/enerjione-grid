@@ -14,6 +14,38 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.89.0] — 2026-08-14
+
+### Eklendi
+
+- **Pole Master Kit'in kendi detay sayfası artık kitin verisine göre.** Sayfa
+  tek üniteli cihaz şablonuyla çiziliyordu ve kite ait olmayan şeyleri
+  soruyordu: beş kartın dördü ("Akım", "Gerilim", "Kalıcı", "Geçici")
+  sonsuza kadar **"Veri yok"** yazıyordu, çünkü kitin bu sinyalleri yok —
+  ölçüm uydularda, yani setlerde. **Solda artık setler listeleniyor:** kaç set
+  eklendiği başlıkta yazıyor, her satırda ad, çevrimiçi durumu ve pil yüzdesi
+  var, tıklayınca o setin sayfası açılıyor. Setin yüzdesi üç uydusunun **en
+  düşüğünden** gelir — ekip direğe en zayıf hücre bittiğinde çıkar, ortalama
+  bunu gizler. **Sağdaki kartlar** kitin gerçekten ölçtüğü şeyleri gösteriyor:
+  RTU sıcaklığı, batarya gerilimi, modem sinyali, besleme (güneş/şebeke/
+  batarya) ve kurcalama. Ayrıca **"Pole Master" sekmesi kitin kendi sayfasında
+  da açılıyor** — daha önce yalnızca setlerde görünüyordu, yani kitin sayfasını
+  açan kişi modem, GPS ve besleme ölçülerinin hiçbirini göremiyordu.
+
+### Değişti
+
+### Değişti
+
+- **Bildirim Ayarları sayfası artık EnerjiOne turuncusunda.** Sayfa indigo/mor
+  bir vurgu rengi kullanıyordu; bu renk uygulamanın hiçbir yerinde marka rengi
+  değil, sayfa tek başına başka bir ürünmüş gibi duruyordu. Seçili kanal kartı,
+  detay başlığının ikonu, kanal aç/kapa anahtarı, alan odak çerçeveleri, "Test
+  gönder" başlığı ve Telegram keşif kartı vurguyu diğer ekranlarla aynı
+  turuncudan alıyor. Pasif kanal ikonları ile "Test" düğmesinin nötr gri tonu
+  değişmedi — onlar vurgu değil arka plan.
+
+---
+
 ## [2.88.0] — 2026-08-14
 
 ### Eklendi
