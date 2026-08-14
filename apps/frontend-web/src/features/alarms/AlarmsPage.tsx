@@ -21,6 +21,10 @@ type Props = {
   lines: Line[];
   deviceTopology: DeviceTopology;
   loading?: boolean;
+  /** Alarm listesi CEKILEMEDIYSE dolu. Bos liste ile "veri yok" ayni sey
+   *  degil — bkz. asagidaki hata dali. (Bilesenin kendi `error` state'i
+   *  yorum kaydetme hatasi icin; ikisi ayri seyler.) */
+  loadError?: string;
   onAssign: (alarmId: number, assignedTo: string | null) => Promise<void>;
   onLoadComments: (alarmId: number) => Promise<AlarmComment[]>;
   onAddComment: (alarmId: number, comment: string) => Promise<void>;
@@ -43,6 +47,7 @@ export function AlarmsPage({
   lines,
   deviceTopology,
   loading,
+  loadError,
   onAssign,
   onLoadComments,
   onAddComment,
@@ -873,6 +878,14 @@ export function AlarmsPage({
 
         {/* Sekme cubugu: Aktif / Normale Donenler / Gecmis */}
         <div className="alarms-section">
+          {/* Elde ESKI liste varken cekim basarisiz olursa sayilar guncel
+              gorunur ama degildir. Uyari YALNIZCA sorun varken cikar; normal
+              calismada ust seritte yer kaplamaz. */}
+          {loadError && tabAlarms.length > 0 ? (
+            <div className="alarms-stale" role="status" title={loadError}>
+              {t("alarms.staleWarning")}
+            </div>
+          ) : null}
           <div className="alarms-tabs" role="tablist">
             <button
               type="button"
@@ -1059,8 +1072,23 @@ export function AlarmsPage({
                   })}
                   {tabAlarms.length === 0 && !loading ? (
                     <tr>
-                      <td colSpan={11} className="alarms-empty-cell">
-                        {activeTab === "resolved" ? t("alarms.noPending") : t("alarms.noActive")}
+                      {/* HATA DALI ONCE GELIR — "yesil yalan"in kapatildigi yer.
+                          Veri alinamadiginda "Aktif alarm yok" yazmak, sistemin
+                          BILMEDIGINI "sorun yok" diye gostermektir. Bir ariza
+                          izleme urununde en agir hata sinifi budur. */}
+                      <td
+                        colSpan={11}
+                        className={
+                          loadError
+                            ? "alarms-empty-cell alarms-empty-cell--error"
+                            : "alarms-empty-cell"
+                        }
+                      >
+                        {loadError
+                          ? `${t("alarms.loadFailed")} — ${loadError}`
+                          : activeTab === "resolved"
+                            ? t("alarms.noPending")
+                            : t("alarms.noActive")}
                       </td>
                     </tr>
                   ) : null}

@@ -83,7 +83,13 @@ class Device(Base):
     signal_profile: Mapped[str] = mapped_column(String(80), default="horstmann_sn2_fixed")
     latitude: Mapped[float] = mapped_column(Float)
     longitude: Mapped[float] = mapped_column(Float)
-    battery_percent: Mapped[float] = mapped_column(Float, default=100.0)
+    # NULL = cihaz HENUZ batarya bildirmedi. Varsayilan 100.0 idi ve bu bir
+    # "yesil yalan"di: hic batarya telemetrisi gondermemis (ya da bu olcumu
+    # hic desteklemeyen) cihaz her ekranda DOLU batarya gosteriyordu.
+    # Bilmemek ile "dolu" ayni sey degil; arayuz NULL'i "—" olarak gosterir.
+    battery_percent: Mapped[float | None] = mapped_column(
+        Float, nullable=True, default=None
+    )
     communication_status: Mapped[CommunicationStatus] = mapped_column(
         Enum(CommunicationStatus), default=CommunicationStatus.UNKNOWN
     )

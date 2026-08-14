@@ -102,7 +102,9 @@ export type DeviceRow = {
   retryCount?: number;
   signalProfile?: string;
   communicationStatus: CommunicationStatus;
-  batteryPercent: number;
+  /** null = cihaz henuz batarya bildirmedi. "Dolu" ile karistirilmamali:
+   *  varsayilan 100 yuzunden hic veri gondermemis cihaz dolu gorunuyordu. */
+  batteryPercent: number | null;
   alarmActive: boolean;
   lastUpdateAt?: string;
   latitude: number;

@@ -105,9 +105,27 @@ authorization {
                 # alirlar (subscribe oncesi "stream var mi?" sorgu). Stream
                 # YONETIMI (add/update/delete) backend'e ozel; worker'lar
                 # sadece OKU + consumer baglan.
+                #
+                # DLQ: worker'lar zehirli mesaji `e1.dlq.<servis>.<subject>`
+                # altina yazar. BU IZIN EKSIKTI ve sonucu sessiz veri
+                # kaybiydi: mesaj max_deliver'a kadar nak'leniyor, son
+                # teslimde DLQ yayini "permissions violation" ile
+                # reddediliyor, PubAck donmuyor ve JetStream mesaji ATIYOR.
+                # Olcum ne DB'ye yaziliyor ne DLQ'ya dusuyordu; `/health/dlq`
+                # "0 mesaj" dedigi icin operator hicbir sey kaybedilmedigini
+                # saniyordu. backend-api ayri kullanici oldugu (izni "e1.>")
+                # icin onun DLQ yazimi calisiyordu — bu yuzden sorun kismen
+                # gorunmezdi.
+                #
+                # Servis basina daraltildi: bir worker baska bir servisin
+                # DLQ'suna yazamasin.
                 publish = {
                     allow = [
                         "e1.telemetry.normalized.>",
+                        "e1.dlq.tag-engine.>",
+                        "e1.dlq.alarm-service.>",
+                        "e1.dlq.iec104-outbound.>",
+                        "e1.dlq.modbus-outbound.>",
                         "$JS.API.CONSUMER.>",
                         "$JS.API.STREAM.NAMES",
                         "$JS.API.STREAM.LIST",

@@ -54,7 +54,7 @@ def test_transition_clear_hala_gonderiliyor(monkeypatch):
     gidenler: list[dict] = []
 
     class SahteNotifier:
-        def submit_raise(self, payload, *, rule_id):
+        def submit_raise(self, payload, *, rule_id, geri_al=None):
             pass
 
         def submit_clear(self, **alan):
@@ -117,7 +117,7 @@ def test_haberlesme_arizasi_ilk_kotu_kalitede_TEK_alarm_acar(monkeypatch):
     raised: list[dict] = []
 
     class SahteNotifier:
-        def submit_raise(self, payload, *, rule_id):
+        def submit_raise(self, payload, *, rule_id, geri_al=None):
             raised.append(payload)
 
         def submit_clear(self, **alan):
@@ -144,7 +144,7 @@ def test_haberlesme_arizasi_iyi_kaliteye_donunce_clear_gonderilir(monkeypatch):
     cleared: list[dict] = []
 
     class SahteNotifier:
-        def submit_raise(self, payload, *, rule_id):
+        def submit_raise(self, payload, *, rule_id, geri_al=None):
             raised.append(payload)
 
         def submit_clear(self, **alan):
@@ -183,7 +183,7 @@ def test_haberlesme_alarmi_device_code_yoksa_sessizce_gecer(monkeypatch):
     calls: list[str] = []
 
     class SahteNotifier:
-        def submit_raise(self, payload, *, rule_id):
+        def submit_raise(self, payload, *, rule_id, geri_al=None):
             calls.append("raise")
 
         def submit_clear(self, **alan):

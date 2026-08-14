@@ -596,6 +596,15 @@ elif grep -q 'max_file_store: 50GB' infra/nats/nats-server.conf; then
   # bos diskinin ustunde oldugu icin emniyet subabi olarak hic calismiyordu.
   e1_info "NATS conf eski hesap tavanini (50GB) tasiyor, yeniden render ediliyor..."
   NEED_NATS_RENDER=1
+elif ! grep -q 'e1.dlq.tag-engine' infra/nats/nats-server.conf; then
+  # Worker'lar `e1.dlq.<servis>.>` altina yazamiyordu: zehirli mesaj
+  # max_deliver'a kadar nak'leniyor, son teslimde DLQ yayini "permissions
+  # violation" ile reddediliyor, JetStream mesaji ATIYORDU. Olcum ne DB'ye
+  # yaziliyor ne DLQ'ya dusuyordu ve `/health/dlq` "0 mesaj" dedigi icin
+  # kayip GORUNMUYORDU. Sahadaki conf yeniden render edilmezse duzelme
+  # buraya ULASMAZ (denetim 2026-08-13).
+  e1_info "NATS conf'ta worker DLQ yayin izni yok, yeniden render ediliyor..."
+  NEED_NATS_RENDER=1
 fi
 
 if [[ $NEED_NATS_RENDER -eq 1 ]]; then

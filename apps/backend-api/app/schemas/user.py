@@ -1,6 +1,6 @@
 import re
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.models.enums import UserRole
 
@@ -104,8 +104,18 @@ class UserUpdate(BaseModel):
     role: UserRole
 
 
+#: Parola asgari uzunlugu — TEK KAYNAK.
+#:
+#: Kural yalnizca davet/sifirlama-token akisinda (api/auth.py) elle
+#: uygulaniyordu; `/auth/me/change-password` ve `/users/{id}/reset-password`
+#: semalari duz `str` oldugu icin TEK KARAKTERLIK parolayi kabul ediyordu.
+#: Yani politikanin uygulandigi yer, kullanicilarin parola degistirdigi asil
+#: iki yol DEGILDI.
+MIN_PASSWORD_LENGTH = 8
+
+
 class ResetPasswordRequest(BaseModel):
-    new_password: str
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH)
 
 
 class SelfProfileUpdateRequest(BaseModel):
@@ -144,4 +154,4 @@ class LanguageUpdateRequest(BaseModel):
 
 class SelfPasswordChangeRequest(BaseModel):
     current_password: str
-    new_password: str
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH)

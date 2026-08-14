@@ -459,6 +459,8 @@
     "active": "Aktif Alarmlar",
     "pendingReset": "Normale Dönen — Onay Bekliyor",
     "noActive": "Aktif alarm yok.",
+    "loadFailed": "Alarm durumu bilinmiyor — liste sunucudan alınamadı",
+    "staleWarning": "Liste güncellenemiyor, gösterilen veriler eski olabilir",
     "noPending": "Onay bekleyen normale dönmüş alarm yok.",
     "moreOverflow": "{{count}} kayıt daha var — onayladıkça listeden çıkacak.",
     "search": "Alarm ara...",
@@ -4327,7 +4329,9 @@
       "supplySolar": "Güneş",
       "supplyAc": "Şebeke",
       "supplyBattery": "Batarya",
-      "tamper": "Kurcalama"
+      "tamper": "Kurcalama",
+      "staleHint": "Son bilinen değer — canlı ölçüm gelmiyor",
+      "untrustedHint": "Ölçüm güvenilmez: haberleşme kopuk veya değer zorlanmış"
     },
     "meta": {
       "region": "Bölge",
@@ -4372,7 +4376,9 @@
       "alarmActive": "AKTİF ALARM",
       "alarmActiveSub": "Cihazda aktif alarm var",
       "alarmClear": "Normal",
-      "alarmClearSub": "Aktif alarm yok"
+      "alarmClearSub": "Aktif alarm yok",
+      "alarmUnknown": "Alarm durumu bilinmiyor",
+      "alarmUnknownSub": "Alarm listesi sunucudan alınamadı"
     },
     "overview": {
       "currentStatus": "MEVCUT DURUM",

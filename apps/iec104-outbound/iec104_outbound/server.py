@@ -112,6 +112,19 @@ KWINDOW_WARN_INTERVAL_SEC = 30.0
 # kalici tikanikligi ise dusurerek GORUNUR kilar.
 OUTBOX_MAX = 2000
 
+# GENEL SORGU (GI) kuyrugu — spontane kuyruktan AYRI ve cok daha buyuk.
+#
+# GI yaniti bir BUTUNDUR: 600 cihaz x ~145 IEC104 noktasi = ~87.000 nesne.
+# Spontane cerceveler gibi "en eskiyi at" davranisi burada YANLIS olurdu —
+# atilan nesne bir daha gonderilmez, master yeniden sormaz ve sonunda giden
+# ACT_TERM sorgunun tamamlandigini soyler. Yani eksik nokta kumesi "guncel"
+# sanilir.
+#
+# 200.000: en buyuk beklenen GI'nin (~87k) iki katindan fazla; her cerceve
+# birkac on bayt oldugu icin en kotu durumda birkac MB. Sinirsiz birakmak
+# yavas bir master ile bellegi tuketirdi.
+GI_OUTBOX_MAX = 200_000
+
 # Bir target'a ayni anda bagli olabilecek en fazla istemci.
 #
 # NEDEN SINIR VAR: her oturum, her deger degisiminde ek is demektir. Yeniden
@@ -158,7 +171,24 @@ class _ClientSession:
         self.last_kwindow_warn_at: float = 0.0
         # Giden ASDU kuyrugu — SINIRLI. Bkz. OUTBOX_MAX.
         self.outbox: asyncio.Queue[bytes] = asyncio.Queue(maxsize=OUTBOX_MAX)
+        # GENEL SORGU (GI) ICIN AYRI KUYRUK — spontane trafikle YARISMAZ.
+        #
+        # Eskiden tek kuyruk vardi ve doldugunda `enqueue` BASTAKI cerceveyi
+        # atiyordu. 600 cihaz x ~145 nokta = ~87.000 nesnelik bir GI yaniti
+        # kuyrugu doldurur; ayni anda saniyede ~1200 spontane telemetri gelir
+        # ve her biri kuyrugun basindaki GI cercevesini atar. Sonuc: GI
+        # nesneleri tel'e HIC cikmadan silinir, ama en sonda ACT_TERM gider —
+        # yani SCADA sorgunun BASARIYLA tamamlandigini sanir ve eksik bir
+        # nokta kumesiyle calisir. Sessiz yanlis veri.
+        #
+        # GI yaniti ATILAMAZ (tekrari yok, master yeniden sormaz), spontane
+        # ise atilabilir (son deger gecerlidir). Bu yuzden ayri kuyruk +
+        # oncelikli drenaj: `_drain_outbox` once GI'yi bosaltir.
+        self.gi_outbox: asyncio.Queue[bytes] = asyncio.Queue(maxsize=GI_OUTBOX_MAX)
         self.dropped_total = 0
+        # Iki kuyruktan HERHANGI birine veri girdiginde set edilir; yazici
+        # gorev tek bir kuyruk uzerinde bloklanamayacagi icin gerekli.
+        self.veri_var: asyncio.Event = asyncio.Event()
         self._drain_task: "asyncio.Task | None" = None
         # Genel sorgu (GI) AYRI gorevde kosar; bkz. _start_interrogation.
         self._gi_task: "asyncio.Task | None" = None
@@ -183,6 +213,7 @@ class _ClientSession:
         """
         try:
             self.outbox.put_nowait(asdu)
+            self.veri_var.set()
             return True
         except asyncio.QueueFull:
             try:
@@ -196,7 +227,26 @@ class _ClientSession:
             except asyncio.QueueFull:  # pragma: no cover
                 self.dropped_total += 1
                 return False
+            finally:
+                self.veri_var.set()
             return False
+
+    async def put_gi(self, asdu: bytes) -> None:
+        """GI (genel sorgu) yaniti cercevesini AYRI kuyruga koyar — BLOKLAYARAK.
+
+        Spontane `enqueue`den iki farki var:
+
+        1. AYRI KUYRUK. Spontane yol kuyruk dolunca EN ESKIYI atar; tek
+           kuyrukta bu, bekleyen GI cercevelerinin silinmesi demekti.
+           Saniyede ~1200 spontane telemetri, ~87.000 nesnelik bir GI'yi
+           kuyruktan supuruyordu — ve en sonda ACT_TERM gittigi icin SCADA
+           sorguyu BASARILI saniyordu.
+        2. DUSURME YOK. Kuyruk dolarsa bu gorev BEKLER; yazici gorev
+           bosaltmaya devam eder. GI yaniti bir butundur ve tekrari yoktur:
+           master yeniden sormaz.
+        """
+        await self.gi_outbox.put(asdu)
+        self.veri_var.set()
 
 
 def _parse_asdu_common_address(asdu: bytes) -> int | None:
@@ -765,11 +815,16 @@ class IEC104Server:
         SCADA `requested_ca=0xFFFF` (broadcast) gonderirse tum CA'lara ait
         noktalar yayinlanir; aksi halde yalnizca o CA.
 
-        Cerceveler kuyruga BLOKLAYAN `put` ile konur (spontane bildirimlerin
-        `enqueue` ile en-eskiyi-dusuren yolu DEGIL): GI yaniti eksiksiz olmak
-        zorundadir. 600 cihazlik bir sahada nesne sayisi kuyruk tavanini rahat
-        asar; `enqueue` kullanilsaydi GI'nin ilk yarisi sessizce dusurulurdu.
-        Kuyruk dolunca bu gorev bekler, yazici gorev bosaltmaya devam eder.
+        Cerceveler AYRI GI KUYRUGUNA bloklayan `put_gi` ile konur.
+
+        Iki ayri koruma gerekiyordu ve eskiden yalnizca biri vardi:
+          * Bloklayan put (vardi): GI uretici tarafi cerceve DUSURMEZ.
+          * Ayri kuyruk (YOKTU): spontane `enqueue`, kuyruk dolunca EN
+            ESKIYI atiyordu ve o en eski cerceve cogu zaman bekleyen bir GI
+            cercevesiydi. 600 cihaz x ~145 nokta = ~87.000 nesnelik GI,
+            saniyede ~1200 spontane telemetri altinda kuyruktan supuruluyor;
+            sonunda ACT_TERM gittigi icin SCADA sorguyu BASARILI saniyor ve
+            eksik nokta kumesiyle calisiyordu. Sessiz yanlis veri.
         """
         is_broadcast = requested_ca == BROADCAST_COMMON_ADDRESS
         # ACT_CON gelen CA ile gonderilir (broadcast'te de).
@@ -777,7 +832,7 @@ class IEC104Server:
             common_address=requested_ca or self.registry.default_common_address,
             cause=COT_ACTIVATION_CON, qoi=20,
         )
-        await session.outbox.put(confirm)
+        await session.put_gi(confirm)
 
         for point in self.registry.points:
             if not is_broadcast and point.common_address != requested_ca:
@@ -798,13 +853,13 @@ class IEC104Server:
                     cause=COT_INTERROGATION, timestamp=current.timestamp,
                 )
             if asdu is not None:
-                await session.outbox.put(asdu)
+                await session.put_gi(asdu)
 
         terminate = encode_interrogation_confirm(
             common_address=requested_ca or self.registry.default_common_address,
             cause=COT_ACTIVATION_TERM, qoi=20,
         )
-        await session.outbox.put(terminate)
+        await session.put_gi(terminate)
         logger.info(
             "iec104_gi_kuyruklandi name=%s peer=%s ca=%s",
             self.name, session.peer, "broadcast" if is_broadcast else requested_ca,
@@ -970,7 +1025,21 @@ class IEC104Server:
         """
         try:
             while True:
-                asdu = await session.outbox.get()
+                # ONCELIK: GI kuyrugu bosalana kadar spontane cerceve
+                # gonderilmez. Ikisi ayni kuyrukta yaristigi surece, yogun
+                # spontane akis GI yanitini kuyruktan siliyordu.
+                if session.gi_outbox.empty() and session.outbox.empty():
+                    # Lost-wakeup'a karsi: ONCE temizle, SONRA yeniden bak.
+                    # Arada bir uretici gelmis olabilir.
+                    session.veri_var.clear()
+                    if session.gi_outbox.empty() and session.outbox.empty():
+                        await session.veri_var.wait()
+                    continue
+                if not session.gi_outbox.empty():
+                    kaynak = session.gi_outbox
+                else:
+                    kaynak = session.outbox
+                asdu = kaynak.get_nowait()
                 try:
                     # k-penceresi dolduysa BEKLE, dusurme. `_send_i` tek basina
                     # `unacked >= 12` gorunce frame'i atiyordu; GI'de bu, sorgu
@@ -992,7 +1061,10 @@ class IEC104Server:
                 except Exception:  # noqa: BLE001
                     logger.debug("iec104_drain_send_error", exc_info=True)
                 finally:
-                    session.outbox.task_done()
+                    # `task_done` cerceveyi ALDIGIMIZ kuyruga bildirilmeli;
+                    # sabit `session.outbox` yazmak GI cercevelerinde yanlis
+                    # kuyrugun sayacini bozardi.
+                    kaynak.task_done()
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001

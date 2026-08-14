@@ -367,6 +367,12 @@ export function App() {
   const [apiKeysLoading, setApiKeysLoading] = useState(false);
   const [gridSnapshot, setGridSnapshot] = useState<GridSnapshot | null>(null);
   const [alarmsLoading, setAlarmsLoading] = useState(false);
+  // Alarm listesi CEKILEMEDIGINDE dolu olur. Bos liste ile "veri alinamadi"
+  // ayni sey DEGIL: eskiden acilistaki hata `catch { setAlarms([]) }` ile
+  // yutuluyordu ve ekran "Aktif alarm yok" + tamamen yesil harita
+  // gosteriyordu. Nobetci operator "X hattinda ariza var mi?" sorusuna
+  // bakip "yok" diyordu — oysa istemci veriyi hic alamamisti.
+  const [alarmsError, setAlarmsError] = useState("");
   const [currentUser, setCurrentUser] = useState<UserRead | null>(null);
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null);
   const [licenseLoading, setLicenseLoading] = useState(false);
@@ -657,8 +663,20 @@ export function App() {
         setAlarmsLoading(true);
         try {
           setAlarms(await fetchAlarmEvents(session.accessToken));
-        } catch {
-          setAlarms([]);
+          setAlarmsError("");
+        } catch (error) {
+          // HATA ARTIK YUTULMUYOR — `catch { setAlarms([]) }` idi.
+          //
+          // Bos liste ekranda "Aktif alarm yok" + tamamen yesil harita
+          // demek. Alarm ucu kalici 500 dondugunde (600 cihazda agirlasmis
+          // sorgu, havuz tukenmesi, ORM patlamasi) operator sistemi TEMIZ
+          // saniyordu; gercekte acik hat arizalari vardi ve ekranda tek bir
+          // uyari yoktu. Liste de BOSALTILMIYOR: elde eski veri varsa
+          // bayat gostermek, hic gostermemekten iyidir — durum rozetten
+          // okunur.
+          setAlarmsError(
+            error instanceof Error ? error.message : t("common.errorOccurred")
+          );
         }
         try {
           setEvents(await fetchSystemEvents(session.accessToken));
@@ -889,6 +907,7 @@ export function App() {
     setDevices([]);
     setUsers([]);
     setAlarms([]);
+    setAlarmsError("");
     seenAlarmIdsRef.current = null; // yeni oturumda alarm toast durumu sifir
     setFaults([]);
     setEvents([]);
@@ -1029,9 +1048,14 @@ export function App() {
     try {
       const rows = await fetchAlarmEvents(session.accessToken);
       setAlarms(rows);
+      setAlarmsError("");
       notifyNew(rows);
-    } catch {
-      // sessizce yutuyoruz — gecici ag hatalari polling'i durdurmamali
+    } catch (err) {
+      // Polling DURMAZ (gecici ag hatalari akisi kesmemeli) ve liste
+      // BOSALTILMAZ — ama hata artik sessizce yutulmuyor. Kalici bir
+      // kesintide ekranda "alarm durumu bilinmiyor" gorunmesi sart:
+      // yesil bir harita, veri gelmedigi icin yesilse yalan soyluyor.
+      setAlarmsError(err instanceof Error ? err.message : t("common.errorOccurred"));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, devices, toast, t, openTab]);
@@ -3201,6 +3225,7 @@ export function App() {
                 lines={gridSnapshot?.lines ?? []}
                 deviceTopology={deviceTopologyInfo}
                 loading={alarmsLoading}
+                loadError={alarmsError}
                 onAssign={handleAssignAlarm}
                 onLoadComments={handleLoadAlarmComments}
                 onAddComment={handleAddAlarmComment}

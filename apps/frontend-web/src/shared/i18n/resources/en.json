@@ -462,6 +462,8 @@
     "active": "Active Alarms",
     "pendingReset": "Returned to Normal — Awaiting Acknowledgement",
     "noActive": "No active alarms.",
+    "loadFailed": "Alarm status unknown — could not load the list",
+    "staleWarning": "List cannot refresh; shown data may be stale",
     "noPending": "No pending normal-return alarms.",
     "moreOverflow": "{{count}} more entries — they leave the list as they are acknowledged.",
     "search": "Search alarm...",
@@ -4330,7 +4332,9 @@
       "supplySolar": "Solar",
       "supplyAc": "Mains",
       "supplyBattery": "Battery",
-      "tamper": "Tamper"
+      "tamper": "Tamper",
+      "staleHint": "Last known value — no live reading",
+      "untrustedHint": "Reading is unreliable: communication lost or value forced"
     },
     "meta": {
       "region": "Region",
@@ -4375,7 +4379,9 @@
       "alarmActive": "ACTIVE ALARM",
       "alarmActiveSub": "Device has an active alarm",
       "alarmClear": "Normal",
-      "alarmClearSub": "No active alarms"
+      "alarmClearSub": "No active alarms",
+      "alarmUnknown": "Alarm status unknown",
+      "alarmUnknownSub": "Could not load the alarm list from the server"
     },
     "overview": {
       "currentStatus": "CURRENT STATUS",

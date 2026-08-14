@@ -7,7 +7,29 @@ const baileys = require("./baileys-client");
 const PORT = parseInt(process.env.WORKER_HEALTH_PORT || "8016", 10);
 const SERVICE_TOKEN = process.env.SERVICE_TOKEN || "";
 
+// FAIL-FAST: token yoksa servis HIC AYAGA KALKMAZ.
+//
+// Eskiden fail-OPEN'di: `SERVICE_TOKEN` bos oldugunda `expected.length === 0`
+// ve header gonderilmediginde `actual.length === 0` olur, `timingSafeEqual`
+// iki bos tamponu ESIT sayar -> checkToken TRUE doner ve butun uclar
+// (mesaj gonderme dahil) herkese acilir. Ustelik servis hicbir uyari
+// vermeden calismaya devam ettigi icin bu durum sessizdi.
+//
+// Sessizce acik kalmak yerine gurultuyle durmak dogru davranis: eksik
+// yapilandirma kurulumda fark edilir, sahada degil.
+if (!SERVICE_TOKEN) {
+  console.error(
+    "whatsapp-web-gateway: SERVICE_TOKEN tanimli degil. Kimlik dogrulama " +
+      "yapilamayacagi icin servis BASLATILMIYOR. .env icinde SERVICE_TOKEN " +
+      "tanimlayin."
+  );
+  process.exit(1);
+}
+
 function checkToken(req) {
+  // Ikinci savunma: token bos ise hicbir istek gecmez (yukaridaki fail-fast
+  // bu duruma dusmemeyi saglar, ama kontrol burada da acikca dursun).
+  if (!SERVICE_TOKEN) return false;
   const provided = req.headers["x-service-token"] || "";
   const expected = Buffer.from(SERVICE_TOKEN);
   const actual = Buffer.from(String(provided));

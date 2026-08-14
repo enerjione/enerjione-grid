@@ -57,8 +57,20 @@ def hash_gateway_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def list_latest_telemetry(db: Session) -> list[Telemetry]:
-    stmt = select(Telemetry).order_by(Telemetry.source_timestamp.desc()).limit(200)
+def list_latest_telemetry(
+    db: Session, *, visible_device_ids: set[int] | None = None
+) -> list[Telemetry]:
+    """Son 200 telemetri satiri.
+
+    `visible_device_ids` None DEGILSE sonuc o cihazlara daraltilir. Eskiden
+    kapsam suzgeci HIC yoktu: bir operator `/telemetry/latest` ile sorumlu
+    olmadigi hatlarin son okumalarini gorebiliyordu — ayni kullanici
+    `/devices` cagirdiginda o cihazlar listede bile cikmazken.
+    """
+    stmt = select(Telemetry)
+    if visible_device_ids is not None:
+        stmt = stmt.where(Telemetry.device_id.in_(visible_device_ids))
+    stmt = stmt.order_by(Telemetry.source_timestamp.desc()).limit(200)
     return list(db.scalars(stmt).all())
 
 

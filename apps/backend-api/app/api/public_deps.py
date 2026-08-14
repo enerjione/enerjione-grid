@@ -26,6 +26,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.core.client_ip import client_ip_from_request
 from app.db.session import get_db
 from app.models.api_key import ApiKey
 from app.models.user import User
@@ -74,13 +75,23 @@ class ApiKeyContext:
 
 
 def _client_ip(request: Request) -> str | None:
-    # Reverse proxy varsa X-Forwarded-For ilk IP'yi kullan.
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
-    if request.client:
-        return request.client.host
-    return None
+    """Istemci IP'si — TEK dogru kaynak `app.core.client_ip`.
+
+    ESKI HALI GUVENLIK ACIGIYDI: `xff.split(",")[0]` yani X-Forwarded-For'un
+    EN SOLDAKI degeri okunuyordu. O deger tamamen ISTEMCININ kontrolunde:
+    nginx header'i silmez, yalnizca saga kendi gordugu IP'yi ekler. Yani
+
+        curl -H "X-Forwarded-For: 10.0.5.20" ...
+
+    diyen biri, anahtarin `allowed_ips` kisitini TEK HEADER ile geciyordu —
+    "bu anahtar yalnizca su IP'den kullanilabilir" garantisi fiilen yoktu.
+    Ustelik `api_key_auth_failed` olay kaydindaki `ip` alani da ayni bozuk
+    kaynaktan beslendigi icin olay-sonrasi inceleme yanlis IP'yi kovaliyordu.
+
+    `client_ip_from_request` dogru sirayi uygular:
+    X-Real-IP -> XFF'in EN SAGI -> TCP peer.
+    """
+    return client_ip_from_request(request)
 
 
 def _unauthorized(detail: str = "Geçersiz veya eksik API anahtarı") -> HTTPException:

@@ -12,7 +12,13 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.user_fcm_token import UserFcmToken
 from app.schemas.auth import LoginRequest, SetupPasswordRequest, TokenResponse
-from app.schemas.user import LanguageUpdateRequest, SelfPasswordChangeRequest, SelfProfileUpdateRequest, UserRead
+from app.schemas.user import (
+    MIN_PASSWORD_LENGTH,
+    LanguageUpdateRequest,
+    SelfPasswordChangeRequest,
+    SelfProfileUpdateRequest,
+    UserRead,
+)
 
 
 # Auth cookie ismi — frontend Authorization header yerine bu cookie ile
@@ -300,10 +306,10 @@ def setup_password(
     new_pwd = (payload.new_password or "")
     if not token or len(token) < 16:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
-    if len(new_pwd) < 8:
+    if len(new_pwd) < MIN_PASSWORD_LENGTH:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Sifre en az 8 karakter olmali.",
+            detail=f"Sifre en az {MIN_PASSWORD_LENGTH} karakter olmali.",
         )
 
     token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()

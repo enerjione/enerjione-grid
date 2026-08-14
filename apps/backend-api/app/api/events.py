@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
+from app.models.enums import UserRole
 from app.models.project_settings import ProjectSettings
 from app.models.user import User
 from app.schemas.event import SystemEventRead
@@ -23,6 +24,29 @@ from app.services.report_layout import format_report_time
 from app.services.system_event_service import list_system_events
 
 router = APIRouter(prefix="/events", tags=["events"])
+
+
+#: OPERATOR'un denetim kaydinda GORMEMESI gereken kategoriler.
+#:
+#: `/events` ve `/events/export` yalnizca `get_current_user` ile korunuyordu,
+#: yani rol ve kapsam kontrolu YOKTU: bir operator giris denemelerini, parola
+#: sifirlamalarini, API anahtari uretimlerini ve kullanici yonetimi
+#: hareketlerini okuyabiliyordu. Bunlar operatorun isi degil.
+#:
+#: Cihaz/alarm/ariza olaylari BILEREK acik kalir — operator kendi sahasinda
+#: ne oldugunu gormeye devam eder, yani mevcut is akisi bozulmaz.
+#:
+#: NOT: olaylarin CIHAZ bazli kapsam suzgeci (operatorun yalnizca sorumlu
+#: oldugu hatlarin cihaz olaylarini gormesi) BILINCLI olarak yapilmadi —
+#: bugunku davranisi daraltmak bir urun karari; ayrica konusulmali.
+_OPERATOR_GIZLI_KATEGORILER = frozenset({"auth", "security", "user"})
+
+
+def _gizli_kategoriler(user: User) -> set[str] | None:
+    """Bu kullanicinin gormemesi gereken olay kategorileri."""
+    if user.role == UserRole.OPERATOR:
+        return set(_OPERATOR_GIZLI_KATEGORILER)
+    return None
 
 
 # Export icin desteklenen formatlar. csv + json frontend tarafinda da
@@ -50,7 +74,7 @@ def list_events(
     limit: int = Query(default=1000, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Filtreli olay listesi (yeniden eskiye).
 
@@ -69,6 +93,7 @@ def list_events(
         q=q,
         date_from=date_from,
         date_to=date_to,
+        exclude_categories=_gizli_kategoriler(user),
         limit=limit,
         offset=offset,
     )
@@ -371,7 +396,7 @@ def export_events(
     offset: int = Query(default=0, ge=0),
     limit: int | None = Query(default=None, ge=1, le=_EXPORT_MAX_ROWS),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Filtreli event listesini CSV/JSON/XLSX/PDF olarak indir.
 
@@ -398,6 +423,9 @@ def export_events(
         q=q,
         date_from=date_from,
         date_to=date_to,
+        # Export listenin AYNI filtresini kullanmali; aksi halde ekranda
+        # gizlenen olaylar CSV/PDF'ten sizardi.
+        exclude_categories=_gizli_kategoriler(user),
         limit=min(limit or _EXPORT_MAX_ROWS, _EXPORT_MAX_ROWS),
         offset=offset,
     )

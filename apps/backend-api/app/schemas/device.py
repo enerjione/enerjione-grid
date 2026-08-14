@@ -100,7 +100,9 @@ class DeviceUpdate(BaseModel):
 
 class DeviceRead(DeviceScalarBase):
     id: int
-    battery_percent: float
+    #: NULL = cihaz henuz batarya bildirmedi. Arayuz bunu "—" gosterir;
+    #: eskiden varsayilan 100.0 idi ve hic bildirmeyen cihaz DOLU gorunuyordu.
+    battery_percent: float | None
     communication_status: CommunicationStatus
     alarm_active: bool
     last_update_at: datetime | None

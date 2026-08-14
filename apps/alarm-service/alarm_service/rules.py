@@ -115,7 +115,11 @@ class AlarmRuleCache:
         self._device_models: dict[str, str] = {}
         #: Haberlesme (kalite) alarminin standart kurali — sinyal indeksinde
         #: DEGIL, ayri durur; onu telemetri degil kalite degisimi tetikler.
+        #: PASIF kayit da burada tutulur (aktiflik `is_active` ile okunur).
         self._comm_rule: AlarmRule | None = None
+        #: Standart kuralin KAYDI var mi. Aktiflikten ayri bilgi: kayit yoksa
+        #: bu bir kurulum eksigidir ve alarm varsayilanlarla uretilmelidir.
+        self._comm_kaydi_var: bool = False
         self._ready = False
 
     def refresh(self) -> bool:
@@ -165,10 +169,18 @@ class AlarmRuleCache:
         alarmable = {s["key"] for s in signals_data}
         by_signal: dict[str, list[AlarmRule]] = {}
         comm_rule: AlarmRule | None = None
+        comm_kaydi_var = False
         for item in rules_data:
-            if not item.get("is_active", True):
-                continue
             rule_kind = item.get("rule_kind") or "simple"
+            aktif = bool(item.get("is_active", True))
+            if rule_kind == "comm_loss":
+                # KAYIT VARLIGI, aktiflikten AYRI bir bilgi. Uc artik pasif
+                # comm_loss kaydini da donduruyor; "kayit yok" (kurulum
+                # eksigi -> varsayilanla alarm uret) ile "kayit pasif"
+                # (operator kapatmis -> uretme) ancak boyle ayirt edilebilir.
+                comm_kaydi_var = True
+            if not aktif and rule_kind != "comm_loss":
+                continue
             # HABERLESME KURALI SINYALE BAGLI DEGIL: cihazin KALITESINE
             # (comm_lost/offline/invalid) bakar ve `signal_key` alaninda
             # katalogda karsiligi olmayan bir nisan deger tasir. Katalog
@@ -226,7 +238,10 @@ class AlarmRuleCache:
                 debounce_sec=int(item.get("debounce_sec") or 0),
                 device_code_filter=item.get("device_code_filter"),
                 device_model_filter=item.get("device_model_filter"),
-                is_active=True,
+                # comm_loss disindaki kurallar zaten filtrelenerek geldi
+                # (yukaridaki `continue`), yani buraya dusen her sey aktif.
+                # comm_loss kaydi PASIF de olabilir; gercek deger tasinmali.
+                is_active=aktif,
                 produces_fault=bool(item.get("produces_fault", True)),
                 rule_kind=rule_kind,
                 expression=expression,
@@ -274,18 +289,33 @@ class AlarmRuleCache:
             self._agg_keys = agg_keys
             self._max_agg_window_sec = max_window
             self._comm_rule = comm_rule
+            self._comm_kaydi_var = comm_kaydi_var
             self._ready = True
         return True
 
     def comm_rule(self) -> AlarmRule | None:
-        """Haberlesme (kalite) alarminin standart kurali.
+        """Haberlesme (kalite) alarminin standart kural KAYDI.
 
-        None = kural yok ya da PASIF. Uc yalnizca aktif kurallari donduruyor,
-        bu yuzden ikisi ayirt edilemez — ikisinin de anlami "haberlesme
-        alarmi uretme"dir.
+        Kayit PASIF olsa bile doner — aktiflik `rule.is_active` ile okunur.
+        None yalnizca "boyle bir kayit YOK" demektir.
+
+        Ikisi ayni sey degil ve cagiran taraf farkli ele almak zorunda:
+          pasif kayit -> operator kapatmis, alarm URETILMEZ.
+          kayit yok   -> kurulum eksigi; VARSAYILANLARLA alarm uretilir.
+        Bkz. `comm_kaydi_var`.
         """
         with self._lock:
             return self._comm_rule
+
+    def comm_kaydi_var(self) -> bool:
+        """Standart haberlesme kuralinin KAYDI var mi (aktif olmasi sart degil).
+
+        False + onbellek dolu = kurulumda kayit hic olusmamis. Bu durumda
+        haberlesme alarmini susturmak cihazin gunlerce sessiz kalmasini
+        gizler; varsayilanlarla devam edilir.
+        """
+        with self._lock:
+            return self._comm_kaydi_var
 
     def needs_samples(self, signal_key: str) -> bool:
         """Bu sinyal icin gecmis ornek tutmak GEREKLI mi?
