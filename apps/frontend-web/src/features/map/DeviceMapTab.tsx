@@ -508,6 +508,14 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
     [selectedDevice, devices]
   );
 
+  /** Secili cihazin batarya yuzdesi; null = cihaz henuz bildirmedi.
+   *  `?? null` SART: alan artik opsiyonel (eskiden varsayilan 100 idi ve
+   *  hic veri gondermemis cihaz DOLU batarya gosteriyordu). */
+  const selectedBattery = useMemo<number | null>(() => {
+    const kaynak = selectedHealth ?? selectedDevice;
+    return kaynak?.batteryPercent ?? null;
+  }, [selectedHealth, selectedDevice]);
+
   // ===== Sebeke topolojisi: hatlar + direkler + cihaz segmentleri =====
   // Cihazda aktif (reset edilmemis) VE hat arizasi ureten alarm var mi?
   // Marker + polyline kirmizi rengi icin. produces_fault === false olan
@@ -1667,14 +1675,24 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                   <li className="device-sidebar-info-row">
                     <span className="material-symbols-outlined">battery_full</span>
                     <span className="device-sidebar-info-label">{t("deviceDetail.meta.battery")}</span>
-                    <span className={`device-sidebar-battery ${batteryClass((selectedHealth ?? selectedDevice).batteryPercent)}`}>
+                    {/* null = cihaz henuz batarya bildirmedi -> "—".
+                        Varsayilan %100 hic veri gondermemis cihazi DOLU
+                        gosteriyordu. */}
+                    <span className={`device-sidebar-battery ${batteryClass(selectedBattery)}`}>
                       <span className="device-battery-icon" aria-hidden="true">
                         <span
                           className="device-battery-fill"
-                          style={{ width: `${Math.max(0, Math.min(100, (selectedHealth ?? selectedDevice).batteryPercent))}%` }}
+                          style={{
+                            width:
+                              selectedBattery === null
+                                ? "0%"
+                                : `${Math.max(0, Math.min(100, selectedBattery))}%`
+                          }}
                         />
                       </span>
-                      <span className="device-sidebar-battery-text">%{Math.round((selectedHealth ?? selectedDevice).batteryPercent)}</span>
+                      <span className="device-sidebar-battery-text">
+                        {selectedBattery === null ? "—" : `%${Math.round(selectedBattery)}`}
+                      </span>
                     </span>
                   </li>
                   <li className="device-sidebar-info-row">

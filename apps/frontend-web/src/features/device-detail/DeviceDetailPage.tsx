@@ -190,6 +190,9 @@ export function DeviceDetailPage({
   const [activeSource, setActiveSource] = useState<SignalSource>("master");
   const [busyReset, setBusyReset] = useState(false);
   const [deviceAlarms, setDeviceAlarms] = useState<AlarmEvent[]>([]);
+  // Alarm cekimi basarisizsa dolu. Bos liste ile "bilmiyoruz" ayni sey degil:
+  // sidebar bos listeyi yesil "Alarm Yok" karti olarak gosteriyordu.
+  const [deviceAlarmsError, setDeviceAlarmsError] = useState("");
   /** PDF sunucuda uretilir (katalog + telemetri + uydu karolari); bir kac
    *  saniye surebilir, o yuzden dugme beklemede kilitlenir. */
   const [raporUretiliyor, setRaporUretiliyor] = useState(false);
@@ -250,12 +253,19 @@ export function DeviceDetailPage({
   const loadAlarms = useCallback(async () => {
     if (!token || !device) return;
     try {
-      const all = await fetchAlarmEvents(token).catch(() => [] as AlarmEvent[]);
+      // `.catch(() => [])` KALDIRILDI: hata bos listeye donusuyordu ve
+      // sidebar yesil "Alarm Yok" karti gosteriyordu. Cihazda acik alarm
+      // olsa bile ekran temiz gorunuyordu — istemci veriyi hic alamamisken.
+      const all = await fetchAlarmEvents(token);
       setDeviceAlarms(all.filter((a) => a.device_id === device.id));
-    } catch {
-      // sessiz
+      setDeviceAlarmsError("");
+    } catch (err) {
+      // Liste BOSALTILMAZ (varsa eski veri kalsin), hata gorunur olur.
+      setDeviceAlarmsError(
+        err instanceof Error ? err.message : t("common.errorOccurred")
+      );
     }
-  }, [token, device]);
+  }, [token, device, t]);
 
   useEffect(() => {
     void loadAlarms();
@@ -549,7 +559,11 @@ export function DeviceDetailPage({
       // uydularinki kendi batarya gerilimlerinden turetilir. Kit setinde
       // `master` bir olcum unitesi DEGIL, o yuzden listede de yok.
       if (src === "master") {
-        if (device && Number.isFinite(device.batteryPercent)) out.master = device.batteryPercent;
+        // `batteryPercent` artik null olabilir (cihaz henuz bildirmedi).
+        // Number.isFinite null'i eler ama TS bunu daraltmadigi icin degeri
+        // yerel bir degiskene alip acikca kontrol ediyoruz.
+        const pct = device?.batteryPercent;
+        if (typeof pct === "number" && Number.isFinite(pct)) out.master = pct;
         return;
       }
       // SETTE PIL FIZIKSEL UYDUDAN OKUNUR.
@@ -623,6 +637,27 @@ export function DeviceDetailPage({
   const voltNow = numVal(`${activeSource}.actual_voltage`);
   const tempNow = numVal(`${activeSource}.device_temperature`) ?? numVal(`${activeSource}.conductor_temperature`);
 
+  /** KPI seridi icin olcum guvenilirligi — `signalTrust` ile, `rows`
+   *  yolundakiyle AYNI kural.
+   *
+   *  `numVal` yalnizca `value` okuyor; ne `quality` ne `gwOnline`. Bu yuzden
+   *  KPI seridi gateway kopukken bile degeri TAZE OLCUM gibi gosteriyordu —
+   *  ustelik ayni ekranin alt bolumu (StatusTable) ayni sinyal icin
+   *  "Güvenilmez" diyordu. Tek ekranda iki farkli cevap, en kotu hali. */
+  const untrustedOf = (key: string): boolean => {
+    const row = valueByKey.get(key);
+    if (row === undefined) return false; // deger yok -> "veri yok" zaten yazilir
+    return signalTrust(row.value ?? null, row.quality, gwOnline) === "untrusted";
+  };
+  const curUntrusted = untrustedOf(`${activeSource}.actual_current`);
+  const voltUntrusted = untrustedOf(`${activeSource}.actual_voltage`);
+  const tempUntrusted =
+    numVal(`${activeSource}.device_temperature`) != null
+      ? untrustedOf(`${activeSource}.device_temperature`)
+      : untrustedOf(`${activeSource}.conductor_temperature`);
+  // Sayaclar cihazin kendi kayitlari: gateway kopukken bayat kabul edilir.
+  const countersUntrusted = !gwOnline;
+
   const tabs: { key: TabKey; icon: string; show: boolean }[] = [
     { key: "overview", icon: "dashboard", show: true },
     { key: "all", icon: "table_rows", show: true },
@@ -661,6 +696,7 @@ export function DeviceDetailPage({
         partNo={sidebarPartNo}
         firmware={sidebarFirmware}
         hasAlarm={hasActiveAlarm}
+        alarmError={deviceAlarmsError}
         channelSerials={channelSerials}
         channelBattery={channelBattery}
         channelSatelliteNo={channelSatelliteNo}
@@ -767,6 +803,10 @@ export function DeviceDetailPage({
             curNow={curNow}
             voltNow={voltNow}
             tempNow={tempNow}
+            curUntrusted={curUntrusted}
+            voltUntrusted={voltUntrusted}
+            tempUntrusted={tempUntrusted}
+            countersUntrusted={countersUntrusted}
             curUnit={unitOf(`${activeSource}.actual_current`)}
             voltUnit={unitOf(`${activeSource}.actual_voltage`)}
             tempUnit={unitOf(`${activeSource}.device_temperature`) ?? unitOf(`${activeSource}.conductor_temperature`)}
@@ -859,6 +899,10 @@ function OverviewTab({
   curNow,
   voltNow,
   tempNow,
+  curUntrusted,
+  voltUntrusted,
+  tempUntrusted,
+  countersUntrusted,
   curUnit,
   voltUnit,
   tempUnit,
@@ -877,6 +921,16 @@ function OverviewTab({
   curNow?: number;
   voltNow?: number;
   tempNow?: number;
+  /** Olcum guvenilmez mi (gateway kopuk ya da engelleyici kalite).
+   *  KPI seridi bunu OKUMUYORDU: ayni ekranin alt bolumu sinyali
+   *  "Güvenilmez" gosterirken serit ayni degeri taze olcum gibi
+   *  sunuyordu. Bkz. shared/signalQuality.ts. */
+  curUntrusted?: boolean;
+  voltUntrusted?: boolean;
+  tempUntrusted?: boolean;
+  /** Ariza sayaclari cihazin kendi kayitlari; gateway kopukken bunlar da
+   *  bayat/guvenilmezdir. */
+  countersUntrusted?: boolean;
   curUnit?: string;
   voltUnit?: string;
   tempUnit?: string;
@@ -895,6 +949,8 @@ function OverviewTab({
   const voltVal = voltNow ?? lastVolt ?? null;
   const tempVal = tempNow ?? lastTemp ?? null;
   const stale = (live: number | undefined, fb: number | null) => live == null && fb != null;
+  const kpiStaleTitle = t("deviceDetail.kpi.staleHint");
+  const kpiUntrustedTitle = t("deviceDetail.kpi.untrustedHint");
   // Ucluk elle yazilmisti ve `sat03` "Satellite 02" gorunuyordu: Pole Master
   // Kit setinin UCUNCU unitesi hep yanlis adla anilirdi. Tek kaynak:
   // `sourceLabel` (signalCatalogConstants).
@@ -998,23 +1054,23 @@ function OverviewTab({
         </div>
       ) : (
       <div className="device-overview-kpis">
-        <KpiCard emptyText={t("deviceDetail.status.noData")} icon="bolt" tone="amber" label={t("deviceDetail.kpi.current")} value={fmt(curVal, "analog", curUnit)} stale={stale(curNow, lastCur)}>
+        <KpiCard emptyText={t("deviceDetail.status.noData")} staleTitle={kpiStaleTitle} untrustedTitle={kpiUntrustedTitle} icon="bolt" tone="amber" label={t("deviceDetail.kpi.current")} value={fmt(curVal, "analog", curUnit)} stale={stale(curNow, lastCur)} untrusted={curUntrusted}>
           {token ? (
             <Sparkline token={token} deviceCode={device.code} signalKey={`${activeSource}.actual_current`} color="#f59e0b" onLastValue={setLastCur} />
           ) : null}
         </KpiCard>
-        <KpiCard emptyText={t("deviceDetail.status.noData")} icon="electric_bolt" tone="blue" label={t("deviceDetail.kpi.voltage")} value={fmt(voltVal, "analog", voltUnit)} stale={stale(voltNow, lastVolt)}>
+        <KpiCard emptyText={t("deviceDetail.status.noData")} staleTitle={kpiStaleTitle} untrustedTitle={kpiUntrustedTitle} icon="electric_bolt" tone="blue" label={t("deviceDetail.kpi.voltage")} value={fmt(voltVal, "analog", voltUnit)} stale={stale(voltNow, lastVolt)} untrusted={voltUntrusted}>
           {token ? (
             <Sparkline token={token} deviceCode={device.code} signalKey={`${activeSource}.actual_voltage`} color="#3b82f6" onLastValue={setLastVolt} />
           ) : null}
         </KpiCard>
-        <KpiCard emptyText={t("deviceDetail.status.noData")} icon="device_thermostat" tone="rose" label={t("deviceDetail.kpi.temperature")} value={fmt(tempVal, "analog", tempUnit)} stale={stale(tempNow, lastTemp)}>
+        <KpiCard emptyText={t("deviceDetail.status.noData")} staleTitle={kpiStaleTitle} untrustedTitle={kpiUntrustedTitle} icon="device_thermostat" tone="rose" label={t("deviceDetail.kpi.temperature")} value={fmt(tempVal, "analog", tempUnit)} stale={stale(tempNow, lastTemp)} untrusted={tempUntrusted}>
           {token ? (
             <Sparkline token={token} deviceCode={device.code} signalKey={`${activeSource}.device_temperature`} color="#f43f5e" onLastValue={setLastTemp} />
           ) : null}
         </KpiCard>
-        <KpiCard emptyText={t("deviceDetail.status.noData")} icon="report" tone="red" label={t("deviceDetail.permanentFaults")} value={fmt(permCount ?? null, "counter")} />
-        <KpiCard emptyText={t("deviceDetail.status.noData")} icon="flash_on" tone="orange" label={t("deviceDetail.momentaryFaults")} value={fmt(momCount ?? null, "counter")} />
+        <KpiCard emptyText={t("deviceDetail.status.noData")} staleTitle={kpiStaleTitle} untrustedTitle={kpiUntrustedTitle} icon="report" tone="red" label={t("deviceDetail.permanentFaults")} value={fmt(permCount ?? null, "counter")} untrusted={countersUntrusted} />
+        <KpiCard emptyText={t("deviceDetail.status.noData")} staleTitle={kpiStaleTitle} untrustedTitle={kpiUntrustedTitle} icon="flash_on" tone="orange" label={t("deviceDetail.momentaryFaults")} value={fmt(momCount ?? null, "counter")} untrusted={countersUntrusted} />
       </div>
       )}
 
@@ -1062,7 +1118,10 @@ function KpiCard({
   label,
   value,
   stale,
+  untrusted,
   emptyText,
+  staleTitle,
+  untrustedTitle,
   children,
 }: {
   icon: string;
@@ -1070,20 +1129,38 @@ function KpiCard({
   label: string;
   value: string;
   stale?: boolean;
+  /** Olcum GUVENILMEZ: gateway kopuk ya da kalite engelleyici
+   *  (comm_lost/invalid/forced...). Deger GIZLENMEZ — urun karari son degeri
+   *  gostermek — ama "taze olcum" gibi sunulamaz. Bu isaret olmadan KPI
+   *  seridi, ayni ekranin alt bolumu "Güvenilmez" derken ayni sinyali
+   *  duz bir sayi olarak gosteriyordu: tek ekranda iki farkli cevap. */
+  untrusted?: boolean;
   /** Deger yokken yazilacak metin ("Veri yok"). Tek basina duran koca bir
    *  tire, kartin bozuk mu yoksa bos mu oldugunu soylemiyordu. */
   emptyText?: string;
+  staleTitle?: string;
+  untrustedTitle?: string;
   children?: ReactNode;
 }) {
   const bos = value === "—";
+  // Guvenilmezlik bayatliktan AGIR: ikisi birdeyse guvenilmez gosterilir.
+  const isaret = untrusted ? " is-untrusted" : stale ? " is-stale" : "";
   return (
     <div className={`device-kpi tone-${tone}${bos ? " is-empty" : ""}`}>
       <div className="device-kpi-head">
         <span className="device-kpi-label">{label}</span>
         <span className="device-kpi-icon material-symbols-outlined">{icon}</span>
       </div>
-      <div className={`device-kpi-value${stale ? " is-stale" : ""}`} title={stale ? "son bilinen deger" : undefined}>
+      <div
+        className={`device-kpi-value${isaret}`}
+        title={untrusted ? untrustedTitle : stale ? staleTitle : undefined}
+      >
         {bos && emptyText ? <span className="device-kpi-nodata">{emptyText}</span> : value}
+        {untrusted && !bos ? (
+          <span className="device-kpi-untrusted-mark" aria-hidden="true">
+            ?
+          </span>
+        ) : null}
       </div>
       {children ? <div className="device-kpi-spark">{children}</div> : null}
     </div>

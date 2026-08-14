@@ -53,6 +53,8 @@ type Props = {
   firmware?: string;
   /** Gercek alarm listesinden: aktif (giderilmemis) alarm var mi. */
   hasAlarm?: boolean;
+  /** Alarm listesi cekilemediyse dolu — kart "bilinmiyor"a gecer. */
+  alarmError?: string;
   /** Kanal seri no'lari (master/sat01/sat02 serial_number). */
   channelSerials?: Partial<Record<SignalSource, string>>;
   /** Kanal pil yuzdeleri (0..100) — her cihazin ayri pil seviyesi. */
@@ -97,7 +99,10 @@ function channelsFor(device: DeviceRow): { key: SignalSource; label: string; ton
 // olculeri "Pole Master" sekmesinde duruyor.
 
 // Pil % -> renk sinifi (ana sayfa ile ayni esikler).
-function batteryClass(pct: number): string {
+function batteryClass(pct: number | null): string {
+  // null = bilinmiyor. Ne "ok" (yesil) ne "critical" — notr kalir; yesil
+  // gostermek, veri yokken saglikli oldugunu iddia etmek olurdu.
+  if (pct === null) return "device-battery--unknown";
   if (pct <= 20) return "device-battery--critical";
   if (pct <= 50) return "device-battery--low";
   return "device-battery--ok";
@@ -113,6 +118,7 @@ export function DeviceSidebar({
   partNo,
   firmware,
   hasAlarm = false,
+  alarmError = "",
   channelSerials,
   channelBattery,
   channelSatelliteNo,
@@ -152,22 +158,38 @@ export function DeviceSidebar({
         </div>
         <div className="device-sidebar-name">{device.code}</div>
 
-        {/* Genel alarm durum karti — alarm varsa yanip sonen, yoksa yesil */}
-        <div className={`device-sidebar-alarmcard ${hasAlarm ? "is-alarm" : "is-ok"}`}>
+        {/* Genel alarm durum karti — UC durum: alarm var / temiz / BILINMIYOR.
+            Ucuncusu olmadan, alarm listesi cekilemedigi anda kart yesile
+            donuyordu: cihazda acik alarm varken ekran "Alarm Yok" diyordu. */}
+        <div
+          className={`device-sidebar-alarmcard ${
+            alarmError ? "is-unknown" : hasAlarm ? "is-alarm" : "is-ok"
+          }`}
+        >
           <span className="device-sidebar-alarmcard-icon">
             <span className="material-symbols-outlined">
-              {hasAlarm ? "notification_important" : "check_circle"}
+              {alarmError ? "help" : hasAlarm ? "notification_important" : "check_circle"}
             </span>
           </span>
           <div className="device-sidebar-alarmcard-body">
             <span className="device-sidebar-alarmcard-title">
-              {hasAlarm ? t("deviceDetail.sidebar.alarmActive") : t("deviceDetail.sidebar.alarmClear")}
+              {alarmError
+                ? t("deviceDetail.sidebar.alarmUnknown")
+                : hasAlarm
+                  ? t("deviceDetail.sidebar.alarmActive")
+                  : t("deviceDetail.sidebar.alarmClear")}
             </span>
-            <span className="device-sidebar-alarmcard-sub">
-              {hasAlarm ? t("deviceDetail.sidebar.alarmActiveSub") : t("deviceDetail.sidebar.alarmClearSub")}
+            <span className="device-sidebar-alarmcard-sub" title={alarmError || undefined}>
+              {alarmError
+                ? t("deviceDetail.sidebar.alarmUnknownSub")
+                : hasAlarm
+                  ? t("deviceDetail.sidebar.alarmActiveSub")
+                  : t("deviceDetail.sidebar.alarmClearSub")}
             </span>
           </div>
-          {hasAlarm ? <span className="device-sidebar-alarmcard-pulse" aria-hidden="true" /> : null}
+          {hasAlarm && !alarmError ? (
+            <span className="device-sidebar-alarmcard-pulse" aria-hidden="true" />
+          ) : null}
         </div>
       </section>
 
@@ -220,14 +242,24 @@ export function DeviceSidebar({
           <li className="device-sidebar-info-row">
             <span className="material-symbols-outlined">battery_full</span>
             <span className="device-sidebar-info-label">{t("deviceDetail.meta.battery")}</span>
+            {/* null = cihaz henuz batarya bildirmedi. Bos bir cubuk + "—"
+                gosterilir; eskiden varsayilan %100 yuzunden hic veri
+                gondermemis cihaz DOLU batarya gosteriyordu. */}
             <span className={`device-sidebar-battery ${batteryClass(health.batteryPercent)}`}>
               <span className="device-battery-icon" aria-hidden="true">
                 <span
                   className="device-battery-fill"
-                  style={{ width: `${Math.max(0, Math.min(100, health.batteryPercent))}%` }}
+                  style={{
+                    width:
+                      health.batteryPercent === null
+                        ? "0%"
+                        : `${Math.max(0, Math.min(100, health.batteryPercent))}%`
+                  }}
                 />
               </span>
-              <span className="device-sidebar-battery-text">%{Math.round(health.batteryPercent)}</span>
+              <span className="device-sidebar-battery-text">
+                {health.batteryPercent === null ? "—" : `%${Math.round(health.batteryPercent)}`}
+              </span>
             </span>
           </li>
 
