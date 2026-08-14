@@ -469,8 +469,10 @@
     "filterAllAssignments": "All Assignments",
     "assigned": "Assigned",
     "unassigned": "Unassigned",
-    "ackAll": "Acknowledge All",
-    "ackAllTooltip": "Acknowledge all active alarms",
+    "ackResolved": "Acknowledge Resolved",
+    "ackResolvedTooltip": "Acknowledges and archives alarms that returned to normal. Leaves ongoing alarms untouched.",
+    "ackActive": "Acknowledge Active",
+    "ackActiveTooltip": "Marks still-active alarms as seen. The records stay in the list.",
     "level": {
       "info": "Info",
       "warning": "Warning",
@@ -504,6 +506,7 @@
       "colEvent": "Status",
       "colDetail": "Event",
       "colWho": "Who",
+      "systemActor": "System",
       "empty": "No alarm history records."
     },
     "eventType": {
@@ -599,6 +602,7 @@
     "confirmDelete": "Delete this alarm permanently?",
     "confirmAckAllPending": "{{active}} active alarms will be acknowledged and {{pending}} return-to-normal records will be removed. Continue?",
     "confirmAckAllActive": "{{active}} active alarms will be acknowledged. Continue?",
+    "confirmAckAllResolved": "{{count}} alarms that returned to normal will be acknowledged and archived. Ongoing alarms are untouched. Continue?",
     "errors": {
       "loadComments": "Failed to load comments.",
       "assignFailed": "Failed to assign alarm.",
@@ -3977,6 +3981,8 @@
     "alarmReset": "Alarm reset.",
     "alarmDeleted": "Alarm deleted.",
     "allAlarmsAcked": "All alarms acknowledged.",
+    "resolvedAlarmsAcked": "Alarms that returned to normal were acknowledged and archived.",
+    "activeAlarmsAcked": "Active alarms acknowledged.",
     "allAlarmsReset": "All alarms reset.",
     "areaCreated": "Responsibility area created.",
     "areaUpdated": "Responsibility area updated.",

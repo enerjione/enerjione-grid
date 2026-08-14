@@ -1363,8 +1363,17 @@ export async function deleteAlarm(token: string, alarmId: number): Promise<void>
   if (!response.ok) throw await buildApiError(response, "Alarm silinemedi.");
 }
 
-export async function acknowledgeAllAlarms(token: string): Promise<AlarmEvent[]> {
-  const response = await apiFetch(`${API_BASE_URL}/alarms/events/ack-all`, {
+/** Toplu onay.
+ *
+ *  `only` ALT KUME SECER: "resolved" yalnizca normale donmus kayitlari
+ *  onaylayip arsivler, "active" yalnizca suren alarmlari isaretler.
+ *  Verilmezse ikisi birden (eski davranis). */
+export async function acknowledgeAllAlarms(
+  token: string,
+  only?: "active" | "resolved"
+): Promise<AlarmEvent[]> {
+  const q = only ? `?only=${only}` : "";
+  const response = await apiFetch(`${API_BASE_URL}/alarms/events/ack-all${q}`, {
     method: "POST",
     headers: authHeaders(token)
   });

@@ -19503,8 +19503,54 @@ th.event-col-category {
 .alarm-event-badge.ev-alarm_triggered, .alarm-event-badge.ev-alarm_created { background: #fee2e2; color: #b91c1c; }
 .alarm-event-badge.ev-alarm_acknowledged, .alarm-event-badge.ev-alarm_acknowledge_all { background: #dbeafe; color: #1d4ed8; }
 .alarm-event-badge.ev-alarm_reset, .alarm-event-badge.ev-alarm_auto_cleared, .alarm-event-badge.ev-alarm_reset_all { background: #dcfce7; color: #15803d; }
+/* Gecmis satiri: olay tipine gore sol kenar cizgisi. Uzun listede "burada ne
+   oldu" sorusu rozeti okumadan, satirin kenarindan cevaplanir. */
+.alarm-history-row td:first-child { box-shadow: inset 3px 0 0 #e2e8f0; }
+.alarm-history-row.ev-row-alarm_created td:first-child,
+.alarm-history-row.ev-row-alarm_triggered td:first-child { box-shadow: inset 3px 0 0 #ef4444; }
+.alarm-history-row.ev-row-alarm_acknowledged td:first-child,
+.alarm-history-row.ev-row-alarm_acknowledge_all td:first-child { box-shadow: inset 3px 0 0 #3b82f6; }
+.alarm-history-row.ev-row-alarm_reset td:first-child,
+.alarm-history-row.ev-row-alarm_auto_cleared td:first-child,
+.alarm-history-row.ev-row-alarm_reset_all td:first-child { box-shadow: inset 3px 0 0 #22c55e; }
+
+/* Aktoru olmayan satir SISTEM uretimi (kural motoru / otomatik temizleme).
+   Once "—" yaziyordu; bu "bilinmiyor" gibi okunuyordu. */
+.alarm-history-actor { font-weight: 600; color: #334155; }
+.alarm-history-system {
+  display: inline-block; padding: 2px 8px; border-radius: 999px;
+  background: #f1f5f9; color: #94a3b8; font-size: 11px; font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 /* Sure hucresi */
 .alarm-cell-duration { color: #475569; font-size: 13.5px; font-weight: 600; white-space: nowrap; }
+
+/* SUREN alarm ile BITMIS alarmin suresi ayni rakam gibi duruyordu; birinin
+   arttigi digerinin durdugu okunmuyordu. Canli olanda nabiz atan nokta,
+   bitmiste soluk ve sabit deger. */
+.alarm-cell-duration.is-live { color: #b45309; }
+.alarm-cell-duration.is-final { color: #64748b; font-weight: 550; }
+.alarm-duration-dot {
+  display: inline-block; width: 6px; height: 6px; margin-right: 6px;
+  border-radius: 50%; background: #f97316; vertical-align: middle;
+  animation: alarm-duration-pulse 1.6s ease-in-out infinite;
+}
+@keyframes alarm-duration-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .alarm-duration-dot { animation: none; }
+}
+
+/* Toplu onay dugmelerindeki adet rozeti: hangi dugmenin kac kaydi
+   etkileyecegi tiklamadan once okunur. */
+.action-btn-count {
+  display: inline-block; margin-left: 7px; padding: 1px 7px;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.22);
+  font-size: 11px; font-weight: 700; line-height: 1.5;
+}
 /* Incele butonu */
 .alarm-row-inspect {
   border: none; background: transparent; color: #ea580c; font-size: 13px;
