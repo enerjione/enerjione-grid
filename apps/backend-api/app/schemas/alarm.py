@@ -5,7 +5,18 @@ from pydantic import BaseModel
 
 class AlarmEventRead(BaseModel):
     id: int
-    device_id: int
+    #: Cihaz SILINMISSE NULL — satir gecmis olarak durur (bkz. models/alarm.py).
+    #: Zorunlu `int` kaldigi surece boyle bir satiri serilestirmek pydantic
+    #: dogrulama hatasi verir ve alarm ucu 500 doner; alan bu yuzden optional.
+    #:
+    #: CANLI UCLAR bu satiri normalde HIC dondurmez: cihaz silinirken kayit
+    #: `superseded_at` ile arsivlenir, `list_alarm_events` de arsivlileri
+    #: suzer. Yani NULL yalnizca arsiv kaydina dogrudan erisildiginde gorunur.
+    device_id: int | None = None
+    #: Silme ANINDAKI cihaz kodu/adi. `device_id` NULL oldugunda kaydin
+    #: hangi cihaza ait oldugu SADECE buradan okunabilir.
+    device_code: str | None = None
+    device_name: str | None = None
     level: str
     title: str
     description: str

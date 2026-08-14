@@ -1,7 +1,9 @@
+from datetime import datetime, timezone
+
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
-from app.models.alarm import AlarmComment, AlarmEvent
+from app.models.alarm import AlarmEvent
 from app.models.alarm_rule import AlarmRule
 from app.models.device import Device
 from app.models.device_command import DeviceCommand
@@ -124,17 +126,40 @@ class DeviceRepository:
             changed += 1
         return changed
 
-    def _delete_telemetry_and_alarms_for_device(self, device_id: int, device_code: str) -> dict[str, int]:
-        event_ids = list(
-            self.db.scalars(select(AlarmEvent.id).where(AlarmEvent.device_id == device_id)).all()
-        )
-        comments = 0
-        if event_ids:
-            result = self.db.execute(
-                delete(AlarmComment).where(AlarmComment.alarm_event_id.in_(event_ids))
+    def _delete_telemetry_and_alarms_for_device(
+        self, device_id: int, device_code: str, device_name: str | None = None
+    ) -> dict[str, int]:
+        # ALARM GECMISI SILINMEZ — cihazdan KOPARILIR.
+        #
+        # Eskiden burada `DELETE FROM alarm_events` vardi. Sahada olculdu
+        # (2026-08-12): demo cihazlari 17 kez silinip yeniden olusturulmus,
+        # geriye 2 alarm satiri kalmisti; Ariza Analizi'ndeki takvim ve
+        # cihaz x zaman matrisi bos cikiyor, operator bunu "alarm olmamis"
+        # diye okuyordu. Ayni kurulumda `telemetry_history` silinen cihazin
+        # satirlarini KORUYORDU — yani operasyonel kayit, donanim kaydiyla
+        # birlikte yok olan tek seydi.
+        #
+        # Satir artik duruyor: `device_id` NULL'a duser, ad/kod silme
+        # anindaki haliyle dondurulur (bkz. models/alarm.py).
+        alarm_result = self.db.execute(
+            update(AlarmEvent)
+            .where(AlarmEvent.device_id == device_id)
+            .values(
+                device_id=None,
+                device_code=device_code,
+                device_name=device_name,
+                # ARSIVE ALINIR: cihaz artik yok, uzerinde islem yapilamaz.
+                # Damgalanmazsa ACIK bir alarm canli panelde ve haritada
+                # sonsuza kadar asili kalirdi — sahibi olmayan, onaylanamayan,
+                # normale donemeyen bir kayit. `superseded_at` canli listelerin
+                # suzgeci; analiz katmani bu alana bakmaz, yani gecmis tam.
+                superseded_at=datetime.now(timezone.utc),
             )
-            comments = int(result.rowcount or 0)
-        alarm_result = self.db.execute(delete(AlarmEvent).where(AlarmEvent.device_id == device_id))
+        )
+        # AlarmComment SILINMEZ: operator yorumu alarmin kendisi kadar
+        # gecmistir ("ekip yonlendirildi", "saha teyit etti"). Alarm satiri
+        # kaldigi surece yorumun FK'si de saglam.
+        comments = 0
         # `telemetry` SENKRON silinir: 30 dakikalik kayan pencere oldugu icin
         # cihaz basina birkac yuz satir (bkz. telemetry_retention).
         telemetry_result = self.db.execute(delete(Telemetry).where(Telemetry.device_id == device_id))
@@ -153,7 +178,13 @@ class DeviceRepository:
         )
         return {
             "alarm_comments": comments,
-            "alarm_events": int(alarm_result.rowcount or 0),
+            # ADI "silinen" DEGIL: bu sayi artik KORUNAN alarm satirlarini
+            # anlatiyor (cihazdan koparilip arsive alinanlar). Eski ad
+            # (`alarm_events`) silme ozetinde duruyordu ve 0 yazmasi "alarm
+            # yoktu" gibi okunurdu; sayinin anlami degistigi icin adi da
+            # degisti. Tuketicisi yalnizca olay kaydinin `cleanup` sozlugu
+            # (bkz. api/devices.py) — arayuz bu alani okumuyor.
+            "alarm_events_preserved": int(alarm_result.rowcount or 0),
             "telemetry": int(telemetry_result.rowcount or 0),
             # `telemetry_history` arka planda temizlenir; sayisi burada
             # BILINMEZ. 0 yazmak "arsiv bostu" demek olurdu — yanlis.
@@ -163,7 +194,7 @@ class DeviceRepository:
         }
 
     def delete(self, device: Device) -> dict[str, int]:
-        counts = self._delete_telemetry_and_alarms_for_device(device.id, device.code)
+        counts = self._delete_telemetry_and_alarms_for_device(device.id, device.code, device.name)
         self.db.delete(device)
         self.db.flush()
         return counts
@@ -177,7 +208,9 @@ class DeviceRepository:
         )
         total: dict[str, int] = {}
         for device in devices:
-            counts = self._delete_telemetry_and_alarms_for_device(device.id, device.code)
+            counts = self._delete_telemetry_and_alarms_for_device(
+                device.id, device.code, device.name
+            )
             for key, value in counts.items():
                 if value is None:
                     # `telemetry_history` BILEREK None doner ("kac satir
