@@ -27,8 +27,15 @@ from .config import SETTINGS
 from .credentials import CredentialPoller
 from .health import start_health_server
 from .reporter import EventReporter
+from . import watchdog
 
 log = logging.getLogger("ftp-server")
+
+#: ioloop'un atissiz kalabilecegi en uzun sure. Kalp 5 sn'de bir attigi icin
+#: bu 12 kacirilmis atis demek — gecici bir yavaslama restart uretmez.
+BEKCI_ESIK_SN = 60.0
+#: Kalp atis araligi.
+BEKCI_ATIS_SN = 5.0
 
 
 def _make_handler(reporter: EventReporter) -> type[FTPHandler]:
@@ -363,7 +370,18 @@ def main() -> None:
             # fallback olarak durur.
             "ftp_user": next(iter(_handler.authorizer.user_table), None),
         },
+        is_healthy=watchdog.saglikli,
     )
+
+    # Kalp atisi ioloop'un KENDISINE zamanlanir: dongu donuyorsa atis gelir,
+    # `serve_forever` icinde bir sey kilitlenirse zamanlanmis cagri hic
+    # calismaz ve bekci sureci sonlandirir. ioloop soketleri zaman asimiyla
+    # yokladigi icin hicbir cihaz baglanmasa da doner — yani bu olcum
+    # trafikten bagimsizdir (bkz. watchdog.py).
+    from pyftpdlib.ioloop import IOLoop
+
+    IOLoop.instance().call_every(BEKCI_ATIS_SN, watchdog.kalp_at)
+    watchdog.baslat(BEKCI_ESIK_SN, servis="ftp-server")
 
     def _shutdown(signum, _frame):
         log.info("Sinyal %s — kapatiliyor.", signum)

@@ -35,6 +35,25 @@ class _SahteTuketici:
         return self.canli
 
 
+def _kalbi_kisa_sure_kostur(tuketici, sure_sn: float = 0.1) -> None:
+    """Kalp dongusunu kisa sure kostur, sonra iptal et.
+
+    `pytest-asyncio` KULLANILMIYOR: bu pakette o eklenti yok ve CI yalnizca
+    `requirements.txt` + `pytest` kuruyor. `@pytest.mark.asyncio` ile
+    yazilsaydi testler CI'da SESSIZCE kosmazdi — bu depoda ayni tuzak daha
+    once yasandi (bkz. ci.yml, iec104 uctan uca TCP testi).
+    """
+
+    async def _kos() -> None:
+        gorev = asyncio.create_task(_kalp_dongusu(tuketici, aralik_sn=0.01))
+        try:
+            await asyncio.sleep(sure_sn)
+        finally:
+            gorev.cancel()
+
+    asyncio.run(_kos())
+
+
 @pytest.fixture(autouse=True)
 def _bekciyi_sifirla():
     """Modul duzeyi durum testler arasinda sizmasin."""
@@ -79,8 +98,7 @@ def test_esik_kurulmadan_saglikli_sayilir():
     assert watchdog.saglikli() is True
 
 
-@pytest.mark.asyncio
-async def test_sessiz_trafikte_saglikli_kalir():
+def test_sessiz_trafikte_saglikli_kalir():
     """HIC MESAJ GELMESE BILE atis surer.
 
     Atis "mesaj isledim"e degil "dongum donuyor"a bagli; bu test o kurali
@@ -88,18 +106,13 @@ async def test_sessiz_trafikte_saglikli_kalir():
     """
     tuketici = _SahteTuketici(canli=True)
     watchdog._son_atis -= 100.0
-    gorev = asyncio.create_task(_kalp_dongusu(tuketici, aralik_sn=0.01))
-    try:
-        await asyncio.sleep(0.1)
-    finally:
-        gorev.cancel()
+    _kalbi_kisa_sure_kostur(tuketici)
 
     # Tek bir mesaj islenmedi ama atis yenilendi.
     assert watchdog.gecen_sn() < 1.0
 
 
-@pytest.mark.asyncio
-async def test_tuketici_ipligi_olunce_atis_DURUR():
+def test_tuketici_ipligi_olunce_atis_DURUR():
     """Olay dongusu donse bile tuketici olduyse atis kesilmeli.
 
     Bu ariza disaridan gorunmez: asyncio dongusu neseyle doner, ama SCADA'ya
@@ -107,11 +120,7 @@ async def test_tuketici_ipligi_olunce_atis_DURUR():
     """
     tuketici = _SahteTuketici(canli=False)
     watchdog._son_atis -= 100.0
-    gorev = asyncio.create_task(_kalp_dongusu(tuketici, aralik_sn=0.01))
-    try:
-        await asyncio.sleep(0.1)
-    finally:
-        gorev.cancel()
+    _kalbi_kisa_sure_kostur(tuketici)
 
     assert watchdog.gecen_sn() >= 100.0
 
