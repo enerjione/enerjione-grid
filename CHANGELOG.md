@@ -14,6 +14,46 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.91.0] — 2026-08-14
+
+### Düzeltildi
+
+- **Birden fazla API süreciyle çalışan kurulumda canlı değerler ve harita
+  kararsızdı.** WebSocket el sıkışması iki ayrı bağlantıdan geçiyor: önce
+  bilet alınıyor, sonra soket açılıyor. Bilet süreç içinde tutulduğu için
+  ikinci istek başka bir sürece düştüğünde bilet bulunamıyor ve bağlantı
+  reddediliyordu. İstemci yeniden deniyor, her denemede aynı kura yeniden
+  atılıyordu — dört süreçte deneme başına yaklaşık dörtte bir tutma
+  şansı. Bilet artık süreçlerin paylaştığı depoda; tek kullanım şartı
+  (aynı bileti ikinci kez kullanamama) korunuyor.
+
+  Varsayılan kurulum tek süreç olduğu için bu, sahadaki mevcut cihazları
+  etkilemiyordu; ölçeklendirme için süreç sayısı artırıldığında ortaya
+  çıkıyordu.
+
+### Değişti
+
+- **Analiz > Trendler'deki seri ekleme/düzenleme penceresi yeniden
+  tasarlandı.** Pencere, Cihaz Detayı penceresinin stillerini ödünç
+  alıyordu ama yapısı ona uymadığı için etiketler stilsiz kalıyor, renk
+  düğmeleri ince çizgi olarak çiziliyor ve cihaz seçimi ham liste kutusu
+  olarak görünüyordu. Artık kendi tasarımı var: renk noktası ve canlı özet
+  taşıyan başlık, temizlenebilir cihaz araması, seçiliyi işaretleyen
+  kaydırmalı cihaz listesi, kaynak için segment kontrolü, tıklanabilir
+  renk kutucukları ve serinin grafikte nasıl görüneceğini gösteren
+  önizleme şeridi. Esc ile kapanma, arama kutusuna otomatik odaklanma ve
+  düzenlemede seçili cihaza kaydırma eklendi. Cihaz Detayı penceresi
+  değişmedi.
+
+### Kaldırıldı
+
+- **Paralel oturum altyapısı** (`tools/` altındaki oturum/teslim/sürüm
+  script'leri ve bunlara bağlı hook'lar) kaldırıldı; çözdüğünden fazla
+  sürtünme üretiyordu. Sürüm etiketi bundan sonra elle atılır. Bu değişiklik
+  yalnızca geliştirme akışını ilgilendirir, saha davranışını etkilemez.
+
+---
+
 ## [2.90.0] — 2026-08-14
 
 Kapsamlı bir production denetiminin bulguları. Buradaki maddelerin ortak
