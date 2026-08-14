@@ -14,6 +14,30 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.87.0] — 2026-08-14
+
+### Eklendi
+
+- **Silinen gateway'in konteyneri artık cihazda öksüz kalmıyor.** Gateway
+  kaydı silindiğinde arayüzden kayboluyor ama mini PC'de çalışmaya devam
+  ediyordu: yer kaplayan, log üreten, kimsenin yönetmediği bir süreç. Silme
+  akışı artık host tarafındaki ajanla birlikte çalışıyor ve konteyneri de
+  kaldırıyor; işlem olay kaydına yazılıyor.
+
+### Düzeltildi
+
+- **Sıfırdan kurulan cihazlarda bazı tablolar hiç oluşmuyordu.** Şema iki ayrı
+  yoldan kuruluyor: temiz kurulumda modellerden doğrudan, mevcut kurulumda
+  migration'larla. Model listesi iki ayrı dosyada elle tutuluyordu ve eksikti —
+  listede olmayan tablo temiz kurulumda oluşmuyor, onu kuran migration da
+  atlanıyordu. **Belirtisi sessiz ve yanıltıcıydı:** `gateway_health` tablosu
+  olmadığı için susmuş gateway'i yakalayan denetçi her turda düşüyor, o
+  gateway'in cihazları haritada **çevrimiçi takılı** kalıyordu. Liste artık tek
+  yerde tutuluyor ve bir test bunu koruyor — test, düzeltme öncesi durumda 12
+  eksik modül yakalıyor.
+
+---
+
 ## [2.86.0] — 2026-08-13
 
 ### Eklendi
