@@ -6,6 +6,7 @@ import re
 import ssl
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Event, Lock, Thread
@@ -87,6 +88,11 @@ INTERNAL_SERVICE_TOKEN = os.getenv("INTERNAL_SERVICE_TOKEN", "change-me-internal
 # _SamplesCache OOM gecmisi). Dolarsa clear isleri dusurulur ve sayilir.
 NOTIFY_QUEUE_MAX = int(os.getenv("ALARM_NOTIFY_QUEUE_MAX", "10000"))
 RULES_REFRESH_SEC = int(os.getenv("ALARM_RULES_REFRESH_SEC", "10"))
+# Raise POST'u basarisiz olursa iki deneme arasindaki bekleme. KISA tutulur:
+# kuyruk tek thread'de islendigi icin her bekleme sirayi bloklar. Asil telafi
+# yolu bekleme degil, kalici basarisizlikta durumu geri alip bir sonraki
+# telemetriye yeniden denetmektir.
+RAISE_RETRY_BEKLEME_SN = float(os.getenv("ALARM_RAISE_RETRY_SEC", "0.5"))
 
 
 # Kural (rule_id, device_code) bazli durum takibi: aktiflik + debounce buffer + ilk gorulen zaman
@@ -435,6 +441,7 @@ def _build_alarm_from_rule(
     level: str,
     value: float,
     *,
+    signal_key: str | None = None,
     threshold: float | None = None,
     operator: str | None = None,
     produces_fault: bool = True,
@@ -448,7 +455,10 @@ def _build_alarm_from_rule(
         "device_id": payload.get("device_id"),
         "device_code": payload.get("device_code"),
         "source_gateway": payload.get("source_gateway"),
-        "signal_key": payload.get("signal_key"),
+        # Kural verdiyse KURALIN anchor signal_key'i kullanilir; clear tarafi da
+        # ayni degeri gonderdigi icin backend acik alarmi bulabilir. Bkz.
+        # cagirandaki not (composite kuralda alarm asla kapanmiyordu).
+        "signal_key": signal_key or payload.get("signal_key"),
         "title": rule_name,
         "description": rule_description or rule_name,
         "level": level,
@@ -604,6 +614,10 @@ class _BackendNotifier:
         self._thread: Thread | None = None
         self._lock = Lock()
         self._dusen_clear = 0
+        # Backend'e YAZILAMAMIS raise sayisi. /health govdesinde gorunur:
+        # sifirdan buyuk olmasi "alarm uretildi ama kaydedilemedi" demektir
+        # ve operatorun bunu gormesi gerekir.
+        self._dusen_raise = 0
 
     def start(self) -> None:
         with self._lock:
@@ -624,12 +638,32 @@ class _BackendNotifier:
     def bekleyen(self) -> int:
         return self._q.qsize()
 
-    def submit_raise(self, alarm_payload: dict, *, rule_id: int) -> None:
+    def submit_raise(
+        self,
+        alarm_payload: dict,
+        *,
+        rule_id: int | None,
+        geri_al: "Callable[[], None] | None" = None,
+    ) -> None:
+        """Raise isini kuyruga alir.
+
+        `geri_al`: backend POST'u KALICI basarisiz olursa cagrilir. Cagiran
+        taraf alarmi gondermeden ONCE kendi bellek durumunu "aktif"
+        isaretledigi icin, gonderim basarisiz olunca o isaret GERI ALINMALI —
+        aksi halde alarm ne DB'ye yazilir ne de bir daha denenir.
+        """
         self.start()
         try:
-            self._q.put_nowait(("raise", alarm_payload, rule_id))
+            self._q.put_nowait(("raise", alarm_payload, rule_id, geri_al))
         except queue.Full:
             print(f"alarm-service-notify-kuyruk-dolu RAISE dustu rule_id={rule_id}")
+            # Kuyruk dolulugu da kalici basarisizliktir: durumu geri al ki
+            # bir sonraki telemetri yeniden denesin.
+            if geri_al is not None:
+                try:
+                    geri_al()
+                except Exception as exc:  # noqa: BLE001
+                    print(f"alarm-service-geri-al-hata rule_id={rule_id} error={exc}")
 
     def submit_clear(
         self,
@@ -673,18 +707,58 @@ class _BackendNotifier:
     def _isle(self, http, job) -> None:
         tur = job[0]
         if tur == "raise":
-            _, alarm_payload, rule_id = job
+            _, alarm_payload, rule_id, geri_al = job
             alarm_id: int | None = None
-            try:
-                alarm_id = _notify_backend(alarm_payload, http=http)
-            except Exception as exc:  # noqa: BLE001
-                print(f"alarm-service-backend-error rule_id={rule_id} error={exc}")
+            # BIR KEZ HIZLI YENIDEN DENEME. Kaybin en sik sebebi backend'in
+            # guncelleme sirasinda 30-60 sn yeniden baslamasi degil, tek bir
+            # anlik ConnectionError; kisa bir tekrar bunlarin cogunu kurtarir.
+            # Uzun/agresif retry BILEREK yok: kuyruk tek thread'de islendigi
+            # icin her deneme sirayi bloklar. Kalici basarisizlikta durum geri
+            # alinir ve bir sonraki telemetri dogal olarak yeniden tetikler.
+            son_hata: Exception | None = None
+            for deneme in range(2):
+                try:
+                    alarm_id = _notify_backend(alarm_payload, http=http)
+                    son_hata = None
+                    break
+                except Exception as exc:  # noqa: BLE001
+                    son_hata = exc
+                    if deneme == 0:
+                        time.sleep(RAISE_RETRY_BEKLEME_SN)
+            if son_hata is not None:
+                print(
+                    f"alarm-service-backend-error rule_id={rule_id} error={son_hata}"
+                )
             if alarm_id is not None:
                 alarm_payload["alarm_id"] = alarm_id
-            try:
-                _publish_alarm_to_rabbitmq(alarm_payload)
-            except Exception as exc:  # noqa: BLE001
-                print(f"alarm-service-publish-error rule_id={rule_id} error={exc}")
+                try:
+                    _publish_alarm_to_rabbitmq(alarm_payload)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"alarm-service-publish-error rule_id={rule_id} error={exc}")
+            else:
+                # ALARM DB'YE YAZILAMADI.
+                #
+                # Eskiden burada yalnizca bir print vardi ve is biterdi: cagiran
+                # taraf durumu ZATEN "aktif" isaretledigi icin sonraki telemetri
+                # de tetiklemiyordu. Sonuc, alarmin SESSIZCE ve KALICI kaybi —
+                # alarm satiri hic olusmuyor, marker yesil kaliyor, produces_fault
+                # alarmi olmadigi icin hat arizasi acilmiyor, bildirim gitmiyor.
+                #
+                # RabbitMQ'ya da BASILMAZ: notification-worker alarm_id bekliyor;
+                # alarm_id'siz mesaj DB'de karsiligi olmayan bir bildirim uretirdi.
+                self._dusen_raise += 1
+                print(
+                    "alarm-service-RAISE-KAYIP "
+                    f"rule_id={rule_id} dev={alarm_payload.get('device_code')} "
+                    f"signal={alarm_payload.get('signal_key')} "
+                    f"toplam={self._dusen_raise} — durum geri alindi, "
+                    "sonraki telemetri yeniden deneyecek"
+                )
+                if geri_al is not None:
+                    try:
+                        geri_al()
+                    except Exception as exc:  # noqa: BLE001
+                        print(f"alarm-service-geri-al-hata rule_id={rule_id} error={exc}")
         elif tur == "clear":
             _, alan, was_active = job
             try:
@@ -750,12 +824,26 @@ def _process_device_comm_alarm(payload: dict) -> None:
     if not dc:
         return
     kural = _CACHE.comm_rule()
-    if kural is None and _CACHE.is_ready():
-        # Onbellek DOLU ve kural yok/pasif -> operator kapatmis demektir.
-        # Onbellek daha hic dolmadiysa (is_ready False) varsayilanlarla devam
-        # ederiz: acilistaki ilk 30 saniyede cihaz kopmasini gizlemek, kapali
-        # bir kuralin alarm uretmesinden daha kotudur.
+    if kural is not None and not kural.is_active:
+        # KAYIT VAR ama PASIF -> operator bilerek kapatmis, alarm uretilmez.
         return
+    if kural is None and _CACHE.is_ready() and _CACHE.comm_kaydi_var():
+        # Kayit var, aktif/pasif ayrimi yukarida yapildi; buraya dusmesi
+        # beklenmez. Yine de kapali kabul et.
+        return
+    # KAYIT HIC YOKSA (comm_kaydi_var False) VARSAYILANLARLA DEVAM EDILIR.
+    #
+    # Eskiden burada "kural yok VE onbellek dolu -> operator kapatmis" deniyor
+    # ve TUM haberlesme alarmlari susturuluyordu. Ama kayit yoklugu operator
+    # karari degil KURULUM EKSIGIDIR: standart kurali migration 0058
+    # tohumluyor, temiz kurulum ise `create_all` + `stamp head` yaptigi icin
+    # o migration HIC kosmuyor -> `alarm_rules` bos -> sifirdan kurulan her
+    # sahada haberlesme alarmi KALICI olarak susuyordu. Cihaz hattan dusse
+    # bile ne alarm aciliyor ne bildirim gidiyordu.
+    #
+    # Backend'in kendi yolu (`alarm_engine_service.comm_loss_rule`) bu ayrimi
+    # zaten dogru yapiyordu; burasi ona hizalandi. `/internal/alarm-rules`
+    # artik pasif comm_loss kaydini da donduruyor ki ikisi ayirt edilebilsin.
     if kural is not None and not _CACHE.rule_covers_device(
         kural, dc, _CACHE.device_model(dc)
     ):
@@ -763,7 +851,13 @@ def _process_device_comm_alarm(payload: dict) -> None:
     if _quality_is_bad(payload):
         if not _QUALITY_STATE.is_bad(dc):
             _QUALITY_STATE.mark_bad(dc)
-            _NOTIFIER.submit_raise(_build_quality_alarm(payload, kural), rule_id=None)
+            # geri_al: backend POST'u kalici basarisiz olursa "bu cihaz bozuk"
+            # isareti geri alinir, boylece sonraki kalite okumasi yeniden dener.
+            _NOTIFIER.submit_raise(
+                _build_quality_alarm(payload, kural),
+                rule_id=None,
+                geri_al=lambda _d=dc: _QUALITY_STATE.mark_good(_d),
+            )
     elif _QUALITY_STATE.mark_good(dc):
         _NOTIFIER.submit_clear(
             rule_id=None,
@@ -856,6 +950,16 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
                 rule_description=rule.description,
                 level=rule.level,
                 value=value,
+                # SIGNAL_KEY KURALIN ANCHOR'I OLMALI — tetikleyen telemetrininki
+                # DEGIL. Backend acik alarmi (rule_id, device_code, signal_key)
+                # ile buluyor; clear tarafi zaten `rule.signal_key` gonderiyor.
+                # Composite kuralda tetikleyen terim anchor'dan FARKLI bir sinyal
+                # olabildigi icin ikisi ayrisiyordu ve alarm ASLA kapanmiyordu:
+                # raise "master.current" ile aciliyor, clear "master.voltage"
+                # ile geliyor, backend eslesme bulamiyordu. Basit kurallarda
+                # ikisi zaten ayni (rules_for o signal_key ile eslesiyor), yani
+                # bu degisiklik orada davranisi degistirmez.
+                signal_key=rule.signal_key,
                 threshold=rule.threshold,
                 operator=rule.comparator,
                 produces_fault=rule.produces_fault,
@@ -864,7 +968,14 @@ def _process_rules_for_payload(channel, payload: dict) -> None:
             # kosar — bu dongu asyncio event loop'unun icinde ve BLOKLANMAMALI
             # (senkron HTTP burada kosarken 401 cihazda prio kuyrugu birikti).
             # "Once backend POST, sonra RabbitMQ" sirasi worker icinde korunur.
-            _NOTIFIER.submit_raise(alarm_payload, rule_id=rule.id)
+            # geri_al: backend POST'u kalici basarisiz olursa aktiflik isareti
+            # geri alinir, boylece bir sonraki telemetri alarmi YENIDEN dener.
+            # Bu olmadan alarm sessizce ve kalici kayboluyordu.
+            _NOTIFIER.submit_raise(
+                alarm_payload,
+                rule_id=rule.id,
+                geri_al=lambda _k=key: _STATE.set_active(_k, False),
+            )
             print(
                 "alarm-service-raised "
                 f"rule_id={rule.id} signal={rule.signal_key} dev={device_code} value={value}"

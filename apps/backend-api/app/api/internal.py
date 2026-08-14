@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -102,13 +102,35 @@ def list_alarm_rules_internal(
     db: Session = Depends(get_db),
     x_service_token: str | None = Header(default=None),
 ):
-    """Alarm-service'in aktif kurallari cekmesi icin internal endpoint."""
+    """Alarm-service'in kurallari cekmesi icin internal endpoint.
+
+    AKTIF kurallar + PASIF comm_loss kaydi doner.
+
+    Neden pasif comm_loss de: alarm-service icin "kayit yok" ile "kayit var
+    ama pasif" AYNI SEY DEGIL.
+
+      pasif kayit -> operator bilerek kapatmis, haberlesme alarmi URETILMEZ.
+      kayit yok   -> kurulum eksigi; alarm VARSAYILANLARLA uretilmeli.
+
+    Uc yalnizca aktif kurallari donderken alarm-service ikisini ayirt
+    edemiyor ve ikisini de "kapatilmis" sayiyordu. Temiz kurulumda standart
+    kurali migration 0058 tohumluyor, ama temiz kurulum `stamp head` yaptigi
+    icin o migration HIC kosmuyor -> `alarm_rules` bos -> TUM haberlesme
+    alarmlari kalici olarak susuyordu. Cihaz gunlerce sessiz kalabiliyordu.
+    Backend'in kendi yolu (`alarm_engine_service.comm_loss_rule`) bu ayrimi
+    zaten dogru yapiyor; burasi ona hizalandi.
+    """
     _require_service_token(x_service_token)
     # _row_to_read composite kurallarda expression_json'i parse edip
     # AlarmRuleRead.expression alanini doldurur. alarm-service worker'i
     # bu alani kullanarak AND/OR mantiksal kuralları degerlendirir.
     from app.api.alarm_rules import _row_to_read
-    stmt = select(AlarmRule).where(AlarmRule.is_active.is_(True))
+    stmt = select(AlarmRule).where(
+        or_(
+            AlarmRule.is_active.is_(True),
+            AlarmRule.rule_kind == "comm_loss",
+        )
+    )
     return [_row_to_read(r) for r in db.scalars(stmt).all()]
 
 
