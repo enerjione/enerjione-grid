@@ -156,6 +156,19 @@ class GatewayConfigCommand(BaseModel):
     count: int = 1
     on_time_ms: int = 100
     off_time_ms: int = 100
+    # Komutun kuyruga alindigi an — UTC, timezone-aware ISO-8601.
+    #
+    # NEDEN GONDERILIYOR: backend bayat komutu zaten teslim ETMIYOR (bkz.
+    # `command_max_age_sec`), ama gateway'in de komutun ne kadar eski
+    # oldugunu GORMESI gerekir; teslimat ile fiziksel gonderim arasinda
+    # gecen sure yalnizca gateway tarafinda bilinir.
+    #
+    # ESKI GATEWAY'I BOZMAZ: saha gateway'i komut sozlugunu ACIK ALAN
+    # CIKARIMIYLA okuyor (`item["id"]`, `item.get("command")`, ...), kati
+    # bir sema ile degil. Tanimadigi anahtarlar hic okunmaz. Bu, calisan
+    # saha imajinin icindeki `backend/config_client.py` uzerinden
+    # dogrulandi — varsayim degil.
+    created_at: datetime | None = None
 
 
 class CommandResultItem(BaseModel):

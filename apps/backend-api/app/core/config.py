@@ -381,6 +381,29 @@ class Settings(BaseSettings):
     # 0 = saglik toplama kapali.
     gateway_heartbeat_interval_sec: int = 30
 
+    # ----- Komut tazelik suresi (TTL) --------------------------------------
+    # BEKLEYEN KOMUT BAYATLAYABILIR. Komut `pending` olarak kuyruga girer ve
+    # gateway'e ancak o poll ettiginde teslim edilir. Gateway saatlerce
+    # cevrimdisi kalirsa komut kuyrukta BEKLEMEYE DEVAM EDER:
+    #
+    #   10:00  operator OPEN komutu verdi   (gateway cevrimdisi)
+    #   14:00  gateway geri geldi           -> 4 SAAT ONCEKI niyet fiziksel
+    #                                          sisteme uygulanir
+    #
+    # Bir kesici komutunda bu kabul edilemez: operatorun 4 saat onceki karari
+    # sahanin SU ANKI durumu icin gecerli olmayabilir. Bu yuzden teslimat
+    # aninda yas kontrol edilir; bayat komut gateway'e GONDERILMEZ ve
+    # `failed` / `result_status='expired'` olarak sonlandirilir.
+    #
+    # 0 = KAPALI GIBI BIR DEGER YOK. "TTL'yi kapat" secenegi eklemek, tam da
+    # onlemeye calistigimiz arizayi tek bir ayarla geri getirirdi; bu yuzden
+    # deger POZITIF olmak ZORUNDA (asagidaki dogrulama).
+    #
+    # 120 sn: gateway komut-poll'u 1 Hz. Iki dakika, gecici bir ag kesintisini
+    # ya da gateway yeniden baslatmasini tolere etmeye yeter; operatorun
+    # "komut gitmedi" deyip yeniden denemesi icin de makul bir ust sinir.
+    command_max_age_sec: int = 120
+
     # ----- WebSocket fan-out (coklu surecin ON KOSULU) ----------------------
     # Canli deger yayini bugun SAF BELLEK-ICI: telemetry_consumer dogrudan
     # ayni surecteki WS abonelerine yaziyor. Bu, backend TEK surec oldugu
@@ -813,6 +836,25 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
+
+    @model_validator(mode="after")
+    def _validate_command_ttl(self) -> "Settings":
+        """`COMMAND_MAX_AGE_SEC` POZITIF olmak zorunda.
+
+        FAIL-OPEN YOK. `0 = kapali` gibi bir kacis yolu bilerek eklenmedi:
+        boyle bir deger, bayat bir kesici komutunun saatler sonra fiziksel
+        sisteme uygulanmasina tek ayarla izin verirdi. Yanlis yapilandirma
+        sessizce "TTL yok" anlamina gelmemeli; acilista sert hata verir ve
+        operator degeri duzeltir.
+        """
+        if int(self.command_max_age_sec) <= 0:
+            raise RuntimeError(
+                "COMMAND_MAX_AGE_SEC pozitif olmali (saniye). Bekleyen cihaz "
+                "komutlarinin tazelik suresidir; kapatilamaz — bayat bir komut "
+                "gateway yeniden baglandiginda fiziksel sisteme uygulanirdi. "
+                f"Verilen deger: {self.command_max_age_sec}"
+            )
+        return self
 
     @model_validator(mode="after")
     def _normalize_app_version(self) -> "Settings":
