@@ -617,6 +617,23 @@ services:
       #
       # KAPATILAMAZ: 0 veya negatif deger acilista sert hata verir.
       COMMAND_MAX_AGE_SEC: ${COMMAND_MAX_AGE_SEC:-120}
+      # --- Komut teslim kirasi (F3C) -------------------------------------
+      # Komut `/pending` yanitina konur konmaz `sent` OLMAZ; once KIRALANIR ve
+      # gateway dayanikli defterine yazdigini ACK ile bildirince `sent` olur.
+      # Eskiden yanit ag uzerinde kaybolursa komut sonsuza kadar `sent` kalir,
+      # cihaza HIC gitmezdi ve kayip SESSIZDI.
+      # Protokol: docs/f3c-command-delivery-protocol.md
+      COMMAND_DELIVERY_LEASE_SEC: ${COMMAND_DELIVERY_LEASE_SEC:-30}
+      COMMAND_DELIVERY_MAX_ATTEMPTS: ${COMMAND_DELIVERY_MAX_ATTEMPTS:-5}
+      # FAIL-CLOSED (varsayilan true): teslim yetenegi bildirmeyen ESKI
+      # gateway'e fiziksel komut GONDERILMEZ. Saha gecisi sirasinda gecici
+      # olarak false yapilabilir; o durumda gorunur uyari uretilir.
+      COMMAND_DELIVERY_ACK_REQUIRED: ${COMMAND_DELIVERY_ACK_REQUIRED:-true}
+      # Gateway kabul etti ama cihaz sonucu hic gelmedi -> komut bu sureden
+      # sonra `failed` / `result_status=result_unknown` olur. FIZIKSEL YENIDEN
+      # DENEME YOKTUR. COMMAND_MAX_AGE_SEC'ten BUYUK olmali (acilista dogrulanir).
+      COMMAND_RESULT_TIMEOUT_SEC: ${COMMAND_RESULT_TIMEOUT_SEC:-300}
+      COMMAND_RESULT_SWEEP_INTERVAL_SEC: ${COMMAND_RESULT_SWEEP_INTERVAL_SEC:-60}
       GATEWAY_STALE_CHECK_INTERVAL_SEC: ${GATEWAY_STALE_CHECK_INTERVAL_SEC:-60}
       GATEWAY_STALE_AFTER_SEC: ${GATEWAY_STALE_AFTER_SEC:-180}
       # Gateway imaji icin yeni surum kontrolu (ajanin uzak digest onbellegi

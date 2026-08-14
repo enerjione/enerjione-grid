@@ -93,6 +93,14 @@ def pg():
 @pytest.fixture(autouse=True)
 def baypaslar(monkeypatch):
     monkeypatch.setattr(settings, "command_max_age_sec", TTL, raising=False)
+    # BU DOSYA ESKI TESLIM PROTOKOLUNU KORUR.
+    #
+    # F3C ile varsayilan FAIL-CLOSED oldu: teslim yetenegi bildirmeyen
+    # gateway'e komut gonderilmez. Buradaki cagrilar `X-E1-Delivery` basligi
+    # GONDERMEDIGI icin varsayilan altinda hicbir komut teslim edilmez ve
+    # F3B'nin es zamanlilik sozlesmesi olculemezdi. Yeni protokolun es
+    # zamanlilik iddialari `test_command_delivery_pg.py` icinde.
+    monkeypatch.setattr(settings, "command_delivery_ack_required", False, raising=False)
     monkeypatch.setattr(gw_api, "_signed_json_response", lambda g, m, extra_headers=None: m)
 
     def _sahte(db_, kod, token):

@@ -12,6 +12,15 @@ teslim ediliyor. Gateway cevrimdisi kaldigi surece komut kuyrukta BEKLIYORDU:
 Bir kesici komutunda bu kabul edilemez: operatorun 4 saat onceki karari
 sahanin SU ANKI durumu icin gecerli olmayabilir.
 
+KAPSAM: ESKI TESLIM PROTOKOLU (F3C sonrasi)
+-------------------------------------------
+F3C ile komut teslimi kira/ACK protokolune gecti ve varsayilan FAIL-CLOSED
+oldu. Bu dosya, teslim yetenegi bildirmeyen ESKI gateway yolunun TTL
+sozlesmesinin bozulmadigini kanitlar (`COMMAND_DELIVERY_ACK_REQUIRED=false`
+ile kurulur). Yeni protokolun TTL davranisi — ozellikle KIRALANMIS bir
+komutun mutlak son kullanma anini asamamasi — `test_command_delivery.py`
+icinde kilitlenir.
+
 BU DOSYANIN KILITLEDIKLERI
 --------------------------
 1. `age <= TTL` TAZE, `age > TTL` BAYAT (sinir dahil).
@@ -66,6 +75,14 @@ def db():
 @pytest.fixture(autouse=True)
 def ttl_sabit(monkeypatch):
     monkeypatch.setattr(settings, "command_max_age_sec", TTL, raising=False)
+    # BU DOSYA ESKI TESLIM PROTOKOLUNU KORUR (bkz. modul docstring'i).
+    #
+    # F3C ile varsayilan FAIL-CLOSED oldu: teslim yetenegi bildirmeyen
+    # gateway'e komut gonderilmez. Buradaki testler `X-E1-Delivery` basligi
+    # GONDERMEDIGI icin varsayilan altinda hicbir komut teslim edilmezdi ve
+    # TTL davranisi olculemezdi. Ayari burada acikca kapatmak, testlerin neyi
+    # kanitladigini gorunur kilar: ESKI yolun TTL sozlesmesi bozulmadi.
+    monkeypatch.setattr(settings, "command_delivery_ack_required", False, raising=False)
 
 
 @pytest.fixture()

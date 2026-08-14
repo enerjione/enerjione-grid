@@ -1260,6 +1260,17 @@ leader.register(
     "fault_notify_sweeper", fault_notify_sweeper.start, fault_notify_sweeper.stop
 )
 
+# Sonucu hic gelmeyen cihaz komutlarini sonlandirir (F3C-C). `sent` durumunda
+# kalan bir komutu HICBIR SEY sonlandirmiyordu: gateway sonucu teslim edemezse
+# komut sonsuza kadar "gonderildi" gorunuyor, operator kesicinin surulup
+# surulmedigini ogrenemiyordu. Tek surecte kosmali — aksi halde her API
+# worker'i ayni komut icin ayri bir olay uretirdi.
+from app.services import command_result_sweeper  # noqa: E402
+
+leader.register(
+    "command_result_sweeper", command_result_sweeper.start, command_result_sweeper.stop
+)
+
 # Kritik ALTYAPI olaylarinin operatore bildirilmesi. `record_event(...)` tek
 # basina kimseye bir sey gondermiyordu: bildirim zinciri yalnizca CIHAZ
 # ALARMLARI icin isliyordu. Yani "telemetri tamponu tasti, olcum kayboldu"

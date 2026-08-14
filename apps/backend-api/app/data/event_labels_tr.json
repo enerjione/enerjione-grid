@@ -110,6 +110,8 @@
     "device_command_failed": "Komut gönderilemedi: {{command}} ({{code}})",
     "device_command_queued": "Komut kuyruğa alındı: {{command}} ({{code}})",
     "device_command_result": "Komut sonucu: {{command}} ({{code}})",
+    "device_command_result_unknown": "Komut sonucu alınamadı: {{command}} ({{code}})",
+    "device_command_delivery_failed": "Komut teslim edilemedi: {{command}} ({{code}})",
     "remote_access_granted": "Uzaktan bakıma {{minutes}} dakikalık izin verildi",
     "remote_access_extended": "Uzaktan bakım süresi {{minutes}} dakika olarak uzatıldı",
     "remote_access_revoked": "Uzaktan bakım izni kapatıldı",

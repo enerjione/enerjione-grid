@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class GatewayCreate(BaseModel):
@@ -169,6 +169,55 @@ class GatewayConfigCommand(BaseModel):
     # saha imajinin icindeki `backend/config_client.py` uzerinden
     # dogrulandi — varsayim degil.
     created_at: datetime | None = None
+
+    # ----- F3C: teslim kirasi ------------------------------------------
+    # Yalnizca teslim protokolunu (command_delivery_ack_v1) bildiren
+    # gateway'e doldurulur; eski gateway'de None kalir ve alan hic okunmaz.
+    # Protokol: docs/f3c-command-delivery-protocol.md
+
+    #: Bu teslimin kimligi. Gateway komutu dayanikli defterine yazdiktan sonra
+    #: `POST /gateways/{code}/command-delivery-acks` ile bu jetonu geri
+    #: gonderir; ancak o zaman komut `sent` olur. OPAKTIR ve LOGLANMAZ.
+    delivery_token: str | None = None
+
+    #: Komutun MUTLAK son kullanma ani (`created_at + COMMAND_MAX_AGE_SEC`),
+    #: timezone-aware ISO-8601.
+    #:
+    #: NEDEN AYRICA GONDERILIYOR: gateway `created_at`ten kendi TTL'siyle de
+    #: hesaplayabilirdi, ama o TTL gateway tarafinda YAPILANDIRILABILIR bir
+    #: degerdir; daha genis ayarlanirsa backend'in kapattigi pencere gateway'de
+    #: acik kalirdi. Backend'in turettigi DEGISMEZ son kullanma ani bu bosluğu
+    #: kapatir (savunma derinligi).
+    delivery_not_after: datetime | None = None
+
+
+class CommandDeliveryAckItem(BaseModel):
+    """Gateway'in tek bir komut icin dayanikli kabul bildirimi (F3C).
+
+    Gateway `start_dispatch` SQLite COMMIT'i tamamlandiktan SONRA uretir; ACK
+    teslimi basarisiz olursa kayit defterde kalir ve proses yeniden
+    baslatildiktan sonra tekrar gonderilir.
+    """
+
+    command_id: int
+    delivery_token: str
+
+
+class CommandDeliveryAckRequest(BaseModel):
+    """`POST /gateways/{code}/command-delivery-acks` govdesi (batch).
+
+    AYRI UC — baslik piggyback'i DEGIL: baslik boyutu sinirina takilmaz,
+    dogrulama yapisaldir, parti dogaldir ve proxy/baslik kodlama davranisina
+    bagimli degildir. Yeni bir auth sistemi YOK; mevcut `X-Gateway-Token` ve
+    gateway sahiplik dogrulamasi kullanilir.
+    """
+
+    acks: list[CommandDeliveryAckItem] = Field(default_factory=list)
+
+
+class CommandDeliveryAckResponse(BaseModel):
+    accepted: int = 0
+    rejected: int = 0
 
 
 class CommandResultItem(BaseModel):
