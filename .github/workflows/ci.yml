@@ -150,6 +150,63 @@ jobs:
         working-directory: apps/modbus-outbound
         run: pytest -q
 
+  ftp-server:
+    # Cihazlarin config/firmware yazdigi FTP sunucusu. Testleri 2.92.0'da
+    # eklendi ve is buraya AYNI ANDA konuldu: CI'da kosmayan bir bekci
+    # testi, bekciligini yalnizca yazildigi gun yapar.
+    #
+    # Kritik test `test_baglanti_olmadan_da_atis_gelir`: kalp atisinin
+    # TRAFIKTEN BAGIMSIZ oldugunu kilitler. Bozulursa hicbir cihaz
+    # baglanmayan sakin bir gecede saglikli servis yeniden baslatilir —
+    # cozdugumuz sorundan daha kotu bir ariza.
+    name: FTP sunucusu — pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/ftp-server/requirements.txt
+      - name: Bagimliliklar
+        working-directory: apps/ftp-server
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+      - name: pytest
+        working-directory: apps/ftp-server
+        run: pytest -q
+
+  whatsapp-gateway:
+    # WhatsApp gecidi (Node). Bekci burada worker_threads ile kosuyor cunku
+    # Node tek iplikli: `setInterval` ile ayni olay dongusune konsaydi,
+    # dongu kilitlendiginde bekci de donmaz ve yakalamasi gereken tek
+    # arizayi yakalayamazdi.
+    #
+    # Test GERCEK cocuk surec doguruyor: `SIGKILL` cagrisinin gercekten tum
+    # sureci indirdigini baska turlu dogrulamak mumkun degil. Ayni dosya
+    # "saglikli surec OLDURULMEZ" durumunu da kilitliyor.
+    #
+    # `npm ci` bugunku testler icin gereksiz gorunebilir (test yalnizca node
+    # yerlesiklerini kullaniyor) ama bilincli: hem lockfile ile package.json
+    # ayrismasini yakalar, hem de baileys'e dokunan bir test eklendiginde
+    # is sessizce kirilmaz.
+    name: WhatsApp gecidi — node:test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/whatsapp-web-gateway/package-lock.json
+      - name: Bagimliliklar (npm ci — lockfile birebir)
+        working-directory: apps/whatsapp-web-gateway
+        run: npm ci
+      - name: node:test
+        working-directory: apps/whatsapp-web-gateway
+        run: npm test
+
   migrations:
     name: Alembic — tek head kontrolu
     runs-on: ubuntu-latest
