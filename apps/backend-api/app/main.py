@@ -1278,6 +1278,22 @@ leader.register(
     "infra_notify_sweeper", infra_notify_sweeper.start, infra_notify_sweeper.stop
 )
 
+# Yarim kalmis restore / artik staging veritabani tespiti. Guvenli restore
+# akisi cutover'i iki `ALTER DATABASE RENAME` ile yapiyor; tam o pencerede
+# guc giderse uretim veritabani `_pre_<zaman>` adinda kalir ve backend
+# acilamaz. Bu kontrol durumu okuyup operatore GORUNUR kilar.
+#
+# HICBIR VERITABANI OTOMATIK SILINMEZ — yalnizca tespit ve olay kaydi.
+# Tek surecte kosmali: her uvicorn sureci ayri ayri tespit etseydi her
+# acilista N kopya olay kaydi olusurdu.
+from app.services import safe_restore as _safe_restore  # noqa: E402
+
+leader.register(
+    "restore_recovery_check",
+    _safe_restore._acilista_kurtarma_baslat,
+    lambda: None,
+)
+
 
 @app.on_event("startup")
 def start_background_jobs():

@@ -28,7 +28,51 @@ from typing import Any
 
 
 # Adim listesi — UI'da iste bu sirada gosterilir.
-STEPS = ("queued", "validating", "preparing", "restoring", "finalizing", "done")
+#
+# GUVENLI RESTORE ILE GENISLEDI. Eski akis dogrudan uretime yaziyordu ve
+# dort adimi vardi; yeni akis once bos bir staging veritabanina yukleyip
+# dogruluyor, uretime yalnizca `cutover` adiminda dokunuyor
+# (bkz. services/safe_restore.py).
+#
+# GERIYE UYUMLULUK: eski adim adlari (`validating`, `preparing`,
+# `restoring`, `finalizing`) LISTEDE KALIYOR. Frontend adimlari bu listeden
+# okuyup ilerleme cubugu ciziyor; kaldirsaydik eski bir arayuz surumu
+# tanimadigi adimda ilerlemeyi kaybederdi. `set_step` taninmayan adimi
+# zaten sessizce yok sayar.
+STEPS = (
+    "queued",
+    "preflight",
+    "validating_archive",
+    "creating_staging",
+    "restoring",
+    "migrating",
+    "validating_staging",
+    "preparing_cutover",
+    "cutover",
+    "post_validation",
+    "done",
+    # --- eski adlar (geriye uyumluluk; yeni akis kullanmaz) ---
+    "validating",
+    "preparing",
+    "finalizing",
+)
+
+#: Ilerleme yuzdesi hesabinda kullanilan GERCEK akis. `STEPS` geriye
+#: uyumluluk icin eski adlari da tasidigi icin yuzde bu listeden hesaplanir;
+#: aksi halde 14 adimlik bir listede gercek ilerleme yaniltici gorunurdu.
+AKIS = (
+    "queued",
+    "preflight",
+    "validating_archive",
+    "creating_staging",
+    "restoring",
+    "migrating",
+    "validating_staging",
+    "preparing_cutover",
+    "cutover",
+    "post_validation",
+    "done",
+)
 
 
 @dataclass
@@ -38,7 +82,7 @@ class _RestoreState:
     status: str = "idle"  # idle | queued | validating | preparing | restoring | finalizing | done | failed
     current_step: str = "queued"
     step_index: int = 0  # 0..len(STEPS)-1
-    total_steps: int = len(STEPS) - 1  # 'done' hedef, 5 adim arasi gecis
+    total_steps: int = len(AKIS) - 1  # 'done' hedef
     progress_percent: int = 0
     message: str = ""
     error: str | None = None
@@ -77,8 +121,9 @@ def set_step(step: str, message: str = "") -> None:
     with _lock:
         _state.status = step
         _state.current_step = step
-        _state.step_index = STEPS.index(step)
-        # 'done' = 100%, diger adimlar oransal.
+        # Yuzde GERCEK akistan hesaplanir; STEPS geriye uyumluluk icin
+        # eski adlari da tasiyor ve onlarin indeksi ilerlemeyi bozardi.
+        _state.step_index = AKIS.index(step) if step in AKIS else _state.step_index
         _state.progress_percent = int((_state.step_index / max(1, _state.total_steps)) * 100)
         _state.message = message or _default_message(step)
         _state.logs.append(_log_entry(step, _state.message, "info"))
@@ -146,7 +191,7 @@ def snapshot() -> dict[str, Any]:
 def is_running() -> bool:
     """Su an aktif restore var mi? (duplicate request'i engellemek icin)"""
     with _lock:
-        return _state.status in ("queued", "validating", "preparing", "restoring", "finalizing")
+        return _state.status not in ("idle", "done", "failed")
 
 
 def _default_message(step: str) -> str:
@@ -156,6 +201,14 @@ def _default_message(step: str) -> str:
         "preparing": "Veritabani hazirlaniyor...",
         "restoring": "Veriler geri yukleniyor (pg_restore)...",
         "finalizing": "Baglantilar yenileniyor...",
+        "preflight": "On kontroller yapiliyor...",
+        "validating_archive": "Yedek arsivi dogrulaniyor...",
+        "creating_staging": "Gecici veritabani olusturuluyor...",
+        "migrating": "Sema guncelleniyor...",
+        "validating_staging": "Geri yuklenen veri dogrulaniyor...",
+        "preparing_cutover": "Gecise hazirlaniliyor...",
+        "cutover": "Veritabani degistiriliyor (kisa kesinti)...",
+        "post_validation": "Yeni veritabani dogrulaniyor...",
         "done": "Restore tamamlandi",
     }.get(step, step)
 

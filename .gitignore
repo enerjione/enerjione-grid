@@ -107,3 +107,7 @@ gateways/
 # olusuyor, depoya ait degil. Ignore edilmezse `git status` her oturumda
 # kirli gorunur ve update.sh'in "calisma agaci temiz" sarti takilir.
 mig_schema.json
+
+# Guvenli restore integration testleri: PG16 istemci sarmalayicilari
+# kosum aninda uretilir (makineye ozgu mutlak Python yolu icerir).
+apps/backend-api/tests/integration/*.cmd

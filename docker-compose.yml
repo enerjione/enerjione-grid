@@ -637,6 +637,18 @@ services:
       # sikligi ve sogumayi yonetir.
       # Soguma YALNIZCA GONDERIME uygulanir — denetim kaydi (`system_events`)
       # her zaman eksiksiz yazilir.
+      # --- Guvenli (staging + cutover) restore ---------------------------
+      # Restore artik yedegi DOGRUDAN uretime uygulamiyor: once bos bir
+      # staging veritabanina yukleyip dogruluyor, uretime yalnizca cutover
+      # adiminda dokunuyor. Bu satirlar SART — compose'da `env_file` yok.
+      #
+      # DUMP BOYUTU DISK IHTIYACI DEGILDIR: sahada olculdu, veritabani
+      # 64 MB iken dump 1,5 MB (~42x). Birincil olcut canli veritabani
+      # boyutu; carpan yalnizca dump'in alt sinir tahmini icin.
+      RESTORE_EXPANSION_FACTOR: ${RESTORE_EXPANSION_FACTOR:-50}
+      RESTORE_DISK_SAFETY: ${RESTORE_DISK_SAFETY:-1.5}
+      RESTORE_PG_TIMEOUT_SEC: ${RESTORE_PG_TIMEOUT_SEC:-7200}
+      RESTORE_MIGRATE_TIMEOUT_SEC: ${RESTORE_MIGRATE_TIMEOUT_SEC:-1800}
       INFRA_NOTIFY_ENABLED: ${INFRA_NOTIFY_ENABLED:-true}
       INFRA_NOTIFY_SWEEP_SEC: ${INFRA_NOTIFY_SWEEP_SEC:-60}
       INFRA_NOTIFY_COOLDOWN_MINUTES: ${INFRA_NOTIFY_COOLDOWN_MINUTES:-15}
