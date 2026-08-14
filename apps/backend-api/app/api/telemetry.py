@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.models.enums import UserRole
 from app.models.user import User
 from app.schemas.telemetry import GatewayTelemetryBatch, TelemetryIn, TelemetryRead
+from app.services import scope_service
 from app.services.ingest_service import (
     ingest_direct_telemetry,
     ingest_gateway_batch,
@@ -23,8 +24,17 @@ _MANUAL_INGEST_MAX_BATCH = 1000
 
 
 @router.get("/latest", response_model=list[TelemetryRead])
-def list_latest(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    return list_latest_telemetry(db)
+def list_latest(
+    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+):
+    """Son telemetri okumalari — KAPSAM suzgeci uygulanir.
+
+    Kapsam kontrolu eskiden yoktu: operator tum sahanin son okumalarini
+    gorebiliyordu (bkz. `scope_service`, `/devices` ile ayni kural).
+    """
+    return list_latest_telemetry(
+        db, visible_device_ids=scope_service.get_visible_device_ids(db, user)
+    )
 
 
 @router.post("", status_code=status.HTTP_202_ACCEPTED)

@@ -27,7 +27,7 @@ from app.models.user import User
 from app.schemas.api_key import ApiKeyCreate, ApiKeyCreatedResponse, ApiKeyRead
 from app.services import api_key_service
 from app.services.auth_service import verify_password  # noqa: F401  (gelecekte 2FA)
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_roles
 from app.services.event_service import record_event
 
 router = APIRouter(prefix="/api-keys", tags=["api-keys"])
@@ -49,7 +49,20 @@ def _row_to_read(row: ApiKey) -> ApiKeyRead:
 )
 def create_api_key(
     payload: ApiKeyCreate,
-    user: User = Depends(get_current_user),
+    # ROL KAPISI — eskiden YOKTU ve bu bir yetki yukselmesiydi.
+    #
+    # Tek kontrol `get_current_user` oldugu icin OPERATOR rolundeki bir
+    # kullanici kendine PAT uretebiliyordu. `/public/*` uclari kapsam
+    # (scope_service) filtresi uygulamadigi icin o anahtarla TUM sahanin
+    # cihaz/telemetri/alarm verisi okunabiliyordu — oysa ayni kullanici
+    # normal JWT'siyle `/devices` cagirdiginda yalnizca sorumlu oldugu
+    # hatlari goruyordu. Panel arayuzde installer/engineer'a gizliydi ama
+    # ucun kendisi dogrudan surulebiliyordu.
+    #
+    # Kapsam filtresi de ayrica eklendi (`app/api/public.py`); ikisi birden
+    # gerekli: rol kapisi tek basina, rolu sonradan operatore DUSURULEN bir
+    # kullanicinin ONCEDEN uretilmis anahtarini kapatmaz.
+    user: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
     db: Session = Depends(get_db),
 ) -> ApiKeyCreatedResponse:
     try:

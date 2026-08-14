@@ -24,6 +24,7 @@ def list_system_events(
     q: str | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
+    exclude_categories: set[str] | None = None,
     limit: int = 1000,
     offset: int = 0,
 ) -> tuple[list[SystemEvent], int]:
@@ -41,6 +42,14 @@ def list_system_events(
     yazmak yeterli.
     """
     filters = []
+    # `exclude_categories`: cagiranin ROLU geregi hic gormemesi gereken
+    # kategoriler. Denetim kaydinin tamami her kimlik dogrulamis kullaniciya
+    # aciktı; operator kendi isi olmayan `security`/`auth`/`user` olaylarini
+    # (giris denemeleri, parola sifirlama, API anahtari uretimi, kullanici
+    # yonetimi) okuyabiliyordu. Filtre SORGUDA uygulanir — sayfalama ve
+    # X-Total-Count da dogru kalsin.
+    if exclude_categories:
+        filters.append(SystemEvent.category.notin_(sorted(exclude_categories)))
     if category:
         filters.append(SystemEvent.category == category)
     if severity:

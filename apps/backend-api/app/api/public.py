@@ -40,10 +40,33 @@ from app.schemas.alarm import AlarmEventRead
 from app.schemas.device import DeviceRead
 from app.schemas.gateway import GatewayRead
 from app.schemas.signal_catalog import SignalCatalogRead
-from app.services import device_kit_service
+from app.services import device_kit_service, scope_service
 
 # Tum endpoint'ler bu prefix altinda. Tag = OpenAPI dokumantasyonunda gruplama.
 router = APIRouter(prefix="/public", tags=["public-api"])
+
+
+# ---------------------------------------------------------------------------
+# KAPSAM (scope) — token SAHIBININ gorebildigi kadari
+# ---------------------------------------------------------------------------
+#
+# Bu uclar eskiden kapsam filtresi UYGULAMIYORDU: `ctx.user` elde oldugu
+# halde okunmuyor, sorgular tum sahayi donduruyordu. Sonuc bir yetki
+# yukselmesiydi — iki hattan sorumlu bir OPERATOR, JWT ile `/devices`
+# cagirdiginda yalnizca kendi cihazlarini gorurken ayni kullanicinin PAT'i
+# ile `/public/devices` TUM 600 cihazi doruyordu.
+#
+# Kural `scope_service` ile AYNI olmali; orasi tek kaynak:
+#   INSTALLER / ENGINEER / OPS_MANAGER -> None (kisitsiz)
+#   OPERATOR                           -> sorumluluk alanindan turetilen set
+def _gorunur_cihaz_idleri(db: Session, ctx: ApiKeyContext) -> set[int] | None:
+    """Token sahibinin gorebilecegi cihaz id'leri. None = kisitsiz."""
+    return scope_service.get_visible_device_ids(db, ctx.user)
+
+
+def _cihaz_kapsamda_mi(db: Session, ctx: ApiKeyContext, device: Device) -> bool:
+    ids = _gorunur_cihaz_idleri(db, ctx)
+    return ids is None or device.id in ids
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +124,11 @@ def list_devices(
 ):
     base = select(Device)
     count_q = select(func.count()).select_from(Device)
+    # KAPSAM: operator yalnizca sorumlu oldugu cihazlari gorur.
+    gorunur = _gorunur_cihaz_idleri(db, ctx)
+    if gorunur is not None:
+        base = base.where(Device.id.in_(gorunur))
+        count_q = count_q.where(Device.id.in_(gorunur))
     if gateway_code:
         base = base.where(Device.gateway_code == gateway_code)
         count_q = count_q.where(Device.gateway_code == gateway_code)
@@ -127,7 +155,9 @@ def get_device(
     ctx: ApiKeyContext = Depends(require_scope("devices:read")),
 ):
     row = db.scalar(select(Device).where(Device.code == code))
-    if row is None:
+    # Kapsam disi cihaz 404 doner, 403 DEGIL: 403 "boyle bir cihaz var ama
+    # goremezsin" bilgisini sizdirirdi. Liste ucu da onu hic gostermiyor.
+    if row is None or not _cihaz_kapsamda_mi(db, ctx, row):
         raise HTTPException(status_code=404, detail="Cihaz bulunamadı")
     return device_kit_service.annotate_one(db, row)
 
@@ -175,7 +205,8 @@ def latest_telemetry(
     ctx: ApiKeyContext = Depends(require_scope("telemetry:read")),
 ):
     device = db.scalar(select(Device).where(Device.code == device_code))
-    if device is None:
+    # Kapsam disi cihaz icin telemetri de verilmez (404 — varligi sizdirmaz).
+    if device is None or not _cihaz_kapsamda_mi(db, ctx, device):
         raise HTTPException(status_code=404, detail="Cihaz bulunamadı")
 
     # Her signal_key icin en son satir (window function ile tek query, alternatif:
@@ -231,7 +262,8 @@ def telemetry_history(
     order: Literal["asc", "desc"] = Query("desc"),
 ):
     device = db.scalar(select(Device).where(Device.code == device_code))
-    if device is None:
+    # Kapsam disi cihazin gecmisi de verilmez (404 — varligi sizdirmaz).
+    if device is None or not _cihaz_kapsamda_mi(db, ctx, device):
         raise HTTPException(status_code=404, detail="Cihaz bulunamadı")
 
     stmt = select(Telemetry).where(
@@ -290,9 +322,13 @@ def list_alarms(
     offset: int = Query(0, ge=0),
 ):
     stmt = select(AlarmEvent)
+    # KAPSAM: operator yalnizca sorumlu oldugu cihazlarin alarmlarini gorur.
+    gorunur = _gorunur_cihaz_idleri(db, ctx)
+    if gorunur is not None:
+        stmt = stmt.where(AlarmEvent.device_id.in_(gorunur))
     if device_code:
         device = db.scalar(select(Device).where(Device.code == device_code))
-        if device is None:
+        if device is None or not _cihaz_kapsamda_mi(db, ctx, device):
             raise HTTPException(status_code=404, detail="Cihaz bulunamadı")
         stmt = stmt.where(AlarmEvent.device_id == device.id)
     if level:
