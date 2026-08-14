@@ -4781,7 +4781,11 @@
     "emptyHint": "Karşılaştırmak istediğiniz cihaz ve sinyalleri ekleyin — farklı cihazlardan seriler aynı grafikte gösterilir.",
     "device": "Cihaz",
     "searchDevice": "Cihaz ara…",
+    "noDeviceMatch": "Eşleşen cihaz yok.",
     "signal": "Sinyal",
+    "source": "Kaynak",
+    "color": "Renk",
+    "preview": "Önizleme",
     "chartSettings": "Grafik ayarları",
     "settingsSaved": "Ayarlar bu tarayıcıda saklanır."
   }

@@ -392,6 +392,33 @@ export function GlobalTrendsPanel({ accessToken }: Props) {
     setPopupOpen(false);
   };
 
+  // Popup ozeti: basliktaki ve onizlemedeki "cihaz · sinyal · kaynak · birim".
+  const popupPreview = useMemo(() => {
+    const dev = deviceByCode.get(pDevice);
+    const cat = popupSuffixes.find((s) => s.suffix === pSuffix);
+    const parts = [dev?.name || pDevice, cat?.label ?? pSuffix, sourceLabel(pSource)].filter(
+      Boolean
+    );
+    const txt = parts.join(" · ");
+    return cat?.unit ? `${txt} · ${cat.unit}` : txt;
+  }, [deviceByCode, pDevice, popupSuffixes, pSuffix, pSource]);
+
+  // Popup acikken Esc kapatir (overlay tiklamasi zaten kapatiyor).
+  useEffect(() => {
+    if (!popupOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPopupOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [popupOpen]);
+
+  // Duzenlemede secili cihaz listenin altinda kalabiliyor — acilista gorunur yap.
+  const activeDeviceRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (popupOpen) activeDeviceRef.current?.scrollIntoView({ block: "nearest" });
+  }, [popupOpen]);
+
   const gearRef = useRef<HTMLDivElement | null>(null);
 
   return (
@@ -663,75 +690,157 @@ export function GlobalTrendsPanel({ accessToken }: Props) {
         </div>
       </div>
 
-      {/* ---- Seri ekle/duzenle ---- */}
+      {/* ---- Seri ekle/duzenle ----
+           Eski hali ham `<select size=6>` + stilsiz input/butonlardan olusuyordu;
+           tarayicinin varsayilan liste kutusu ekranin geri kalaniyla hic uyusmuyordu.
+           Burada cihaz secimi kendi listesi, kaynak segment kontrolu, renk ise
+           tikli swatch. En altta secimin nasil gorunecegini gosteren onizleme var. */}
       {popupOpen ? (
-        <div className="device-trend-modal-overlay" onClick={() => setPopupOpen(false)}>
-          <div className="device-trend-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="device-trend-modal-head">
-              {editId ? t("trends.editSeries") : t("trends.addSeries")}
-            </div>
-            <div className="device-trend-modal-body">
-              <label className="device-trend-field">
-                {t("trends.device")}
-                <input
-                  type="search"
-                  placeholder={t("trends.searchDevice")}
-                  value={pFilter}
-                  onChange={(e) => setPFilter(e.target.value)}
-                />
-                <select
-                  value={pDevice}
-                  size={6}
-                  onChange={(e) => setPDevice(e.target.value)}
-                >
-                  {filteredDevices.map((d) => (
-                    <option key={d.code} value={d.code}>
-                      {d.name || d.code}
-                      {d.name && d.name !== d.code ? ` (${d.code})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="device-trend-field">
-                {t("trends.signal")}
-                <select value={pSuffix} onChange={(e) => setPSuffix(e.target.value)}>
-                  {popupSuffixes.map((s) => (
-                    <option key={s.suffix} value={s.suffix}>
-                      {s.label}
-                      {s.unit ? ` (${s.unit})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="device-trend-modal-sources">
-                {popupSources.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    className={pSource === s ? "is-active" : ""}
-                    onClick={() => setPSource(s)}
-                  >
-                    {sourceLabel(s)}
-                  </button>
-                ))}
+        <div
+          className="trend-series-overlay"
+          role="presentation"
+          onMouseDown={() => setPopupOpen(false)}
+        >
+          <div
+            className="trend-series-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={editId ? t("trends.editSeries") : t("trends.addSeries")}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <header className="trend-series-head">
+              <span className="trend-series-head-dot" style={{ background: pColor }} />
+              <div className="trend-series-head-text">
+                <h4>{editId ? t("trends.editSeries") : t("trends.addSeries")}</h4>
+                <p title={popupPreview}>{popupPreview}</p>
               </div>
+              <button
+                type="button"
+                className="trend-series-close"
+                onClick={() => setPopupOpen(false)}
+                aria-label={t("common.close")}
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </header>
 
-              <div className="device-trend-colors">
-                {PALETTE.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    style={{ background: c }}
-                    className={pColor === c ? "is-active" : ""}
-                    onClick={() => setPColor(c)}
-                    aria-label={c}
+            <div className="trend-series-body">
+              <section className="trend-series-block">
+                <div className="trend-series-block-head">
+                  <span className="trend-series-label">{t("trends.device")}</span>
+                  <span className="trend-series-count">{filteredDevices.length}</span>
+                </div>
+                <div className="trend-series-search">
+                  <span className="material-symbols-outlined">search</span>
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder={t("trends.searchDevice")}
+                    value={pFilter}
+                    onChange={(e) => setPFilter(e.target.value)}
                   />
-                ))}
+                  {pFilter ? (
+                    <button
+                      type="button"
+                      className="trend-series-search-clear"
+                      onClick={() => setPFilter("")}
+                      aria-label={t("common.close")}
+                    >
+                      <span className="material-symbols-outlined">close</span>
+                    </button>
+                  ) : null}
+                </div>
+                <ul className="trend-series-devices">
+                  {filteredDevices.length === 0 ? (
+                    <li className="trend-series-nores">{t("trends.noDeviceMatch")}</li>
+                  ) : (
+                    filteredDevices.map((d) => {
+                      const secili = pDevice === d.code;
+                      return (
+                        <li key={d.code}>
+                          <button
+                            type="button"
+                            ref={secili ? activeDeviceRef : undefined}
+                            className={`trend-series-device${secili ? " is-active" : ""}`}
+                            onClick={() => setPDevice(d.code)}
+                          >
+                            <span className="trend-series-device-name">{d.name || d.code}</span>
+                            {d.name && d.name !== d.code ? (
+                              <span className="trend-series-device-code">{d.code}</span>
+                            ) : null}
+                            <span className="material-symbols-outlined trend-series-tick">
+                              check
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })
+                  )}
+                </ul>
+              </section>
+
+              <section className="trend-series-block">
+                <span className="trend-series-label">{t("trends.signal")}</span>
+                <div className="trend-series-select">
+                  <select value={pSuffix} onChange={(e) => setPSuffix(e.target.value)}>
+                    {popupSuffixes.map((s) => (
+                      <option key={s.suffix} value={s.suffix}>
+                        {s.label}
+                        {s.unit ? ` (${s.unit})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="material-symbols-outlined">expand_more</span>
+                </div>
+              </section>
+
+              <div className="trend-series-split">
+                <section className="trend-series-block">
+                  <span className="trend-series-label">{t("trends.source")}</span>
+                  <div className="trend-series-seg">
+                    {popupSources.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        className={`trend-series-seg-btn${pSource === s ? " is-active" : ""}`}
+                        onClick={() => setPSource(s)}
+                      >
+                        {sourceLabel(s)}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="trend-series-block">
+                  <span className="trend-series-label">{t("trends.color")}</span>
+                  <div className="trend-series-colors">
+                    {PALETTE.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        style={{ background: c }}
+                        className={`trend-series-color${pColor === c ? " is-active" : ""}`}
+                        onClick={() => setPColor(c)}
+                        aria-label={c}
+                        aria-pressed={pColor === c}
+                      >
+                        <span className="material-symbols-outlined">check</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              </div>
+
+              <div className="trend-series-preview">
+                <span className="trend-series-preview-label">{t("trends.preview")}</span>
+                <span className="trend-series-preview-line" style={{ background: pColor }} />
+                <span className="trend-series-preview-text" title={popupPreview}>
+                  {popupPreview}
+                </span>
               </div>
             </div>
-            <div className="device-trend-modal-foot">
+
+            <footer className="trend-series-foot">
               <button
                 type="button"
                 className="device-trend-btn-secondary"
@@ -747,7 +856,7 @@ export function GlobalTrendsPanel({ accessToken }: Props) {
               >
                 {editId ? t("common.save") : t("common.add")}
               </button>
-            </div>
+            </footer>
           </div>
         </div>
       ) : null}

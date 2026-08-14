@@ -32032,6 +32032,204 @@ th.event-col-category {
   .global-trend .device-trend-body { grid-template-columns: 1fr; }
 }
 
+/* ---- Analiz > Trendler: "Seri ekle / duzenle" penceresi ----
+   Cihaz Detayi'ndaki popup ile ayni sinifi PAYLASMIYOR: orada seri = sinyal,
+   burada seri = cihaz x sinyal x kaynak, yani listelenecek bir cihaz kolonu
+   var. Ortak sinifa cihaz listesi eklemek oteki ekrani da degistirirdi. */
+.trend-series-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(3px);
+  animation: trend-series-fade 0.16s ease-out;
+}
+.trend-series-modal {
+  width: 100%; max-width: 460px; max-height: calc(100vh - 48px);
+  display: flex; flex-direction: column;
+  background: #fff; border-radius: 18px; overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28), 0 2px 8px rgba(15, 23, 42, 0.08);
+  animation: trend-series-pop 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes trend-series-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes trend-series-pop {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trend-series-overlay, .trend-series-modal { animation: none; }
+}
+
+/* Baslik: solda secili rengin noktasi, altta canli ozet */
+.trend-series-head {
+  display: flex; align-items: center; gap: 11px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #f1f5f9;
+  background: linear-gradient(180deg, #f8fafc, #fff);
+  flex: 0 0 auto;
+}
+.trend-series-head-dot {
+  width: 12px; height: 12px; border-radius: 4px; flex: 0 0 auto;
+  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.05);
+  transition: background 0.15s;
+}
+.trend-series-head-text { min-width: 0; flex: 1; }
+.trend-series-head-text h4 { margin: 0; font-size: 15px; font-weight: 800; color: #0f172a; }
+.trend-series-head-text p {
+  margin: 2px 0 0; font-size: 12px; color: #94a3b8;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.trend-series-close {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; flex: 0 0 auto;
+  border: none; border-radius: 9px; background: transparent; color: #94a3b8; cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.trend-series-close:hover { background: #f1f5f9; color: #0f172a; }
+.trend-series-close .material-symbols-outlined { font-size: 19px; }
+
+.trend-series-body {
+  padding: 16px 18px; display: flex; flex-direction: column; gap: 15px;
+  overflow-y: auto; min-height: 0;
+}
+.trend-series-block { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.trend-series-block-head { display: flex; align-items: center; justify-content: space-between; }
+.trend-series-label {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.05em;
+  text-transform: uppercase; color: #94a3b8;
+}
+.trend-series-count {
+  font-size: 11px; font-weight: 700; color: #64748b;
+  padding: 1px 7px; border-radius: 999px; background: #f1f5f9;
+}
+
+/* Cihaz arama */
+.trend-series-search {
+  display: flex; align-items: center; gap: 7px;
+  padding: 0 10px; height: 36px;
+  border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.trend-series-search:focus-within {
+  border-color: #0ea5e9; background: #fff;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.14);
+}
+.trend-series-search > .material-symbols-outlined { font-size: 18px; color: #94a3b8; flex: 0 0 auto; }
+.trend-series-search input {
+  flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+  font-size: 13px; color: #0f172a;
+}
+.trend-series-search input::placeholder { color: #b6c2d2; }
+.trend-series-search-clear {
+  display: inline-flex; border: none; background: none; padding: 0;
+  color: #cbd5e1; cursor: pointer;
+}
+.trend-series-search-clear:hover { color: #64748b; }
+.trend-series-search-clear .material-symbols-outlined { font-size: 16px; }
+
+/* Cihaz listesi — tarayicinin liste kutusu yerine kendi satirlarimiz */
+.trend-series-devices {
+  list-style: none; margin: 0; padding: 4px;
+  max-height: 188px; overflow-y: auto;
+  border: 1px solid #e2e8f0; border-radius: 11px; background: #fff;
+  display: flex; flex-direction: column; gap: 2px;
+  scrollbar-width: thin;
+}
+.trend-series-devices::-webkit-scrollbar { width: 8px; }
+.trend-series-devices::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 999px; }
+.trend-series-device {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border: none; border-radius: 8px;
+  background: transparent; cursor: pointer; text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+.trend-series-device:hover { background: #f1f5f9; }
+.trend-series-device.is-active { background: #0f172a; }
+.trend-series-device-name {
+  font-size: 13px; font-weight: 700; color: #0f172a;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.trend-series-device-code { font-size: 11px; color: #94a3b8; flex: 1; }
+.trend-series-device.is-active .trend-series-device-name { color: #fff; }
+.trend-series-device.is-active .trend-series-device-code { color: rgba(255, 255, 255, 0.6); }
+.trend-series-tick { font-size: 17px; color: transparent; margin-left: auto; flex: 0 0 auto; }
+.trend-series-device.is-active .trend-series-tick { color: #38bdf8; }
+.trend-series-nores { padding: 22px 12px; text-align: center; font-size: 12px; color: #94a3b8; }
+
+/* Sinyal secici — yerlesik ok yerine kendi chevron'umuz */
+.trend-series-select { position: relative; }
+.trend-series-select select {
+  width: 100%; height: 38px; padding: 0 34px 0 11px;
+  border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc;
+  font-size: 13px; font-weight: 600; color: #0f172a; cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.trend-series-select select:focus {
+  outline: none; border-color: #0ea5e9; background: #fff;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.14);
+}
+.trend-series-select > .material-symbols-outlined {
+  position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
+  font-size: 19px; color: #94a3b8; pointer-events: none;
+}
+
+.trend-series-split { display: grid; grid-template-columns: 1fr auto; gap: 15px; align-items: start; }
+@media (max-width: 520px) { .trend-series-split { grid-template-columns: 1fr; } }
+
+/* Kaynak segment kontrolu */
+.trend-series-seg { display: inline-flex; gap: 2px; padding: 3px; background: #f1f5f9; border-radius: 10px; }
+.trend-series-seg-btn {
+  flex: 1; padding: 7px 12px; border: none; border-radius: 7px;
+  background: transparent; color: #64748b;
+  font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.trend-series-seg-btn:hover { color: #0f172a; }
+.trend-series-seg-btn.is-active {
+  background: #fff; color: #0f172a; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+/* Renk swatch'lari */
+.trend-series-colors { display: flex; gap: 6px; flex-wrap: wrap; padding: 3px 0; }
+.trend-series-color {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; padding: 0;
+  border: none; border-radius: 8px; cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.trend-series-color:hover { transform: translateY(-1px) scale(1.06); }
+.trend-series-color .material-symbols-outlined { font-size: 16px; color: #fff; opacity: 0; }
+.trend-series-color.is-active {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #0f172a;
+}
+.trend-series-color.is-active .material-symbols-outlined { opacity: 1; }
+
+/* Onizleme: secim grafikte nasil gorunecek */
+.trend-series-preview {
+  display: flex; align-items: center; gap: 9px;
+  padding: 10px 12px; border-radius: 11px;
+  background: #f8fafc; border: 1px dashed #e2e8f0;
+}
+.trend-series-preview-label {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.05em;
+  text-transform: uppercase; color: #b6c2d2; flex: 0 0 auto;
+}
+.trend-series-preview-line { width: 22px; height: 3px; border-radius: 999px; flex: 0 0 auto; transition: background 0.15s; }
+.trend-series-preview-text {
+  font-size: 12px; font-weight: 600; color: #475569; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.trend-series-foot {
+  display: flex; justify-content: flex-end; gap: 10px;
+  padding: 13px 18px; border-top: 1px solid #f1f5f9; background: #fcfdfe;
+  flex: 0 0 auto;
+}
+.trend-series-foot .device-trend-btn-primary:not(:disabled):hover { background: #1e293b; }
+.trend-series-foot .device-trend-btn-secondary:hover { background: #f8fafc; }
+
 .device-chart-panel {
   display: flex;
   flex-direction: column;

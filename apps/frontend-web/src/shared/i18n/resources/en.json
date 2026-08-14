@@ -4788,7 +4788,11 @@
     "emptyHint": "Add the devices and signals you want to compare — series from different devices are drawn on the same chart.",
     "device": "Device",
     "searchDevice": "Search device...",
+    "noDeviceMatch": "No matching device.",
     "signal": "Signal",
+    "source": "Source",
+    "color": "Color",
+    "preview": "Preview",
     "chartSettings": "Chart settings",
     "settingsSaved": "Settings are stored in this browser."
   }
