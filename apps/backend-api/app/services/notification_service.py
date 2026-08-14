@@ -88,6 +88,19 @@ def create_notification(
     cagrilir; commit fail olsa bile push gider — bu daha hizli (gerçek-zamanli)
     deneyim icin kabul edilebilir.
     """
+    # BASLIK KOLON GENISLIGINE KIRPILIR — savunma derinligi.
+    #
+    # `Notification.title` String(200) ve Postgres bunu ZORLAR. Uzun bir
+    # baslik INSERT'i `StringDataRightTruncation` ile dusurur; hata COMMIT
+    # aninda olustugu icin cagiranin o transaction'da yaptigi HER SEY
+    # (bildirim disi kayitlar dahil) geri sarilir. Yani tek bir uzun metin,
+    # ilgisiz durum guncellemelerini de goturur.
+    #
+    # Kirpma cagiran basina tekrarlanmak yerine burada bir kez yapiliyor:
+    # her yeni cagiran icin ayni tuzagi kapatir. Govde (`body`) String(2000)
+    # oldugu icin tam metin orada korunur.
+    if title and len(title) > 200:
+        title = title[:199] + "…"
     row = Notification(
         recipient_username=recipient_username,
         title=title,
