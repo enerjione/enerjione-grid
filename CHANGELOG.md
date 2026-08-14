@@ -14,7 +14,91 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
-## [2.89.0] — 2026-08-14
+## [2.90.0] — 2026-08-14
+
+Kapsamlı bir production denetiminin bulguları. Buradaki maddelerin ortak
+noktası **sessizlik**: hiçbiri hata vermiyordu, çoğu ekranda "sorun yok"
+diye görünüyordu.
+
+### Düzeltildi
+
+- **Sıfırdan kurulan cihazlarda dört tablo hiç oluşmuyordu.** Şema iki
+  ayrı yoldan kuruluyor: temiz kurulum modellerden üretip damgalıyor
+  (migration'lar koşmuyor), mevcut kurulum migration'ları oynatıyor. Model
+  listesi elle tutulduğu için eksilmiş ve `gateway_health`,
+  `device_purge_jobs`, `ftp_settings`, `device_model_settings` sahaya hiç
+  gitmemişti. En görünür sonucu: **susmuş bir gateway'in cihazları haritada
+  ONLINE takılı kalıyordu**, çünkü onları çevrimdışına çekecek denetçi her
+  turda düşüyordu. Güncelleme sırasında eksik tablolar tamamlanıyor.
+
+- **Haberleşme alarmları sıfırdan kurulan sahalarda kalıcı olarak
+  susuyordu.** Standart kuralı oluşturan adım temiz kurulumda atlandığı
+  için sistem bunu "operatör kapatmış" sanıyordu. Artık "kural yok" ile
+  "kural kapatılmış" ayrı şeyler: kayıt yoksa alarm varsayılan ayarlarla
+  üretiliyor.
+
+- **Cihazdan gelen bozuk bir ölçüm hiçbir iz bırakmadan kayboluyordu.**
+  Servislerin arıza kuyruğuna yazma izni yoktu; mesaj düşüyor, sistem
+  durumu ekranı ise "0 kayıp" gösteriyordu.
+
+- **Backend yeniden başlarken oluşan alarm sonsuza kadar kayboluyordu.**
+  Kaydetme başarısız olduğunda bir daha denenmiyordu — güncelleme
+  sırasındaki yarım dakikada bir cihaz arızalanırsa ne alarm açılıyor ne
+  bildirim gidiyordu. Artık yeniden deneniyor.
+
+- **Çok sinyalli (bileşik) kuralların alarmı hiç kapanmıyordu**; listede
+  sonsuza kadar açık kalıyordu.
+
+- **Alarm listesi sunucudan alınamadığında harita tamamen yeşil
+  açılıyordu** ve ekranda tek bir uyarı yoktu. Nöbetçi operatör "arıza var
+  mı?" sorusuna bakıp "yok" diyebiliyordu. Artık "alarm durumu bilinmiyor"
+  görünüyor; aynı düzeltme cihaz detay sayfası için de yapıldı.
+
+- **Hiç batarya bilgisi göndermemiş cihaz her ekranda dolu batarya
+  gösteriyordu** (varsayılan %100). Artık "—" yazıyor.
+
+- **Cihaz detayındaki üst şerit (Akım/Gerilim/Sıcaklık), haberleşme
+  kopukken bile değeri taze ölçüm gibi gösteriyordu** — üstelik aynı
+  sayfanın alt bölümü aynı sinyal için "Güvenilmez" diyordu. Değer hâlâ
+  görünüyor ama artık güvenilmez olduğu belli.
+
+- **SCADA'nın "bana her şeyi gönder" sorgusu eksik cevaplanıyordu.** Yanıt,
+  aynı anda akan anlık ölçümler tarafından kuyruktan siliniyor; sonunda
+  "tamamlandı" işareti gittiği için SCADA eksik veriyi güncel sanıyordu.
+
+- **Yedekten geri yükleme arayüzden çalışmıyordu.** Büyük dosya izni yanlış
+  adrese tanımlanmıştı; 10 MB üstü her yedek reddediliyordu. Felaket
+  kurtarmanın tek arayüz adımı buydu.
+
+- **Eski bir sürüme dönmek sistemi açılamaz hale getiriyordu.** Artık ne
+  yapılması gerektiğini söyleyen anlaşılır bir hata veriyor.
+
+- **Sıfırdan kurulan sahalarda cihaz silme hata veriyordu**; yükseltilen
+  sahalarda çalışan aynı işlem orada patlıyordu.
+
+### Güvenlik
+
+- **Operatör rolündeki bir kullanıcı kendine API anahtarı üretip tüm
+  sahanın verisini okuyabiliyordu.** Arayüzde gizli olan bu işlem doğrudan
+  çağrılabiliyor ve açık API sorumluluk alanı sınırını hiç uygulamıyordu.
+  Hem anahtar üretimi yetkiye bağlandı hem de açık API artık sorumluluk
+  alanına göre filtreliyor.
+
+- **API anahtarının "yalnızca şu IP'den kullanılabilir" kısıtı tek bir
+  başlıkla aşılabiliyordu.** Denetim kaydındaki IP de aynı yanlış kaynaktan
+  besleniyordu.
+
+- **Sistem denetim kaydının tamamı herkese açıktı**: operatör giriş
+  denemelerini, parola sıfırlamalarını ve anahtar üretimlerini
+  görebiliyordu. Cihaz ve arıza olayları görünmeye devam ediyor.
+
+- **Şifre değiştirme ekranları tek karakterlik parolayı kabul ediyordu**;
+  en az 8 karakter kuralı yalnızca davet akışında vardı.
+
+- **Son telemetri listesi sorumluluk alanı filtresi uygulamıyordu.**
+
+- WhatsApp servisi, kimlik anahtarı tanımsızken **herkesi içeri
+  alıyordu**; artık anahtar yoksa hiç başlamıyor.
 
 ### Eklendi
 
