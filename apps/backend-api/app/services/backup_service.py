@@ -30,6 +30,7 @@ from pathlib import Path
 from urllib.parse import urlparse, unquote
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -1186,16 +1187,68 @@ def delete_backup_file(job: BackupJob) -> None:
         logger.warning("backup_delete_file_failed id=%s error=%s", job.id, exc)
 
 
+#: Yedek programinin ILK KEZ yaratildiginda alacagi degerler. Tek kaynak
+#: burasi; model tarafindaki `default=`lerle AYNI olmak zorunda.
+#:
+#: 24 saat + 7 kopya = bir haftalik geri donus penceresi. `retention_count`
+#: mevcut `apply_retention` ile birebir uyumlu (en yeni N BASARILI yedek
+#: korunur, eskiler dosyasiyla birlikte silinir) — yeni bir kavram girmiyor.
+DEFAULT_SCHEDULE_ENABLED = True
+DEFAULT_SCHEDULE_INTERVAL_HOURS = 24
+DEFAULT_SCHEDULE_RETENTION_COUNT = 7
+
+
 def get_or_create_schedule(db: Session) -> BackupSchedule:
+    """Tekil (id=1) yedek programini dondur; yoksa VARSAYILANLARLA yarat.
+
+    GERIYE UYUMLULUK — BURASI KRITIK
+    --------------------------------
+    Bu fonksiyon MEVCUT satiri ASLA DEGISTIRMEZ. Satir varsa oldugu gibi
+    donulur; `enabled` alanina bakilmaz bile. Yani operator Yedekleme
+    ekranindan bilincli olarak kapattiysa (`enabled=false`) her acilista,
+    her guncellemede ve her API cagrisinda KAPALI kalir.
+
+    Varsayilanlar YALNIZCA satir HIC YOKKEN — yani temiz kurulumda, ya da
+    yedek ekranina hic girilmemis bir kurulumda ilk temas aninda — devreye
+    girer.
+
+    NEDEN MIGRATION DEGIL
+    ---------------------
+    Temiz kurulum semayi `Base.metadata.create_all()` + `stamp head` ile
+    kuruyor (bkz. scripts/migrate_db.py); migration'lar KOSMUYOR. Yani
+    satiri seed eden bir migration tam da hedefledigimiz senaryoda —
+    yeni sahada — hic calismazdi. Varsayilanin domain katmaninda durmasi
+    bu yuzden tercih degil zorunluluk.
+
+    YARIS DURUMU
+    ------------
+    Ayni anda birden fazla surec (backend-worker'in uvicorn kopyalari +
+    API'ye gelen bir GET /schedule istegi) ilk satiri yaratmaya calisabilir.
+    Ikinci INSERT birincil anahtarda patlar; bu bir hata degil, yarisi
+    KAYBETMEKTIR — geri sarilir ve kazananin satiri okunur. Aksi halde
+    acilista rastgele 500'ler gorulurdu.
+    """
     sch = db.get(BackupSchedule, 1)
-    if sch is None:
-        sch = BackupSchedule(
-            id=1,
-            enabled=False,
-            interval_hours=24,
-            retention_count=7,
-        )
-        db.add(sch)
+    if sch is not None:
+        return sch
+    sch = BackupSchedule(
+        id=1,
+        enabled=DEFAULT_SCHEDULE_ENABLED,
+        interval_hours=DEFAULT_SCHEDULE_INTERVAL_HOURS,
+        retention_count=DEFAULT_SCHEDULE_RETENTION_COUNT,
+        # `last_run_at` BILEREK None: ilk yedek 24 saat beklemeden, ilk
+        # scheduler turunda alinir (bkz. backup_scheduler._maybe_run).
+        # Yeniden baslatmalarda tekrarlanmaz cunku ilk basarili turdan
+        # sonra bu alan damgalanir.
+    )
+    db.add(sch)
+    try:
         db.commit()
-        db.refresh(sch)
+    except IntegrityError:
+        db.rollback()
+        mevcut = db.get(BackupSchedule, 1)
+        if mevcut is None:
+            raise
+        return mevcut
+    db.refresh(sch)
     return sch

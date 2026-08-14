@@ -822,6 +822,7 @@
       "backup_jobs_reindexed": "Backup list re-scanned: {{count}} records added",
       "backup_disk_warning": "Backup disk {{pct}}% full — backups will stop unless space is freed",
       "backup_disk_critical": "Backup disk {{pct}}% full — scheduled backup skipped",
+      "backup_scheduled_failed": "Scheduled backup failed: {{reason}}",
       "license_request_downloaded": "License request file downloaded",
       "license_imported": "License activated (device limit {{limit}})",
       "license_import_rejected": "License rejected: {{reason}}",

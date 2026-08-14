@@ -57,7 +57,16 @@ class BackupSchedule(Base):
     __tablename__ = "backup_schedule"
 
     id: Mapped[int] = mapped_column(primary_key=True, default=1)
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # VARSAYILAN ACIK. Kapali varsayilan sessiz bir veri dayanikliligi
+    # arizasiydi: saha IPC'sinde kimse Yedekleme ekranina girmezse HICBIR
+    # zamanli yedek alinmiyor, tek yedek kaynagi `update.sh`in aldigi
+    # pre-update dump'i oluyordu — yani yedek sikligi "operator ne zaman
+    # guncelleme yapti"ya bagli kaliyordu.
+    #
+    # BU DEFAULT YALNIZCA SATIR ILK KEZ YARATILIRKEN OKUNUR. Mevcut
+    # kurulumlardaki satirlara DOKUNMAZ: operator bilincli olarak kapattiysa
+    # kapali kalir (bkz. backup_service.get_or_create_schedule).
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Yedek alma araligi (saat). Min 1.
     interval_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
     # Tutulacak yedek sayisi (retention). En eski silinir.

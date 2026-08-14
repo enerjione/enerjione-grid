@@ -155,6 +155,7 @@
     "backup_jobs_reindexed": "Yedek listesi yeniden tarandı: {{count}} kayıt eklendi",
     "backup_disk_warning": "Yedek diski %{{pct}} dolu — yer açılmazsa yedekleme duracak",
     "backup_disk_critical": "Yedek diski %{{pct}} dolu — planlı yedek atlandı",
+    "backup_scheduled_failed": "Zamanlı yedek alınamadı: {{reason}}",
     "license_request_downloaded": "Lisans istek dosyası indirildi",
     "license_imported": "Lisans etkinleştirildi (cihaz limiti {{limit}})",
     "license_import_rejected": "Lisans reddedildi: {{reason}}",
