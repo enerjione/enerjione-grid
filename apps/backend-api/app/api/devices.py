@@ -1,9 +1,10 @@
 import logging
+import re
 
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select, text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
@@ -526,6 +527,79 @@ def queue_device_command(
     return DeviceCommandQueued(
         id=queued.id, status=queued.status,
         command=queued.command, dnp3_index=queued.dnp3_index,
+    )
+
+
+@router.get("/{device_code}/report.pdf")
+def device_report_pdf(
+    device_code: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Cihazin tek dosyalik DURUM RAPORU (A4 dikey, konum haritali).
+
+    NE ICERIR: kunye ve baglanti, konum, olcum kanallari (unite/uydu/seri/
+    faz/pil), kanal kanal sinyal tablolari, RTU (ya da kit seviyesi)
+    degerler, aktif alarmlar ve son olaylar. Iskelet CIHAZ TURUNE gore
+    degisir — Pole Master Kit'in kendi raporunda olcum kanali yoktur, bagli
+    setler listesi vardir; setin raporunda ise haberlesme degerleri KIT
+    kaydindan gelir. Ayrintili gerekce: `services/device_report_service.py`.
+
+    Yetki: cihaz listesiyle AYNI kapsam — operator/engineer yalnizca kendi
+    sorumluluk alanindaki cihazin raporunu alabilir. Rapor musteri logosu,
+    hat/direk bilgisi ve GPS koordinati tasidigi icin kapsam disina sizmasi
+    kabul edilemez.
+
+    KIT ISTISNASI: fiziksel kit kaydi hicbir hat kesimine baglanmaz (hatta
+    oturan setleridir), bu yuzden kapsam filtresinden HER ZAMAN duserdi —
+    setleri gorunen bir kullanici kitin raporunu alamazdi. Kural liste
+    ucundakiyle ayni: setlerinden en az biri gorunuyorsa kit de gorunur.
+    """
+    from app.models.project_settings import ProjectSettings
+    from app.services.device_report_map import render_device_map_for
+    from app.services.device_report_service import (
+        build_device_report_pdf,
+        collect_device_report,
+    )
+
+    device = DeviceRepository(db).get_by_code(device_code)
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+
+    visible = get_visible_device_ids(db, current_user)
+    if visible is not None and device.id not in visible:
+        gorunur_set = any(
+            child.id in visible for child in device_kit_service.list_subunits(db, device.id)
+        )
+        if not gorunur_set:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Bu cihaza erişim yetkiniz yok (responsibility scope dışı)",
+            )
+
+    data = collect_device_report(db, device)
+    # Harita ZORUNLU DEGIL: karo yoksa (cevrimdisi kurulum, indirilmemis alan)
+    # ya da cihaz hatta yerlestirilmemisse rapor haritasiz cikar. Raporun hic
+    # uretilmemesi, eksik bir figurden cok daha kotu olurdu.
+    map_image = render_device_map_for(db, device)
+
+    pdf = build_device_report_pdf(
+        data,
+        settings_row=db.get(ProjectSettings, 1),
+        map_image=map_image,
+        generated_by=current_user.full_name or current_user.username,
+    )
+
+    stamp = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d-%H%M")
+    # Dosya adindaki cihaz kodu dosya sistemine giriyor: kod `devices.code`
+    # uzerinde serbest metin, `/` ya da `"` iceren bir kod Content-Disposition
+    # basligini kirardi.
+    safe_code = re.sub(r"[^A-Za-z0-9._-]+", "-", device.code).strip("-") or "cihaz"
+    filename = f"cihaz-{safe_code}-{stamp}.pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

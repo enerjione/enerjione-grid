@@ -16,7 +16,7 @@ import { useDeviceModelSettings } from "../../components/DeviceModelSettingsProv
 import { voltageToPercent } from "../../shared/battery";
 import { fizikselUydular, setMi, uyduKaynagi } from "../../shared/deviceKit";
 
-import { fetchAlarmEvents } from "../../shared/api";
+import { downloadDeviceReport, fetchAlarmEvents } from "../../shared/api";
 import { SOURCES, sourceLabel } from "../signals/signalCatalogConstants";
 import { PoleMasterTab } from "./PoleMasterTab";
 import { signalLabel } from "../../shared/signalLabel";
@@ -184,6 +184,10 @@ export function DeviceDetailPage({
   const [activeSource, setActiveSource] = useState<SignalSource>("master");
   const [busyReset, setBusyReset] = useState(false);
   const [deviceAlarms, setDeviceAlarms] = useState<AlarmEvent[]>([]);
+  /** PDF sunucuda uretilir (katalog + telemetri + uydu karolari); bir kac
+   *  saniye surebilir, o yuzden dugme beklemede kilitlenir. */
+  const [raporUretiliyor, setRaporUretiliyor] = useState(false);
+  const [raporHatasi, setRaporHatasi] = useState("");
 
   const device = useMemo(() => devices.find((d) => d.id === deviceId), [devices, deviceId]);
 
@@ -229,6 +233,40 @@ export function DeviceDetailPage({
     () => deviceAlarms.some((a) => !a.reset),
     [deviceAlarms]
   );
+
+  /** CIHAZ DURUM RAPORU (PDF) — sunucuda uretilir, burada indirilir.
+   *
+   *  Tarayicinin yazdirma diyalogu YOK: sayfa bes sekmeye yayilmis bir pano
+   *  ve `window.print()` yalnizca ACIK sekmeyi, secili kanalla, pencere
+   *  genisligine bagli bicimde kagida dokerdi. Rapor gercek bir belge
+   *  (`services/device_report_service.py`); iskeleti cihaz turune gore
+   *  sunucuda kuruluyor ve dosya adi da oradan geliyor. */
+  const raporIndir = useCallback(async () => {
+    if (!token || !device) return;
+    setRaporUretiliyor(true);
+    setRaporHatasi("");
+    try {
+      const { blob, filename } = await downloadDeviceReport(token, device.code);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      // Chromium bazi proxy'lerin arkasinda DOM'a eklenmemis anchor'un
+      // click'ini yutuyor (bkz. shared/api.ts indirme yardimcilari).
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      // Hemen revoke etmek bazi tarayicilarda indirmeyi "network error"a
+      // dusuruyor: click asenkron baslatiyor.
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      setRaporHatasi(
+        err instanceof Error ? err.message : t("deviceDetail.exportPdfFailed")
+      );
+    } finally {
+      setRaporUretiliyor(false);
+    }
+  }, [token, device, t]);
 
   const dataTypeByKey = useMemo(() => {
     const m = new Map<string, SignalDataType>();
@@ -590,6 +628,38 @@ export function DeviceDetailPage({
                 <span className="device-alarm-pulse" aria-hidden="true" />
                 {t("deviceDetail.alarmActive")}
               </span>
+            ) : null}
+            {/* PDF: BACKEND uretir (`/devices/{code}/report.pdf`). Sayfanin
+                tamaminin — kunye, kanallar, sinyal durumu, kit seviyesi
+                degerler, alarmlar, olaylar — tek belgeye dokulmus hali.
+                Sekmeden BAGIMSIZ: hangi sekmede olursaniz olun ayni belge
+                cikar, cunku rapor ekrandan degil KAYITTAN uretiliyor. */}
+            {raporHatasi ? (
+              // Hata dugmenin YANINDA durur: `title` ipucu dokunmatik
+              // ekranda hic gorunmuyor ve indirme sessizce basarisiz
+              // olmus gibi okunuyordu.
+              <span className="device-report-error" role="alert">
+                <span className="material-symbols-outlined">error</span>
+                {raporHatasi}
+              </span>
+            ) : null}
+            {token ? (
+              <button
+                type="button"
+                className="device-report-btn"
+                onClick={() => void raporIndir()}
+                disabled={raporUretiliyor}
+                aria-busy={raporUretiliyor}
+              >
+                {raporUretiliyor ? (
+                  <span className="btn-spinner" aria-hidden="true" />
+                ) : (
+                  <span className="material-symbols-outlined">picture_as_pdf</span>
+                )}
+                {raporUretiliyor
+                  ? t("deviceDetail.exportPdfBusy")
+                  : t("deviceDetail.exportPdf")}
+              </button>
             ) : null}
             {showReset ? (
               <button

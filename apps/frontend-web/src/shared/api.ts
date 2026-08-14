@@ -1045,6 +1045,38 @@ export async function downloadFaultReport(
   };
 }
 
+/**
+ * CIHAZ DURUM RAPORU (PDF) — Arıza Raporu ile AYNI sablondan, sunucuda.
+ *
+ * Cihaz detay sayfasi bes sekmeye yayilmis bir panodur; sahaya cikan ekibe
+ * ya da musteriye bunun tamami TEK belge olarak lazim oluyor. Ekran
+ * goruntusu yollamak o anki sekmeye, secili kanala ve pencere genisligine
+ * bagli bir sey uretirdi.
+ *
+ * Belgenin iskeleti CIHAZ TURUNE gore degisir (SN 2.0 / Pole Master Kit /
+ * kit seti) ve bu karar sunucuda, sinyal katalogundan veriliyor — istemci
+ * yalnizca indirir.
+ *
+ * Dosya adi backend'in Content-Disposition basligindan gelir; sunucu ile
+ * istemci ayri ayri ad turetirse arsivde iki farkli isim olusur.
+ */
+export async function downloadDeviceReport(
+  token: string,
+  deviceCode: string
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/devices/${encodeURIComponent(deviceCode)}/report.pdf`,
+    { headers: authHeaders(token) }
+  );
+  if (!response.ok) throw await buildApiError(response, "Cihaz raporu oluşturulamadı.");
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = /filename="?([^";]+)"?/i.exec(disposition);
+  return {
+    blob: await response.blob(),
+    filename: match ? match[1] : `cihaz-${deviceCode}.pdf`
+  };
+}
+
 export async function fetchFaultStats(
   token: string
 ): Promise<import("./types").FaultStats> {

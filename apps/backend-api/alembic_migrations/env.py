@@ -27,30 +27,17 @@ if str(_BACKEND_DIR) not in sys.path:
 
 from app.core.config import settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
-# Model'lerin Base'e register olmasi icin import et (yan etki):
-import app.models.alarm  # noqa: F401,E402
-import app.models.alarm_rule  # noqa: F401,E402
-import app.models.api_key  # noqa: F401,E402
-import app.models.backup  # noqa: F401,E402
-import app.models.device  # noqa: F401,E402
-import app.models.fault  # noqa: F401,E402
-import app.models.gateway  # noqa: F401,E402
-import app.models.gateway_ingest_batch  # noqa: F401,E402
-import app.models.grid_topology  # noqa: F401,E402
-import app.models.notification  # noqa: F401,E402
-import app.models.notification_settings  # noqa: F401,E402
-import app.models.outbound_target  # noqa: F401,E402
-import app.models.outbox_event  # noqa: F401,E402
-import app.models.processed_message  # noqa: F401,E402
-import app.models.project_settings  # noqa: F401,E402
-import app.models.responsibility_area  # noqa: F401,E402
-import app.models.signal_catalog  # noqa: F401,E402
-import app.models.system_event  # noqa: F401,E402
-import app.models.telemetry  # noqa: F401,E402
-import app.models.telemetry_history  # noqa: F401,E402
-import app.models.user  # noqa: F401,E402
-import app.models.user_fcm_token  # noqa: F401,E402
-import app.models.user_notification_preference  # noqa: F401,E402
+
+# Model'lerin Base'e register olmasi icin TEK import — liste
+# `app/models/__init__.py` icinde tutulur.
+#
+# ESKIDEN BURADA AYRI BIR LISTE VARDI ve 10 model eksikti (bulk_notification_*,
+# device_command, device_config, device_model_settings, device_purge_job,
+# ftp_settings, gateway_health, telemetry_latest, user_session). Autogenerate
+# bu tablolari "DB'de var ama modelde yok" sanip onlar icin `op.drop_table`
+# uretiyordu — gozden kacan tek bir migration `telemetry_latest`i ya da
+# `user_sessions`i her saha cihazindan dusurebilirdi.
+import app.models  # noqa: F401,E402
 
 config = context.config
 

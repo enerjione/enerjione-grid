@@ -32994,6 +32994,38 @@ th.event-col-category {
 .device-reset-btn:disabled { opacity: 0.6; cursor: default; }
 .device-reset-btn .material-symbols-outlined { font-size: 18px; }
 
+/* ---- PDF rapor dugmesi ----
+   Alarm reset dugmesiyle AYNI olculer, NOTR renk: ikisi yan yana duruyor
+   ve reset cihaza komut gonderen tek geri alinamaz eylem. Turuncu ikinci
+   bir dugme, hangisinin sahaya dokundugunu belirsizlestirirdi. */
+.device-report-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.device-report-btn:hover:not(:disabled) { background: #eef2f7; }
+.device-report-btn:disabled { opacity: 0.6; cursor: default; }
+.device-report-btn .material-symbols-outlined { font-size: 18px; }
+.device-report-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 320px;
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 600;
+}
+.device-report-error .material-symbols-outlined { font-size: 16px; }
+
 /* ---- KPI: stale (son bilinen) + kaynak ipucu ---- */
 .device-kpi-value.is-stale { color: #94a3b8 !important; }
 .device-overview-srchint {
