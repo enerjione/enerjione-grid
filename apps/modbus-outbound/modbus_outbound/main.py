@@ -34,6 +34,28 @@ from modbus_outbound.config import SETTINGS
 from modbus_outbound.consumer import TelemetryConsumer
 from modbus_outbound.health import start_health_server
 from modbus_outbound.server import manager as modbus_manager
+from modbus_outbound import watchdog
+
+#: Ana dongunun atissiz kalabilecegi en uzun sure. Kalp 5 sn'de bir attigi
+#: icin bu 12 kacirilmis atis demek — gecici bir yavaslama restart uretmez.
+BEKCI_ESIK_SN = 60.0
+#: Kalp atis araligi.
+BEKCI_ATIS_SN = 5.0
+
+
+async def _kalp_dongusu(consumer, aralik_sn: float = BEKCI_ATIS_SN) -> None:
+    """Olay dongusu donuyor VE tuketici ipligi ayakta ise atis yap.
+
+    Iki ariza da boylece yakalanir:
+      * asyncio dongusu bloklanirsa `sleep` hic donmez, atis durur;
+      * tuketici ipligi olduyse kosul saglanmaz, atis durur.
+    Ikisi de trafikten bagimsizdir — sessiz gecede atis surer (bkz.
+    watchdog.py "ATIS NEYE BAGLANMALI").
+    """
+    while True:
+        await asyncio.sleep(aralik_sn)
+        if consumer.is_alive():
+            watchdog.kalp_at()
 
 
 def _configure_logging() -> None:
@@ -120,6 +142,7 @@ async def _async_main() -> None:
         port=settings.health_port,
         snapshot=_health,
         runtime_for=_runtime_for,
+        is_healthy=watchdog.saglikli,
     )
     logger.info(
         "modbus_outbound_starting version=%s health=%s:%d",
@@ -144,6 +167,11 @@ async def _async_main() -> None:
     )
     consumer.start()
 
+    # Bekci tuketici AYAGA KALKTIKTAN SONRA baslar: once baslarsa ilk atisa
+    # kadar gecen surede iplik henuz yokken atis kosulu saglanmaz.
+    watchdog.baslat(BEKCI_ESIK_SN, servis="modbus-outbound")
+    kalp_task = asyncio.create_task(_kalp_dongusu(consumer), name="watchdog-kalp")
+
     try:
         await stop_event.wait()
     finally:
@@ -151,6 +179,7 @@ async def _async_main() -> None:
         syncer.request_stop()
         snapshot.request_stop()
         consumer.stop()
+        kalp_task.cancel()
         await asyncio.wait([syncer_task, snapshot_task], timeout=5)
         await modbus_manager.undeploy_all()
         try:

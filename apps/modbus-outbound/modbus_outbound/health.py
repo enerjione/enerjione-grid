@@ -20,7 +20,15 @@ def start_health_server(
     port: int,
     snapshot: Callable[[], dict],
     runtime_for: Callable[[int], dict] | None = None,
+    is_healthy: Callable[[], bool] | None = None,
 ) -> HTTPServer:
+    """`is_healthy` verilmezse uc HER ZAMAN 200 doner (eski davranis).
+
+    ONCEDEN SABIT 200 DONUYORDU. Saglik sunucusu AYRI bir iplikte oldugu
+    icin ana dongu kilitlense de 200 doner ve container "saglikli"
+    gorunurdu — yani tam da yakalamasi gereken arizayi yakalamiyordu.
+    `is_healthy` verildiginde takilma 503 olarak bildirilir.
+    """
     class _Handler(BaseHTTPRequestHandler):
         def _send_json(self, payload: dict, status: int = 200) -> None:
             body = json.dumps(payload).encode("utf-8")
@@ -33,7 +41,11 @@ def start_health_server(
         def do_GET(self):  # noqa: N802
             try:
                 if self.path == "/health":
-                    self._send_json(snapshot())
+                    canli = True if is_healthy is None else bool(is_healthy())
+                    govde = snapshot()
+                    if not canli:
+                        govde = {**govde, "status": "stalled"}
+                    self._send_json(govde, 200 if canli else 503)
                     return
                 if self.path.startswith("/runtime/") and runtime_for is not None:
                     raw = self.path.split("/runtime/", 1)[1]
