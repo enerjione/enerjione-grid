@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Imajla birlikte paketlenen surum. Kok dizindeki VERSION dosyasi ve
 # apps/frontend-web/package.json ile AYNI olmali; release CI ucunu de
 # birbirine karsi dogrular.
-_FALLBACK_APP_VERSION = "2.94.0"
+_FALLBACK_APP_VERSION = "2.95.0"
 
 
 # Production'da reddedilen placeholder secret prefix'leri. Settings constructor

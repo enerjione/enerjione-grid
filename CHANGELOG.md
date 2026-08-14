@@ -14,6 +14,55 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.95.0] — 2026-08-14
+
+### Değişti
+
+- **Yedekten geri yükleme artık çalışan veritabanını riske atmıyor.** Bu,
+  sürümün tek ve en önemli değişikliğidir.
+
+  Önceden geri yükleme, yedeği **doğrudan çalışan veritabanının üzerine**
+  uyguluyordu: önce mevcut tablolar siliniyor, sonra yedek yazılıyordu.
+  Bu sırada bir şey ters giderse — yedek dosyası bozuksa, disk dolarsa ya da
+  elektrik kesilirse — veritabanı **yarım geri yüklenmiş** halde kalıyor ve
+  geri dönüş olmuyordu. Yani felaket kurtarma için kullanılan aracın kendisi
+  felakete yol açabiliyordu.
+
+  Artık yedek önce **ayrı ve boş bir çalışma veritabanına** yükleniyor,
+  şeması güncelleniyor ve doğrulanıyor. Çalışan veritabanına ancak bunların
+  tamamı başarılı olduktan sonra, **saniyenin yarısından kısa süren** bir
+  geçişle dokunuluyor.
+
+  **Geri yükleme başarısız olursa mevcut veritabanı hiç değişmemiş olur** ve
+  sistem çalışmaya devam eder.
+
+  Ayrıca:
+  - Geri yükleme öncesi **disk yeterliliği kontrol ediliyor**; yer yoksa
+    işlem hiç başlamıyor ve mevcut geri dönüş noktası korunuyor.
+  - Başarılı geri yüklemeden sonra **önceki veritabanı saklanıyor**, bir
+    sorun çıkarsa ona dönülebiliyor. Otomatik silinmiyor.
+  - **Eski sürümlerden alınmış yedekler** artık sorunsuz geri yükleniyor;
+    önceden bu durum sistemin açılamamasına yol açabiliyordu.
+  - Aynı anda iki geri yükleme başlatılamıyor.
+  - Elektrik kesintisiyle yarıda kalan bir geri yükleme **açılışta tespit
+    edilip** operatöre bildiriliyor; hiçbir veritabanı kendiliğinden
+    silinmiyor.
+
+  Geri yükleme sırasında **telemetri kaybolmuyor**: veriler geçici olarak
+  kuyrukta bekliyor ve işlem bitince kaydediliyor.
+
+  Ayrıntılı davranış ve elle kurtarma adımları için `docs/RESTORE.md`.
+
+### Düzeltildi
+
+- **Uyumsuz PostgreSQL araç sürümü artık erkenden yakalanıyor.** Cihaza
+  veritabanı sunucusundan daha yeni bir PostgreSQL kurulmuşsa alınan
+  yedekler geri yüklenemez hale geliyor ve bu ancak geri yükleme
+  denendiğinde anlaşılıyordu. Artık işlem başlamadan önce kontrol ediliyor
+  ve açık bir hata veriliyor.
+
+---
+
 ## [2.94.0] — 2026-08-14
 
 ### Eklendi
