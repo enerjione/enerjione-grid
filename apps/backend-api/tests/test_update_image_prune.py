@@ -87,9 +87,8 @@ def _bash_bul() -> str | None:
     HICBIR sorun yokken kirmizi olur.
 
     Bu, hangi kabuktan calistirildigina gore degisen sinsi bir farkti:
-    Git Bash icinden pytest yesil, PowerShell icinden (ve dolayisiyla
-    `tools/oturum-teslim.ps1` icinden) 5 test kirmizi. Teslim scripti tam
-    bu yuzden duruyordu.
+    Git Bash icinden pytest yesil, PowerShell icinden 5 test kirmizi --
+    update.sh'ta hicbir sey degismeden.
 
     Sira: Git Bash -> PATH'teki bash (WSL saplamasi degilse) -> yok.
     """

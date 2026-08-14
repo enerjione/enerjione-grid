@@ -15,15 +15,7 @@
       "Bash(pip-compile:*)",
       "Bash(docker compose ps:*)",
       "Bash(docker compose logs:*)",
-      "Read(//**)",
-
-      "PowerShell(*oturum-kayit.ps1*)",
-      "PowerShell(*oturum-birlestir.ps1*)",
-      "PowerShell(*oturum-durum.ps1*)",
-      "PowerShell(*oturum-koruma-test.ps1*)",
-      "Bash(powershell*oturum-kayit.ps1*)",
-      "Bash(powershell*oturum-birlestir.ps1*)",
-      "Bash(powershell*oturum-koruma-test.ps1*)"
+      "Read(//**)"
     ],
     "ask": [
       "Bash(git push:*)",
@@ -31,12 +23,7 @@
       "Bash(docker compose up:*)",
       "Bash(docker compose down:*)",
       "Bash(bash update.sh:*)",
-      "Bash(bash uninstall.sh:*)",
-      "PowerShell(*oturum-ac.ps1*)",
-      "PowerShell(*oturum-kapat.ps1*)",
-      "PowerShell(*oturum-teslim.ps1*)",
-      "PowerShell(*surum-hazir.ps1*)",
-      "PowerShell(*dal-temizle.ps1*)"
+      "Bash(bash uninstall.sh:*)"
     ],
     "deny": [
       "Read(.env)",
@@ -50,178 +37,5 @@
   "worktree": {
     "symlinkDirectories": ["apps/frontend-web/node_modules"],
     "baseRef": "fresh"
-  },
-
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-durum.ps1",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
-
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-baslik.ps1",
-            "timeout": 15
-          }
-        ]
-      }
-    ],
-
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-bitis.ps1",
-            "timeout": 20
-          }
-        ]
-      }
-    ],
-
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "if": "Bash(git *)",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-koruma.ps1",
-            "timeout": 20,
-            "statusMessage": "Paralel oturum korumasi"
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-yazma-koruma.ps1",
-            "timeout": 20,
-            "statusMessage": "Ana agac korumasi"
-          },
-          {
-            "type": "command",
-            "if": "Edit(**/src/shared/**)",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-carpisma.ps1",
-            "timeout": 20,
-            "statusMessage": "Carpisma kontrolu"
-          },
-          {
-            "type": "command",
-            "if": "Write(**/src/shared/**)",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-carpisma.ps1",
-            "timeout": 20,
-            "statusMessage": "Carpisma kontrolu"
-          },
-          {
-            "type": "command",
-            "if": "Edit(**/src/app/**)",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-carpisma.ps1",
-            "timeout": 20,
-            "statusMessage": "Carpisma kontrolu"
-          },
-          {
-            "type": "command",
-            "if": "Write(**/src/app/**)",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-carpisma.ps1",
-            "timeout": 20,
-            "statusMessage": "Carpisma kontrolu"
-          },
-          {
-            "type": "command",
-            "if": "Edit(**/src/styles.css)",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-carpisma.ps1",
-            "timeout": 20,
-            "statusMessage": "Carpisma kontrolu"
-          },
-          {
-            "type": "command",
-            "if": "Write(**/src/styles.css)",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-carpisma.ps1",
-            "timeout": 20,
-            "statusMessage": "Carpisma kontrolu"
-          },
-          {
-            "type": "command",
-            "if": "Edit(**/app/models/**)",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-carpisma.ps1",
-            "timeout": 20,
-            "statusMessage": "Carpisma kontrolu"
-          },
-          {
-            "type": "command",
-            "if": "Write(**/app/models/**)",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-carpisma.ps1",
-            "timeout": 20,
-            "statusMessage": "Carpisma kontrolu"
-          },
-          {
-            "type": "command",
-            "if": "Edit(**/alembic_migrations/versions/**)",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-carpisma.ps1",
-            "timeout": 20,
-            "statusMessage": "Migration zinciri kontrolu"
-          },
-          {
-            "type": "command",
-            "if": "Write(**/alembic_migrations/versions/**)",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-carpisma.ps1",
-            "timeout": 20,
-            "statusMessage": "Migration zinciri kontrolu"
-          },
-          {
-            "type": "command",
-            "if": "Edit(**/docker-compose.yml)",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-carpisma.ps1",
-            "timeout": 20,
-            "statusMessage": "Carpisma kontrolu"
-          },
-          {
-            "type": "command",
-            "if": "Edit(**/CLAUDE.md)",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-carpisma.ps1",
-            "timeout": 20,
-            "statusMessage": "Carpisma kontrolu"
-          }
-        ]
-      }
-    ],
-
-    "WorktreeCreate": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-worktree-hook.ps1 -Olay create",
-            "timeout": 300,
-            "statusMessage": "Oturum worktree'si kuruluyor"
-          }
-        ]
-      }
-    ],
-
-    "WorktreeRemove": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-worktree-hook.ps1 -Olay remove",
-            "timeout": 60
-          }
-        ]
-      }
-    ]
   }
 }
