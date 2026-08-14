@@ -77,11 +77,44 @@ def _blogu_ayikla() -> str:
     return "\n".join(satirlar[bas + 1 : son])
 
 
+def _bash_bul() -> str | None:
+    """Windows YOLLARINI anlayan bir bash bul.
+
+    `shutil.which("bash")` Windows'ta cogu zaman
+    `%LOCALAPPDATA%\\Microsoft\\WindowsApps\\bash.EXE` dondururu — bu WSL
+    saplamasidir ve kendisine verilen `C:/...` yolunu goremez; harness
+    "No such file or directory" ile 127 doner. Yani test, update.sh'ta
+    HICBIR sorun yokken kirmizi olur.
+
+    Bu, hangi kabuktan calistirildigina gore degisen sinsi bir farkti:
+    Git Bash icinden pytest yesil, PowerShell icinden (ve dolayisiyla
+    `tools/oturum-teslim.ps1` icinden) 5 test kirmizi. Teslim scripti tam
+    bu yuzden duruyordu.
+
+    Sira: Git Bash -> PATH'teki bash (WSL saplamasi degilse) -> yok.
+    """
+    adaylar = [
+        Path(r"C:\Program Files\Git\bin\bash.exe"),
+        Path(r"C:\Program Files (x86)\Git\bin\bash.exe"),
+    ]
+    for aday in adaylar:
+        if aday.is_file():
+            return str(aday)
+
+    yol = shutil.which("bash")
+    if yol and "windowsapps" not in yol.replace("\\", "/").lower():
+        return yol
+    return None
+
+
 def _calistir(tmp_path: Path, *, registry: str, yeni: str, onceki: str) -> list[str]:
     """Blogu sahte docker ile kostur, SILINEN imajlarin listesini dondur."""
-    bash = shutil.which("bash")
+    bash = _bash_bul()
     if not bash:
-        pytest.skip("bash yok (bu blok yalnizca Linux saha cihazinda kosuyor)")
+        pytest.skip(
+            "Windows yollarini anlayan bash yok (bu blok yalnizca Linux saha "
+            "cihazinda ya da Git Bash kurulu makinede kosar)"
+        )
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
