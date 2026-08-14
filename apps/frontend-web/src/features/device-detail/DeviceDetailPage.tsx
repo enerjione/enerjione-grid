@@ -900,6 +900,21 @@ function OverviewTab({
   // `sourceLabel` (signalCatalogConstants).
   const srcLabel = sourceLabel(activeSource);
 
+  /** KURCALAMA — "Normal" demeden ONCE guvenilirlik.
+   *
+   *  Bir sayi ciplak sayidir ama "Normal" bir HUKUMDUR: haberlesmesi kopmus
+   *  bir cihaz icin gateway `comm_lost` kalitesiyle 0.0 basar ve kart bunu
+   *  "sorun yok" diye gosterirse sunucunun kararini gecersiz kilar. Bu, bu
+   *  urundeki en agir hata sinifi (bkz. shared/signalQuality.ts).
+   *
+   *  Kontrol KPI seridinden once burada duruyor; `test_ui_green_lie_guard`
+   *  bunu ayrica dogruluyor ("guvenilirlik kontrolu ROZETTEN once"). */
+  const kurcalamaSatiri = rowBySuffix.get("tamper_detection");
+  const kurcalama = {
+    trust: signalTrust(kurcalamaSatiri?.value, kurcalamaSatiri?.effQuality, true),
+    aktif: kurcalamaSatiri?.value === 1,
+  };
+
   return (
     <div className="device-overview">
       <div className="device-overview-srchint">
@@ -970,15 +985,15 @@ function OverviewTab({
           <KpiCard
             emptyText={t("deviceDetail.status.noData")}
             icon="security"
-            tone={rowBySuffix.get("tamper_detection")?.value === 1 ? "red" : "green"}
+            tone={kurcalama.trust !== "trusted" ? "slate" : kurcalama.aktif ? "red" : "green"}
             label={t("deviceDetail.kpi.tamper")}
-            value={(() => {
-              const v = rowBySuffix.get("tamper_detection")?.value;
-              if (v == null) return "—";
-              return v === 1
-                ? t("deviceDetail.status.active")
-                : t("deviceDetail.status.normal");
-            })()}
+            value={
+              kurcalama.trust !== "trusted"
+                ? "—"
+                : kurcalama.aktif
+                  ? t("deviceDetail.status.active")
+                  : t("deviceDetail.status.normal")
+            }
           />
         </div>
       ) : (
