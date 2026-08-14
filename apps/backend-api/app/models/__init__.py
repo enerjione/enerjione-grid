@@ -65,6 +65,7 @@ from app.models.user import User
 from app.models.user_fcm_token import UserFcmToken
 from app.models.user_notification_preference import UserNotificationPreference
 from app.models.user_session import UserSession
+from app.models.ws_ticket import WsTicket
 
 __all__ = [
     "AlarmComment",
@@ -110,4 +111,5 @@ __all__ = [
     "UserFcmToken",
     "UserNotificationPreference",
     "UserSession",
+    "WsTicket",
 ]

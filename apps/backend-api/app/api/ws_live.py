@@ -305,7 +305,10 @@ async def live_values_ws(
         # Yeni yol: ticket consume (tek kullanim, 30sn TTL).
         from app.services.auth_service import consume_ws_ticket
 
-        consumed = consume_ws_ticket(ticket)
+        # Bilet artik DB'de (surecler arasi paylasim icin) — senkron sorgu
+        # event loop'u bloklamasin diye thread'e aliniyor, `_is_session_revoked`
+        # ile ayni gerekce.
+        consumed = await asyncio.to_thread(consume_ws_ticket, ticket)
         if consumed is not None:
             username, jti = consumed
     if username is None and token:
