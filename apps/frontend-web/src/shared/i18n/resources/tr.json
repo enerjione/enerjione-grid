@@ -807,6 +807,7 @@
       "outbound_batch_failed": "Toplu gönderim başarısız: {{target}} — {{error}}",
       "gateway_local_install_requested": "Gateway kurulum isteği: {{name}} ({{code}})",
       "gateway_local_remove_requested": "Gateway kaldırma isteği: {{name}} ({{code}})",
+      "gateway_local_remove_failed": "Gateway kaydı silindi ama container kaldırılamadı: {{name}} ({{code}}) — elle temizlenmeli ({{error}})",
       "gateway_local_update_requested": "Gateway güncelleme isteği: {{name}} ({{code}})",
       "gateway_stale_devices_unknown": "Gateway sessiz: {{code}} — {{count}} cihazın durumu bilinmiyor",
       "backup_jobs_reindexed": "Yedek listesi yeniden tarandı: {{count}} kayıt eklendi",

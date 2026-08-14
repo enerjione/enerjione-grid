@@ -215,9 +215,25 @@ def request_install(
     return _write_request(body)
 
 
-def request_remove(code: str, actor_username: str) -> str:
-    """Gateway container'ini durdur ve compose dizinini sil."""
-    return _write_request(_base_request("remove", code, actor_username))
+def request_remove(code: str, actor_username: str, *, purge: bool = False) -> str:
+    """Gateway container'ini durdur ve compose dizinini sil.
+
+    `purge=True` ek olarak state VOLUME'unu da siler. Yalnizca gateway
+    KAYDI silinirken kullanilir: orada kalan config onbellegi cihaz
+    IP'lerini tasir ve geride birakilan bir container ayni outstation'lara
+    baglanmayi deneyebilir (Horstmann `CloseExisting` -> oturum savasi).
+
+    `purge=False` (varsayilan) "yalnizca bu makineden kaldir" durumudur;
+    volume korunur cunku icinde gonderilmemis telemetri (outbox) ve komut
+    defteri olabilir.
+
+    ESKI AJANLA UYUMLU: ajan `_validate` yalnizca tanidigi anahtarlari
+    gecirir, `purge`u bilmeyen surum onu sessizce dusurur ve bugunku
+    davranista (volume korunur) kalir.
+    """
+    body = _base_request("remove", code, actor_username)
+    body["purge"] = bool(purge)
+    return _write_request(body)
 
 
 def request_restart(code: str, actor_username: str) -> str:

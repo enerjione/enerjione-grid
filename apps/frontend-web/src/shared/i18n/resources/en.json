@@ -810,6 +810,7 @@
       "outbound_batch_failed": "Batch delivery failed: {{target}} — {{error}}",
       "gateway_local_install_requested": "Gateway install requested: {{name}} ({{code}})",
       "gateway_local_remove_requested": "Gateway removal requested: {{name}} ({{code}})",
+      "gateway_local_remove_failed": "Gateway record deleted but container could not be removed: {{name}} ({{code}}) — needs manual cleanup ({{error}})",
       "gateway_local_update_requested": "Gateway update requested: {{name}} ({{code}})",
       "gateway_stale_devices_unknown": "Gateway silent: {{code}} — status of {{count}} devices unknown",
       "backup_jobs_reindexed": "Backup list re-scanned: {{count}} records added",
