@@ -1614,11 +1614,19 @@ export function App() {
     toast.success(t("toasts.alarmDeleted"));
   };
 
-  const handleAcknowledgeAllAlarms = async () => {
+  const handleAcknowledgeAllAlarms = async (only?: "active" | "resolved") => {
     if (!session) return;
-    const updated = await acknowledgeAllAlarms(session.accessToken);
+    const updated = await acknowledgeAllAlarms(session.accessToken, only);
     setAlarms(updated);
-    toast.success(t("toasts.allAlarmsAcked"));
+    toast.success(
+      t(
+        only === "resolved"
+          ? "toasts.resolvedAlarmsAcked"
+          : only === "active"
+            ? "toasts.activeAlarmsAcked"
+            : "toasts.allAlarmsAcked"
+      )
+    );
   };
 
   const handleResetAllAlarms = async () => {

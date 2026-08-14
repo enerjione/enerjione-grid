@@ -466,8 +466,10 @@
     "filterAllAssignments": "Tüm Atamalar",
     "assigned": "Atanmış",
     "unassigned": "Atanmamış",
-    "ackAll": "Tümünü Onayla",
-    "ackAllTooltip": "Aktif alarmların tümünü onayla",
+    "ackResolved": "Normale Dönenleri Onayla",
+    "ackResolvedTooltip": "Normale dönmüş alarmları onaylayıp arşivler. Süren alarmlara dokunmaz.",
+    "ackActive": "Aktifleri Onayla",
+    "ackActiveTooltip": "Hâlâ süren alarmları görüldü olarak işaretler. Kayıtlar listede kalır.",
     "level": {
       "info": "Bilgi",
       "warning": "Uyarı",
@@ -501,6 +503,7 @@
       "colEvent": "Durum",
       "colDetail": "Olay",
       "colWho": "Kim",
+      "systemActor": "Sistem",
       "empty": "Alarm geçmişi kaydı yok."
     },
     "eventType": {
@@ -596,6 +599,7 @@
     "confirmDelete": "Bu alarm kalici olarak silinsin mi?",
     "confirmAckAllPending": "{{active}} aktif alarm onaylanacak ve normale dönmüş {{pending}} kayıt silinecek. Onaylıyor musunuz?",
     "confirmAckAllActive": "{{active}} aktif alarm onaylanacak. Onaylıyor musunuz?",
+    "confirmAckAllResolved": "Normale dönmüş {{count}} alarm onaylanıp arşive alınacak. Süren alarmlara dokunulmaz. Onaylıyor musunuz?",
     "errors": {
       "loadComments": "Yorumlar yüklenemedi.",
       "assignFailed": "Alarm ataması yapılamadı.",
@@ -3974,6 +3978,8 @@
     "alarmReset": "Alarm sıfırlandı.",
     "alarmDeleted": "Alarm silindi.",
     "allAlarmsAcked": "Tüm alarmlar onaylandı.",
+    "resolvedAlarmsAcked": "Normale dönen alarmlar onaylandı ve arşive alındı.",
+    "activeAlarmsAcked": "Aktif alarmlar onaylandı.",
     "allAlarmsReset": "Tüm alarmlar sıfırlandı.",
     "areaCreated": "Sorumluluk alanı oluşturuldu.",
     "areaUpdated": "Sorumluluk alanı güncellendi.",

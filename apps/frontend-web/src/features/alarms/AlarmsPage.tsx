@@ -8,6 +8,7 @@ import {
 import { asyncConfirm } from "../../components/ConfirmDialog";
 import { TablePagination } from "../../components/TablePagination";
 import type { AlarmComment, AlarmEvent, DeviceRow, Line, Region, SystemEvent, UserRead } from "../../shared/types";
+import { formatEventMessage } from "../events/formatEventMessage";
 
 // Cihaz id -> topoloji (bolge/hat) — App.tsx deviceTopologyInfo map'i.
 type DeviceTopology = Map<number, { regionId: number; regionName: string; lineId: number; lineName: string }>;
@@ -24,7 +25,8 @@ type Props = {
   onLoadComments: (alarmId: number) => Promise<AlarmComment[]>;
   onAddComment: (alarmId: number, comment: string) => Promise<void>;
   onAcknowledge: (alarmId: number) => Promise<void>;
-  onAcknowledgeAll: () => Promise<void>;
+  /** `only` HANGI KUME onaylanacagini soyler; bkz. handleAcknowledgeAll. */
+  onAcknowledgeAll: (only?: "active" | "resolved") => Promise<void>;
   onOpenDevice: (deviceId: number) => void;
   events: SystemEvent[];
 };
@@ -102,6 +104,41 @@ export function AlarmsPage({
     const entry = sourceOf(signalKey);
     if (!entry) return <span className="alarm-cell-empty">—</span>;
     return <span className={`badge badge-source badge-source-${entry.klass}`}>{entry.label}</span>;
+  };
+
+  // Olay kaydi cihazi KOD ile tasir (id degil) — gecmis sekmesinde ham kodu
+  // ("7", "SN2_0") gostermek yerine cihaz adiyla eslestirmek icin.
+  const deviceByCode = useMemo(() => {
+    const map = new Map<string, DeviceRow>();
+    for (const dev of devices) map.set(dev.code, dev);
+    return map;
+  }, [devices]);
+
+  /** Gecmis satirinin cihaz hucresi: ad ustte, kod altta.
+   *  Eslesme yoksa ham kod kalir — kayit silinmis bir cihaza ait olabilir. */
+  const renderHistoryDeviceCell = (code: string | null | undefined) => {
+    if (!code) return <span className="alarm-cell-empty">—</span>;
+    const dev = deviceByCode.get(code);
+    if (!dev) return <span className="alarm-device-code">{code}</span>;
+    return (
+      <div className="alarm-device-cell">
+        <span className="alarm-device-name">{dev.name}</span>
+        <span className="alarm-device-code">{dev.code}</span>
+      </div>
+    );
+  };
+
+  /** Olayin sinyal anahtari — `alarm_created` metadata'sinda tasinir
+   *  (bkz. alarm_engine_service). Master/uydu rozetinin kaynagi bu; alarm
+   *  hangi uniteden geldi sorusu gecmiste hic cevaplanmiyordu. */
+  const eventSignalKey = (ev: SystemEvent): string | null => {
+    if (!ev.metadata_json) return null;
+    try {
+      const parsed = JSON.parse(ev.metadata_json) as { signal_key?: unknown };
+      return typeof parsed?.signal_key === "string" ? parsed.signal_key : null;
+    } catch {
+      return null; // bozuk metadata — rozet yok, satirin geri kalani calisir
+    }
   };
 
   /** Seviye kodundan i18n etiketi. Bilinmeyen seviye icin ham deger doner. */
@@ -324,13 +361,28 @@ export function AlarmsPage({
     await handleAcknowledge(selectedAlarm.id);
   };
 
-  const handleAcknowledgeAll = async () => {
-    if (activeAlarms.length === 0) return;
-    if (!await asyncConfirm(t("alarms.confirmAckAllActive", { active: activeAlarms.length }))) return;
+  /** Toplu onay — HANGI KUME oldugu acikca secilir.
+   *
+   *  Tek bir "Tumunu Onayla" dugmesi vardi ve iki farkli isi ayni tikla
+   *  yapiyordu: normale donmus kayitlari arsivlemek (dongu bitti, liste
+   *  temizlensin) ve SAHADA DEVAM EDEN alarmlari "gordum" diye isaretlemek.
+   *  Listeyi toparlamak isteyen operator, farkinda olmadan suren alarmlari da
+   *  gorulmus sayiyordu — o kayitlar bir daha kimsenin dikkatini cekmiyordu.
+   *
+   *  NOT: kapsam SUNUCUDAKI gorunur kumedir, ekrandaki filtre degil. Onay
+   *  metni bu yuzden sayfadaki sayiyi degil yapilacak isi anlatir. */
+  const handleAcknowledgeAll = async (only: "active" | "resolved") => {
+    const sayi = only === "resolved" ? resolvedAlarms.length : activeAlarms.length;
+    if (sayi === 0) return;
+    const soru =
+      only === "resolved"
+        ? t("alarms.confirmAckAllResolved", { count: sayi })
+        : t("alarms.confirmAckAllActive", { active: sayi });
+    if (!await asyncConfirm(soru)) return;
     setSaving(true);
     setError("");
     try {
-      await onAcknowledgeAll();
+      await onAcknowledgeAll(only);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("alarms.errors.ackAllFailed"));
     } finally {
@@ -788,14 +840,33 @@ export function AlarmsPage({
                 </div>
               ) : null}
             </div>
+            {/* IKI AYRI DUGME: "arsivle" ile "gordum" ayni is degil.
+                Once tek dugme ikisini birden yapiyordu — bkz.
+                handleAcknowledgeAll. Normale donenler once geliyor: gunluk
+                kullanimda sik olan ve risksiz olan o. */}
+            <button
+              type="button"
+              className="secondary-btn action-btn"
+              disabled={saving || resolvedAlarms.length === 0}
+              onClick={() => void handleAcknowledgeAll("resolved")}
+              title={t("alarms.ackResolvedTooltip")}
+            >
+              {t("alarms.ackResolved")}
+              {resolvedAlarms.length > 0 ? (
+                <span className="action-btn-count">{resolvedAlarms.length}</span>
+              ) : null}
+            </button>
             <button
               type="button"
               className="secondary-btn action-btn"
               disabled={saving || activeAlarms.length === 0}
-              onClick={() => void handleAcknowledgeAll()}
-              title={t("alarms.ackAllTooltip")}
+              onClick={() => void handleAcknowledgeAll("active")}
+              title={t("alarms.ackActiveTooltip")}
             >
-              {t("alarms.ackAll")}
+              {t("alarms.ackActive")}
+              {activeAlarms.length > 0 ? (
+                <span className="action-btn-count">{activeAlarms.length}</span>
+              ) : null}
             </button>
           </div>
         </div>
@@ -837,18 +908,27 @@ export function AlarmsPage({
               <table className="values-table alarms-page-table">
                 <thead>
                   <tr>
-                    <th scope="col">{t("alarms.table.date")}</th>
-                    <th scope="col">{t("alarms.history.colEvent")}</th>
-                    <th scope="col">{t("alarms.table.device")}</th>
-                    <th scope="col">{t("alarms.history.colDetail")}</th>
-                    <th scope="col">{t("alarms.history.colWho")}</th>
+                    <th scope="col" className="alarm-col-date">{t("alarms.table.date")}</th>
+                    <th scope="col" className="alarm-col-status">{t("alarms.history.colEvent")}</th>
+                    <th scope="col" className="alarm-col-device">{t("alarms.table.device")}</th>
+                    {/* KAYNAK: alarm hangi uniteden (master/uydu) geldi.
+                        Gecmiste hic gorunmuyordu; ayni cihazin uc unitesi
+                        ayri fazlara bagli oldugu icin bu ayrim ariza sebebi
+                        cikariminin girdisi. */}
+                    <th scope="col" className="alarm-col-source">{t("alarms.table.source")}</th>
+                    <th scope="col" className="alarm-col-alarm">{t("alarms.history.colDetail")}</th>
+                    <th scope="col" className="alarm-col-assignee">{t("alarms.history.colWho")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {historyEvents.map((ev) => {
                     const created = new Date(ev.created_at);
+                    // Mesaj i18n'den gecirilir: kayitlarin bir kismi backend'de
+                    // Ingilizce uretilmis ("Alarm rule triggered: ...") ve
+                    // gecmis sekmesi ham metni basiyordu — ayni ekranda iki dil.
+                    const mesaj = formatEventMessage(ev);
                     return (
-                      <tr key={ev.id} className="alarm-row alarm-history-row">
+                      <tr key={ev.id} className={`alarm-row alarm-history-row ev-row-${ev.event_type}`}>
                         <td className="alarm-cell-date">
                           <div className="alarm-date">{created.toLocaleDateString(localeTag)}</div>
                           <div className="alarm-time">{created.toLocaleTimeString(localeTag, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</div>
@@ -858,18 +938,25 @@ export function AlarmsPage({
                             {t(`alarms.eventType.${ev.event_type}`, ev.event_type)}
                           </span>
                         </td>
-                        <td className="alarm-cell-device">
-                          {ev.device_code ? <span className="alarm-device-code">{ev.device_code}</span> : <span className="alarm-cell-empty">—</span>}
-                        </td>
+                        <td className="alarm-cell-device">{renderHistoryDeviceCell(ev.device_code)}</td>
+                        <td className="alarm-cell-source">{renderSourceCell(eventSignalKey(ev))}</td>
                         <td className="alarm-cell-title">
-                          <div className="alarm-title-text" title={ev.message}>{ev.message}</div>
+                          <div className="alarm-title-text" title={mesaj}>{mesaj}</div>
                         </td>
-                        <td className="alarm-cell-assignee">{ev.actor_username ?? <span className="alarm-cell-empty">—</span>}</td>
+                        <td className="alarm-cell-assignee">
+                          {ev.actor_username ? (
+                            <span className="alarm-history-actor">{ev.actor_username}</span>
+                          ) : (
+                            /* Aktoru olmayan satir SISTEM uretimi: kural motoru
+                               ya da otomatik temizleme. "—" bunu soylemiyordu. */
+                            <span className="alarm-history-system">{t("alarms.history.systemActor")}</span>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
                   {historyEvents.length === 0 ? (
-                    <tr><td colSpan={5} className="alarms-empty-cell">{t("alarms.history.empty")}</td></tr>
+                    <tr><td colSpan={6} className="alarms-empty-cell">{t("alarms.history.empty")}</td></tr>
                   ) : null}
                 </tbody>
               </table>
@@ -899,7 +986,17 @@ export function AlarmsPage({
                     const selectedClass = selectedAlarmId === alarm.id ? "alarm-row-active" : "";
                     const created = new Date(alarm.created_at);
                     const state = alarmState(alarm);
-                    const rowDuration = formatDuration(Date.now() - created.getTime());
+                    // SURE NORMALE DONUSTE DURUR. Satir her zaman "simdi"ye
+                    // gore hesapliyordu: sahada bitmis bir alarmin suresi
+                    // ekranda saymaya devam ediyor, 17 saatlik bir kesinti
+                    // gibi gorunuyordu. Bitmis kaydin suresi olaya aittir,
+                    // ekrana bakma anina degil (detay paneli zaten boyle).
+                    const rowEndMs =
+                      alarm.reset && alarm.reset_at
+                        ? new Date(alarm.reset_at).getTime()
+                        : Date.now();
+                    const rowDuration = formatDuration(rowEndMs - created.getTime());
+                    const rowLive = !alarm.reset;
                     const topo = deviceTopology.get(alarm.device_id);
                     return (
                       <tr
@@ -927,7 +1024,13 @@ export function AlarmsPage({
                           </span>
                         </td>
                         <td className="alarm-cell-assignee">{alarm.assigned_to ?? <span className="alarm-cell-empty">—</span>}</td>
-                        <td className="alarm-cell-duration">{rowDuration}</td>
+                        {/* Suren alarmda canli nokta, bitmiste kesin sure.
+                            Ayni sayinin "artiyor mu, durdu mu" oldugu
+                            rakamdan anlasilmiyordu. */}
+                        <td className={`alarm-cell-duration${rowLive ? " is-live" : " is-final"}`}>
+                          {rowLive ? <i className="alarm-duration-dot" aria-hidden="true" /> : null}
+                          {rowDuration}
+                        </td>
                         <td className="actions-cell alarm-actions-cell">
                           <div className="alarm-row-actions">
                             {/* Hizli islem: onaysizsa Onayla; her zaman Incele (panel acar) */}
