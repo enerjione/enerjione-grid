@@ -33,7 +33,10 @@
       "Bash(bash update.sh:*)",
       "Bash(bash uninstall.sh:*)",
       "PowerShell(*oturum-ac.ps1*)",
-      "PowerShell(*oturum-kapat.ps1*)"
+      "PowerShell(*oturum-kapat.ps1*)",
+      "PowerShell(*oturum-teslim.ps1*)",
+      "PowerShell(*surum-hazir.ps1*)",
+      "PowerShell(*dal-temizle.ps1*)"
     ],
     "deny": [
       "Read(.env)",
@@ -102,6 +105,12 @@
       {
         "matcher": "Edit|Write",
         "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/oturum-yazma-koruma.ps1",
+            "timeout": 20,
+            "statusMessage": "Ana agac korumasi"
+          },
           {
             "type": "command",
             "if": "Edit(**/src/shared/**)",

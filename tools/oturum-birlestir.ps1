@@ -136,15 +136,26 @@ function Incele($kayit) {
     # Ayni dosyaya dokunmak cakisma DEMEK DEGIL; farkli yerlere dokunulmus
     # olabilir. `merge-tree --write-tree` sanal birlestirme yapar, diske
     # dokunmaz; ciktisinda "CONFLICT" varsa is gercekten elle cozulecek.
-    $prova = Invoke-GitOku -C $yol merge-tree --write-tree --name-only $Hedef HEAD
-    if ($prova) {
-      $conflictli = @(@($prova) | Where-Object { $_ -match 'CONFLICT' })
-      if ($conflictli.Count -gt 0) {
-        Yaz "  PROVA: gercek cakisma var, elle cozulecek." "Red"
-        foreach ($c in ($conflictli | Select-Object -First 8)) { Yaz "      $c" "Red" }
-      } else {
-        Yaz "  PROVA: dosyalar ortak ama satirlar cakismiyor; otomatik birlesir." "Green"
-      }
+    #
+    # `Invoke-GitOku` KULLANILMAZ: merge-tree cakisma bulunca cikis kodu 1
+    # doner, Invoke-GitOku sifirdan farkli kodda $null verir -- yani prova tam
+    # cakisma varken sessiz kalirdi. Cikis kodu: 0 temiz, 1 cakisma.
+    $eskiTercih = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+      $provaCikti = & git -C $yol merge-tree --write-tree --name-only $Hedef HEAD 2>&1
+      $provaKod = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $eskiTercih }
+
+    if ($provaKod -eq 1) {
+      # Ilk satir agac OID'i, kalanlar cakisan dosyalar.
+      $conflictli = @(@($provaCikti) | Select-Object -Skip 1 | Where-Object { $_ -and "$_" -notmatch '^(Auto-merging|hint:)' })
+      Yaz "  PROVA: gercek cakisma var, elle cozulecek." "Red"
+      foreach ($c in ($conflictli | Select-Object -First 8)) { Yaz "      $c" "Red" }
+    } elseif ($provaKod -eq 0) {
+      Yaz "  PROVA: dosyalar ortak ama satirlar cakismiyor; otomatik birlesir." "Green"
+    } else {
+      Yaz "  PROVA yapilamadi (git merge-tree desteklemiyor olabilir)." "DarkGray"
     }
   }
 

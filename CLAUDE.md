@@ -145,10 +145,22 @@ Bu depoda aynı anda birden fazla oturum (Claude Code penceresi, IDE, terminal)
 editörde kalmış eski tampon 246 satırlık bir düzeltmeyi commit ile geri aldı,
 `git reset` iki commit'i daldan düşürdü.
 
-**Kural: her iş kendi worktree'sinde.** Bu artık *otomatik* — hatırlamaya
-bağlı değil (`.claude/settings.json` > `hooks`).
+**Kural: her iş kendi worktree'sinde.** Bu artık *zorunlu* — hatırlamaya bağlı
+değil: ana ağaçta bir kod dosyasına `Edit`/`Write` **hook ile reddedilir**
+(`tools/oturum-yazma-koruma.ps1`). Serbest kalanlar: kendi worktree'n, depo
+dışı dosyalar, `tools/` ve `.claude/` (altyapının kendisi — worktree'de
+düzenlenirse merge edilene kadar etkisiz kalır). Paralel çalışmanın olmadığı
+bir makinede: `$env:E1_ANA_AGAC_SERBEST = "1"`.
 
-### Günlük akış
+### Bir işin ömrü: aç → çalış → **teslim et** → kapat
+
+İzolasyon tek başına yetmiyordu; eksik olan **teslim** adımıydı. Ölçülebilir
+sonucu: bu akış yazılırken 16 açık oturumun 13'ünün dalı main'e girmişti ama
+worktree'si açıktı, 44 ölü dal duruyordu, main origin'in 4 commit önündeydi ve
+bir dalda commit mesajı *"MIGRATION EKSIK"* diyen bir iş bekliyordu.
+
+**Kural: bir oturum işini bitirince `/teslim` çalıştırır.** Teslim edilmemiş iş
+= tag'a girmeyen iş; saha cihazları main'i değil **tag**'i takip eder.
 
 ```powershell
 .\tools\oturum-kayit.ps1                         # kim ne yapıyor, nerede çarpışıyoruz
@@ -156,11 +168,51 @@ bağlı değil (`.claude/settings.json` > `hooks`).
 .\tools\oturum-ac.ps1  -Konu analiz -VSCode      # worktree + dal + .env + port + AYRI pencere
 .\tools\oturum-mesaj.ps1 -Kime analiz -Mesaj "types.ts bende, 10 dk"
 .\tools\oturum-birlestir.ps1 -Hepsi              # dallar main'e göre nerede
-.\tools\oturum-birlestir.ps1 -Konu analiz -Uygula  # güncel main üstüne rebase
+.\tools\oturum-teslim.ps1 -Prova                 # teslim edilebilir miyim (hiçbir şeyi değiştirmez)
+.\tools\oturum-teslim.ps1                        # doğrula + main'e al + push
 .\tools\oturum-kapat.ps1 -Konu analiz            # güvenli kapatma (junction'a dikkat)
+.\tools\surum-hazir.ps1                          # TAG'A HAZIR MIYIZ (tüm oturumlar)
+.\tools\dal-temizle.ps1 -Uygula                  # main'e girmiş ölü dalları sil
 ```
 
-Claude içinden hepsi tek komut: **`/oturum`** (durum · ac · mesaj · birlestir · panel · kapat).
+Claude içinden: **`/oturum`** (durum · ac · mesaj · birlestir · panel · kapat),
+**`/teslim`** (bu oturumun işini main'e al), **`/surum`** (tag'a hazır mıyız).
+
+### Teslim ne doğrular
+
+`oturum-teslim.ps1` şu sırayla ilerler; **herhangi bir adım düşerse hiçbir şey
+değişmez** (rebase geri alınır, main'e dokunulmaz):
+
+1. Commit'lenmemiş iş var mı
+2. main'i origin'den tazele (ayrışma varsa durur)
+3. Dalı güncel main üstüne rebase — önce `merge-tree` ile **sanal** prova
+4. **Migration borcu**: `app/models/` değişmiş ama yeni migration yoksa durur
+   (şema gerçekten değişmediyse `-MigrationGerekmiyor`)
+5. **Migration zinciri tek başlı mı** — tek Postgres var, iki başlı zincir
+   `alembic_version`'ı herkes için bozar
+6. Testler: değişen alana göre `pytest` / `npx tsc -b` + `npm test`
+7. main'e `--no-ff` merge (geçmişte hangi oturumdan geldiği kalsın)
+8. `origin/main`'e push — **push edilmezse** diğer oturumlar bu işi göremez,
+   çünkü hepsi `origin/main` üstüne rebase oluyor
+
+Başka bir oturumun dalını `-Konu` ile dışarıdan teslim etmek, o oturum son 30
+dakika içinde hareket ettiyse **engellenir**: rebase onun commit'lerini yeniden
+yazar. Önce mesaj at.
+
+### Tek seferde tag
+
+`surum-hazir.ps1` "her şey main'de mi" sorusunu tek ekranda cevaplar: teslim
+edilmemiş dallar, worktree'lerde kaydedilmemiş dosyalar, main ↔ origin/main,
+migration zinciri, ve sürüm numarasının **beş kaynakta** (`VERSION`,
+`package.json`, `config.py` `_FALLBACK_APP_VERSION`, `CLAUDE.md`, `CHANGELOG`)
+aynı olup olmadığı. Temizse tag'i de atar:
+
+```powershell
+.\tools\surum-hazir.ps1 -Test -Tag -Ozet "<bir cümlelik özet>"
+```
+
+**ENGEL** = tag atılırsa sahaya eksik/bozuk çıkar. **UYARI** = düzen sorunu
+(ölü dal, boşuna açık worktree), tag'i durdurmaz.
 
 ### Oturumlar arası mesajlaşma
 
@@ -200,12 +252,23 @@ verilir — bir oturum kapanınca portu serbest kalır.
 | SessionStart | `oturum-durum.ps1` | Nerede olduğun, **açık oturumlar + ne yaptıkları**, dalların kaç commit geride kaldığı, aynı dosyada birden fazla oturum, migration zinciri çakışma riski |
 | UserPromptSubmit | `oturum-baslik.ps1` | İlk isteği oturumun "işi" olarak deftere yazar; **diğer oturumlardan gelen mesajları bağlama düşürür** |
 | PreToolUse `Bash(git *)` | `oturum-koruma.ps1` | Ana ağaçta `add -A`, `commit -a`, `reset --hard`, `clean -f`, `checkout -- .`, `stash` **engellenir**. Kendi worktree'nde serbest |
+| PreToolUse `Edit/Write` | `oturum-yazma-koruma.ps1` | **Ana ağaçta kod dosyası düzenlemek reddedilir.** Karar dosya yoluna göre verilir (oturumun dizinine göre değil — VSCode'da editör ana ağaçta kalabiliyor). Muaf: `tools/`, `.claude/`, `OTURUM.md`, depo dışı |
 | PreToolUse `Edit/Write` | `oturum-carpisma.ps1` | Paylaşımlı dosyalarda (`src/shared/`, `src/app/`, `styles.css`, `app/models/`, `alembic_migrations/versions/`) "bu dosyada 2 oturum daha var" uyarısı. Engellemez |
 | SessionEnd | `oturum-bitis.ps1` | Defterden düşer; commit'lenmemiş iş varsa ekrana yazar |
 | WorktreeCreate | `oturum-worktree-hook.ps1` | Yerleşik `--worktree` / `EnterWorktree` akışını da `oturum-ac.ps1`'den geçirir |
 
-Testler: `tools/oturum-test.ps1` (34 durum — defter, slot, yol, hook'lar) ve
-`tools/oturum-koruma-test.ps1` (13 durum — engelleme; **ana ağaçtan** koşulur).
+Testler:
+
+| Script | Kapsam |
+| --- | --- |
+| `tools/oturum-test.ps1` | 34 durum — defter, slot, yol, hook'lar |
+| `tools/oturum-koruma-test.ps1` | 13 durum — git komut engelleme (**ana ağaçtan** koşulur) |
+| `tools/oturum-yazma-koruma-test.ps1` | 16 durum — ana ağaçta yazma engeli, muafiyetler, acil kapı |
+| `tools/oturum-teslim-test.ps1` | 9 senaryo — teslim akışı **uçtan uca**, `$env:TEMP`'te geçici depoda (gerçek main'e dokunmaz) |
+
+**Hook değişikliği açık oturumlara geçmez:** `.claude/settings.json` oturum
+başlangıcında okunur. Yeni bir hook eklendiğinde çalışan oturumlar eski
+kuralla devam eder — koruma onlar için bir sonraki açılışta devreye girer.
 
 ### VSCode kullanıyorsan
 
@@ -224,11 +287,13 @@ main'e girsin, diğeri üstüne rebase etsin.
 
 ### Ana ağaçta kalmak zorundaysan
 
+Kod düzenlemek artık hook ile engelli; ana ağaçta yalnızca **altyapı**
+(`tools/`, `.claude/`) düzenlenebilir. Orada bile:
+
 Commit'i **açık dosya yoluyla** yap, `reset` / `checkout --` öncesi
 `git log --oneline -5` ile ne düşeceğine bak (düşen commit başkasının olabilir;
-reflog'dan kurtarılır ama önce fark etmek gerekir), `types.ts` / `App.tsx` /
-i18n gibi **ortak dosyalara** dokunduysan hemen commit'le — çarpışmaların hepsi
-bu dosyalarda oldu.
+reflog'dan kurtarılır ama önce fark etmek gerekir), dokunduğun altyapı
+dosyasını hemen commit'le — bu dosyaları birden fazla oturum okuyor.
 
 ---
 

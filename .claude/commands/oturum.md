@@ -51,12 +51,27 @@ Ne zaman kendiligindenden mesaj gonder: paylasimli bir dosyada (`types.ts`,
 BASLARKEN ilgili oturuma haber ver. Carpisma hook'u sana kimin ayni dosyada
 oldugunu zaten soyluyor; oraya bir satir yaz.
 
+## teslim [<ad>]
+Ayri bir akis: **`/teslim`**. Bir oturumun isini dogrular ve main'e alir.
+Kullanici "bitti", "main'e al", "tag'a hazir olsun" derse oraya yonlendir.
+Ozet: `tools\oturum-teslim.ps1 -Prova` -> temizse `-Prova`siz calistir.
+
 ## kapat <ad>
 `tools\oturum-kapat.ps1 -Konu <ad>`. Commit'lenmemis is varsa script durur —
 `-Zorla` ONERME, once isin commit'lenmesini soyle.
 
+Kapatmadan once **isin teslim edilmis olmasi** gerekir; edilmemisse dal
+main'e girmeden ortada kalir. `tools\oturum-birlestir.ps1 -Hepsi` ciktisinda
+o oturum "+N ileride" gorunuyorsa once `/teslim`.
+
+## temizle
+`tools\dal-temizle.ps1` (rapor) / `-Uygula` (sil). main'e girmis olu dallari
+toplar. Silme `git branch -d` iledir: birlesmemis dali git zaten reddeder,
+yani is kaybettirmez. Varsayilan yalnizca otomatik uretilmis
+`worktree-agent-*` dallarini hedefler; elle acilmis dallar icin `-Hepsi`.
+
 ---
 
-Not: `oturum-ac`, `oturum-kapat` ve `-Uygula` kalici sonuc dogurur; digerleri
-salt-okunur. Salt-okunur olanlari sormadan calistir, digerlerini kullanicinin
-istegi uzerine.
+Not: `oturum-ac`, `oturum-kapat`, `oturum-teslim`, `dal-temizle -Uygula` ve
+`-Uygula` kalici sonuc dogurur; digerleri salt-okunur. Salt-okunur olanlari
+sormadan calistir, digerlerini kullanicinin istegi uzerine.
