@@ -49,12 +49,30 @@ def _backend_tavani() -> int:
     return _BACKUP_UPLOAD_MAX_BYTES
 
 
+def _yedek_yolu() -> str:
+    """Yedek uclarinin GERCEK yolu — router prefix'inden turetilir.
+
+    SABIT DIZE YAZILMAZ. Bu test bir donem `location ^~ /api/v1/backups/`
+    ariyordu ve YESILDI; oysa router prefix'i `/admin/backups` oldugu icin
+    gercek yol `/api/v1/admin/backups/` idi ve nginx blogu HIC ESLESMIYORDU.
+    Yani test, kusurun kendisini kilitliyordu: yukleme genel `/api/` blogunun
+    10 MB limitine takiliyor, felaket kurtarma calismiyordu — ama zincir
+    "dogrulanmis" sayiliyordu (denetim 2026-08-13).
+
+    Prefix artik kaynaktan okunur; router tasinirsa test kirmizi olur.
+    """
+    from app.api.backups import router
+
+    return f"/api/v1{router.prefix}/"
+
+
 def _yedek_blogu(kaynak: str) -> str:
-    """Ic nginx'teki `location ^~ /api/v1/backups/ { ... }` blogunu dondurur."""
-    i = kaynak.find("location ^~ /api/v1/backups/")
+    """Ic nginx'teki yedek `location` blogunu dondurur."""
+    yol = _yedek_yolu()
+    i = kaynak.find(f"location ^~ {yol}")
     assert i != -1, (
-        "ic nginx'te yedek yollari icin ayri bir location YOK — genel 10 MB "
-        "limiti uygulanir ve yukleme 413 ile duser"
+        f"ic nginx'te yedek yolu ({yol}) icin ayri bir location YOK — genel "
+        "10 MB limiti uygulanir ve yukleme 413 ile duser"
     )
     derinlik = 0
     basladi = False
