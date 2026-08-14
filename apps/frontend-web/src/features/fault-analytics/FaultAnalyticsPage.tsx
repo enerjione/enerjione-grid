@@ -55,6 +55,7 @@ import {
   Gauge,
   GitBranch,
   Grid3x3,
+  LineChart as LineChartIcon,
   Loader,
   Map as MapIcon,
   MapPin,
@@ -98,6 +99,7 @@ import type {
   FaultCauseCatalog,
   SystemHealth
 } from "../../shared/types";
+import { GlobalTrendsPanel } from "../trends/GlobalTrendsPanel";
 import { usePolling } from "../../shared/usePolling";
 import { voltageToPercent } from "../../shared/battery";
 import { useDeviceModelSettings } from "../../components/DeviceModelSettingsProvider";
@@ -120,13 +122,17 @@ const WINDOWS = [30, 90, 365, 1095] as const;
  *  Kesin bir esik yok; amac "bu grafige dayanip karar verme" demek. */
 const LOW_LABEL_RATIO = 0.4;
 
-type Sekme = "faults" | "density" | "flow" | "devices";
+type Sekme = "faults" | "density" | "flow" | "devices" | "trends";
 
 const SEKMELER: { key: Sekme; labelKey: string; Icon: typeof TrendingUp }[] = [
   { key: "faults", labelKey: "faultAnalytics.tabFaults", Icon: TrendingUp },
   { key: "density", labelKey: "faultAnalytics.tabDensity", Icon: MapIcon },
   { key: "flow", labelKey: "faultAnalytics.tabFlow", Icon: Share2 },
-  { key: "devices", labelKey: "faultAnalytics.tabDevices", Icon: Radio }
+  { key: "devices", labelKey: "faultAnalytics.tabDevices", Icon: Radio },
+  // Trendler ariza verisine DEGIL historian'a bakar; bu yuzden ust seritteki
+  // "pencere" secimi (gun) ve ariza KPI'lari onu ilgilendirmez — kendi zaman
+  // araligi vardir (bkz. GlobalTrendsPanel).
+  { key: "trends", labelKey: "faultAnalytics.tabTrends", Icon: LineChartIcon }
 ];
 
 /** "Hat Ariza Yogunlugu" sekmesindeki kesitler. Ucu de AYNI soruyu farkli
@@ -239,7 +245,14 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
   // kartlari en kucuk kartlari oluyordu. Cok kartli sekmeler (Arizalar,
   // Cihaz Sagligi) izgarada kalir ve normal akisinda kayar.
   const [gorunum, setGorunum] = useState<Gorunum>("map");
-  const dolduran = sekme === "density" || sekme === "flow";
+  const dolduran = sekme === "density" || sekme === "flow" || sekme === "trends";
+
+  // ARIZA KPI'LARI TRENDLERDE GOSTERILMEZ.
+  // Ust serit ariza penceresini (gun) ve ariza sayaclarini tasiyor; Trendler
+  // sekmesi historian'a bakiyor ve KENDI zaman araligi var. Ilgisiz uc sayiyi
+  // orada tutmak hem yer yiyor hem "bu grafik o pencereye ait" yanilgisi
+  // veriyordu.
+  const kpiGoster = sekme !== "trends";
 
   return (
     <section className={`tab-panel fa-page ${dolduran ? "fa-page--fill" : ""}`}>
@@ -248,7 +261,7 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
            surumde 34px ikon kutusu + 1.35rem sayi ile serit 64px'e cikiyor
            ve asil grafikleri kati asagi itiyordu. Ikon artik etiketin
            icinde (12px), sayi ile serh AYNI satirda. */}
-      <div className="fa-kpis">
+      <div className="fa-kpis" hidden={!kpiGoster}>
         <div className="fa-kpi fa-kpi--window">
           <span className="fa-kpi-body">
             <span className="fa-kpi-label">
@@ -540,6 +553,8 @@ export function FaultAnalyticsPage({ accessToken }: Props) {
       {sekme === "flow" ? <ArizaAkisi analytics={data} fazLabel={fazLabel} /> : null}
 
       {sekme === "devices" ? <CihazSagligi accessToken={accessToken} days={days} /> : null}
+
+      {sekme === "trends" ? <GlobalTrendsPanel accessToken={accessToken} /> : null}
     </section>
   );
 }

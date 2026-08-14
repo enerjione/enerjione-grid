@@ -211,7 +211,7 @@
     "home": "Home",
     "alarms": "Alarms",
     "faults": "Line Faults",
-    "faultAnalytics": "Fault Analytics",
+    "faultAnalytics": "Analytics",
     "events": "Events",
     "systemStatus": "System Status",
     "engineering": "Engineering",
@@ -1970,7 +1970,7 @@
       "fieldTools": "Test connectivity to field devices; ping an IP address.",
       "remoteAccess": "Grant the support team time-limited remote access; close it whenever you want.",
       "firewall": "Manage the system firewall: open/close ports, define rules and forwards.",
-      "faultAnalytics": "Which line faults most, why, and how long repairs take."
+      "faultAnalytics": "Fault distribution, device health and cross-device trend comparison."
     },
     "nav": {
       "devices": "Devices",
@@ -1995,7 +1995,7 @@
       "remoteAccess": "Remote Maintenance",
       "firewall": "Firewall",
       "fieldTools": "Field Tools",
-      "faultAnalytics": "Fault Analytics"
+      "faultAnalytics": "Analytics"
     },
     "users": {
       "title": "Users",
@@ -4204,7 +4204,8 @@
         "24h": "24 Hours",
         "7d": "7 Days",
         "5m": "5 min",
-        "15m": "15 min"
+        "15m": "15 min",
+        "30d": "30d"
       },
       "signals": "Signals",
       "sources": "Sources",
@@ -4242,7 +4243,8 @@
       "alarmCount": "alarms",
       "heatmapNote": "3 sources (Master/Sat01/Sat02) shown as rows; range auto-split into hourly/daily resolution.",
       "live": "Live",
-      "liveHint": "Live mode: new data is appended to the chart in real time"
+      "liveHint": "Live mode: new data is appended to the chart in real time",
+      "showSymbol": "Show points"
     },
     "config": {
       "dnp3Title": "DNP3 Settings",
@@ -4763,6 +4765,19 @@
     "calendarTitle": "Alarm Frequency — Calendar",
     "calendarHint": "One square per day. Darker means more alarms that day; quiet days still get a square.",
     "matrixTitle": "Device × Time Alarm Density",
-    "matrixHint": "Always the LAST 30 DAYS — it does not follow the period selector above. If several devices darken in the same column, the problem is not the devices but a shared event that day."
+    "matrixHint": "Always the LAST 30 DAYS — it does not follow the period selector above. If several devices darken in the same column, the problem is not the devices but a shared event that day.",
+    "tabTrends": "Trends"
+  },
+  "trends": {
+    "seriesTitle": "Series",
+    "addSeries": "Add series",
+    "editSeries": "Edit series",
+    "noSeries": "No series added yet.",
+    "emptyHint": "Add the devices and signals you want to compare — series from different devices are drawn on the same chart.",
+    "device": "Device",
+    "searchDevice": "Search device...",
+    "signal": "Signal",
+    "chartSettings": "Chart settings",
+    "settingsSaved": "Settings are stored in this browser."
   }
 }

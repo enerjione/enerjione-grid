@@ -40847,7 +40847,9 @@ th.event-col-category {
    serh ayni satira alindi. Sonuc ~38px. */
 .fa-kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  /* Tek satirlik olculer daha genis kutu ister; 158px'te etiket ile sayi
+     ust uste biniyordu. */
+  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
   gap: 1px;
   flex-shrink: 0;
   background: var(--fa-line);
@@ -40859,15 +40861,21 @@ th.event-col-category {
 .fa-kpi {
   display: flex;
   align-items: center;
-  padding: 8px 14px;
+  /* SERIT ALCAK: bu satir ekranin baglami, ana icerigi degil. Iki satirli
+     duzende (etiket ustte, sayi altta) serit ~52px tutuyor ve asil
+     grafikleri asagi itiyordu. Tek satira alinca ~30px'e iniyor. */
+  padding: 5px 12px;
   background: var(--fa-surface);
 }
 
 .fa-kpi-body {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  /* Etiket ve sayi AYNI satirda, taban cizgisinde hizali. */
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
   min-width: 0;
+  width: 100%;
 }
 
 .fa-kpi-label {

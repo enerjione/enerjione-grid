@@ -208,7 +208,7 @@
     "home": "Anasayfa",
     "alarms": "Alarmlar",
     "faults": "Hat Arızaları",
-    "faultAnalytics": "Arıza Analizi",
+    "faultAnalytics": "Analiz",
     "events": "Olaylar",
     "systemStatus": "Sistem Durumu",
     "engineering": "Mühendislik",
@@ -1967,7 +1967,7 @@
       "remoteAccess": "Teknik destek ekibine süreli uzaktan erişim izni ver; istediğin an kapat.",
       "firewall": "Sistemin güvenlik duvarını yönet: portları aç/kapat, kural ve yönlendirme tanımla.",
       "fieldTools": "Saha cihazlarına erişimi test et; IP adresine ping at.",
-      "faultAnalytics": "Hangi hat en çok arıza çıkarıyor, neden ve ne kadar sürede çözülüyor."
+      "faultAnalytics": "Arıza dağılımı, cihaz sağlığı ve tüm cihazlar arası trend karşılaştırması."
     },
     "nav": {
       "devices": "Cihazlar",
@@ -1992,7 +1992,7 @@
       "remoteAccess": "Uzaktan Bakım",
       "firewall": "Güvenlik Duvarı",
       "fieldTools": "Saha Araçları",
-      "faultAnalytics": "Arıza Analizi"
+      "faultAnalytics": "Analiz"
     },
     "users": {
       "title": "Kullanıcılar",
@@ -4201,7 +4201,8 @@
         "24h": "24 Saat",
         "7d": "7 Gün",
         "5m": "5 dk",
-        "15m": "15 dk"
+        "15m": "15 dk",
+        "30d": "30g"
       },
       "signals": "Sinyaller",
       "sources": "Kaynaklar",
@@ -4239,7 +4240,8 @@
       "alarmCount": "alarm",
       "heatmapNote": "3 kaynak (Master/Sat01/Sat02) satır olarak gösterilir; aralık otomatik saat/gün çözünürlüğe bölünür.",
       "live": "Canlı",
-      "liveHint": "Canlı mod: yeni veriler anlık olarak grafiğe eklenir"
+      "liveHint": "Canlı mod: yeni veriler anlık olarak grafiğe eklenir",
+      "showSymbol": "Noktaları göster"
     },
     "config": {
       "dnp3Title": "DNP3 Ayarları",
@@ -4756,6 +4758,19 @@
     "calendarTitle": "Alarm Sıklığı — Takvim",
     "calendarHint": "Her kare bir gün. Koyulaştıkça o gün üretilen alarm artar; sessiz günler de kare açar.",
     "matrixTitle": "Cihaz × Zaman Alarm Yoğunluğu",
-    "matrixHint": "Hep SON 30 GÜN — üstteki dönem seçimini izlemez. Aynı sütunda birden çok cihaz koyulaşıyorsa sorun cihazlarda değil o gün yaşanan ortak olaydadır."
+    "matrixHint": "Hep SON 30 GÜN — üstteki dönem seçimini izlemez. Aynı sütunda birden çok cihaz koyulaşıyorsa sorun cihazlarda değil o gün yaşanan ortak olaydadır.",
+    "tabTrends": "Trendler"
+  },
+  "trends": {
+    "seriesTitle": "Seriler",
+    "addSeries": "Seri Ekle",
+    "editSeries": "Seriyi düzenle",
+    "noSeries": "Henüz seri eklenmedi.",
+    "emptyHint": "Karşılaştırmak istediğiniz cihaz ve sinyalleri ekleyin — farklı cihazlardan seriler aynı grafikte gösterilir.",
+    "device": "Cihaz",
+    "searchDevice": "Cihaz ara…",
+    "signal": "Sinyal",
+    "chartSettings": "Grafik ayarları",
+    "settingsSaved": "Ayarlar bu tarayıcıda saklanır."
   }
 }

@@ -34,47 +34,35 @@ import type {
   HistoryBucket,
   SignalCatalogRow,
   SignalSource,
-  TelemetryAggregatePoint,
   TelemetryHistoryPoint,
 } from "../../shared/types";
+import {
+  DEFAULT_SETTINGS,
+  NON_TREND_RE,
+  PALETTE,
+  RANGES,
+  buildTrendOption,
+  isAggregate,
+  suffixOf,
+  unitsOf,
+  type ChartSettings,
+  type ChartType as CoreChartType,
+  type Point,
+} from "../trends/trendChartCore";
 
 echarts.use([LineChart, BarChart, HeatmapChart, GridComponent, TooltipComponent, LegendComponent, DataZoomComponent, MarkLineComponent, VisualMapComponent, CanvasRenderer]);
 
-type ChartType = "line" | "area" | "bar" | "heatmap";
+// Bu ekran ortak trend cekirdegini kullanir (`../trends/trendChartCore`):
+// palet, araliklar, ayarlar ve line/area/bar option'i Analiz > Trendler ile
+// AYNI yerden gelir. Yalnizca `heatmap` buraya ozel — o gorunum kaynak x zaman
+// matrisi cikariyor ve kendi veri hazirligini gerektiriyor.
+type ChartType = CoreChartType | "heatmap";
 type HeatmapMode = "alarm" | "value"; // alarm yogunlugu / secili sinyal degeri
-type ChartSettings = {
-  smooth: boolean;       // cizgi/alan: yumusak
-  showSymbol: boolean;   // cizgi/alan: nokta goster
-  lineWidth: number;     // cizgi/alan kalinlik
-  barStack: boolean;     // bar: ust uste (stack)
-  barWidth: number;      // bar: genislik (px, 0=otomatik)
-  barRadius: number;     // bar: ust kose yuvarlaklik (px)
-};
-const DEFAULT_SETTINGS: ChartSettings = { smooth: true, showSymbol: false, lineWidth: 2, barStack: false, barWidth: 0, barRadius: 3 };
 
-// Zaman araliklari (kisa araliklar dahil) — bucket araliga gore otomatik.
-const RANGES: { key: string; minutes: number; bucket: HistoryBucket }[] = [
-  { key: "5m", minutes: 5, bucket: "10s" },
-  { key: "15m", minutes: 15, bucket: "10s" },
-  { key: "1h", minutes: 60, bucket: "raw" },
-  { key: "6h", minutes: 360, bucket: "raw" },
-  { key: "24h", minutes: 1440, bucket: "1m" },
-  { key: "7d", minutes: 10080, bucket: "1h" },
-];
-
-// Renk paleti (sinyal ekleme popup'inda secilebilir + varsayilan atama).
-const PALETTE = [
-  "#38bdf8", "#f59e0b", "#34d399", "#f87171", "#a78bfa",
-  "#f472b6", "#2dd4bf", "#fb923c", "#60a5fa", "#a3e635",
-];
 const SOURCE_META: Record<SignalSource, { label: string }> = Object.fromEntries(
   SOURCES.map((s) => [s, { label: sourceLabel(s) }])
 ) as Record<SignalSource, { label: string }>;
 const ALL_SOURCES: SignalSource[] = SOURCES;
-
-// Grafige uygun OLMAYAN sinyaller (sabit/konum/kimlik) — listede gizli.
-const NON_TREND_RE =
-  /(firmware|fw_version|hardware_revision|serial|part_no|latitude|longitude|gps|test_point|modem_model|imei|sim_serial|ipv4|ip_address|dial_in|comm_library|network_operator|network_type|network_registration|rtu_status|device_position|last_configuration|nominal_voltage|pitch_angle)/;
 
 type Props = {
   deviceCode: string;
@@ -82,8 +70,6 @@ type Props = {
   signals: SignalCatalogRow[];
   token: string;
 };
-
-type Point = [number, number | null]; // [timestamp, value]
 
 // Eklenmis bir seri = tek sinyal + tek cihaz + renk (id ile benzersiz).
 type SeriesDef = { id: string; suffix: string; source: SignalSource; color: string };
@@ -103,15 +89,6 @@ function newId(): string {
   return `s${_idCounter}_${Math.floor(performance.now())}`;
 }
 
-function isAggregate(
-  rows: TelemetryHistoryPoint[] | TelemetryAggregatePoint[]
-): rows is TelemetryAggregatePoint[] {
-  return rows.length > 0 && "avg_value" in rows[0];
-}
-function suffixOf(key: string): string {
-  const i = key.indexOf(".");
-  return i >= 0 ? key.slice(i + 1) : key;
-}
 function loadView(code: string): SavedView | null {
   try {
     const raw = window.localStorage.getItem(`hsl.device-trends.${code}`);
@@ -440,14 +417,7 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
   }, [live, chartType]);
 
   // Cift Y-ekseni: ilk 2 farkli birim.
-  const units = useMemo(() => {
-    const u: string[] = [];
-    for (const s of series) {
-      const un = s.unit ?? "";
-      if (!u.includes(un)) u.push(un);
-    }
-    return u;
-  }, [series]);
+  const units = useMemo(() => unitsOf(series), [series]);
 
   const hasData = series.some((s) => s.points.length > 0);
 
@@ -539,104 +509,13 @@ export function DeviceChartsPanel({ deviceCode, activeSource, signals, token }: 
       };
     }
 
-    // ---- LINE/AREA/BAR ----
-    // Acik tema — okunur gri eksen + hafif grid.
-    const mkAxis = (name: string, position: "left" | "right", showSplit: boolean) => ({
-      type: "value" as const,
-      name,
-      position,
-      splitLine: { lineStyle: { color: showSplit ? "rgba(148,163,184,0.22)" : "rgba(148,163,184,0)" } },
-      axisLabel: { color: "#64748b" },
-      nameTextStyle: { color: "#94a3b8" },
-    });
-    const yAxes = [mkAxis(units[0] ?? "", "left", true)];
-    if (units[1] != null) {
-      yAxes.push(mkAxis(units[1], "right", false));
-    }
-    return {
-      backgroundColor: "transparent",
-      animationDuration: 300,
-      grid: { left: 8, right: units[1] != null ? 8 : 16, top: 16, bottom: 44, containLabel: true },
-      // Alt slider: zaman penceresini kaydir/yakinlastir (line/area/bar).
-      dataZoom: [
-        { type: "inside", filterMode: "none" as const },
-        {
-          type: "slider" as const,
-          height: 22,
-          bottom: 6,
-          filterMode: "none" as const,
-          borderColor: "rgba(148,163,184,0.35)",
-          fillerColor: "rgba(14,165,233,0.12)",
-          handleStyle: { color: "#0ea5e9" },
-          moveHandleStyle: { color: "#0ea5e9" },
-          textStyle: { color: "#64748b", fontSize: 10 },
-          dataBackground: { lineStyle: { color: "#cbd5e1" }, areaStyle: { color: "rgba(148,163,184,0.15)" } },
-        },
-      ],
-      tooltip: {
-        trigger: "axis",
-        backgroundColor: "rgba(255,255,255,0.98)",
-        borderColor: "#e2e8f0",
-        borderWidth: 1,
-        textStyle: { color: "#0f172a", fontSize: 12 },
-        extraCssText: "box-shadow: 0 6px 20px rgba(15,23,42,0.12); border-radius: 10px; padding: 8px 10px;",
-        axisPointer: { type: "cross", lineStyle: { color: "rgba(148,163,184,0.5)" } },
-        // Her seri satiri: renk noktasi + etiket + deger + birim. Birim
-        // seri sirasindan (series[].unit) alinir; ECharts param.seriesIndex.
-        formatter: (params: { axisValueLabel?: string; axisValue?: number; seriesIndex: number; value: [number, number | null]; marker: string; seriesName: string }[]) => {
-          if (!params.length) return "";
-          const ts = params[0].axisValue;
-          const head = ts != null
-            ? new Date(ts).toLocaleString(undefined, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
-            : (params[0].axisValueLabel ?? "");
-          const rows = params.map((pt) => {
-            const v = Array.isArray(pt.value) ? pt.value[1] : null;
-            const unit = series[pt.seriesIndex]?.unit ?? "";
-            const valStr = v == null ? "—" : Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
-            return (
-              `<div style="display:flex;align-items:center;gap:6px;margin-top:3px">${pt.marker}` +
-              `<span style="flex:1;color:#475569">${pt.seriesName}</span>` +
-              `<span style="font-weight:800;color:#0f172a">${valStr}</span>` +
-              (unit ? `<span style="color:#94a3b8;font-size:11px">${unit}</span>` : "") +
-              `</div>`
-            );
-          }).join("");
-          return `<div style="font-size:11px;color:#94a3b8;margin-bottom:2px">${head}</div>${rows}`;
-        },
-      },
-      xAxis: {
-        type: "time",
-        axisLine: { lineStyle: { color: "rgba(148,163,184,0.35)" } },
-        axisLabel: { color: "#64748b", hideOverlap: true },
-        splitLine: { show: false },
-      },
-      yAxis: yAxes,
-      series: series.map((s) => ({
-        name: s.label,
-        type: chartType === "bar" ? ("bar" as const) : ("line" as const),
-        data: s.points,
-        showSymbol: chartType !== "bar" && settings.showSymbol,
-        symbolSize: 5,
-        smooth: chartType !== "bar" && settings.smooth ? 0.3 : false,
-        yAxisIndex: units[1] != null && (s.unit ?? "") === units[1] ? 1 : 0,
-        // bar: gruplu ya da stack + genislik/yuvarlaklik
-        stack: chartType === "bar" && settings.barStack ? "total" : undefined,
-        barWidth: chartType === "bar" && settings.barWidth > 0 ? settings.barWidth : undefined,
-        barMaxWidth: chartType === "bar" && settings.barWidth === 0 ? 40 : undefined,
-        lineStyle: chartType !== "bar" ? { color: s.color, width: settings.lineWidth } : undefined,
-        itemStyle: {
-          color: s.color,
-          borderRadius: chartType === "bar" ? [settings.barRadius, settings.barRadius, 0, 0] : 0,
-        },
-        // alan dolgusu: sadece "area" tipinde
-        areaStyle:
-          chartType === "area"
-            ? { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: s.color + "33" }, { offset: 1, color: s.color + "05" }]) }
-            : undefined,
-        connectNulls: true,
-      })),
-    };
-  }, [series, units, chartType, settings, heatmapMode, heatData, t]);
+    // ---- LINE/AREA/BAR: ORTAK CEKIRDEK ----
+    // Bu uc gorunum Analiz > Trendler ile birebir ayni; option uretimi
+    // `trendChartCore` icinde tek yerde yasiyor. Iki kopya tutuldugunda
+    // birinde yapilan iyilestirme (tooltip birimi, cift eksen, dataZoom)
+    // digerinde sessizce eksik kaliyordu.
+    return buildTrendOption({ series, chartType, settings });
+  }, [series, chartType, settings, heatmapMode, heatData, t, defs, heatmapSignal, suffixCatalog]);
 
   // Popup: sinyal ekle / duzenle (tek sinyal + tek cihaz).
   const [pSuffix, setPSuffix] = useState<string>("");
