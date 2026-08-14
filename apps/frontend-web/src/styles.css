@@ -31988,9 +31988,24 @@ th.event-col-category {
 .device-trend-btn-primary { padding: 9px 18px; border: none; border-radius: 9px; background: #0f172a; color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; }
 .device-trend-btn-primary:disabled { opacity: 0.5; cursor: default; }
 
+/* ---- Analiz > Trendler (GlobalTrendsPanel) ----
+   Cihaz Detayi'ndaki panel bir SEKME govdesinin icinde yasiyor: ata zincir
+   flex ve yuksekligi belli, `flex: 1` orada is goruyor. Analiz sayfasinda
+   ise panel siradan bir `<section>` icinde; `flex: 1`in dayanacagi bir
+   yukseklik YOK ve govde icerik kadar cokuyor — grafik alani bos bir kutu,
+   sayfanin geri kalani beyaz kaliyordu. Bu yuzden burada yukseklik ACIKCA
+   veriliyor. `vh` tabanli: kucuk ekranda sayfayi tasirmaz, buyuk ekranda
+   grafigi genisletir. */
+.global-trend { min-height: clamp(460px, 62vh, 760px); }
+.global-trend .device-trend-body { min-height: clamp(400px, 55vh, 700px); }
+/* Sol panel bu ekranda cihaz ADI da tasiyor (seriler farkli cihazlardan
+   geliyor); 240px'e "Çakıllı Ayrım 2 / Anlık Akım · Master" sigmiyordu. */
+.global-trend .device-trend-body { grid-template-columns: 268px 1fr; }
+
 @media (max-width: 1024px) {
   .device-trend-body { grid-template-columns: 1fr; }
   .device-trend-side { max-height: 200px; }
+  .global-trend .device-trend-body { grid-template-columns: 1fr; }
 }
 
 .device-chart-panel {
