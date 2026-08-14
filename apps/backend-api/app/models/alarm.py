@@ -22,7 +22,32 @@ class AlarmEvent(Base):
     __tablename__ = "alarm_events"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    device_id: Mapped[int] = mapped_column(ForeignKey("devices.id"), index=True)
+
+    #: Alarmi ureten cihaz. Cihaz SILINIRSE bu alan NULL'a duser ama satir
+    #: KALIR — bkz. `device_code` / `device_name` ve asagidaki not.
+    device_id: Mapped[int | None] = mapped_column(
+        ForeignKey("devices.id"), index=True, nullable=True
+    )
+
+    #: Cihaz kodu/adi — SILINME ANINDA dondurulan anlik goruntu.
+    #:
+    #: NEDEN VAR: cihaz silindiginde alarm gecmisi de siliniyordu
+    #: (`device_repository._delete_telemetry_and_alarms_for_device`). Sahada
+    #: olculdu (2026-08-12): demo cihazlari 17 kez silinip yeniden
+    #: olusturulmus ve `alarm_events` 2 satira dusmustu; analiz ekranindaki
+    #: takvim ve cihaz x zaman matrisi bos cikiyordu. Operator bunu
+    #: "alarm olmamis" diye okuyordu.
+    #:
+    #: Asimetri de buydu: `telemetry_history` silinen cihazin satirlarini
+    #: KORUYOR (aynı olcumde ~20 olu device_id duruyordu), alarm korumuyordu.
+    #: Bir ariza izleme urununde operasyonel kaydin donanim kaydiyla birlikte
+    #: yok olmasi, saklama politikasi degil VERI KAYBIDIR.
+    #:
+    #: NULL = cihaz hala duruyor; ad/kod `devices` tablosundan okunur. Dolu =
+    #: cihaz silinmis, gecmis bu iki alandan okunur.
+    device_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    device_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
     level: Mapped[str] = mapped_column(String(30), index=True)
     title: Mapped[str] = mapped_column(String(255))
     description: Mapped[str] = mapped_column(String(1000))

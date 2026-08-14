@@ -174,6 +174,96 @@ def test_ayni_alarm_TEKRAR_tetikleyince_onceki_kayit_kaliyor(db, cihaz):
     assert len(canli) == 1, "alt panel eski kayitla dolmus"
 
 
+# --- Dorduncu silme yolu: CIHAZ SILINMESI -------------------------------
+#
+# Ustteki uc yol bir GORUNUM sorununu veri silerek cozuyordu. Bu dorduncusu
+# daha sessizdi: cihaz silinince alarm satirlari da gidiyordu
+# (`device_repository._delete_telemetry_and_alarms_for_device`). Sahada
+# olculdu (2026-08-12): demo cihazlari 17 kez silinip yeniden olusturulmus,
+# geriye 2 alarm satiri kalmisti. Ayni kurulumda `telemetry_history` silinen
+# cihazin satirlarini KORUYORDU — operasyonel kayit, donanim kaydiyla
+# birlikte yok olan tek seydi.
+
+
+def _cihazi_sil(db, dev: Device) -> dict:
+    from app.repositories.device_repository import DeviceRepository
+
+    sayilar = DeviceRepository(db).delete(dev)
+    db.flush()
+    return sayilar
+
+
+def test_cihaz_silinince_alarm_satiri_KALIYOR(db, cihaz):
+    """Asil regresyon: gecmis, donanim kaydiyla birlikte yok olmuyor."""
+    eski = _alarm(db, cihaz, gun_once=10, ack=True, reset=True, arsiv=True)
+    acik = _alarm(db, cihaz, gun_once=1)
+
+    _cihazi_sil(db, cihaz)
+
+    assert db.get(AlarmEvent, eski.id) is not None, "arsiv satiri cihazla birlikte silinmis"
+    assert db.get(AlarmEvent, acik.id) is not None, "acik alarm cihazla birlikte silinmis"
+    assert db.scalar(select(func.count()).select_from(AlarmEvent)) == 2
+
+
+def test_cihaz_silinince_kod_ve_ad_DONDURULUYOR(db, cihaz):
+    """Cihaz artik yok; adi `devices`ten okunamaz. Okunamayan bir ad yerine
+    gecmiste "#41" yazmak, kaydi kimin urettigini kaybetmek olurdu."""
+    a = _alarm(db, cihaz, gun_once=4)
+    kod, ad = cihaz.code, cihaz.name
+
+    _cihazi_sil(db, cihaz)
+
+    db.refresh(a)
+    assert a.device_id is None, "FK bosaltilmamis"
+    assert a.device_code == kod
+    assert a.device_name == ad
+
+
+def test_cihazi_silinen_alarm_CANLI_LISTEDE_gorunmuyor(db, cihaz):
+    """Cihaz yoksa alarm uzerinde islem de yapilamaz: onaylanamaz, normale
+    donemez, haritada gosterilemez. Damgalanmasaydi ACIK bir alarm panelde
+    sonsuza kadar asili kalirdi."""
+    _alarm(db, cihaz, gun_once=1)
+    baska = Device(code="DEMO-2", name="DEMO-2", ip_address="10.0.0.2",
+                   latitude=39.1, longitude=35.1)
+    db.add(baska)
+    db.flush()
+    kalan = _alarm(db, baska, gun_once=1)
+
+    _cihazi_sil(db, cihaz)
+
+    canli = alarm_engine_service.list_alarm_events(db)
+    assert [a.id for a in canli] == [kalan.id], "cihazi silinen alarm canli listede"
+
+
+def test_cihaz_silinince_SAHA_YORUMU_kaliyor(db, cihaz):
+    """Operator yorumu ("ekip yonlendirildi") alarmin kendisi kadar gecmistir."""
+    a = _alarm(db, cihaz, gun_once=2)
+    db.add(AlarmComment(alarm_event_id=a.id, author_username="muh",
+                        comment="ekip yonlendirildi",
+                        created_at=datetime.now(timezone.utc)))
+    db.flush()
+
+    _cihazi_sil(db, cihaz)
+
+    yorum = db.scalar(
+        select(func.count()).select_from(AlarmComment)
+        .where(AlarmComment.alarm_event_id == a.id)
+    )
+    assert yorum == 1, "saha yorumu cihazla birlikte silinmis"
+
+
+def test_cihaz_silinince_TAKVIM_gecmisi_duruyor(db, cihaz):
+    """Silmenin gorunur sonucu buydu: analiz takvimi bos cikiyordu."""
+    _alarm(db, cihaz, gun_once=6, ack=True, reset=True, arsiv=True)
+    _alarm(db, cihaz, gun_once=6, ack=True, reset=True, arsiv=True)
+
+    _cihazi_sil(db, cihaz)
+
+    takvim = alarm_takvimi(db, days=30, visible_device_ids=None)
+    assert takvim["total"] == 2, "cihaz silininca takvim gecmisi bosaldi"
+
+
 # --- Retention: tavan var ama CANLI alarma dokunmuyor --------------------
 
 

@@ -273,7 +273,16 @@ export type UserRead = {
 
 export type AlarmEvent = {
   id: number;
+  /** Backend'de bu alan NULL olabilir: cihaz silinince alarm satırı gecmis
+   *  olarak kalır ve `device_id` boşaltılır. Burada `number` kalması bilinçli
+   *  — cihazı silinen kayıt aynı anda arşivlenir (`superseded_at`) ve canlı
+   *  uçlar arşivlileri süzer, yani bu tipin doldurulduğu hiçbir yanıtta NULL
+   *  gelmez. Arşiv kayıtlarını okuyan bir ekran eklenirse tip orada
+   *  `number | null` olmalı ve aşağıdaki iki alan kullanılmalı. */
   device_id: number;
+  /** Silme ANINDAKI cihaz kodu/adı — yalnızca cihazı silinmiş kayıtlarda dolu. */
+  device_code?: string | null;
+  device_name?: string | null;
   level: string;
   title: string;
   description: string;
