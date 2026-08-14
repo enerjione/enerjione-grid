@@ -388,6 +388,7 @@ def acknowledge_all_alarms(
     db: Session,
     actor_username: str,
     visible_device_ids: set[int] | None = None,
+    only: str | None = None,
 ) -> list[AlarmEvent]:
     """Gorunur alarmlari toplu onaylar.
 
@@ -397,10 +398,24 @@ def acknowledge_all_alarms(
     ucu cagirinca sistemdeki TUM alarmlar onaylaniyor, resetlenmis olanlar
     yorumlariyla birlikte KALICI SILINIYORDU — ve yanit bos dondugu icin
     arayuzde hicbir sey olmamis gibi gorunuyordu.
+
+    `only` ALT KUME SECER — cunku bu iki islem AYNI SEY DEGIL:
+      "resolved" : normale donmus (reset) kayitlar onaylanir ve arsive gider.
+                   Dongusu bitmis kayitlari temizler; SAHADA DEVAM EDEN hicbir
+                   alarma dokunmaz.
+      "active"   : hala suren alarmlar "gordum" diye isaretlenir; kayit durur.
+      None       : ikisi birden (eski davranis, geriye donuk uyumluluk).
+
+    Tek dugmeyle ikisini birden yapmak, "listeyi temizleyeyim" diyen bir
+    operatorun ayni tikla SUREN alarmlari da gorulmus saymasi demekti — bu
+    kayitlar sonra kimsenin dikkatini cekmiyordu.
     """
     alarms = list_alarm_events(db, visible_device_ids)
+    if only == "resolved":
+        alarms = [a for a in alarms if a.reset]
+    elif only == "active":
+        alarms = [a for a in alarms if not a.reset]
     now = datetime.now(timezone.utc)
-    remaining: list[AlarmEvent] = []
     for alarm in alarms:
         alarm.acknowledged = True
         alarm.acknowledged_at = now
@@ -408,8 +423,6 @@ def acknowledge_all_alarms(
         if alarm.reset:
             db.query(AlarmComment).filter(AlarmComment.alarm_event_id == alarm.id).delete(synchronize_session=False)
             db.delete(alarm)
-        else:
-            remaining.append(alarm)
     record_event(
         db,
         category="alarm",
@@ -417,12 +430,17 @@ def acknowledge_all_alarms(
         severity="info",
         actor_username=actor_username,
         message="Tüm alarmlar onaylandı",
-        metadata={"count": len(alarms)},
+        metadata={"count": len(alarms), "only": only or "all"},
         i18n_key="alarm_acknowledge_all",
         i18n_params={"count": len(alarms)},
     )
     db.commit()
-    return remaining
+    # ISLEM SONRASI GUNCEL LISTE — dokunulan kayitlarin artigi degil.
+    # `only` ile alt kume secilebildigi icin bu fark onemli: "yalnizca normale
+    # donenler" cagrisinda dokunulanlarin HEPSI silinir ve eski davranisla
+    # (artigi dondurmek) yanit BOS gelirdi; arayuz bu bos listeyi durumun
+    # kendisi sanip hala suren alarmlari da ekrandan dusururdu.
+    return list_alarm_events(db, visible_device_ids)
 
 
 def reset_all_alarms(
