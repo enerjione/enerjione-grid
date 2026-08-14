@@ -40,6 +40,44 @@ h1{font-size:15px;margin:0;letter-spacing:.24em;text-transform:uppercase}
        vertical-align:-2px;animation:yanip 1s steps(2,end) infinite}
 @keyframes yanip{50%{opacity:0}}
 
+/* --- tag hazirlik bandi ---
+   Panelin en ustunde duruyor cunku sorulan soru bu: "tag'a cikabilir miyiz".
+   Oturum kartlari o sorunun ayrintisi. */
+.bant{display:grid;gap:14px;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);margin-bottom:18px}
+@media (max-width:900px){.bant{grid-template-columns:1fr}}
+.kutu{border:2px solid var(--cerceve);background:linear-gradient(180deg,var(--panel),var(--panel2));
+      padding:11px 13px 13px;box-shadow:0 0 0 2px #090a16, 0 6px 0 0 #090a16;min-width:0}
+.kutu h2{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;margin:0 0 9px;color:var(--sonuk)}
+.kutu.hazir{border-color:var(--yesil)} .kutu.engelli{border-color:var(--kirmizi)}
+.buyuk{font-size:17px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;line-height:1.2}
+.buyuk.hazir{color:var(--yesil)} .buyuk.engelli{color:var(--kirmizi)}
+.surumSatir{color:var(--sonuk);font-size:11px;margin-top:5px}
+.surumSatir b{color:var(--mor);font-weight:400}
+.sayaclar{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.sayac{border:1px solid currentColor;padding:3px 7px;font-size:10px;text-transform:uppercase;letter-spacing:.07em}
+.sayac.yesil{color:var(--yesil)} .sayac.sari{color:var(--sari)}
+.sayac.kirmizi{color:var(--kirmizi)} .sayac.sonuk{color:var(--cok-sonuk)}
+.liste{margin:10px 0 0;padding:0;list-style:none;font-size:10.5px;line-height:1.55;
+       max-height:170px;overflow:auto}
+.liste li{padding:3px 0 3px 12px;position:relative;color:var(--metin)}
+.liste li:before{content:"";position:absolute;left:0;top:8px;width:5px;height:5px;background:var(--kirmizi)}
+.liste li.uyari{color:var(--sonuk)} .liste li.uyari:before{background:var(--sari)}
+.komut{margin-top:9px;font-size:10px;color:var(--cok-sonuk);line-height:1.6}
+.komut code{color:var(--mavi)}
+
+/* --- ne cikiyor --- */
+.notGrup{margin-bottom:9px}
+.notGrup h3{font-size:10px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 4px}
+.notGrup.ekle h3{color:var(--yesil)} .notGrup.duzelt h3{color:var(--sari)}
+.notGrup.diger h3{color:var(--cok-sonuk)}
+.not{font-size:10.5px;line-height:1.45;padding:3px 0 3px 13px;position:relative;color:var(--metin)}
+.not:before{position:absolute;left:0;top:2px;font-size:11px}
+.notGrup.ekle .not:before{content:"+";color:var(--yesil)}
+.notGrup.duzelt .not:before{content:"*";color:var(--sari)}
+.notGrup.diger .not:before{content:"-";color:var(--cok-sonuk)}
+.not .kaynak{color:var(--cok-sonuk);font-size:9.5px;margin-left:5px}
+.notKaydir{max-height:250px;overflow:auto}
+
 /* --- masalar --- */
 .oda{display:grid;gap:13px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
 .masa{background:linear-gradient(180deg,var(--panel),var(--panel2));
@@ -47,6 +85,12 @@ h1{font-size:15px;margin:0;letter-spacing:.24em;text-transform:uppercase}
       box-shadow:0 0 0 2px #090a16, 0 6px 0 0 #090a16;display:flex;flex-direction:column}
 .masa.carpisan{border-color:var(--kirmizi)}
 .masa.uykuda{opacity:.55}
+/* Teslim durumu kartin SOL SERIDI: "isini bitirip beklemeye almis mi"
+   sorusunun cevabi rozetler arasinda kaybolmasin. */
+.masa:before{content:"";position:absolute;left:-2px;top:-2px;bottom:-2px;width:4px}
+.masa.teslim-edildi:before{background:var(--yesil)}
+.masa.teslim-bekliyor:before{background:var(--sari)}
+.masa.teslim-kirli:before{background:var(--kirmizi)}
 .basSatir{display:flex;align-items:flex-start;gap:10px}
 .sprite{flex:0 0 auto;width:72px;height:72px;image-rendering:pixelated;shape-rendering:crispEdges}
 .kimlik{min-width:0;flex:1}
@@ -125,6 +169,17 @@ h1{font-size:15px;margin:0;letter-spacing:.24em;text-transform:uppercase}
     <input type="checkbox" id="uykuGoster"> uykudakileri de goster
     <span id="uykuSayi"></span>
   </label>
+</div>
+
+<div class="bant">
+  <div class="kutu" id="hazirlikKutu">
+    <h2>Tag Hazirlik</h2>
+    <div id="hazirlik">hesaplaniyor...</div>
+  </div>
+  <div class="kutu">
+    <h2>Bu Tag'de Ne Cikiyor</h2>
+    <div class="notKaydir" id="notlar">hesaplaniyor...</div>
+  </div>
 </div>
 
 <div class="oda" id="oda"></div>
@@ -263,12 +318,107 @@ function gosterilsinMi(a, cakisanlar){
   if (a.saniye < 0) return false;
   if (a.saniye < CANLI_ESIK) return true;
   if (a.kirli > 0) return true;
+  /* Teslim edilmemis commit tasiyan agac, uykuda bile olsa GIZLENMEZ:
+     tag'a cikarken gozden kacacak tek sey tam olarak budur. */
+  if (a.ileride > 0) return true;
   if (a.okunmamis > 0) return true;
   if (cakisanlar.has(a.konu)) return true;
   return false;
 }
 
+/* Bir oturum isini bitirip beklemeye almis mi?
+   Uc durum, sunucudan EK VERI ISTEMEDEN: `ileride` (main'de olmayan commit)
+   ve `kirli` (kaydedilmemis dosya) zaten kartta var.
+     kirli    -> daha yaziyor, commit bile edilmemis
+     bekliyor -> commit'lenmis ama main'e girmemis: /teslim kosulmali
+     edildi   -> agac temiz ve dalda main'de olmayan commit yok */
+function teslimDurumu(a){
+  if (a.anaMi) return null;
+  if (a.kirli > 0)   return { sinif:"teslim-kirli",    rozet:"kirmizi", metin:`${a.kirli} dosya kaydedilmemis` };
+  if (a.ileride > 0) return { sinif:"teslim-bekliyor", rozet:"sari",    metin:`${a.ileride} commit teslim bekliyor` };
+  return { sinif:"teslim-edildi", rozet:"yesil", metin:"teslim edildi" };
+}
+
+function cizHazirlik(veri){
+  const s = veri.surum;
+  const kutu = document.getElementById("hazirlikKutu");
+  const el = document.getElementById("hazirlik");
+  if (!s){
+    kutu.className = "kutu";
+    el.innerHTML = `<div class="aciklama">Durum hesaplanamadi (depo okunamiyor olabilir).</div>`;
+    return;
+  }
+
+  const engeller = s.engeller || [], uyarilar = s.uyarilar || [];
+  const hazir = engeller.length === 0;
+  kutu.className = "kutu " + (hazir ? "hazir" : "engelli");
+
+  /* Oturum sayimi kartlardan turetiliyor: band ile kartlar ayni sayiyi
+     gostermek zorunda, yoksa hangisine inanilacagi belirsiz kalir. */
+  let edildi = 0, bekliyor = 0, kirli = 0;
+  for (const a of veri.ajanlar){
+    const t = teslimDurumu(a);
+    if (!t) continue;
+    if (t.sinif === "teslim-edildi") edildi++;
+    else if (t.sinif === "teslim-bekliyor") bekliyor++;
+    else kirli++;
+  }
+
+  const tagMetni = !s.tagAdi ? "surum okunamadi"
+    : (!s.tagVar ? `${s.tagAdi} henuz atilmamis`
+    : (s.tagMaindeMi ? `${s.tagAdi} zaten main'de` : `${s.tagAdi} VAR ama baska commit'te`));
+
+  const satirlar = engeller.map(e => `<li>${kacar(e)}</li>`)
+    .concat(uyarilar.map(u => `<li class="uyari">${kacar(u)}</li>`)).join("");
+
+  el.innerHTML = `
+    <div class="buyuk ${hazir?"hazir":"engelli"}">${hazir ? "TAG'A HAZIR" : engeller.length + " ENGEL"}</div>
+    <div class="surumSatir">surum <b>${kacar(s.surum || "?")}</b> &middot; ${kacar(tagMetni)}
+      ${s.cevrimdisi ? ` &middot; <span style="color:var(--sari)">origin okunamadi</span>` : ""}</div>
+    <div class="sayaclar">
+      <span class="sayac ${edildi?"yesil":"sonuk"}">${edildi} teslim etti</span>
+      <span class="sayac ${bekliyor?"sari":"sonuk"}">${bekliyor} bekliyor</span>
+      <span class="sayac ${kirli?"kirmizi":"sonuk"}">${kirli} kaydedilmemis</span>
+      ${s.olu && s.olu.length ? `<span class="sayac sonuk">${s.olu.length} olu dal</span>` : ""}
+    </div>
+    ${satirlar ? `<ul class="liste">${satirlar}</ul>` : `<div class="temiz" style="margin-top:10px">Engel yok.</div>`}
+    <div class="komut">
+      hepsini main'e al: <code>tools\\oturum-teslim.ps1 -Hepsi</code><br>
+      tam rapor: <code>tools\\surum-hazir.ps1</code> &middot;
+      tag: <code>tools\\surum-hazir.ps1 -Test -Tag -Ozet "..."</code>
+    </div>`;
+}
+
+function cizNotlar(veri){
+  const n = veri.notlar;
+  const el = document.getElementById("notlar");
+  if (!n){ el.innerHTML = `<div class="aciklama">Hesaplanamadi.</div>`; return; }
+  if (!n.toplam){
+    el.innerHTML = `<div class="aciklama">${kacar(n.sonTag || "son tag")} sonrasi main'e
+      yeni bir is girmemis. Oturumlar teslim ettikce burasi dolar.</div>`;
+    return;
+  }
+  const grup = (sinif, baslik, liste) => !liste || !liste.length ? "" :
+    `<div class="notGrup ${sinif}">
+       <h3>${baslik} (${liste.length})</h3>
+       ${liste.map(x => `<div class="not">${kacar(x.metin)}
+          <span class="kaynak">${kacar(x.sha)}${x.dal ? " &middot; " + kacar(x.dal) : ""}</span></div>`).join("")}
+     </div>`;
+
+  el.innerHTML =
+    `<div class="aciklama" style="margin:0 0 8px">${kacar(n.sonTag || "baslangic")} sonrasi ${n.toplam} is</div>`
+    + grup("ekle", "Eklendi", n.eklendi)
+    + grup("duzelt", "Duzeltildi", n.duzeltildi)
+    + grup("diger", "Diger", n.diger)
+    + (n.yayinlanmamis
+        ? `<div class="komut" style="color:var(--sari)">CHANGELOG &gt; [Yayinlanmamis] bos degil —
+             tag'den once yeni surum basligina tasinmali.</div>`
+        : "");
+}
+
 function ciz(veri){
+  cizHazirlik(veri);
+  cizNotlar(veri);
   const cakisanlar = new Set();
   for (const c of veri.carpismalar) for (const k of c.kimler) cakisanlar.add(k);
 
@@ -276,24 +426,36 @@ function ciz(veri){
   document.getElementById("proje").title = veri.projeYolu || "";
 
   const hepsiGoster = document.getElementById("uykuGoster").checked;
-  const gorunen = veri.ajanlar.filter(a => hepsiGoster || gosterilsinMi(a, cakisanlar));
+  /* Siralama: once ISI KALAN oturumlar. Tag'a cikarken bakilan sey "kimde
+     is kaldi"; teslim etmis oturumlarin ustte durmasinin bir degeri yok.
+     Sira duruma bagli oldugu icin kararli -- her tazelemede zipzip degismez. */
+  const SIRA = { "teslim-kirli":0, "teslim-bekliyor":1, "teslim-edildi":3 };
+  const gorunen = veri.ajanlar.filter(a => hepsiGoster || gosterilsinMi(a, cakisanlar))
+    .sort((x, y) => {
+      const tx = teslimDurumu(x), ty = teslimDurumu(y);
+      const rx = tx ? SIRA[tx.sinif] : 2, ry = ty ? SIRA[ty.sinif] : 2;   /* ana agac ortada */
+      if (rx !== ry) return rx - ry;
+      return String(x.konu).localeCompare(String(y.konu));
+    });
   const gizli = veri.ajanlar.length - gorunen.length;
   document.getElementById("uykuSayi").textContent = gizli ? `(${gizli} gizli)` : "";
 
   document.getElementById("oda").innerHTML = gorunen.length === 0
     ? `<div class="yok">Su an aktif oturum yok. Uykudakileri gormek icin yukaridaki kutuyu isaretle.</div>`
     : gorunen.map(a => {
+    const t = teslimDurumu(a);
     const rozet = [];
+    /* Teslim rozeti ILK sirada: kartin cevapladigi ilk soru bu. */
+    if (t) rozet.push(`<span class="rz ${t.rozet}">${t.metin}</span>`);
     if (a.anaMi) rozet.push(`<span class="rz mavi">ana agac</span>`);
     if (a.oturumSayisi > 1) rozet.push(`<span class="rz mavi">${a.oturumSayisi} claude oturumu</span>`);
     if (a.port)  rozet.push(`<span class="rz sonuk">:${a.port}</span>`);
     if (a.kirli) rozet.push(`<span class="rz sari">${a.kirli} dosya acik</span>`);
-    if (a.ileride) rozet.push(`<span class="rz yesil">+${a.ileride}</span>`);
     if (a.geride)  rozet.push(`<span class="rz ${a.geride>10?"kirmizi":"sonuk"}">-${a.geride}</span>`);
     if (cakisanlar.has(a.konu)) rozet.push(`<span class="rz kirmizi">carpisma</span>`);
     if (a.okunmamis) rozet.push(`<span class="rz sari">${a.okunmamis} yeni mesaj</span>`);
 
-    return `<div class="masa ${cakisanlar.has(a.konu)?"carpisan":""} ${a.durum==="uykuda"?"uykuda":""}">
+    return `<div class="masa ${t?t.sinif:""} ${cakisanlar.has(a.konu)?"carpisan":""} ${a.durum==="uykuda"?"uykuda":""}">
       <div class="basSatir">
         ${spriteSVG(a)}
         <div class="kimlik">
@@ -336,8 +498,11 @@ function ciz(veri){
 
   const calisan = veri.ajanlar.filter(a => a.durum === "yaziyor").length;
   const bekleyen = veri.mesajlar.filter(m => !m.okuyan || !m.okuyan.length).length;
+  const teslimsiz = veri.ajanlar.filter(a => { const t = teslimDurumu(a);
+                                               return t && t.sinif !== "teslim-edildi"; }).length;
   document.getElementById("ozet").textContent =
     `${gorunen.length}/${veri.ajanlar.length} oturum · ${calisan} calisiyor`
+    + ` · ${teslimsiz} teslim etmedi`
     + ` · ${veri.carpismalar.length} carpisma · ${bekleyen} mesaj bekliyor · ${veri.guncelleme}`;
 }
 

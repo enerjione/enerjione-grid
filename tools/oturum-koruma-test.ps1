@@ -42,6 +42,9 @@ $durumlar = @(
   @{ Ad = "git commit -m";                   Komut = "git commit -m 'mesaj'";            Beklenen = "IZIN" },
   @{ Ad = "git status";                      Komut = "git status";                       Beklenen = "IZIN" },
   @{ Ad = "git stash list";                  Komut = "git stash list";                   Beklenen = "IZIN" },
+  @{ Ad = "git stash show (salt-okunur)";    Komut = "git stash show -p stash@{0}";      Beklenen = "IZIN" },
+  @{ Ad = "git stash pop";                   Komut = "git stash pop";                    Beklenen = "ENGEL" },
+  @{ Ad = "git stash drop";                  Komut = "git stash drop stash@{1}";         Beklenen = "ENGEL" },
   @{ Ad = "metinde gecen kalip (echo)";      Komut = "echo 'git add -A yapmayin'";       Beklenen = "IZIN" },
   @{ Ad = "metinde gecen kalip (grep)";      Komut = "grep -r 'git reset --hard' docs";  Beklenen = "IZIN" }
 )

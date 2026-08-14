@@ -41,6 +41,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "oturum-ortak.ps1")
+# Tag hazirlik bandinin hesabi: surum-hazir.ps1 ile AYNI kitaplik. Panel kendi
+# hesabini yapsaydi iki yuz bir gun farkli cevap verirdi.
+. (Join-Path $PSScriptRoot "surum-durum.ps1")
 
 $sayfaYolu = Join-Path $PSScriptRoot "oturum-panel.html"
 if (-not (Test-Path $sayfaYolu)) { throw "Panel sayfasi bulunamadi: $sayfaYolu" }
@@ -132,6 +135,19 @@ function Get-PanelVerisi {
     })
   }
 
+  # --- Tag hazirlik ---------------------------------------------------------
+  # -Fetch VERILMEZ: panel 4 saniyede bir tazeliyor, her turda aga cikmak
+  # agsiz makinede paneli dondururdu. Uzak karsilastirmasi son fetch'e gore
+  # yapilir; band bunu ayrica yaziyor.
+  $surum = $null
+  $notlar = $null
+  try {
+    $surum = Get-SurumDurumu
+    if ($surum) { $notlar = Get-SurumNotlari -Kok $surum.kok }
+  } catch {
+    # Hesap dusse bile panelin geri kalani calismali.
+  }
+
   $anaKok = Get-AnaAgacKok
   return [pscustomobject]@{
     guncelleme  = (Get-Date).ToString("HH:mm:ss")
@@ -140,6 +156,8 @@ function Get-PanelVerisi {
     ajanlar     = @($ajanlar)
     carpismalar = @($carpismalar)
     mesajlar    = @($mesajlar)
+    surum       = $surum
+    notlar      = $notlar
   }
 }
 

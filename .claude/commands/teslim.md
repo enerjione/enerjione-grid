@@ -39,6 +39,12 @@ tools\oturum-teslim.ps1
 Ana ağaçtan çalıştırıyorsan `-Konu <ad>` ver. Oturumun kendi penceresindeysen
 gerekmez.
 
+**Kullanıcı "hepsini teslim et" derse** (tag hazırlığı): `-Hepsi`. Bütün açık
+oturumları en az commit taşıyan önce sırayla teslim eder, düşenleri özetler.
+Önce `-Hepsi -Prova` ile tur atmak iyi olur — hiçbir şeyi değiştirmez.
+Başka oturumun dalı son 30 dk'da hareket ettiyse teslim engellenir (rebase
+onun commit'lerini yeniden yazar); önce mesaj at.
+
 ## Script durursa
 
 Her adım kendi çözümünü ekrana yazar. **Sen çöz, kullanıcıya devretme:**

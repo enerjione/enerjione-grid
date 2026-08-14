@@ -53,7 +53,12 @@ $kaliplar = @(
   @{ Desen = '^git\s+checkout\s+--\s+\.';                          Ad = 'git checkout -- .' },
   @{ Desen = '^git\s+restore\s+(--\s+)?\.(\s|$)';                  Ad = 'git restore .' },
   @{ Desen = '^git\s+clean\s+-[a-zA-Z]*f';                         Ad = 'git clean -f' },
-  @{ Desen = '^git\s+stash(\s|$)(?!\s*list)';                      Ad = 'git stash' }
+  # `list` ve `show` SALT-OKUNUR: stash'in ne oldugunu gormek icin kullanilir
+  # ve hicbir seyi degistirmez. Ilk surum yalnizca `list`i muaf tutuyordu;
+  # `git stash show` engellenince "hangi is nerede kaldi" sorusuna bakan
+  # komutun onu kesilmis oluyordu. Yanlis engelleme korumaya olan guveni
+  # goturur -- kullanici ilk isten sonra hook'u kapatir.
+  @{ Desen = '^git\s+stash(\s|$)(?!\s*(list|show)\b)';             Ad = 'git stash' }
 )
 
 # YALNIZCA KOMUT KONUMUNDAKI git cagrilari.

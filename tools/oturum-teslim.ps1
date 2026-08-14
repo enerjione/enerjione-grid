@@ -57,6 +57,11 @@
 .PARAMETER Kapat
   Teslim basariliysa worktree'yi de kapat (`oturum-kapat.ps1`).
 
+.PARAMETER Hepsi
+  Butun acik oturumlari sirayla teslim eder (en az commit tasiyan once).
+  Biri duserse digerleri devam eder; sonda hangisinin kaldigi ve NEDEN
+  kaldigi ozetlenir. `-Prova` ile birlikte "hepsi hazir mi" turu atar.
+
 .PARAMETER Zorla
   `-Konu` ile disaridan teslim ederken "o oturum su an calisiyor" korumasini
   gecersiz kilar. Rebase karsi tarafin commit'lerini yeniden yazar; ancak
@@ -76,7 +81,8 @@ param(
   [switch]$MigrationGerekmiyor,
   [switch]$PushYok,
   [switch]$Kapat,
-  [switch]$Zorla
+  [switch]$Zorla,
+  [switch]$Hepsi
 )
 
 $ErrorActionPreference = "Stop"
@@ -137,6 +143,83 @@ function Dur($mesaj) {
 # ---------------------------------------------------------------------------
 $anaKok = Get-AnaAgacKok
 if (-not $anaKok) { throw "Git deposu bulunamadi." }
+
+# ---------------------------------------------------------------------------
+# -Hepsi: butun hazir oturumlari sirayla teslim et
+# ---------------------------------------------------------------------------
+# NEDEN AYRI SUREC: her oturum icin bu script YENIDEN calistirilir. Boylece
+# birinin dusmesi digerlerini etkilemez ve her teslim, bir oncekinin main'e
+# yazdigi hali gorur (rebase hedefi guncel kalir).
+#
+# SIRA: en az commit tasiyan once. Kucuk isler main'e once girsin ki buyuk
+# olanlar onlarin ustune rebase olsun -- ters sira cakismayi buyutur.
+if ($Hepsi) {
+  if ($Konu) { throw "-Hepsi ile -Konu birlikte verilmez." }
+
+  $agaclar = @(Get-WorktreeListesi | Where-Object { -not $_.AnaMi -and $_.Dal -and (Test-Path $_.Yol) })
+  $adaylar = New-Object System.Collections.ArrayList
+  foreach ($w in $agaclar) {
+    $n = Invoke-GitOku -C $anaKok rev-list --count "main..$($w.Dal)"
+    $sayi = 0
+    if ($n) { try { $sayi = [int](($n -join "").Trim()) } catch { $sayi = 0 } }
+    if ($sayi -gt 0) {
+      [void]$adaylar.Add([pscustomobject]@{ Konu = (Split-Path -Leaf $w.Yol); Dal = $w.Dal; Sayi = $sayi })
+    }
+  }
+  $adaylar = @($adaylar | Sort-Object Sayi)
+
+  # Worktree'si olmayan ama isi bekleyen dallar: bu akis onlara dokunamaz
+  # (teslim bir calisma agaci ister). Sessizce atlanmaz -- "hepsi" diyen bir
+  # komutun sessizce bir seyi disarida birakmasi, tam da onlenmek istenen sey.
+  $hamAcik = Invoke-GitOku -C $anaKok branch --no-merged main --format="%(refname:short)"
+  $agacDallari = @($agaclar | ForEach-Object { $_.Dal })
+  $agacsiz = @(@($hamAcik) | Where-Object { $_ -and $_.Trim() -and ($agacDallari -notcontains $_.Trim()) } |
+                ForEach-Object { $_.Trim() })
+
+  Write-Host ""
+  Write-Host "TOPLU TESLIM  --  $($adaylar.Count) oturum" -ForegroundColor Cyan
+  if ($adaylar.Count -eq 0) { Write-Host "  Teslim edilecek is yok." -ForegroundColor Green }
+
+  $sonuc = New-Object System.Collections.ArrayList
+  foreach ($a in $adaylar) {
+    Write-Host ""
+    Write-Host ("=" * 68) -ForegroundColor DarkGray
+    $altArg = @("-Konu", $a.Konu)
+    if ($Prova) { $altArg += "-Prova" }
+    if ($TestAtla) { $altArg += "-TestAtla" }
+    if ($PushYok) { $altArg += "-PushYok" }
+    if ($Zorla) { $altArg += "-Zorla" }
+    # Cikti YAKALANIP yeniden yazdiriliyor. Dogrudan biraksaydik alt surecin
+    # yazdiklari ana surecin akisiyla karisir; cikti bir yere yonlendirildiginde
+    # (dosya, `Select-Object`, panel) ozet EN USTTE, ayrintilar altinda cikiyor
+    # ve hangi bolumun hangi oturuma ait oldugu kayboluyordu.
+    $altCikti = & powershell -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath @altArg 2>&1
+    $altKod = $LASTEXITCODE
+    foreach ($s in @($altCikti)) { Write-Host "$s" }
+    [void]$sonuc.Add([pscustomobject]@{ Konu = $a.Konu; Dal = $a.Dal; Sayi = $a.Sayi; Kod = $altKod })
+  }
+
+  Write-Host ""
+  Write-Host ("=" * 68) -ForegroundColor DarkGray
+  Write-Host "TOPLU TESLIM OZETI" -ForegroundColor Cyan
+  $gecen = @($sonuc | Where-Object { $_.Kod -eq 0 })
+  $kalan = @($sonuc | Where-Object { $_.Kod -ne 0 })
+  foreach ($s in $gecen) { Write-Host ("  OK    {0,-28} +{1}" -f $s.Konu, $s.Sayi) -ForegroundColor Green }
+  foreach ($s in $kalan) { Write-Host ("  KALDI {0,-28} +{1}  [{2}]" -f $s.Konu, $s.Sayi, $s.Dal) -ForegroundColor Red }
+  if ($agacsiz.Count -gt 0) {
+    Write-Host ""
+    Write-Host "  WORKTREE'SI OLMAYAN, ISI BEKLEYEN DALLAR ($($agacsiz.Count)) -- toplu teslim bunlara DOKUNMAZ:" -ForegroundColor Yellow
+    foreach ($d in $agacsiz) { Write-Host "    $d" -ForegroundColor DarkYellow }
+    Write-Host "    Agac acip teslim edin:  tools\oturum-ac.ps1 -Konu <ad>" -ForegroundColor DarkGray
+  }
+  Write-Host ""
+  if ($kalan.Count -gt 0 -or $agacsiz.Count -gt 0) {
+    Write-Host "Kalanlarin gerekcesi yukarida her oturumun kendi bolumunde yaziyor." -ForegroundColor Yellow
+    exit 1
+  }
+  Write-Host "Hepsi main'de. Sirada: tools\surum-hazir.ps1" -ForegroundColor Green
+  exit 0
+}
 
 if ([string]::IsNullOrWhiteSpace($Konu)) {
   # Worktree icinden calistirilmis olmali; dizin adi oturum adidir.
