@@ -14,6 +14,40 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.96.0] — 2026-08-14
+
+### Eklendi
+
+- **Bekleyen cihaz komutları artık bayatlamıyor.** Bir komut verildiğinde
+  kuyruğa alınıyor ve saha cihazına ancak gateway bağlandığında iletiliyordu.
+  Gateway saatlerce çevrimdışı kalırsa çok eski bir komut, geri geldiğinde
+  fiziksel sisteme uygulanıyordu:
+
+  ```
+  10:00  operatör komut verdi      (gateway çevrimdışı)
+  14:00  gateway geri geldi        → 4 saat önceki karar uygulandı
+  ```
+
+  Bir kesici komutunda bu kabul edilemez: operatörün 4 saat önceki kararı
+  sahanın **şu anki** durumu için geçerli olmayabilir.
+
+  Artık komutun yaşı teslimat anında kontrol ediliyor. Varsayılan **2
+  dakikadan** eski komutlar cihaza **gönderilmiyor**; başarısız olarak
+  sonlandırılıyor ve komut geçmişinde "zaman aşımı" olarak görünüyor.
+  Operatör komutun uygulanmadığını görüp güncel duruma göre yeniden karar
+  verebiliyor.
+
+  Süre `COMMAND_MAX_AGE_SEC` ile ayarlanabilir (varsayılan 120 saniye).
+  **Kapatılamaz**: sıfır veya negatif bir değer sistemin açılmasını
+  engeller — çünkü bu ayar, tam da önlemek için var olduğu riski tek başına
+  geri getirebilirdi.
+
+  Bu koruma hem arayüzden hem SCADA (IEC 104) üzerinden verilen komutları
+  kapsıyor; ikisi de aynı kuyruğu kullanıyor. Zamanında iletilen
+  komutların davranışı **değişmedi**.
+
+---
+
 ## [2.95.1] — 2026-08-14
 
 ### Düzeltildi
