@@ -14,6 +14,52 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.94.0] — 2026-08-14
+
+### Eklendi
+
+- **Kritik altyapı sorunları artık operatöre bildiriliyor.** Sistem bugüne
+  kadar "telemetri tamponu taştı, ölçümler kayboldu", "disk acil seviyede" ve
+  "zamanlı yedek alınamadı" gibi olayları yalnızca Olaylar ekranına
+  yazıyordu; kimseye bildirim gitmiyordu. Bildirim zinciri sadece cihaz
+  alarmları için çalışıyordu. Başında kimsenin olmadığı bir saha cihazında bu,
+  **sistem ayakta görünürken verinin kaybolduğu** durumun günlerce fark
+  edilmemesi demekti.
+
+  Bu uyarılar artık mevcut bildirim kanallarından (e-posta, SMS, Telegram,
+  WhatsApp, uygulama içi bildirim) gidiyor. Yeni bir kanal yapılandırması
+  gerekmiyor; hâlihazırda tanımlı kanallar kullanılıyor. Uyarılar sahaya
+  müdahale edebilecek rollere (mühendis, kurulumcu) gönderiliyor.
+
+  **Bildirim yağmuru olmuyor.** Aynı sorun için 15 dakikada en fazla bir
+  uyarı gider; arada oluşan olaylar tek uyarıda toplanır ve kaç kez
+  tekrarlandığı mesajda yazar. Farklı sorunlar birbirini bastırmaz. Olay
+  kayıtları bundan etkilenmez: 100 olay olduysa Olaylar ekranında 100 kayıt
+  durur, yalnızca gönderim tekilleştirilir.
+
+  Bildirim gönderimi ana işleyişten tamamen ayrı çalışır; bir e-posta
+  sunucusuna ulaşılamaması telemetri akışını, disk temizliğini veya
+  yedeklemeyi hiçbir şekilde yavaşlatmaz.
+
+  Uyarı üretecek olaylar bilinçli olarak dar tutuldu: telemetri veri kaybı,
+  kritik telemetri birikimi, disk acil durumu, yedek diski dolu ve zamanlı
+  yedek hatası. Cihaz alarmlarının bildirim davranışı **değişmedi**.
+
+### Değişti
+
+- **Servis sağlık durumları artık kurulum dosyasında da görünüyor.** Sağlık
+  kontrolleri 2.92.0'dan beri çalışıyordu ancak yalnızca uygulama
+  görüntülerinin içinde tanımlıydı; `docker-compose.yml` dosyasına bakan bir
+  operatör hiçbir sağlık kontrolü göremiyor ve "izleme yok" sonucuna
+  varabiliyordu. Sekiz servisin sağlık kontrolü artık kurulum dosyasında
+  açıkça yazılı ve denetlenebilir.
+
+  Davranış değişmedi: sağlık kontrolü yalnızca **durumu bildirir**, servisi
+  yeniden başlatmaz. Takılan bir servisin kendini toparlaması 2.92.0'da
+  eklenen bekçi mekanizmasının işidir ve olduğu gibi duruyor.
+
+---
+
 ## [2.93.0] — 2026-08-14
 
 ### Düzeltildi
