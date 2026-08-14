@@ -106,8 +106,13 @@ def create_access_token(subject: str, remember_me: bool = False) -> tuple[str, i
 
 
 # ---- WebSocket ticket store (URL'de JWT yerine kisa-omurlu ticket) ---------
-# In-memory: ticket -> (username, jti, exp_epoch). Multi-replica deploy'da
-# Redis gerek. 30sn TTL; consume sonrasi revoke (tek kullanim).
+# DB'de (`ws_tickets` tablosu), surec-ici bir dict'te DEGIL: bilet
+# `/auth/ws-ticket` ile uretilip AYRI bir TCP baglantisi olan WS upgrade
+# istegiyle tuketiliyor. `E1_API_WORKERS>1` iken bu iki istek farkli
+# uvicorn sureclerine dusebilir; surec-ici saklama bileti "kayip"
+# gosteriyor ve baglanti 1008 ile kapaniyordu (bkz. models/ws_ticket.py).
+#
+# 30sn TTL; consume sonrasi silinir (tek kullanim).
 #
 # `jti` NEDEN tasiniyor: WS baglantisi uzun omurlu. Bilet uretilirken oturum
 # gecerliydi ama installer "oturumu at" dedikten sonra da soket akmaya devam
@@ -115,43 +120,69 @@ def create_access_token(subject: str, remember_me: bool = False) -> tuple[str, i
 # handshake aninda hem de baglanti boyunca periyodik olarak
 # `UserSession.revoked_at` / `is_jti_revoked` kontrolu yapabiliyor.
 _WS_TICKET_TTL_SEC = 30
-_ws_tickets: dict[str, tuple[str, str | None, float]] = {}
-_ws_tickets_lock = threading.Lock()
 
 
 def issue_ws_ticket(username: str, jti: str | None = None) -> tuple[str, int]:
-    """Yeni WS ticket uret + cache'le. Returns (ticket, ttl_sec).
+    """Yeni WS ticket uret + kaydet. Returns (ticket, ttl_sec).
 
     `jti` bileti ureten oturumun token kimligi; WS tarafinda iptal kontrolu
     icin saklanir. None ise (eski cagri sekli) iptal kontrolu yapilamaz.
+
+    Kisa-omurlu kendi session'ini acar: cagiran uclarin imzasi degismesin
+    diye (`_is_session_revoked` ile ayni desen).
     """
+    from sqlalchemy import delete as _delete
+
+    from app.db.session import SessionLocal
+    from app.models.ws_ticket import WsTicket
+
     ticket = uuid4().hex
-    exp = time.time() + _WS_TICKET_TTL_SEC
-    with _ws_tickets_lock:
-        # Periyodik cleanup — expired ticket'lari at (cache leak onlemi)
-        now = time.time()
-        if len(_ws_tickets) > 1000:
-            expired = [t for t, (_, _j, e) in _ws_tickets.items() if e < now]
-            for t in expired:
-                _ws_tickets.pop(t, None)
-        _ws_tickets[ticket] = (username, jti, exp)
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(seconds=_WS_TICKET_TTL_SEC)
+    db = SessionLocal()
+    try:
+        # Firsatci temizlik: suresi dolmuslari at. Bilet omru 30sn oldugu
+        # icin tablo normalde birkac satir; ayri bir retention isi gerekmez.
+        db.execute(_delete(WsTicket).where(WsTicket.expires_at < now))
+        db.add(WsTicket(ticket=ticket, username=username, jti=jti, expires_at=expires_at))
+        db.commit()
+    finally:
+        db.close()
     return ticket, _WS_TICKET_TTL_SEC
 
 
 def consume_ws_ticket(ticket: str) -> tuple[str, str | None] | None:
-    """Ticket'i pop edip (username, jti) don. Gecersiz/expired → None.
+    """Ticket'i tuketip (username, jti) don. Gecersiz/expired → None.
 
-    Tek kullanim: pop edildiginde cache'ten silinir; ayni ticket ikinci
-    kez kullanilamaz (WS replay attack korumasi).
+    Tek kullanim: silme `rowcount` ile dogrulanir, yani ayni bileti iki
+    surec es zamanli tuketmeye calisirsa YALNIZCA BIRI kazanir (WS replay
+    attack korumasi surecler arasinda da gecerli).
     """
     if not ticket:
         return None
-    now = time.time()
-    with _ws_tickets_lock:
-        entry = _ws_tickets.pop(ticket, None)
-    if entry is None:
-        return None
-    username, jti, exp = entry
-    if exp < now:
-        return None
-    return username, jti
+    from sqlalchemy import delete as _delete
+
+    from app.db.session import SessionLocal
+    from app.models.ws_ticket import WsTicket
+
+    db = SessionLocal()
+    try:
+        row = db.get(WsTicket, ticket)
+        if row is None:
+            return None
+        username, jti, expires_at = row.username, row.jti, row.expires_at
+        # Yarisi kazanan tek surec: rowcount 0 ise bileti baskasi kapmis.
+        deleted = db.execute(_delete(WsTicket).where(WsTicket.ticket == ticket)).rowcount
+        db.commit()
+        if not deleted:
+            return None
+        if expires_at is not None:
+            # SQLite gibi tz tasimayan backend'lerde naive donebilir; naive
+            # degeri UTC sayiyoruz (yazarken UTC yazildi).
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at < datetime.now(timezone.utc):
+                return None
+        return username, jti
+    finally:
+        db.close()
