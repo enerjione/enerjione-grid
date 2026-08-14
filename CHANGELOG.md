@@ -14,6 +14,44 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.88.0] — 2026-08-14
+
+### Eklendi
+
+- **Cihaz raporunda bölüm seçimi.** "PDF rapor" düğmesi artık önce bir seçim
+  penceresi açıyor: hangi bölümler yer alsın? Rapor kime gittiğine göre
+  değişiyor — sahaya çıkan ekibe konum ve ölçüm kanalları yetiyor, müşteriye
+  giden ekte bağlantı ayrıntısı (IP, DNP3 adresi) hiç istenmiyor, arızayı
+  inceleyen mühendis sinyal tablolarını ve olayları istiyor. Liste cihaz
+  türüne göre kısalıyor (bir SN 2.0'da "Bağlı Setler", bir Pole Master
+  Kit'te "Ölçüm Kanalları" diye bir şey yok) ve seçim tarayıcıda
+  hatırlanıyor. Kısaltılmış rapor, hangi bölümlerin dışarıda bırakıldığını
+  belgenin sonunda yazıyor.
+
+### Değişti
+
+- **Enlem/boylam artık kendi satırlarında ve iki biçimde.** Koordinat bölüm
+  başlığında küçük bir ipucu olarak duruyordu; oysa raporun sahada en çok
+  okunan satırı o. Artık her eksen ayrı satırda: önce ondalık derece
+  (haritaya yapıştırılan biçim), yanında derece-dakika-saniye (el GPS'i
+  biçimi).
+- **"RTU ve Haberleşme" başlığı "Haberleşme" oldu** — "RTU" bir iç terim.
+- **Rapordan çıkarılanlar:** sorgu aralığı ve sinyal profili (kurulum
+  ayrıntısı, raporu okuyan için bir şey ifade etmiyor) ile bölüm
+  başlıklarındaki "Her ünite ayrı bir faza kelepçelenir", "Sütunlar cihazın
+  ölçüm üniteleridir" gibi sistemi anlatan açıklamalar.
+
+### Düzeltildi
+
+- **Aynı değer raporda iki kez basılıyordu.** Şebeke sinyali hem durum
+  özetinde hem haberleşme bölümündeydi; GPS koordinatı ayrıca derece,
+  dakika ve saniye bileşenleri hâlinde altı satır tutuyordu. Ayrıca cihaz
+  bazı bilgileri hem ham sayı hem metin olarak yayınlıyor ve ikisinin adı
+  aynı: yan yana iki "Yazılım Sürümü" satırı çıkıyordu, biri "2.338"
+  diğeri "27,78". Artık her değer tek yerde; tercih ekrandakiyle aynı.
+
+---
+
 ## [2.87.0] — 2026-08-14
 
 ### Eklendi
