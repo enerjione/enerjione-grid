@@ -67,6 +67,13 @@ type Props = {
   onSourceChange: (s: SignalSource) => void;
   /** Her kaynaktaki sinyal sayisi (0 ise kanal disabled). */
   sourceCounts: Record<SignalSource, number>;
+  /** KITIN KENDI sayfasinda: bu kite bagli setler (sanal alt cihazlar).
+   *  Set sayfasinda BOS gecilir — orada gosterilecek bir alt cihaz yok. */
+  sets?: readonly DeviceRow[];
+  /** Set id -> pil yuzdesi. Setin pili kendi uydularindan gelir. */
+  setBattery?: Record<number, number | undefined>;
+  /** Sete tiklaninca o setin detay sayfasini ac. */
+  onOpenSet?: (deviceId: number) => void;
 };
 
 /** Cihazin OLCUM YAPAN unite kanallari — MODELE gore.
@@ -112,6 +119,9 @@ export function DeviceSidebar({
   activeSource,
   onSourceChange,
   sourceCounts,
+  sets,
+  setBattery,
+  onOpenSet,
 }: Props) {
   const { t } = useTranslation();
   // Haberlesme/pil/sinyal SAHIBI cihaz: sette kit, sade cihazda kendisi.
@@ -253,6 +263,58 @@ export function DeviceSidebar({
           ) : null}
         </ul>
       </section>
+
+      {/* ---- SETLER (yalnizca KITIN KENDI sayfasinda) ----
+           Kit tek DNP3 outstation'dir ama sahada is goren sey onun
+           SETLERIDIR: her set ayri bir noktaya kelepcelenir, kendi
+           arizasini uretir, kendi detay sayfasi vardir. Kitin sayfasi
+           bunlari hic gostermiyordu — kullanici kaca set ekledigini
+           buradan goremiyor, her birine ulasmak icin cihaz listesine
+           donmek zorunda kaliyordu.
+           Sayi baslikta: "uc set ekledim ama ikisi gorunuyor" ancak
+           sayilabildiginde fark edilir. */}
+      {sets && sets.length > 0 ? (
+        <section className="device-sidebar-section">
+          <span className="device-sidebar-kicker">
+            {t("deviceDetail.sidebar.sets")}
+            <span className="device-sets-count">{sets.length}</span>
+          </span>
+          <ul className="device-sidebar-sets device-sidebar-sets">
+            {sets.map((s) => {
+              const batt = setBattery?.[s.id];
+              const cevrimici = s.communicationStatus === "online";
+              return (
+                <li key={s.id}>
+                  <button
+                    type="button"
+                    className="device-set-row"
+                    onClick={() => onOpenSet?.(s.id)}
+                    disabled={!onOpenSet}
+                    title={s.code}
+                  >
+                    <span
+                      className={`device-set-dot ${cevrimici ? "is-online" : "is-offline"}`}
+                      aria-hidden="true"
+                    />
+                    <span className="device-set-body">
+                      <span className="device-set-name">{s.name}</span>
+                      <span className="device-set-code">{s.code}</span>
+                    </span>
+                    {batt != null ? (
+                      <span className={`device-set-batt ${batteryClass(batt)}`}>
+                        %{Math.round(batt)}
+                      </span>
+                    ) : null}
+                    <span className="material-symbols-outlined device-set-go">
+                      chevron_right
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       {/* ---- Kanal secimi (seri no'lu) ---- */}
       <section className="device-sidebar-section">

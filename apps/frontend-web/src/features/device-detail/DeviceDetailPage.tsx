@@ -22,6 +22,7 @@ import { PoleMasterTab } from "./PoleMasterTab";
 import { signalLabel } from "../../shared/signalLabel";
 import { signalTrust } from "../../shared/signalQuality";
 import type { AlarmEvent } from "../../shared/types";
+import { isKitModel } from "../../shared/types";
 
 import type {
   DeviceRow,
@@ -59,6 +60,9 @@ type Props = {
   canConfig?: boolean;
   onDeviceCommand?: (deviceCode: string, command: string, label: string) => Promise<void>;
   token?: string;
+  /** Baska bir cihazin detay sayfasini ac. Kitin sayfasindaki SET listesi
+   *  bunu kullanir; verilmezse setler listelenir ama tiklanmaz. */
+  onOpenDevice?: (deviceId: number) => void;
 };
 
 // ---- Kategori tanimi (source-agnostic suffix -> kategori + TR etiket) --------
@@ -179,6 +183,7 @@ export function DeviceDetailPage({
   canConfig = false,
   onDeviceCommand,
   token,
+  onOpenDevice,
 }: Props) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
@@ -207,6 +212,28 @@ export function DeviceDetailPage({
         : undefined,
     [devices, device]
   );
+
+  /** Acik olan kayit KITIN KENDISI mi (setlerinden biri degil)? */
+  const kitMi = device != null && !setMi(device) && isKitModel(device.model);
+
+  /** Bu kite bagli setler — kitin sayfasinda solda listelenir.
+   *
+   *  Kod sirasi (PMK-001-S1, -S2, -S3) sahadaki set numarasiyla ayni; id
+   *  sirasi degil, cunku set kayitlari sonradan silinip yeniden
+   *  yaratilabiliyor ve o zaman numaralar karisik gorunurdu. */
+  const setler = useMemo(
+    () =>
+      device && kitMi
+        ? devices
+            .filter((d) => d.parentDeviceId === device.id)
+            .sort((a, b) => a.code.localeCompare(b.code, "tr"))
+        : [],
+    [devices, device, kitMi]
+  );
+
+  /** KIT SEVIYESI KAYIT: sette ust cihaz, kitin kendi sayfasinda kendisi.
+   *  "Pole Master" verileri her iki durumda da AYNI yerden okunur. */
+  const kitKaydi = parentDevice ?? (kitMi ? device : undefined);
 
   // Bir Pole Master Kit setinde olcum yapan uc unitenin ucu de uydudur;
   // kitin `master`i ortak RTU'dur. Bu yuzden set acildiginda varsayilan
@@ -486,6 +513,35 @@ export function DeviceDetailPage({
     [device]
   );
 
+  /** SETLERIN PIL YUZDESI — kitin sayfasindaki set listesi icin.
+   *
+   *  Setin yuzdesi UC uydusunun EN DUSUGUNDEN cikar: ekip direge en zayif
+   *  hucre bittiginde cikar, ortalama bunu gizler (ayni kural
+   *  `shared/battery.ts` icinde).
+   *
+   *  Gerilim KIT kaydinin telemetrisinde durur — kit tek outstation'dir ve
+   *  veri cogaltilmaz; setin fiziksel uydu numaralari `fizikselUydular` ile
+   *  cozulur (set 2 -> sat04..06, atama degistirildiyse ne secildiyse o). */
+  const setPilleri = useMemo<Record<number, number | undefined>>(() => {
+    const out: Record<number, number | undefined> = {};
+    if (!device || setler.length === 0) return out;
+    const kitSatirlari = new Map<string, number | null>();
+    for (const r of values) {
+      if (r.device_id === device.id) kitSatirlari.set(r.signal_key, r.value ?? null);
+    }
+    for (const s of setler) {
+      const yuzdeler: number[] = [];
+      for (const no of fizikselUydular(s)) {
+        const kaynak = uyduKaynagi(no);
+        const volt = kitSatirlari.get(`${kaynak}.battery_voltage_satellite`);
+        const pct = voltageToPercent(volt ?? undefined, thresholdsFor(s.model, kaynak));
+        if (pct != null) yuzdeler.push(pct);
+      }
+      out[s.id] = yuzdeler.length > 0 ? Math.min(...yuzdeler) : undefined;
+    }
+    return out;
+  }, [device, setler, values, thresholdsFor]);
+
   const channelBattery = useMemo<Partial<Record<SignalSource, number>>>(() => {
     const out: Partial<Record<SignalSource, number>> = {};
     measuringSources.forEach((src, i) => {
@@ -578,7 +634,13 @@ export function DeviceDetailPage({
     // AYNI ikon. Onceden `solar_power` idi: hem kiti gunes paneli gibi
     // gosteriyordu hem de ikon subset fontunda olmadigi icin sekme basliginda
     // duz metin ("solar_") olarak cikiyordu.
-    { key: "poleMaster", icon: "dns", show: parentDevice != null },
+    // KITIN KENDI SAYFASINDA DA GORUNUR. Onceden kosul `parentDevice != null`
+    // idi, yani sekme YALNIZCA setlerde aciliyordu; kitin kendi sayfasini acan
+    // kullanici — ki o sayfa tam olarak Pole Master'in sayfasi — modem, GPS,
+    // besleme, sicaklik, kurcalama olculerinin HICBIRINI goremiyordu. Ustelik
+    // o sayfada Genel Bakis da bosa dusuyordu: kitin akim/gerilim/ariza
+    // sinyali yoktur, kartlar sonsuza kadar "Veri yok" yaziyordu.
+    { key: "poleMaster", icon: "dns", show: kitKaydi != null },
     { key: "trends", icon: "show_chart", show: true },
     { key: "events", icon: "history", show: true },
     { key: "commands", icon: "terminal", show: canCommand },
@@ -605,6 +667,9 @@ export function DeviceDetailPage({
         activeSource={activeSource}
         onSourceChange={setActiveSource}
         sourceCounts={sourceCounts}
+        sets={setler}
+        setBattery={setPilleri}
+        onOpenSet={onOpenDevice}
       />
 
       <div className="device-detail-main">
@@ -707,6 +772,7 @@ export function DeviceDetailPage({
             tempUnit={unitOf(`${activeSource}.device_temperature`) ?? unitOf(`${activeSource}.conductor_temperature`)}
             permCount={permCount}
             momCount={momCount}
+            kitMi={kitMi}
             onViewAllEvents={() => setActiveTab("events")}
             t={t}
           />
@@ -724,8 +790,8 @@ export function DeviceDetailPage({
           />
         ) : null}
 
-        {activeTab === "poleMaster" && parentDevice ? (
-          <PoleMasterTab parent={parentDevice} values={values} signals={signals} />
+        {activeTab === "poleMaster" && kitKaydi ? (
+          <PoleMasterTab parent={kitKaydi} values={values} signals={signals} />
         ) : null}
 
         {activeTab === "trends" && token ? (
@@ -798,6 +864,7 @@ function OverviewTab({
   tempUnit,
   permCount,
   momCount,
+  kitMi,
   onViewAllEvents,
   t,
 }: {
@@ -815,6 +882,8 @@ function OverviewTab({
   tempUnit?: string;
   permCount?: number;
   momCount?: number;
+  /** Acik kayit KITIN KENDISI mi — KPI seridi buna gore degisir. */
+  kitMi?: boolean;
   onViewAllEvents: () => void;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
@@ -838,6 +907,81 @@ function OverviewTab({
         {t("deviceDetail.overview.sourceHint", { source: srcLabel })}
       </div>
       {/* KPI serit */}
+      {kitMi ? (
+        /* KIT SERIDI — kitin GERCEKTEN olctugu seyler.
+         *
+         * Kit tek DNP3 outstation'dir ve akim/gerilim/ariza sinyali YOKTUR;
+         * onlar uydularda, yani setlerde. Sabit SN 2.0 seridi burada bes
+         * kartin dordunu sonsuza kadar "Veri yok" yapiyordu — ekran
+         * dolu gorunuyor ama hicbir sey soylemiyordu. Kitin kendi konulari:
+         * besleme (solar/AC/batarya), RTU sicakligi, modem ve kurcalama. */
+        <div className="device-overview-kpis">
+          <KpiCard
+            emptyText={t("deviceDetail.status.noData")}
+            icon="device_thermostat"
+            tone="rose"
+            label={t("deviceDetail.kpi.temperature")}
+            value={fmt(tempVal, "analog", tempUnit)}
+            stale={stale(tempNow, lastTemp)}
+          >
+            {token ? (
+              <Sparkline
+                token={token}
+                deviceCode={device.code}
+                signalKey={`${activeSource}.device_temperature`}
+                color="#f43f5e"
+                onLastValue={setLastTemp}
+              />
+            ) : null}
+          </KpiCard>
+          <KpiCard
+            emptyText={t("deviceDetail.status.noData")}
+            icon="battery_full"
+            tone="green"
+            label={t("deviceDetail.kpi.battery")}
+            value={fmt(rowBySuffix.get("battery_voltage_satellite")?.value ?? null, "analog", "V")}
+          />
+          <KpiCard
+            emptyText={t("deviceDetail.status.noData")}
+            icon="cell_tower"
+            tone="blue"
+            label={t("deviceDetail.kpi.network")}
+            value={fmt(rowBySuffix.get("modem_rssi")?.value ?? null, "analog", "dBm")}
+          />
+          <KpiCard
+            emptyText={t("deviceDetail.status.noData")}
+            icon="power"
+            tone="amber"
+            label={t("deviceDetail.kpi.supply")}
+            value={(() => {
+              // Iki ayri binary: gunes paneli ve sebeke. Ikisi de bilinmiyorsa
+              // "—" kalir; "yok" demek olcumu olmayan bir sey uydurmak olurdu.
+              const solar = rowBySuffix.get("solar_power")?.value;
+              const ac = rowBySuffix.get("ac_power")?.value;
+              if (solar == null && ac == null) return "—";
+              const kaynaklar: string[] = [];
+              if (solar === 1) kaynaklar.push(t("deviceDetail.kpi.supplySolar"));
+              if (ac === 1) kaynaklar.push(t("deviceDetail.kpi.supplyAc"));
+              return kaynaklar.length > 0
+                ? kaynaklar.join(" + ")
+                : t("deviceDetail.kpi.supplyBattery");
+            })()}
+          />
+          <KpiCard
+            emptyText={t("deviceDetail.status.noData")}
+            icon="security"
+            tone={rowBySuffix.get("tamper_detection")?.value === 1 ? "red" : "green"}
+            label={t("deviceDetail.kpi.tamper")}
+            value={(() => {
+              const v = rowBySuffix.get("tamper_detection")?.value;
+              if (v == null) return "—";
+              return v === 1
+                ? t("deviceDetail.status.active")
+                : t("deviceDetail.status.normal");
+            })()}
+          />
+        </div>
+      ) : (
       <div className="device-overview-kpis">
         <KpiCard emptyText={t("deviceDetail.status.noData")} icon="bolt" tone="amber" label={t("deviceDetail.kpi.current")} value={fmt(curVal, "analog", curUnit)} stale={stale(curNow, lastCur)}>
           {token ? (
@@ -857,6 +1001,7 @@ function OverviewTab({
         <KpiCard emptyText={t("deviceDetail.status.noData")} icon="report" tone="red" label={t("deviceDetail.permanentFaults")} value={fmt(permCount ?? null, "counter")} />
         <KpiCard emptyText={t("deviceDetail.status.noData")} icon="flash_on" tone="orange" label={t("deviceDetail.momentaryFaults")} value={fmt(momCount ?? null, "counter")} />
       </div>
+      )}
 
       {/* 2 kolon: sol Mevcut Durum (2 kolonlu), sag Son Olaylar */}
       <div className="device-overview-grid">

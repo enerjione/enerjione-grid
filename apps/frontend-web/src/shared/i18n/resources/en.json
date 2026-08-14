@@ -4315,7 +4315,14 @@
     "kpi": {
       "current": "Current",
       "voltage": "Voltage",
-      "temperature": "Temperature"
+      "temperature": "Temperature",
+      "battery": "Battery",
+      "network": "Network",
+      "supply": "Power supply",
+      "supplySolar": "Solar",
+      "supplyAc": "Mains",
+      "supplyBattery": "Battery",
+      "tamper": "Tamper"
     },
     "meta": {
       "region": "Region",
@@ -4340,6 +4347,7 @@
       "info": "INFO",
       "statusSummary": "STATUS SUMMARY",
       "channel": "DEVICES",
+      "sets": "SETS",
       "lastComm": "Last comm",
       "lastCommShort": "Last Comm",
       "satelliteNo": "Physical satellite: {{no}}",
