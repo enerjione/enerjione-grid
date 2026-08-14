@@ -549,7 +549,7 @@ def _set_db_allow_connections(db_conn_info: dict, allow: bool) -> bool:
     return ok
 
 
-def run_pg_restore(file_path: Path) -> tuple[bool, str]:
+def _legacy_run_pg_restore_UNSAFE(file_path: Path) -> tuple[bool, str]:
     """pg_restore calistir — mevcut tablolarin uzerine clean+create modunda
     yazar. UYARI: Mevcut tum DB icerigi silinir.
 
@@ -941,6 +941,28 @@ def restore_backup(db: Session, job: BackupJob) -> tuple[bool, str]:
         _tracker.fail(msg)
         return False, msg
 
+    # GUVENLI AKISA DELEGE — imza ve donus tipi BILEREK degismedi, boylece
+    # API ucu ve mevcut testler oldugu gibi calisir. Gercek is artik
+    # `safe_restore.run()` icinde: once bos bir staging veritabanina yukle,
+    # dogrula, ancak ondan sonra uretimi degistir.
+    from app.services import safe_restore
+
+    return safe_restore.run(job.id, p, started_by=job.created_by_username or "(system)")
+
+
+def _legacy_restore_backup_UNSAFE(db: Session, job: BackupJob) -> tuple[bool, str]:
+    """ESKI AKIS — ARTIK CAGRILMIYOR. Yalnizca tarihsel referans.
+
+    Bu yol yedegi DOGRUDAN uretim veritabanina `pg_restore --clean` ile
+    uyguluyordu. `--single-transaction` yoktu (`--jobs` ile birlikte
+    kullanilamaz) ve dogrulama hic yoktu; ortasinda olusan bir hata
+    veritabanini yarim restore edilmis, geri donulemez halde birakiyordu.
+    Yerini `safe_restore.run()` aldi.
+    """
+    from app.services import restore_status_tracker as _tracker
+
+    p = Path(job.file_path or "")
+
     # Adim 1: validate
     _tracker.set_step("validating", f"{p.name} dogrulaniyor...")
     valid, validation_err = validate_dump_file(p)
@@ -955,7 +977,7 @@ def restore_backup(db: Session, job: BackupJob) -> tuple[bool, str]:
 
     # Adim 3: pg_restore (en uzun adim — 30 sn ile 10 dk arasi)
     _tracker.set_step("restoring", "pg_restore calisiyor (uzun surebilir)...")
-    ok, msg = run_pg_restore(p)
+    ok, msg = _legacy_run_pg_restore_UNSAFE(p)
     if not ok:
         _tracker.fail(msg)
         return False, msg

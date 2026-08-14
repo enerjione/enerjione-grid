@@ -589,6 +589,24 @@ class Settings(BaseSettings):
     # korunur; bu deger onun altina inemez.
     disk_guard_emergency_backup_keep: int = 2
 
+    # --- Guvenli (staging + cutover) restore ------------------------------
+    # Restore artik yedegi DOGRUDAN uretime uygulamiyor; once bos bir
+    # staging veritabanina yukleyip dogruluyor (bkz. services/safe_restore.py).
+    #
+    # DUMP BOYUTU DISK IHTIYACI DEGILDIR — sahada olculdu: veritabani 64 MB,
+    # dump 1,5 MB (~42x). En buyuk tablolarin verisi dump'a hic girmiyor,
+    # dosya sikistirilmis ve index'ler restore sirasinda yeniden uretiliyor.
+    # Bu yuzden birincil olcut canli veritabani boyutu; carpan yalnizca
+    # dump'in alt sinir tahmini icin.
+    restore_expansion_factor: int = 50
+    # Tahmini staging boyutunun uzerine guvenlik payi.
+    restore_disk_safety: float = 1.5
+    # pg_restore ust siniri (sn). Buyuk kurulumda staging restore uzun
+    # surebilir; uretim bu sirada calismaya devam ettigi icin cömert.
+    restore_pg_timeout_sec: int = 7200
+    # Staging uzerinde migration ust siniri (sn).
+    restore_migrate_timeout_sec: int = 1800
+
     # --- Kritik ALTYAPI olaylarinin operatore bildirilmesi ----------------
     # Kritik olaylar (`system_events`) eskiden YALNIZCA tabloya yaziliyor,
     # kimseye gonderilmiyordu; bildirim zinciri sadece cihaz alarmlari icin

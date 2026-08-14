@@ -78,6 +78,70 @@ jobs:
         working-directory: apps/backend-api
         run: pytest -q
 
+  safe-restore-integration:
+    # GUVENLI RESTORE — GERCEK VERITABANI UZERINDE KABUL TESTLERI.
+    #
+    # NEDEN AYRI IS: bu testler gercek bir PostgreSQL kumesinde veritabani
+    # yaratip yeniden adlandiriyor ve `pg_restore` calistiriyor; normal
+    # birim paketini yavaslatmamasi icin ayrildi.
+    #
+    # NEDEN BU IMAJ: uretimde `timescale/timescaledb:2.17.2-pg16` kosuyor.
+    # Restore davranisi surume duyarli — olculdu: `pg_restore` 18 bir PG16
+    # sunucuya restore YAPAMIYOR ("unrecognized configuration parameter
+    # transaction_timeout"). Dolayisiyla kabul yalnizca uretimdeki ana
+    # surumde verilebilir; istemci de ayni ana surumden kurulur.
+    name: Guvenli restore — PG16 + TimescaleDB
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:2.17.2-pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/backend-api/requirements.txt
+      - name: PostgreSQL 16 istemcisi
+        # Sunucuyla AYNI ana surum. Runner'in varsayilan istemcisi daha yeni
+        # olabilir ve o birlesim restore'u dusurur (yukaridaki not).
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc             | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc]             http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main"             | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client-16
+          pg_restore --version
+      - name: Bagimliliklar
+        working-directory: apps/backend-api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+      - name: Kabul ortamini dogrula (PG16 + TimescaleDB 2.17.2)
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -h 127.0.0.1 -U postgres -d postgres -c "SELECT version();"
+          psql -h 127.0.0.1 -U postgres -d postgres             -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"             -tAc "SELECT extversion FROM pg_extension WHERE extname='timescaledb';"
+      - name: Guvenli restore integration testleri
+        working-directory: apps/backend-api
+        env:
+          E1_TEST_PG_URL: postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/postgres
+        run: pytest tests/integration -q -p no:randomly
+
   alarm-service:
     # Bu servisin CI'da HIC test kapsami yoktu; yalnizca backend-api
     # kosuluyordu. Denetim raporundaki A5 (ornek tamponu 512M container

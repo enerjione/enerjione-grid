@@ -41,6 +41,22 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # VARLIK KONTROLU — savunma derinligi.
+    #
+    # Senaryo: eski bir yedek (alembic_version=0067) yeni bir kuruluma
+    # yuklenirse `pg_restore --clean` YALNIZCA arsivdeki objeleri dusurur;
+    # bu tablo arsivde olmadigi icin diskte KALIR ama surum 0067'ye doner.
+    # Sonraki acilista bu migration yeniden oynatilir ve kosulsuz bir
+    # `create_table` "DuplicateTable" ile duser. Migration konteyner
+    # CMD'sinde uvicorn'dan ONCE kostugu icin sonuc KALICI CRASH-LOOP olur.
+    #
+    # Guvenli restore akisi (services/safe_restore.py) bu durumu yapisal
+    # olarak imkansiz kilar: staging DB `TEMPLATE template0` ile BOS
+    # yaratilir, dolayisiyla artik tablo hic olusmaz. Buradaki kontrol yine
+    # de duruyor cunku migration'lar restore disi yollardan da oynatilabilir
+    # ve bir crash-loop'un bedeli bu uc satirdan cok daha yuksektir.
+    if sa.inspect(op.get_bind()).has_table("infra_notification_state"):
+        return
     op.create_table(
         "infra_notification_state",
         sa.Column("id", sa.Integer(), nullable=False),
