@@ -14,6 +14,42 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.92.0] — 2026-08-14
+
+### Eklendi
+
+- **Takılan bir servis artık kendini toparlıyor.** Ana döngüsü kilitlenen bir
+  arka plan servisi dışarıdan "çalışıyor" görünüyordu: kapsayıcı ayakta,
+  süreç ayakta, sağlık kontrolü yeşil — ama SCADA'ya veri gitmiyor, cihazlar
+  dosya yazamıyor ya da bildirim çıkmıyor. Başında kimsenin olmadığı bir saha
+  cihazında fark edilmesi en zor arıza türü.
+
+  Üç serviste (tag-engine, alarm-service, notification-worker) zaten bulunan
+  koruma kalan dördüne de eklendi: **IEC 104 çıkışı, Modbus çıkışı, FTP
+  sunucusu ve WhatsApp geçidi**. Takılan servis kendini sonlandırıyor,
+  yeniden başlatma politikası onu geri kaldırıyor. Yeniden başlayan yalnızca
+  takılan servis oluyor; sistemin geri kalanı etkilenmiyor.
+
+  Koruma **trafiğe bakmıyor, döngünün dönüp dönmediğine bakıyor**. Bu
+  bilinçli: "mesaj işledim"e bağlansaydı, hiç mesaj gelmeyen sakin bir gecede
+  sağlıklı servis yeniden başlatılırdı — çözülen sorundan daha kötü bir
+  arıza. Eşik 60 saniye; geçici yavaşlamalar yeniden başlatma üretmez.
+
+### Düzeltildi
+
+- **Dört serviste sağlık kontrolü takılmayı hiç bildirmiyordu**; koşulsuz
+  "iyiyim" yanıtı veriyordu. Sağlık ucu ayrı bir iş parçacığında çalıştığı
+  için ana döngü kilitlense bile yeşil kalıyordu — yani tam da yakalaması
+  gereken arızayı yakalamıyordu. Artık takılma bildiriliyor.
+
+- **WhatsApp geçidinin durumu görünür oldu.** Sağlık yanıtı "geçit ayakta ama
+  WhatsApp bağlı değil" ayrımını taşımıyordu; Sistem Durumu sayfası bu iki
+  hâli birbirinden ayıramıyordu. Bağlantı kopması yeniden başlatma sebebi
+  sayılmıyor (kopma rutindir ve yeniden bağlanma zinciri bunu zaten ele
+  alıyor), yalnızca operatöre gösteriliyor.
+
+---
+
 ## [2.91.0] — 2026-08-14
 
 ### Düzeltildi
