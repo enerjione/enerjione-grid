@@ -11,36 +11,18 @@ from app.db.base import Base
 from app.db.session import engine
 
 # Tum metadata kayitlari create_all icin gerekli.
-from app.models import (  # noqa: F401
-    alarm,
-    alarm_rule,
-    api_key,
-    backup,
-    bulk_notification_job,
-    bulk_notification_template,
-    device,
-    device_command,
-    device_config,
-    fault,
-    gateway,
-    gateway_ingest_batch,
-    grid_topology,
-    notification,
-    notification_settings,
-    outbound_target,
-    outbox_event,
-    processed_message,
-    project_settings,
-    responsibility_area,
-    signal_catalog,
-    system_event,
-    telemetry,
-    telemetry_history,
-    user,
-    user_fcm_token,
-    user_notification_preference,
-    user_session,
-)
+# Modellerin `Base.metadata`'ya kaydi icin TEK import — liste `app/models/__init__.py`
+# icinde tutulur.
+#
+# ESKIDEN BURADA AYRI BIR LISTE VARDI ve eksikti: `gateway_health`,
+# `device_purge_job`, `ftp_settings`, `device_model_settings` yoktu. Temiz
+# kurulumda `create_all` bu tablolari kurmuyor, `stamp head` de onlari kuran
+# migration'lari atliyordu — yani sifirdan kurulan sahada bu dort tablo HIC
+# olusmuyordu. `gateway_health` yoklugu staleness watchdog'u her turda
+# UndefinedTable ile dusurup susmus gateway'in cihazlarini haritada ONLINE
+# takili birakiyordu. Liste iki yerde (burada ve alembic/env.py) elle
+# tutuldugu surece tekrar kacar; bu yuzden tek kaynaga indirildi.
+import app.models  # noqa: F401
 
 log = logging.getLogger(__name__)
 
