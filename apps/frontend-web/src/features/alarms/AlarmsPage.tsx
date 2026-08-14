@@ -264,7 +264,16 @@ export function AlarmsPage({
     const q = search.trim().toLowerCase();
     return events
       .filter((e) => e.category === "alarm")
-      .filter((e) => (q ? `${e.message} ${e.device_code ?? ""} ${e.actor_username ?? ""}`.toLowerCase().includes(q) : true))
+      // Arama EKRANDA GORUNEN metinde yapilir. Ham `message` alarm yollarinda
+      // Ingilizce ("Alarm rule triggered: ..."); kullanici okudugu Turkce
+      // metni aratinca hicbir sey bulamiyordu.
+      .filter((e) =>
+        q
+          ? `${formatEventMessage(e)} ${e.device_code ?? ""} ${e.actor_username ?? ""}`
+              .toLowerCase()
+              .includes(q)
+          : true
+      )
       .slice(0, 300);
   }, [events, search]);
 
