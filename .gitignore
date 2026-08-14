@@ -102,3 +102,8 @@ tokenler.txt
 #  2. Icindeki per-gateway compose dosyalari GATEWAY_TOKEN tasiyor.
 #     Yanlislikla commit'lenmesi secret sizintisi olurdu.
 gateways/
+
+# Elle uretilen sema dokumu (kolon listesi) — denetim/analiz sirasinda
+# olusuyor, depoya ait degil. Ignore edilmezse `git status` her oturumda
+# kirli gorunur ve update.sh'in "calisma agaci temiz" sarti takilir.
+mig_schema.json
