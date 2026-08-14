@@ -1,7 +1,7 @@
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -1532,6 +1532,26 @@ def get_gateway_pending(
 
     gateway = validate_gateway_token(db, gateway_code, x_gateway_token)
 
+    # TEK `now` — TUM PARTI ICIN.
+    #
+    # Her komut icin ayri `datetime.now()` cagirmak, TTL sinirindaki iki
+    # komutun ayni istekte FARKLI kararlar almasina yol acardi (biri taze,
+    # digeri bayat) ve sinir davranisi tekrarlanamaz olurdu.
+    now = datetime.now(timezone.utc)
+    ttl_sec = int(settings.command_max_age_sec)
+    cutoff = now - timedelta(seconds=ttl_sec)
+
+    # `with_for_update()` — AYNI KOMUT HEM `sent` HEM `expired` OLAMAZ.
+    #
+    # Gateway 1 Hz poll ediyor ve ag tarafinda tekrar/es zamanli istek
+    # mumkun. Satir kilidi olmadan iki paralel poll ayni `pending` satiri
+    # okuyup biri `sent` digeri `expired` yazabilirdi. Kilit, satiri ilk
+    # alan istek COMMIT edene kadar digerini bekletir; ikinci istek satiri
+    # artik `pending` gormedigi icin ona hic dokunmaz.
+    #
+    # SQLite (testler) `FOR UPDATE` desteklemez ve sessizce yok sayar; bu
+    # kabul edilebilir cunku esler-arasi yaris yalnizca gercek Postgres
+    # dagitiminda anlamli.
     pending_cmds = list(
         db.scalars(
             select(DeviceCommand)
@@ -1540,8 +1560,70 @@ def get_gateway_pending(
                 DeviceCommand.status == "pending",
             )
             .order_by(DeviceCommand.id.asc())
+            .with_for_update()
         ).all()
     )
+
+    # BAYAT KOMUT GATEWAY'E GONDERILMEZ VE KUYRUKTA BIRAKILMAZ.
+    #
+    # Yalnizca filtrelemek (`WHERE created_at >= cutoff`) yetmezdi: komut
+    # sonsuza dek `pending` kalir, her poll'de yeniden degerlendirilir ve
+    # arayuzde "bekliyor" gorunmeye devam ederdi. Bayat komut TERMINAL bir
+    # duruma alinir.
+    #
+    # SINIR: `age <= TTL` TAZE. Karsilastirma `created_at >= cutoff`
+    # seklinde yapiliyor, yani tam TTL yasindaki komut hala taze.
+    def _utc(deger: datetime | None) -> datetime | None:
+        """Naive damgayi UTC-aware yap.
+
+        SOZLESMEYI SURUCUYE BIRAKMIYORUZ: kolon `DateTime(timezone=True)`
+        olsa da bazi surucler (or. SQLite) tzinfo'yu KAYBEDEREK dondurur.
+        Hem TTL karsilastirmasi hem gateway'e giden payload bu yuzden
+        burada normalize edilir; aksi halde "timezone-aware UTC" sozu
+        ortama gore tutulur ya da tutulmazdi.
+        """
+        if deger is None:
+            return None
+        return deger if deger.tzinfo is not None else deger.replace(tzinfo=timezone.utc)
+
+    taze: list[DeviceCommand] = []
+    bayat: list[DeviceCommand] = []
+    for cmd in pending_cmds:
+        olusturma = _utc(cmd.created_at)
+        # `created_at` yoksa (teorik) komut BAYAT SAYILMAZ: yasini
+        # bilemedigimiz bir komutu sessizce dusurmek, operatorun verdigi
+        # bir kesici komutunu kaybetmek olurdu.
+        if olusturma is None or olusturma >= cutoff:
+            taze.append(cmd)
+        else:
+            bayat.append(cmd)
+
+    # --- BAYAT: gateway'e GONDERILMEDEN sonlandir ------------------------
+    #
+    # YENI BIR `status` DEGERI URETILMEZ. Durum sozlesmesi
+    # (pending/sent/ok/failed/cancelled) korunuyor; sona erme
+    # `failed` + `result_status='expired'` ile temsil ediliyor. Yeni bir
+    # lifecycle durumu eklemek arayuzu, IEC 104 esleme tablosunu ve
+    # `command-results` idempotency kontrollerini birden etkilerdi.
+    for cmd in bayat:
+        olusturma = _utc(cmd.created_at)
+        yas_sn = (now - olusturma).total_seconds() if olusturma else -1.0
+        cmd.status = "failed"
+        cmd.result_status = "expired"
+        cmd.result_error = "Komut gateway'e teslim edilmeden once zaman asimina ugradi"
+        cmd.completed_at = now
+        cmd.sent_at = None  # gateway'e HIC gonderilmedi
+        logger.warning(
+            "event=command_expired_backend gateway_code=%s command_id=%s "
+            "device_code=%s command=%s dnp3_index=%s created_at=%s "
+            "age_sec=%.3f ttl_sec=%s",
+            gateway.code, cmd.id, cmd.device_code, cmd.command,
+            cmd.dnp3_index,
+            olusturma.isoformat() if olusturma else None,
+            yas_sn, ttl_sec,
+        )
+
+    # --- TAZE: mevcut davranis AYNEN korunur ------------------------------
     commands = [
         GatewayConfigCommand(
             id=cmd.id,
@@ -1552,17 +1634,16 @@ def get_gateway_pending(
             count=cmd.count,
             on_time_ms=cmd.on_time_ms,
             off_time_ms=cmd.off_time_ms,
+            created_at=_utc(cmd.created_at),
         )
-        for cmd in pending_cmds
+        for cmd in taze
     ]
     # pending -> sent (komut gateway'e teslim edildi). Gateway command_ledger ile
     # idempotent; sent komut tekrar cekilmez (artik pending degil). Sonucu
     # command-results ile bildirir -> ok/failed.
-    if pending_cmds:
-        now = datetime.now(timezone.utc)
-        for cmd in pending_cmds:
-            cmd.status = "sent"
-            cmd.sent_at = now
+    for cmd in taze:
+        cmd.status = "sent"
+        cmd.sent_at = now
 
     gateway.last_seen_at = datetime.now(timezone.utc)
 

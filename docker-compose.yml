@@ -605,6 +605,18 @@ services:
       #
       # Gateway susarsa cihazlar yesil kalmasin: tarama periyodu ve gateway'in
       # "bayat" sayilma esigi.
+      # --- Bekleyen komutun tazelik suresi (saniye) ----------------------
+      # BU SATIR SART: compose'da `env_file` YOK; burada listelenmeyen ayar
+      # container'a ULASMAZ ve operator degistirdigini SANIR.
+      #
+      # Komut `pending` kuyrukta bekler ve gateway'e ancak o poll ettiginde
+      # teslim edilir. Gateway saatlerce cevrimdisi kalirsa, 4 saat onceki
+      # bir OPEN komutu geri gelisinde fiziksel sisteme uygulanirdi. Bu
+      # sureden eski komutlar gateway'e GONDERILMEZ; `failed` /
+      # `result_status=expired` olarak sonlandirilir.
+      #
+      # KAPATILAMAZ: 0 veya negatif deger acilista sert hata verir.
+      COMMAND_MAX_AGE_SEC: ${COMMAND_MAX_AGE_SEC:-120}
       GATEWAY_STALE_CHECK_INTERVAL_SEC: ${GATEWAY_STALE_CHECK_INTERVAL_SEC:-60}
       GATEWAY_STALE_AFTER_SEC: ${GATEWAY_STALE_AFTER_SEC:-180}
       # Gateway imaji icin yeni surum kontrolu (ajanin uzak digest onbellegi
