@@ -14,6 +14,20 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.88.0] — 2026-08-14
+
+### Değişti
+
+- **Bildirim Ayarları sayfası artık EnerjiOne turuncusunda.** Sayfa indigo/mor
+  bir vurgu rengi kullanıyordu; bu renk uygulamanın hiçbir yerinde marka rengi
+  değil, sayfa tek başına başka bir ürünmüş gibi duruyordu. Seçili kanal kartı,
+  detay başlığının ikonu, kanal aç/kapa anahtarı, alan odak çerçeveleri, "Test
+  gönder" başlığı ve Telegram keşif kartı vurguyu diğer ekranlarla aynı
+  turuncudan alıyor. Pasif kanal ikonları ile "Test" düğmesinin nötr gri tonu
+  değişmedi — onlar vurgu değil arka plan.
+
+---
+
 ## [2.87.0] — 2026-08-14
 
 ### Eklendi
