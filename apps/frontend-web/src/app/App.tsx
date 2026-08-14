@@ -2880,6 +2880,8 @@ export function App() {
               canConfig={session.role === "installer"}
               onDeviceCommand={handleDeviceCommand}
               token={session.accessToken}
+              // Kitin sayfasindaki SET listesi buradan geziniyor.
+              onOpenDevice={openDeviceDetail}
             />
           </main>
         ) : pageMode === "fault-detail" && activeFaultDetailId !== null ? (

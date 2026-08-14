@@ -4312,7 +4312,14 @@
     "kpi": {
       "current": "Akım",
       "voltage": "Gerilim",
-      "temperature": "Sıcaklık"
+      "temperature": "Sıcaklık",
+      "battery": "Batarya",
+      "network": "Şebeke",
+      "supply": "Besleme",
+      "supplySolar": "Güneş",
+      "supplyAc": "Şebeke",
+      "supplyBattery": "Batarya",
+      "tamper": "Kurcalama"
     },
     "meta": {
       "region": "Bölge",
@@ -4337,6 +4344,7 @@
       "info": "BİLGİLER",
       "statusSummary": "DURUM ÖZETİ",
       "channel": "CİHAZLAR",
+      "sets": "SETLER",
       "lastComm": "Son iletişim",
       "lastCommShort": "Son İletişim",
       "satelliteNo": "Fiziksel uydu: {{no}}",

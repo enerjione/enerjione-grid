@@ -32421,6 +32421,55 @@ th.event-col-category {
 .device-sidebar-info,
 .device-sidebar-summary,
 .device-sidebar-channels { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+
+/* ---- SETLER (Pole Master Kit'in KENDI sayfasinda) ----
+   Kit tek DNP3 outstation'dir ama sahada is goren sey SETLERIDIR. Kitin
+   sayfasi bunlari hic gostermiyordu; kullanici kac set ekledigini goremiyor
+   ve her birine ulasmak icin cihaz listesine donuyordu. Satirlar kanal
+   secicisiyle ayni ritimde ama TIKLANINCA BASKA SAYFA acar — bu yuzden
+   sag tarafta bir ok var, secili durumu yok. */
+.device-sets-count {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.device-sidebar-sets { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.device-set-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.device-set-row:hover:not(:disabled) { border-color: #93c5fd; background: #f8fbff; }
+.device-set-row:disabled { cursor: default; opacity: 0.75; }
+.device-set-dot { width: 8px; height: 8px; border-radius: 50%; }
+.device-set-dot.is-online { background: #10b981; }
+.device-set-dot.is-offline { background: #94a3b8; }
+.device-set-body { min-width: 0; display: flex; flex-direction: column; }
+.device-set-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.device-set-code { font-size: 10.5px; color: #94a3b8; }
+.device-set-batt { font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.device-set-go { font-size: 16px; color: #cbd5e1; }
+.device-set-row:hover:not(:disabled) .device-set-go { color: #2563eb; }
 .device-sidebar-info-row {
   display: grid;
   grid-template-columns: 20px 1fr auto;
