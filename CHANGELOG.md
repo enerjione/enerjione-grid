@@ -14,6 +14,45 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.93.0] — 2026-08-14
+
+### Düzeltildi
+
+- **Otomatik veritabanı yedeği artık varsayılan olarak açık.** Zamanlı yedek
+  kapalı geliyordu ve hiçbir kurulum adımı onu açmıyordu; sahada kimse
+  Yedekleme ekranına girmezse **hiçbir zamanlı yedek alınmıyordu**. Geriye
+  kalan tek yedek kaynağı güncelleme öncesi alınan kopyaydı — yani yedek
+  sıklığı "operatör ne zaman güncelleme yaptı" sorusuna bağlıydı. Disk
+  arızasında iki yıllık olay kaydı ve tüm yapılandırma kaybedilirdi.
+
+  Yeni kurulumlar **24 saatte bir, son 7 kopya** ayarıyla açık geliyor ve ilk
+  yedek 24 saat beklemeden kurulumdan hemen sonra alınıyor. Yeniden
+  başlatmalar fazladan yedek üretmiyor.
+
+  **Mevcut kurulumlar etkilenmiyor.** Yedeklemeyi bilinçli olarak kapatmış bir
+  kurulumda ayar kapalı kalır; güncelleme hiçbir mevcut ayarı değiştirmez.
+  Yalnızca ayarın hiç oluşturulmamış olduğu durumda varsayılan devreye girer.
+
+- **Başarısız zamanlı yedek artık sessiz kalmıyor.** Yedek alınamadığında
+  olay kaydı oluşuyor ve Olaylar ekranında görünüyor. Kalıcı bir arıza
+  dakikada bir yeniden denenip günlüğü doldurmuyor; bir sonraki normal
+  periyotta tekrar deneniyor.
+
+- **Yedek diski dolduğunda yedekleme gerçekten duruyor.** Disk %95'i
+  aştığında yedeğin atlanması gerekiyordu ama kontrolün sonucu yutuluyor ve
+  yedek yine alınıyordu — yani belgelenen koruma çalışmıyordu. Zamanlı yedek
+  varsayılan açık hale geldiği için bu, diski dolduran gerçek bir yola
+  dönüşürdü. Artık yer açılana kadar yedek alınmıyor, yer açılır açılmaz
+  bir sonraki turda alınıyor.
+
+### Değişti
+
+- FTP sunucusu ve WhatsApp geçidinin testleri artık sürekli tümleştirmede
+  (CI) koşuyor; bu servislerdeki kendi kendine toparlanma korumasının
+  bozulması geliştirme aşamasında yakalanıyor.
+
+---
+
 ## [2.92.0] — 2026-08-14
 
 ### Eklendi
