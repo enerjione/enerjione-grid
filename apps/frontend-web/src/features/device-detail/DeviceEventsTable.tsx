@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { fetchDeviceCommands, fetchSystemEvents } from "../../shared/api";
+import { formatEventMessage } from "../events/formatEventMessage";
 import { formatDate, formatDateTime, formatRelative } from "../../shared/format";
 import type { DeviceCommandRow, SystemEvent } from "../../shared/types";
 
@@ -116,7 +117,13 @@ export function DeviceEventsTable({ token, deviceCode, limit, onViewAll, variant
     const evRows: Row[] = events.map((e) => ({
       id: `ev-${e.id}`,
       ts: e.created_at,
-      message: e.message,
+      // MESAJ CEVRILEREK GOSTERILIR. Olay kaydinin `message` alani backend'in
+      // yazdigi HAM metindir ve alarm yollarinda Ingilizce uretilir
+      // ("Alarm rule triggered: Haberlesme arizasi"); Turkcesi ayni kaydin
+      // metadata'sindaki `_i18n` etiketinde tasinir. Bu tablo ham metni
+      // basiyordu: ayni ekranda iki dil goruluyordu. Olaylar ve Alarmlar
+      // sayfalari zaten bu yardimciyi kullaniyor.
+      message: formatEventMessage(e),
       source: e.category || "system",
       channel: channelOfEvent(e),
       actor: e.actor_username ?? null,
