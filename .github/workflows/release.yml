@@ -57,9 +57,53 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "major_minor=$(echo "${version}" | cut -d. -f1,2)" >> "$GITHUB_OUTPUT"
 
+  ci-gate:
+    # ANA CI GECMEDEN SURUM YAYINLANMAZ.
+    #
+    # v2.95.0'da ana CI `Guvenli restore — PG16 + TimescaleDB` isinde DUSTU
+    # ama bu akis sorunsuz tamamlandi: dokuz imaj GHCR'a basildi ve GitHub
+    # Release yayinlandi. Tek on kosul `Tag == VERSION == package.json`
+    # esitligiydi; CI'in sonucuna HIC bakilmiyordu. Saha cihazlari surumu
+    # TAG'den takip ettigi icin bu, test edilmemis kodun sahaya inmesi
+    # demekti.
+    #
+    # Kapi `build`den ONCE kosar: imajlar basildiktan sonra durmak ayni
+    # arizanin daha pahali hali olurdu.
+    name: Ana CI kapisi
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - id: sha
+        name: Tag'in isaret ettigi KAYNAK commit
+        run: |
+          set -euo pipefail
+          # `github.sha` annotated tag'lerde TAG NESNESINI gosterebilir;
+          # bize gereken tag'in isaret ettigi COMMIT. `^{}` dereference
+          # eder. Dalin ucuna BAKILMAZ: tag'den sonra main'e gelen yesil
+          # bir commit, tag'lenen kirmizi commit'i aklardi.
+          git fetch --tags --force --quiet || true
+          ref="${{ github.event.inputs.tag || github.ref_name }}"
+          sha="$(git rev-list -n 1 "${ref}")"
+          echo "tag=${ref} kaynak_commit=${sha}"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+      - name: Ana CI sonucunu bekle (fail-closed)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          E1_GATE_TIMEOUT_SEC: "2700"
+        run: bash infra/scripts/linux/release-ci-gate.sh "${{ steps.sha.outputs.sha }}"
+
   build:
     name: ${{ matrix.service }} imaji
-    needs: verify
+    # `ci-gate` SART: imajlar ancak ana CI yesilse basilir. v2.95.0'da bu
+    # bagimlilik yoktu ve CI kirmiziyken dokuz imaj yayinlandi.
+    needs: [verify, ci-gate]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -118,7 +162,7 @@ jobs:
 
   release:
     name: GitHub Release
-    needs: [verify, build]
+    needs: [verify, ci-gate, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -179,7 +223,7 @@ jobs:
 
   deploy-vds:
     name: VDS deploy
-    needs: [verify, build]
+    needs: [verify, ci-gate, build]
     runs-on: ubuntu-latest
     # Ortam korumasi: GitHub UI'dan 'production' environment'ina onay/kisit
     # eklenebilir (belirli kisiler onaylamadan deploy calismaz).

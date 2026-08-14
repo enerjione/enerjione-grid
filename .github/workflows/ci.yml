@@ -341,6 +341,12 @@ jobs:
       # yayin isi tam olarak boyle dustu (imajlar yayinlanmisti).
       - name: pipefail + head tuzagi
         run: bash infra/scripts/linux/tests/test-pipefail-head.sh "$PWD"
+      # RELEASE KAPISI. v2.95.0'da ana CI DUSTUGU HALDE dokuz imaj basildi ve
+      # GitHub Release yayinlandi; Release akisi CI sonucuna hic bakmiyordu.
+      # Kapi eklendi, ama "acilmayan kapi" ile "hic kapi yok" ayni sey oldugu
+      # icin davranisi burada kilitleniyor.
+      - name: Release CI kapisi davranisi
+        run: bash infra/scripts/linux/tests/test-release-ci-gate.sh "$PWD"
       # Kiosk splash'i snap tarayicinin OKUYABILECEGI yerde olmali. Sahada
       # ekranda "File not found" cikti; dosya diskte duruyordu ama Firefox
       # snap oldugu icin /usr/local altini goremiyordu.

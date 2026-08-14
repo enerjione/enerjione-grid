@@ -366,20 +366,54 @@ def test_IT09_ikinci_rename_basarisiz_eski_db_geri_alinir(uretim, dump, monkeypa
 # ==========================================================================
 
 
-def test_IT11_staging_restore_sirasinda_SIGKILL_uretim_saglam(
-    uretim, dump, monkeypatch, tmp_path
-):
-    """pg_restore surecini staging'e yazarken oldur.
+@pytest.fixture()
+def buyuk_dump(uretim, paylasim) -> Path:
+    """Restore'un ANINDA bitemeyecegi kadar veri tasiyan yedek.
 
-    Beklenen: uretim dokunulmamis; staging oksuz kalabilir; sistem
-    calismaya devam eder ve oksuz DB OTOMATIK SILINMEZ.
+    NEDEN GEREKLI: SIGKILL testi restore'u ORTASINDA yakalamak zorunda.
+    Kucuk bir yedekte `pg_restore` CI kosucusunda 150 ms dolmadan bitiyor ve
+    `kill()` oldurecek bir sey bulamiyor (returncode 0) — test sessizce
+    anlamsizlasiyor. Bu, yerelde gecip CI'da dusen bir yaristi; cozum
+    zamanlamayi degil IS YUKUNU degistirmek.
     """
+    from app.services.backup_service import _parse_db_url, resolve_pg_binary
+
+    eng = create_engine(_db_url(uretim), isolation_level="AUTOCOMMIT")
+    with eng.connect() as c:
+        c.execute(text(
+            "INSERT INTO telemetry (v) SELECT i::float FROM generate_series(1, 300000) i"
+        ))
+    eng.dispose()
+
+    db = _parse_db_url(PG_URL)
+    hedef = paylasim / "buyuk.dump"
+    ortam = os.environ.copy()
+    if db["password"]:
+        ortam["PGPASSWORD"] = db["password"]
+    p = subprocess.run(
+        [resolve_pg_binary("pg_dump"), "-h", db["host"], "-p", db["port"],
+         "-U", db["user"], "-d", uretim, "-F", "c", "--no-owner", "--no-acl",
+         "-f", str(hedef)],
+        env=ortam, capture_output=True, text=True, check=False,
+    )
+    assert p.returncode == 0, p.stderr[-500:]
+    return hedef
+
+
+def test_IT11_staging_restore_sirasinda_SIGKILL_uretim_saglam(
+    uretim, buyuk_dump, monkeypatch, paylasim
+):
+    """pg_restore surecini staging'e YAZARKEN oldur (guc kesintisi benzetimi).
+
+    Beklenen: uretim dokunulmamis; staging oksuz kalabilir; sistem calismaya
+    devam eder ve oksuz veritabani OTOMATIK SILINMEZ.
+    """
+    from app.services.backup_service import _parse_db_url, resolve_pg_binary
+
     once = _uretim_parmak_izi(uretim)
     staging = ss.staging_db_name(111, uretim)
     _dusur(staging)
     sr.staging_yarat(staging)
-
-    from app.services.backup_service import _parse_db_url, resolve_pg_binary
 
     db = _parse_db_url(PG_URL)
     ortam = os.environ.copy()
@@ -390,15 +424,51 @@ def test_IT11_staging_restore_sirasinda_SIGKILL_uretim_saglam(
             resolve_pg_binary("pg_restore"),
             "-h", db["host"], "-p", db["port"], "-U", db["user"],
             "-d", staging, "--single-transaction", "--exit-on-error",
-            "--no-owner", "--no-acl", str(dump),
+            "--no-owner", "--no-acl", str(buyuk_dump),
         ],
         env=ortam, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
-    time.sleep(0.15)
-    p.kill()  # SIGKILL
-    p.wait(timeout=10)
+
+    # SENKRONIZASYON: SABIT BEKLEME YOK.
+    #
+    # Onceki hali `time.sleep(0.15)` sonrasi oldurmeye calisiyordu ve CI
+    # kosucusunda `pg_restore` o sureden once bitiyordu: `kill()` oldurecek
+    # bir sey bulamiyor, returncode 0 donuyor ve test SESSIZCE anlamsiz hale
+    # geliyordu (yerelde gecip CI'da dusen bir yaris).
+    #
+    # Artik zamana degil GOZLENEBILIR DURUMA bakiliyor: restore surecinin
+    # staging veritabanina baglanip is yaptigini `pg_stat_activity`den
+    # DOGRULADIKTAN sonra olduruyoruz. Donanim hizlanirsa/yavaslarsa
+    # davranis degismez.
+    baglandi = False
+    son = time.monotonic() + 60
+    while time.monotonic() < son:
+        if p.poll() is not None:
+            p.wait()
+            pytest.fail(
+                "pg_restore oldurulemeden bitti — `buyuk_dump` is yuku "
+                "yetersiz kalmis; satir sayisi artirilmali (aksi halde test "
+                "gercek SIGKILL senaryosunu uretmez)"
+            )
+        aktif = _admin(
+            "SELECT count(*) FROM pg_stat_activity "
+            f"WHERE datname = '{staging}' AND pid <> pg_backend_pid()"
+        )
+        if aktif and int(aktif[0][0]) > 0:
+            baglandi = True
+            break
+
+    assert baglandi, (
+        "restore surecinin staging veritabanina baglandigi 60 sn icinde "
+        "gozlenemedi"
+    )
+
+    # Artik surecin CALISTIGI kanitlandi; guc kesintisini benzet.
+    p.kill()
+    p.wait(timeout=30)
 
     assert p.returncode != 0, "surec oldurulmus olmali"
+
     # URETIM SAGLAM.
     assert uretim in _dbler()
     assert _uretim_parmak_izi(uretim) == once
