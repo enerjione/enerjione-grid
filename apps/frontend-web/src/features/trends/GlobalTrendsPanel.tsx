@@ -396,117 +396,81 @@ export function GlobalTrendsPanel({ accessToken }: Props) {
 
   return (
     <div className="device-trend global-trend">
-      {/* ---- Sol: seri listesi ---- */}
-      <aside className="device-trend-side">
-        <div className="device-trend-side-head">
-          <span>{t("trends.seriesTitle")}</span>
-          <button type="button" className="device-trend-add" onClick={openAdd} disabled={devices.length === 0}>
-            + {t("trends.addSeries")}
+      {/* ---- Zaman araligi + grafik tipi (UST SERIT, tam genislik) ----
+           Cihaz Detayi > Trendler ile AYNI iskelet: serit ustte, altta
+           "sol panel | grafik" izgarasi. Onceden serit sag kolonun ICINE
+           konulmustu ve iki kolonu kuran `.device-trend-body` sarmalayicisi
+           hic yoktu; `.device-trend` bir SUTUN flex'i oldugu icin seri
+           paneli grafigin USTUNDE tam genislikte duruyor, sayfanin yarisi
+           bos kaliyordu. */}
+      <div className="device-trend-timebar">
+        <div className="device-trend-ranges">
+          {RANGES.map((r) => (
+            <button
+              key={r.key}
+              type="button"
+              className={`device-trend-range${!customOn && rangeKey === r.key ? " active" : ""}`}
+              onClick={() => {
+                setCustomOn(false);
+                setRangeKey(r.key);
+              }}
+            >
+              {t(`deviceDetail.charts.range.${r.key}`, { defaultValue: r.key })}
+            </button>
+          ))}
+          <button
+            type="button"
+            className={`device-trend-range${customOn ? " active" : ""}`}
+            onClick={() => setCustomOn(true)}
+          >
+            {t("deviceDetail.charts.custom")}
           </button>
         </div>
-        <div className="device-trend-list">
-          {defs.length === 0 ? (
-            <p className="device-trend-list-empty">{t("trends.noSeries")}</p>
-          ) : (
-            defs.map((d) => {
-              const dev = deviceByCode.get(d.deviceCode);
-              const cat = dev ? modelCatalog.get(dev.model)?.get(d.suffix) : undefined;
-              return (
-                <div key={d.id} className="device-trend-listitem">
-                  <span className="device-trend-listcolor" style={{ background: d.color }} />
-                  <button
-                    type="button"
-                    className="device-trend-listbody"
-                    onClick={() => openEdit(d)}
-                    title={t("trends.editSeries")}
-                  >
-                    <span className="device-trend-listlabel">
-                      {dev?.name || d.deviceCode}
-                    </span>
-                    <span className="device-trend-listsrc">
-                      {cat?.label ?? d.suffix} · {sourceLabel(d.source)}
-                      {cat?.unit ? ` (${cat.unit})` : ""}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="device-trend-listdel"
-                    onClick={() => setDefs((prev) => prev.filter((x) => x.id !== d.id))}
-                    aria-label={t("common.delete")}
-                  >
-                    ×
-                  </button>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </aside>
 
-      {/* ---- Sag: arac cubugu + grafik ---- */}
-      <div className="device-trend-chart">
-        <div className="device-trend-timebar">
-          <div className="device-trend-ranges">
-            {RANGES.map((r) => (
+        {customOn ? (
+          <div className="device-trend-custom">
+            <input
+              type="datetime-local"
+              value={customFrom}
+              onChange={(e) => setCustomFrom(e.target.value)}
+            />
+            <span className="device-trend-custom-sep">→</span>
+            <input
+              type="datetime-local"
+              value={customTo}
+              onChange={(e) => setCustomTo(e.target.value)}
+            />
+          </div>
+        ) : null}
+
+        <div className="device-trend-typebar">
+          <div className="device-trend-types">
+            {([
+              { key: "line", icon: "show_chart" },
+              { key: "area", icon: "area_chart" },
+              { key: "bar", icon: "bar_chart" },
+            ] as { key: ChartType; icon: string }[]).map((ct) => (
               <button
-                key={r.key}
+                key={ct.key}
                 type="button"
-                className={!customOn && rangeKey === r.key ? "is-active" : ""}
-                onClick={() => {
-                  setCustomOn(false);
-                  setRangeKey(r.key);
-                }}
+                className={`device-trend-type${chartType === ct.key ? " active" : ""}`}
+                onClick={() => setChartType(ct.key)}
+                title={t(`deviceDetail.charts.type.${ct.key}`, { defaultValue: ct.key })}
               >
-                {t(`deviceDetail.charts.range.${r.key}`, { defaultValue: r.key })}
+                <span className="material-symbols-outlined">{ct.icon}</span>
               </button>
             ))}
+          </div>
+          <div className="device-trend-gear-wrap" ref={gearRef}>
             <button
               type="button"
-              className={customOn ? "is-active" : ""}
-              onClick={() => setCustomOn(true)}
+              className={`device-trend-gear${gearOpen ? " active" : ""}`}
+              onClick={() => setGearOpen((v) => !v)}
+              title={t("trends.chartSettings")}
+              aria-label={t("trends.chartSettings")}
             >
-              {t("deviceDetail.charts.custom")}
+              <span className="material-symbols-outlined">tune</span>
             </button>
-          </div>
-
-          {customOn ? (
-            <div className="device-trend-custom">
-              <input
-                type="datetime-local"
-                value={customFrom}
-                onChange={(e) => setCustomFrom(e.target.value)}
-              />
-              <span className="device-trend-custom-sep">→</span>
-              <input
-                type="datetime-local"
-                value={customTo}
-                onChange={(e) => setCustomTo(e.target.value)}
-              />
-            </div>
-          ) : null}
-
-          <div className="device-trend-typebar">
-            <div className="device-trend-types">
-              {(["line", "area", "bar"] as ChartType[]).map((ct) => (
-                <button
-                  key={ct}
-                  type="button"
-                  className={chartType === ct ? "is-active" : ""}
-                  onClick={() => setChartType(ct)}
-                >
-                  {t(`deviceDetail.charts.type.${ct}`, { defaultValue: ct })}
-                </button>
-              ))}
-            </div>
-            <div className="device-trend-gear-wrap" ref={gearRef}>
-              <button
-                type="button"
-                className="device-trend-btn-secondary"
-                onClick={() => setGearOpen((v) => !v)}
-                aria-label={t("trends.chartSettings")}
-              >
-                ⚙
-              </button>
               {gearOpen ? (
                 <>
                   <div
@@ -581,33 +545,122 @@ export function GlobalTrendsPanel({ accessToken }: Props) {
                 </>
               ) : null}
             </div>
+          <button
+            type="button"
+            className="device-trend-gear"
+            onClick={() => setReloadTick((v) => v + 1)}
+            disabled={loading}
+            title={t("common.refresh")}
+            aria-label={t("common.refresh")}
+          >
+            {loading ? (
+              <span className="btn-spinner" aria-hidden="true" />
+            ) : (
+              <span className="material-symbols-outlined">refresh</span>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* ---- Ana govde: sol seri paneli | grafik ---- */}
+      <div className="device-trend-body">
+        <aside className="device-trend-side">
+          <div className="device-trend-side-head">
+            <span>{t("trends.seriesTitle")}</span>
             <button
               type="button"
-              className="device-trend-btn-secondary"
-              onClick={() => setReloadTick((v) => v + 1)}
-              disabled={loading}
+              className="device-trend-add"
+              onClick={openAdd}
+              disabled={devices.length === 0}
+              title={t("trends.addSeries")}
+              aria-label={t("trends.addSeries")}
             >
-              {loading ? <span className="btn-spinner" /> : "⟳"}
+              <span className="material-symbols-outlined">add</span>
             </button>
           </div>
-        </div>
+          <ul className="device-trend-list">
+            {defs.length === 0 ? (
+              <li className="device-trend-list-empty">{t("trends.noSeries")}</li>
+            ) : (
+              defs.map((d) => {
+                const dev = deviceByCode.get(d.deviceCode);
+                const cat = dev ? modelCatalog.get(dev.model)?.get(d.suffix) : undefined;
+                return (
+                  <li
+                    key={d.id}
+                    className="device-trend-listitem"
+                    onClick={() => openEdit(d)}
+                    title={t("trends.editSeries")}
+                  >
+                    <span className="device-trend-listcolor" style={{ background: d.color }} />
+                    <div className="device-trend-listbody">
+                      {/* CIHAZ ADI USTTE: bu ekranda seriler FARKLI cihazlardan
+                          geliyor, ayirt edici olan sinyal degil cihaz. */}
+                      <span className="device-trend-listlabel">{dev?.name || d.deviceCode}</span>
+                      <span className="device-trend-listsrc">
+                        {cat?.label ?? d.suffix} · {sourceLabel(d.source)}
+                        {cat?.unit ? ` · ${cat.unit}` : ""}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="device-trend-listdel"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDefs((prev) => prev.filter((x) => x.id !== d.id));
+                      }}
+                      aria-label={t("common.delete")}
+                    >
+                      <span className="material-symbols-outlined">close</span>
+                    </button>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        </aside>
 
-        {metaError ? (
-          <p className="device-trend-empty is-error">{metaError}</p>
-        ) : error ? (
-          <p className="device-trend-empty is-error">{error}</p>
-        ) : defs.length === 0 ? (
-          <p className="device-trend-empty">{t("trends.emptyHint")}</p>
-        ) : !hasData && !loading ? (
-          <p className="device-trend-empty">{t("deviceDetail.charts.noData")}</p>
-        ) : (
-          <ReactECharts
-            echarts={echarts}
-            option={chartOption}
-            notMerge
-            style={{ width: "100%", height: "100%" }}
-          />
-        )}
+        <div className="device-trend-chart">
+          {metaError ? (
+            <div className="device-trend-empty is-error">
+              <span className="material-symbols-outlined">error</span>
+              <p>{metaError}</p>
+            </div>
+          ) : error ? (
+            <div className="device-trend-empty is-error">
+              <span className="material-symbols-outlined">error</span>
+              <p>{error}</p>
+            </div>
+          ) : defs.length === 0 ? (
+            // Bos durumda EYLEM de duruyor: grafik alani sayfanin en buyuk
+            // parcasi ve tek satirlik bir aciklamayla bos birakmak, kullaniciyi
+            // sol panelin kosesindeki kucuk "+" dugmesini aramaya birakiyordu.
+            <div className="device-trend-empty">
+              <span className="material-symbols-outlined">timeline</span>
+              <p>{t("trends.emptyHint")}</p>
+              <button
+                type="button"
+                className="device-trend-btn-primary"
+                onClick={openAdd}
+                disabled={devices.length === 0}
+              >
+                {t("trends.addSeries")}
+              </button>
+            </div>
+          ) : !hasData && !loading ? (
+            <div className="device-trend-empty">
+              <span className="material-symbols-outlined">timeline</span>
+              <p>{t("deviceDetail.charts.noData")}</p>
+            </div>
+          ) : (
+            <ReactECharts
+              echarts={echarts}
+              option={chartOption}
+              notMerge
+              style={{ width: "100%", height: "100%" }}
+            />
+          )}
+        </div>
       </div>
 
       {/* ---- Seri ekle/duzenle ---- */}
