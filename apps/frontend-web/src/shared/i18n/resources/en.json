@@ -777,6 +777,8 @@
       "device_command_failed": "Command failed: {{command}} ({{code}})",
       "device_command_queued": "Command queued: {{command}} ({{code}})",
       "device_command_result": "Command result: {{command}} ({{code}})",
+      "device_command_result_unknown": "Command result unavailable: {{command}} ({{code}})",
+      "device_command_delivery_failed": "Command delivery failed: {{command}} ({{code}})",
       "remote_access_granted": "Remote maintenance allowed for {{minutes}} minutes",
       "remote_access_extended": "Remote maintenance extended to {{minutes}} minutes",
       "remote_access_revoked": "Remote maintenance access closed",

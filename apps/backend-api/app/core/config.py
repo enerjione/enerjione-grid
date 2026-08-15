@@ -404,6 +404,51 @@ class Settings(BaseSettings):
     # "komut gitmedi" deyip yeniden denemesi icin de makul bir ust sinir.
     command_max_age_sec: int = 120
 
+    # ----- Komut teslim kirasi (F3C) ---------------------------------------
+    # Komut artik `/pending` yanitina konur konmaz `sent` OLMAZ; once KIRALANIR
+    # ve gateway dayanikli defterine yazdigini ACK ile bildirince `sent` olur.
+    # Gerekce ve tel sozlesmesi: docs/f3c-command-delivery-protocol.md
+    #
+    # Kira suresi: bu sure boyunca komut baska bir poll'a sunulmaz. Cok kisa
+    # olursa gateway ACK'i yetistiremeden komut yeniden sunulur (zararsiz ama
+    # gereksiz trafik); cok uzun olursa kayip bir teslim gec fark edilir.
+    # 30 sn: gateway komut-poll'u 1 Hz, ACK bir sonraki turda gider; 30 sn
+    # gecici bir ag kesintisini tolere etmeye yeter ve mutlak TTL'nin (120 sn)
+    # altinda kalarak birkac denemeye izin verir.
+    command_delivery_lease_sec: int = 30
+
+    # Kac kez teslim denenecek. Gateway kabul ettigini HICBIR ZAMAN
+    # bildirmezse komut sonsuza kadar yeniden sunulmamali.
+    command_delivery_max_attempts: int = 5
+
+    # Yetenek bildirmeyen (eski) gateway'e fiziksel komut teslim edilsin mi?
+    #
+    # true (varsayilan) = FAIL-CLOSED. Eski gateway'e komut GONDERILMEZ; komut
+    #   `pending` kalir ve TTL dolunca `expired` olur. Yeni kurulumda dogru
+    #   davranis budur: teslim garantisi olmayan bir kanaldan kesici komutu
+    #   gecirmek, tam da F3C'nin kapattigi sessiz kaybi geri getirir.
+    # false = saha gecisi icin gecici kaldirac. Eski v2.96 davranisi (poll
+    #   sirasinda `pending -> sent`) uygulanir, ama SESSIZ DEGILDIR: hiz
+    #   sinirli uyari ve `system_event` uretilir.
+    command_delivery_ack_required: bool = True
+
+    # ----- Sonucu gelmeyen komut (F3C-C) -----------------------------------
+    # `sent` artik "gateway dayanikli olarak kabul etti" demek. Buna ragmen
+    # cihaz sonucu hic gelmeyebilir (gateway defteri dead-letter'a aldi,
+    # gateway kalici olarak kayboldu...). Eskiden bu komut SONSUZA KADAR
+    # `sent` kaliyordu ve hicbir sey onu sonlandirmiyordu.
+    #
+    # Sure dolunca komut `failed` / `result_status='result_unknown'` olur.
+    # FIZIKSEL YENIDEN DENEME YOKTUR — `sent -> pending` ASLA yapilmaz.
+    #
+    # 300 sn: `command_max_age_sec`ten (120) buyuk olmak ZORUNDA, aksi halde
+    # komut daha teslim penceresi kapanmadan "sonucu gelmedi" diye
+    # sonlandirilirdi.
+    command_result_timeout_sec: int = 300
+
+    # Sonucu gelmeyen komut supurucusunun calisma araligi.
+    command_result_sweep_interval_sec: int = 60
+
     # ----- WebSocket fan-out (coklu surecin ON KOSULU) ----------------------
     # Canli deger yayini bugun SAF BELLEK-ICI: telemetry_consumer dogrudan
     # ayni surecteki WS abonelerine yaziyor. Bu, backend TEK surec oldugu
@@ -853,6 +898,38 @@ class Settings(BaseSettings):
                 "komutlarinin tazelik suresidir; kapatilamaz — bayat bir komut "
                 "gateway yeniden baglandiginda fiziksel sisteme uygulanirdi. "
                 f"Verilen deger: {self.command_max_age_sec}"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_command_delivery(self) -> "Settings":
+        """F3C teslim ayarlari — hepsi POZITIF, sonuc zaman asimi TTL'den BUYUK.
+
+        FAIL-OPEN YOK: hicbirinde `0 = kapali` kacis yolu yok. Kira suresi ya da
+        deneme sayisi sifirlanabilseydi teslim protokolu tek ayarla devre disi
+        kalir ve F3C'nin kapattigi sessiz komut kaybi geri gelirdi.
+        """
+        for ad, deger in (
+            ("COMMAND_DELIVERY_LEASE_SEC", self.command_delivery_lease_sec),
+            ("COMMAND_DELIVERY_MAX_ATTEMPTS", self.command_delivery_max_attempts),
+            ("COMMAND_RESULT_TIMEOUT_SEC", self.command_result_timeout_sec),
+            ("COMMAND_RESULT_SWEEP_INTERVAL_SEC", self.command_result_sweep_interval_sec),
+        ):
+            if int(deger) <= 0:
+                raise RuntimeError(
+                    f"{ad} pozitif olmali (verilen: {deger}). Komut teslim zinciri "
+                    "kapatilabilir bir ozellik degildir."
+                )
+
+        # SIRALAMA KISITI: sonuc bekleme suresi teslim penceresinden UZUN olmali.
+        # Aksi halde komut daha gateway'e teslim edilme sansi bitmeden "sonucu
+        # gelmedi" diye sonlandirilir ve operatore yanlis bilgi verilirdi.
+        if int(self.command_result_timeout_sec) <= int(self.command_max_age_sec):
+            raise RuntimeError(
+                "COMMAND_RESULT_TIMEOUT_SEC, COMMAND_MAX_AGE_SEC'ten BUYUK olmali "
+                f"(verilen: {self.command_result_timeout_sec} <= {self.command_max_age_sec}). "
+                "Aksi halde komut, teslim penceresi daha kapanmadan 'sonucu gelmedi' "
+                "diye sonlandirilirdi."
             )
         return self
 

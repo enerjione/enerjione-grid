@@ -136,7 +136,12 @@ jobs:
           set -euo pipefail
           psql -h 127.0.0.1 -U postgres -d postgres -c "SELECT version();"
           psql -h 127.0.0.1 -U postgres -d postgres             -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"             -tAc "SELECT extversion FROM pg_extension WHERE extname='timescaledb';"
-      - name: Guvenli restore integration testleri
+      # DIZININ TAMAMI kosar — yalnizca guvenli restore degil. Gercek DB
+      # gerektiren her kabul testi buraya dusuyor; F3C komut teslim kirasi
+      # (`test_command_delivery_pg.py`) da dahil: `SELECT ... FOR UPDATE` ve
+      # `skip_locked` SQLite'ta YOKTUR ve sessizce yok sayilir, dolayisiyla
+      # es zamanlilik iddialari yalnizca burada kanitlanabilir.
+      - name: Gercek DB integration testleri (restore + komut teslimi)
         working-directory: apps/backend-api
         env:
           E1_TEST_PG_URL: postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/postgres

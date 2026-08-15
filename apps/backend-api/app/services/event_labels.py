@@ -77,6 +77,12 @@ _STATUS_EXACT = {
     "device_command_queued": "queued",
     "device_command_sent": "sent",
     "device_command_result": "completed",
+    # Gateway kabul etti ama cihaz sonucu gelmedi. "completed" DEGIL: komutun
+    # uygulanip uygulanmadigi bilinmiyor ve arayuzde basarili gorunmemeli.
+    "device_command_result_unknown": "failed",
+    # Komut gateway'e TESLIM edilemedi (defter kimligi degisti, deneme
+    # tukendi ya da kabul dogrulanamadan yas doldu).
+    "device_command_delivery_failed": "failed",
     "device_command_failed": "failed",
     "bulk_notification_sent": "sent",
 }

@@ -77,6 +77,13 @@ ACIK_UCLAR: dict[str, str] = {
     "GET /api/v1/gateways/{gateway_code}/config": "gateway token'i ile dogrulanir",
     "GET /api/v1/gateways/{gateway_code}/pending": "gateway token'i ile dogrulanir",
     "POST /api/v1/gateways/{gateway_code}/command-results": "gateway token'i ile dogrulanir",
+    # F3C teslim bildirimi. YENI BIR AUTH YUZEYI ACMAZ: `command-results` ile
+    # AYNI `X-Gateway-Token` dogrulamasindan gecer ve ayrica komutun gercekten
+    # o gateway'e ait oldugu kontrol edilir (IDOR koruma). Teslim jetonu tek
+    # basina yetki vermez; gateway kimligi olmadan istek handler'a giremez.
+    "POST /api/v1/gateways/{gateway_code}/command-delivery-acks": (
+        "gateway token'i ile dogrulanir"
+    ),
     "POST /api/v1/telemetry/gateway/{gateway_code}": "gateway token'i ile dogrulanir",
 }
 

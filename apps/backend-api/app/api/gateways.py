@@ -29,6 +29,8 @@ from app.schemas.gateway_agent import (
     LocalInstallResponse,
 )
 from app.schemas.gateway import (
+    CommandDeliveryAckRequest,
+    CommandDeliveryAckResponse,
     CommandResultItem,
     GatewayConfigCommand,
     GatewayConfigDevice,
@@ -39,7 +41,7 @@ from app.schemas.gateway import (
     GatewayRead,
     GatewayUpdate,
 )
-from app.services import gateway_agent_service
+from app.services import command_delivery_service, gateway_agent_service
 from app.services.event_service import record_event
 from app.services.gateway_agent_service import GatewayAgentError
 from app.services.gateway_compose import (
@@ -1514,6 +1516,7 @@ def get_gateway_pending(
     db: Session = Depends(get_db),
     x_gateway_token: str | None = Header(default=None, alias="X-Gateway-Token"),
     x_gateway_health: str | None = Header(default=None, alias="X-E1-Gateway-Health"),
+    x_e1_delivery: str | None = Header(default=None, alias="X-E1-Delivery"),
 ):
     """Hafif komut-poll — gateway 1sn'de bir ceker (komut anlik gelsin).
 
@@ -1524,13 +1527,26 @@ def get_gateway_pending(
     Auth: `X-Gateway-Token`. HMAC imza (X-Config-Signature) — MITM/komut enjekte
     koruma; gateway imzayi dogrular.
 
-    `pending -> sent` gecisi BURADA yapilir (config endpoint'te DEGIL). Gateway
-    komutu cektikten sonra command_ledger ile idempotent calistirir; ayni komut
-    tekrar cekilse bile (sent kalirken) gateway CROB'u tekrar atmaz (ledger).
+    TESLIM PROTOKOLU (F3C)
+    ----------------------
+    Gateway `X-E1-Delivery` basligiyla `command_delivery_ack_v1` yetenegini
+    bildiriyorsa komut BURADA `sent` OLMAZ: yalnizca KIRALANIR ve `pending`
+    kalir. `sent`e gecis, gateway komutu dayanikli defterine yazdigini
+    `POST /gateways/{code}/command-delivery-acks` ile bildirince olur.
+
+    Eskiden gecis burada yapiliyordu ve teslim garantisi TASIMIYORDU: yanit ag
+    uzerinde kaybolursa ya da gateway onu deftere yazmadan olurse komut
+    sonsuza kadar `sent` kalir, cihaza HIC gitmezdi. Kayip SESSIZDI.
+
+    Yetenek bildirmeyen gateway icin davranis `COMMAND_DELIVERY_ACK_REQUIRED`
+    ile belirlenir (varsayilan: fail-closed).
+
+    Protokol: docs/f3c-command-delivery-protocol.md
     """
     from app.services.ingest_service import validate_gateway_token
 
     gateway = validate_gateway_token(db, gateway_code, x_gateway_token)
+    yetenek = command_delivery_service.parse_delivery_header(x_e1_delivery)
 
     # TEK `now` — TUM PARTI ICIN.
     #
@@ -1552,17 +1568,32 @@ def get_gateway_pending(
     # SQLite (testler) `FOR UPDATE` desteklemez ve sessizce yok sayar; bu
     # kabul edilebilir cunku esler-arasi yaris yalnizca gercek Postgres
     # dagitiminda anlamli.
-    pending_cmds = list(
-        db.scalars(
-            select(DeviceCommand)
-            .where(
-                DeviceCommand.gateway_code == gateway.code,
-                DeviceCommand.status == "pending",
-            )
-            .order_by(DeviceCommand.id.asc())
-            .with_for_update()
-        ).all()
-    )
+    #
+    # F3C: bu sorgu ve kilit artik YALNIZCA eski protokol yolunda kullaniliyor.
+    # Teslim protokolunu bildiren gateway'de ayni kilit stratejisi
+    # `command_delivery_service.kirala` icinde uygulanir.
+    def _eski_yol_pending() -> list[DeviceCommand]:
+        return list(
+            db.scalars(
+                select(DeviceCommand)
+                .where(
+                    DeviceCommand.gateway_code == gateway.code,
+                    DeviceCommand.status == "pending",
+                    # KIRALANMIS KOMUT ESKI YOLA DUSMEZ.
+                    #
+                    # Eski yol jeton/kira/defter kimligi SORMAZ. Filtre
+                    # olmasaydi, yeni protokolle kiralanmis bir komut —
+                    # gateway o sirada baslik gondermeyen bir surume geri
+                    # alinirsa — hicbir kontrolden gecmeden yeniden teslim
+                    # edilirdi. Gateway defteri de kaybolmussa ayni komut
+                    # cihazda IKINCI KEZ uygulanabilirdi; tam olarak F3C'nin
+                    # engellemek icin var oldugu sey.
+                    DeviceCommand.delivery_token.is_(None),
+                )
+                .order_by(DeviceCommand.id.asc())
+                .with_for_update()
+            ).all()
+        )
 
     # BAYAT KOMUT GATEWAY'E GONDERILMEZ VE KUYRUKTA BIRAKILMAZ.
     #
@@ -1586,46 +1617,49 @@ def get_gateway_pending(
             return None
         return deger if deger.tzinfo is not None else deger.replace(tzinfo=timezone.utc)
 
-    taze: list[DeviceCommand] = []
-    bayat: list[DeviceCommand] = []
-    for cmd in pending_cmds:
-        olusturma = _utc(cmd.created_at)
-        # `created_at` yoksa (teorik) komut BAYAT SAYILMAZ: yasini
-        # bilemedigimiz bir komutu sessizce dusurmek, operatorun verdigi
-        # bir kesici komutunu kaybetmek olurdu.
-        if olusturma is None or olusturma >= cutoff:
-            taze.append(cmd)
-        else:
-            bayat.append(cmd)
+    def _terminalleri_kaydet(
+        sonlandirilan: list[tuple[DeviceCommand, str]],
+    ) -> None:
+        """Teslim yolunda sonlanan komutlar icin DENETIM KAYDI yazar.
 
-    # --- BAYAT: gateway'e GONDERILMEDEN sonlandir ------------------------
-    #
-    # YENI BIR `status` DEGERI URETILMEZ. Durum sozlesmesi
-    # (pending/sent/ok/failed/cancelled) korunuyor; sona erme
-    # `failed` + `result_status='expired'` ile temsil ediliyor. Yeni bir
-    # lifecycle durumu eklemek arayuzu, IEC 104 esleme tablosunu ve
-    # `command-results` idempotency kontrollerini birden etkilerdi.
-    for cmd in bayat:
-        olusturma = _utc(cmd.created_at)
-        yas_sn = (now - olusturma).total_seconds() if olusturma else -1.0
-        cmd.status = "failed"
-        cmd.result_status = "expired"
-        cmd.result_error = "Komut gateway'e teslim edilmeden once zaman asimina ugradi"
-        cmd.completed_at = now
-        cmd.sent_at = None  # gateway'e HIC gonderilmedi
-        logger.warning(
-            "event=command_expired_backend gateway_code=%s command_id=%s "
-            "device_code=%s command=%s dnp3_index=%s created_at=%s "
-            "age_sec=%.3f ttl_sec=%s",
-            gateway.code, cmd.id, cmd.device_code, cmd.command,
-            cmd.dnp3_index,
-            olusturma.isoformat() if olusturma else None,
-            yas_sn, ttl_sec,
-        )
+        Bu gecisler kalici durum degisimidir (CLAUDE.md kural 4) ve operatorun
+        gormesi gereken kararlardir — ozellikle `delivery_state_lost`: gateway
+        defteri sifirlandigi icin komutun uygulanip uygulanmadigi BILINMIYOR ve
+        otomatik teslim durduruldu. Yalnizca log'a yazmak, basinda kimsenin
+        olmadigi bir saha IPC'sinde bu karari gorunmez kilardi.
 
-    # --- TAZE: mevcut davranis AYNEN korunur ------------------------------
-    commands = [
-        GatewayConfigCommand(
+        Sicak yol endisesi yok: bu dal yalnizca komut GERCEKTEN sonlanirken
+        kosar, her poll'de degil.
+        """
+        for cmd, sonuc in sonlandirilan:
+            # `expired` icin olay yazilmaz — F3B davranisi AYNEN korunuyor;
+            # bu, TTL'nin normal ve beklenen sonucudur.
+            if sonuc == command_delivery_service.RESULT_EXPIRED:
+                continue
+            record_event(
+                db,
+                category="device",
+                event_type="device_command_delivery_failed",
+                severity="warning",
+                actor_username=cmd.actor_username,
+                device_code=cmd.device_code,
+                message=(
+                    f"Komut teslim edilemedi: {cmd.command} ({cmd.device_code}) "
+                    f"#{cmd.id} — {sonuc}"
+                ),
+                metadata={
+                    "command": cmd.command,
+                    "command_id": cmd.id,
+                    "gateway_code": cmd.gateway_code,
+                    "result_status": sonuc,
+                    "delivery_attempt": int(cmd.delivery_attempt or 0),
+                },
+                i18n_key="device_command_delivery_failed",
+                i18n_params={"command": cmd.command, "code": cmd.device_code},
+            )
+
+    def _payload(cmd: DeviceCommand, *, jeton: str | None) -> GatewayConfigCommand:
+        return GatewayConfigCommand(
             id=cmd.id,
             device_code=cmd.device_code,
             command=cmd.command,
@@ -1635,15 +1669,108 @@ def get_gateway_pending(
             on_time_ms=cmd.on_time_ms,
             off_time_ms=cmd.off_time_ms,
             created_at=_utc(cmd.created_at),
+            delivery_token=jeton,
+            delivery_not_after=(
+                command_delivery_service.son_kullanma(cmd, ttl_sec) if jeton else None
+            ),
         )
-        for cmd in taze
-    ]
-    # pending -> sent (komut gateway'e teslim edildi). Gateway command_ledger ile
-    # idempotent; sent komut tekrar cekilmez (artik pending degil). Sonucu
-    # command-results ile bildirir -> ok/failed.
-    for cmd in taze:
-        cmd.status = "sent"
-        cmd.sent_at = now
+
+    if yetenek is not None and yetenek.ack_v1:
+        # ---- YENI PROTOKOL: kirala, `sent` YAPMA -------------------------
+        #
+        # Komut `pending` kalir ve `sent_at` yazilmaz. Teslim ancak gateway
+        # dayanikli defterine yazdigini ACK ile bildirince tamamlanir; bu,
+        # A/B cokme pencerelerinde komutun SESSIZCE kaybolmasini onler.
+        karar = command_delivery_service.kirala(
+            db, gateway_code=gateway.code, yetenek=yetenek, now=now
+        )
+        commands = [
+            _payload(cmd, jeton=cmd.delivery_token) for cmd in karar.teslim
+        ]
+        _terminalleri_kaydet(karar.sonlandirilan)
+    else:
+        # ---- ESKI PROTOKOL ------------------------------------------------
+        #
+        # Gateway teslim yetenegi bildirmiyor. Bu, teslim garantisi olmayan bir
+        # kanaldir; varsayilan FAIL-CLOSED'dur.
+        if settings.command_delivery_ack_required:
+            # Komut kuyrukta BIRAKILIR: gateway yukseltilirse ayni komut —
+            # hala TTL icindeyse — normal sekilde teslim edilir.
+            #
+            # AMA MUTLAK TTL YINE ISLER. Bu cagri olmadan komut SONSUZA KADAR
+            # `pending` kalirdi: `kirala` yalnizca yetenek bildiren gateway'de
+            # kosuyor, sonuc supurucusu ise `status='sent'` ariyor. Yani hicbir
+            # sey o satirlara bakmiyordu ve "TTL dolunca expired olur" sozu
+            # tutulmuyordu.
+            _terminalleri_kaydet(
+                command_delivery_service.bayatlari_sonlandir(
+                    db, gateway_code=gateway.code, now=now
+                )
+            )
+            bekleyen = len(_eski_yol_pending())
+            if bekleyen and command_delivery_service.legacy_uyarisi_gerekli(gateway.code):
+                logger.error(
+                    "event=command_delivery_blocked_legacy_gateway gateway_code=%s "
+                    "pending=%d — gateway `%s` yetenegini bildirmiyor ve "
+                    "COMMAND_DELIVERY_ACK_REQUIRED acik; komut TESLIM EDILMEDI. "
+                    "Gateway'i yukseltin ya da gecis icin ayari kapatin.",
+                    gateway.code, bekleyen, command_delivery_service.CAPABILITY_ACK_V1,
+                )
+            commands = []
+        else:
+            # Gecis kaldiraci: v2.96 davranisi. SESSIZ DEGIL.
+            if command_delivery_service.legacy_uyarisi_gerekli(gateway.code):
+                logger.warning(
+                    "event=command_delivery_legacy_protocol gateway_code=%s — gateway "
+                    "`%s` yetenegini bildirmiyor; komut teslim garantisi OLMADAN "
+                    "gonderiliyor (COMMAND_DELIVERY_ACK_REQUIRED kapali). Bu gecici "
+                    "bir saha gecisi ayaridir.",
+                    gateway.code, command_delivery_service.CAPABILITY_ACK_V1,
+                )
+
+            taze: list[DeviceCommand] = []
+            bayat: list[DeviceCommand] = []
+            for cmd in _eski_yol_pending():
+                olusturma = _utc(cmd.created_at)
+                # `created_at` yoksa (teorik) komut BAYAT SAYILMAZ: yasini
+                # bilemedigimiz bir komutu sessizce dusurmek, operatorun verdigi
+                # bir kesici komutunu kaybetmek olurdu.
+                if olusturma is None or olusturma >= cutoff:
+                    taze.append(cmd)
+                else:
+                    bayat.append(cmd)
+
+            # --- BAYAT: gateway'e GONDERILMEDEN sonlandir ------------------
+            #
+            # YENI BIR `status` DEGERI URETILMEZ. Durum sozlesmesi
+            # (pending/sent/ok/failed/cancelled) korunuyor; sona erme
+            # `failed` + `result_status='expired'` ile temsil ediliyor.
+            for cmd in bayat:
+                olusturma = _utc(cmd.created_at)
+                yas_sn = (now - olusturma).total_seconds() if olusturma else -1.0
+                cmd.status = "failed"
+                cmd.result_status = command_delivery_service.RESULT_EXPIRED
+                cmd.result_error = (
+                    "Komut gateway'e teslim edilmeden once zaman asimina ugradi"
+                )
+                cmd.completed_at = now
+                cmd.sent_at = None  # gateway'e HIC gonderilmedi
+                logger.warning(
+                    "event=command_expired_backend gateway_code=%s command_id=%s "
+                    "device_code=%s command=%s dnp3_index=%s created_at=%s "
+                    "age_sec=%.3f ttl_sec=%s",
+                    gateway.code, cmd.id, cmd.device_code, cmd.command,
+                    cmd.dnp3_index,
+                    olusturma.isoformat() if olusturma else None,
+                    yas_sn, ttl_sec,
+                )
+
+            commands = [_payload(cmd, jeton=None) for cmd in taze]
+            # pending -> sent: ESKI anlam ("backend yanita koydu"). Teslim
+            # garantisi YOKTUR; bu yolun kapatilmasinin sebebi tam da budur.
+            for cmd in taze:
+                cmd.status = "sent"
+                cmd.sent_at = now
 
     gateway.last_seen_at = datetime.now(timezone.utc)
 
@@ -1698,6 +1825,54 @@ def get_gateway_pending(
     return _signed_json_response(gateway, resp)
 
 
+@router.post("/{gateway_code}/command-delivery-acks")
+def report_command_delivery_acks(
+    gateway_code: str,
+    payload: CommandDeliveryAckRequest = Body(...),
+    db: Session = Depends(get_db),
+    x_gateway_token: str | None = Header(default=None, alias="X-Gateway-Token"),
+):
+    """Gateway'in komutu DAYANIKLI olarak kabul ettigini bildirir (batch, F3C).
+
+    Auth: `X-Gateway-Token` — mevcut gateway kimligi. YENI BIR AUTH SISTEMI YOK.
+
+    Gateway bu bildirimi ancak komutu kendi kalici defterine yazdiktan (SQLite
+    COMMIT) SONRA uretir. Kabul edilen komut `pending -> sent` gecer ve `sent`
+    artik "gateway komutu dayanikli olarak kabul etti" anlamini tasir.
+
+    Dogrulama: komut gercekten bu gateway'e mi ait (IDOR koruma) ve teslim
+    jetonu sabit-zamanli karsilastirma ile esiyor mu. Mukerrer ACK idempotent
+    no-op'tur ve KABUL sayilir — reddetmek gateway'i sonsuz yeniden denemeye
+    sokardi. Jeton HICBIR log satirinda yer almaz.
+
+    Protokol: docs/f3c-command-delivery-protocol.md
+    """
+    from app.services.ingest_service import validate_gateway_token
+
+    gateway = validate_gateway_token(db, gateway_code, x_gateway_token)
+
+    ackler = payload.acks or []
+    if not ackler:
+        return CommandDeliveryAckResponse(accepted=0, rejected=0)
+    if len(ackler) > command_delivery_service.MAX_ACK_BATCH:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=(
+                f"Tek istekte en fazla {command_delivery_service.MAX_ACK_BATCH} "
+                "teslim bildirimi kabul edilir"
+            ),
+        )
+
+    kabul, ret = command_delivery_service.ack_uygula(
+        db,
+        gateway_code=gateway.code,
+        ackler=[(a.command_id, a.delivery_token) for a in ackler],
+        now=datetime.now(timezone.utc),
+    )
+    db.commit()
+    return CommandDeliveryAckResponse(accepted=kabul, rejected=ret)
+
+
 @router.post("/{gateway_code}/command-results")
 def report_command_results(
     gateway_code: str,
@@ -1737,9 +1912,34 @@ def report_command_results(
         cmd = rows.get(res.id)
         if cmd is None:
             continue  # baska gateway'e ait veya silinmis; atla
-        # Terminal durumdaki komutu tekrar guncelleme (idempotent)
-        if cmd.status in ("ok", "failed"):
-            continue
+        # Terminal durumdaki komutu tekrar guncelleme (idempotent).
+        #
+        # TEK ISTISNA — `result_unknown` MUTABAKATI (F3C):
+        # `failed` + `result_status='result_unknown'`, "gateway kabul etti ama
+        # cihaz sonucu ALINAMADI" demektir; bu bir TAHMINDIR, gozlem degil.
+        # Gercek sonuc daha sonra gelirse (gateway defterindeki sonuc gec
+        # teslim edildi) onu yutmak, operatore kalici olarak yanlis bilgi
+        # gostermek olurdu. (Gercek sonuc = gateway defterinden gec teslim.)
+        #
+        # ISTISNA BILEREK DAR: yalnizca `result_unknown` -> gercek sonuc.
+        # `ok -> failed`, `failed(normal) -> ok`, `cancelled -> *`,
+        # `expired -> *` gecisleri ACILMADI; mukerrer sonuc bildirimi
+        # (gateway at-least-once teslim eder) hala idempotent kalmali.
+        #
+        # `cancelled` DE KORUNUYOR. Guard eskiden yalnizca ("ok","failed")
+        # bakiyordu; `cancelled` bu kumede olmadigi icin ELEKTEN GECIYORDU:
+        # cihaz silindiginde komutlar `cancelled` + "Cihaz silindi" yapiliyor
+        # (device_repository), ardindan gateway'in gec gelen sonucu o kaydi
+        # `ok` yapip iptal gerekcesini siliyordu — ustelik silinmis bir cihaz
+        # kodu icin yeni bir olay uretiyordu.
+        if cmd.status not in ("pending", "sent"):
+            if cmd.result_status != command_delivery_service.RESULT_UNKNOWN:
+                continue
+            logger.info(
+                "event=command_result_reconciled gateway_code=%s command_id=%s "
+                "device_code=%s onceki=result_unknown yeni_ok=%s",
+                gateway_code, cmd.id, cmd.device_code, res.ok,
+            )
         cmd.status = "ok" if res.ok else "failed"
         # result_status: gercek DNP3 CommandStatus varsa onu goster (NO_SELECT,
         # NOT_SUPPORTED gibi — cihaz neden reddetti belli olsun), yoksa genel status.
