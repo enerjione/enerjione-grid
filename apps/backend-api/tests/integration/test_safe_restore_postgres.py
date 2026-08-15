@@ -753,8 +753,24 @@ def test_IT13_gercek_v293_yedegi_guncel_surume_restore_edilir(
         ok, hata = sr.run(113, hedef)
         assert ok is True, hata
 
-        # 1) Migration 0068 TEMIZ tamamlandi (DuplicateTable yok).
-        assert _q(prod, "SELECT version_num FROM alembic_version")[0][0] == "0068"
+        # 1) Migration zinciri GUNCEL HEAD'e kadar TEMIZ kostu.
+        #
+        # HEAD LITERAL YAZILMAZ: eskiden "0068" sabitti ve her yeni migration
+        # bu testi — asil iddiasi hala dogruyken — kirmiziya cevirdi (F3C'de
+        # 0069 eklenince yasandi). Iddia "su surum" degil, "eski yedek GUNCEL
+        # semaya tasindi"; head dinamik okunuyor.
+        from alembic.config import Config as _AlembicConfig
+        from alembic.script import ScriptDirectory as _ScriptDirectory
+
+        _cfg = _AlembicConfig(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+        _cfg.set_main_option(
+            "script_location",
+            str(Path(__file__).resolve().parents[2] / "alembic_migrations"),
+        )
+        beklenen_head = _ScriptDirectory.from_config(_cfg).get_current_head()
+        assert _q(prod, "SELECT version_num FROM alembic_version")[0][0] == beklenen_head, (
+            "eski yedek guncel semaya tasinmadi"
+        )
         # 2) 0068'in tablosu olustu.
         assert _q(
             prod,
