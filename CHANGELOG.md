@@ -14,6 +14,88 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.97.0] — 2026-08-15
+
+Komut teslimi artık **garantili**: backend komutu yalnızca kiralar, gateway onu
+kalıcı defterine yazdığını bildirince (`ACK`) `sent` olur.
+
+> **Yayın sırası:** bu sürümden ÖNCE gateway'ler **v1.9.0**'a yükseltilmiş
+> olmalıdır. Varsayılan `COMMAND_DELIVERY_ACK_REQUIRED=true` fail-closed'dur;
+> yetenek bildirmeyen eski bir gateway'e komut teslim edilmez.
+
+### Eklendi
+
+- **Komut teslim kirası ve dayanıklı kabul.** Backend `/pending` yanıtını
+  üretirken komutu `sent` işaretliyordu. İki pencere açıktı ve ikisi de
+  **sessiz komut kaybına** çıkıyordu:
+
+  ```
+  A)  backend `sent` COMMIT etti, HTTP yanıtı gateway'e ULAŞMADI
+  B)  gateway yanıtı okudu, kalıcı defterine yazmadan öldü
+  ```
+
+  Her ikisinde de backend `sent`, gateway defteri boş, cihaz komutu hiç almadı.
+  Operatör "gönderildi" görüyor; kesici sürülmemiş. Artık komut önce
+  **kiralanır** (`pending` kalır) ve gateway kabulünü bildirince `sent` olur.
+
+  **`sent` artık "gateway komutu kalıcı olarak kabul etti" demektir.**
+
+- **Sonucu gelmeyen komut süpürücüsü.** `sent` durumunda kalan bir komutu
+  hiçbir şey sonlandırmıyordu; arayüzde sonsuza kadar "gönderildi" görünüyordu.
+  `COMMAND_RESULT_TIMEOUT_SEC` (varsayılan 300 sn) dolunca komut
+  `failed` / `result_status=result_unknown` olur ve belirsizlik operatöre
+  açıkça söylenir. **Fiziksel yeniden deneme yoktur** — `sent → pending` asla
+  yapılmaz.
+
+- **Geç gelen gerçek sonucun mutabakatı.** Gateway sonucu daha sonra teslim
+  ederse `result_unknown` hükmü düzeltilir. İstisna bilerek dardır: yalnızca
+  `result_unknown` → gerçek sonuç. `ok`, normal `failed`, `expired` ve
+  `cancelled` geçişleri kapalıdır.
+
+- **Gateway defteri sıfırlanma koruması.** Gateway'in komut defteri kaybolursa
+  tekrar-önleme kanıtı da kaybolur; aynı komut yeniden sunulsaydı gateway onu
+  yeni sanıp fiziksel komutu tekrarlayabilirdi. Backend ilk kiralamadaki defter
+  kimliğini saklar, değiştiğini görürse **otomatik teslimi durdurur**
+  (`delivery_state_lost`) ve komutu operatör incelemesine bırakır.
+
+### Değişti
+
+- **Mutlak tazelik süresi kiralama ile ötelenmez.** Son kullanma her zaman
+  `created_at + COMMAND_MAX_AGE_SEC`. 10:00'da üretilip teslimi kaybolan bir
+  komut 10:03'te yeniden sunulamaz. Gateway'e ayrıca değişmez bir
+  `delivery_not_after` gönderilir (savunma derinliği).
+
+- **İptal edilmiş komut geç gelen sonuçla ezilemez.** Cihaz silindiğinde
+  komutlar `cancelled` yapılıyor; geç gelen bir sonuç bu kaydı `ok` yapıp iptal
+  gerekçesini siliyordu.
+
+### Güvenlik
+
+- Teslim onayı ucu (`POST /gateways/{code}/command-delivery-acks`) yeni bir
+  kimlik doğrulama yüzeyi açmaz: mevcut `X-Gateway-Token` ile doğrulanır,
+  komutun gerçekten o gateway'e ait olduğu kontrol edilir ve teslim jetonu
+  sabit-zamanlı karşılaştırılır. Jeton hiçbir log satırına yazılmaz.
+
+### Notlar
+
+- **Fiziksel komut tekrarı yoktur.** Backend→gateway *teslimi* yeniden
+  denenebilir; gateway→cihaz *çalıştırması* asla otomatik yeniden denenmez.
+  Teslimi yeniden denemek güvenlidir çünkü gateway defteri aynı komut kimliği
+  için ikinci bir DNP3 komutunu imkânsız kılar.
+- Migration **0069** (`device_commands` teslim kolonları). Mevcut satırlar
+  değişmez; veri dönüşümü yoktur.
+- Yeni ayarlar: `COMMAND_DELIVERY_LEASE_SEC` (30), `COMMAND_DELIVERY_MAX_ATTEMPTS`
+  (5), `COMMAND_DELIVERY_ACK_REQUIRED` (true), `COMMAND_RESULT_TIMEOUT_SEC`
+  (300), `COMMAND_RESULT_SWEEP_INTERVAL_SEC` (60).
+- **Gateway v1.9.0 gereklidir** F3C protokolü için. Geçiş sırasında
+  `COMMAND_DELIVERY_ACK_REQUIRED=false` ile eski davranış sürdürülebilir; bu
+  durum görünür uyarı üretir.
+- Doğrulama: 2445 birim + 31 gerçek PostgreSQL 16/TimescaleDB entegrasyon
+  testi; çapraz-repo kabul koşumunda gerçek backend + gerçek gateway süreciyle
+  19/19 senaryo geçti.
+
+---
+
 ## [2.96.0] — 2026-08-14
 
 ### Eklendi
