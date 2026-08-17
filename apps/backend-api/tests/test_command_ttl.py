@@ -121,7 +121,7 @@ def token_dogrulamasi_baypas(monkeypatch, request):
 @pytest.fixture(autouse=True)
 def imza_baypas(monkeypatch):
     """HMAC imzali yanit yerine duz sozluk don — test icerigi okuyabilsin."""
-    def _duz(gateway, model, extra_headers=None):  # noqa: ANN001
+    def _duz(gateway, model, extra_headers=None, **_):  # noqa: ANN001
         return model
 
     monkeypatch.setattr(gw_api, "_signed_json_response", _duz)

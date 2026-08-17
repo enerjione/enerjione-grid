@@ -101,7 +101,7 @@ def baypaslar(monkeypatch):
     # F3B'nin es zamanlilik sozlesmesi olculemezdi. Yeni protokolun es
     # zamanlilik iddialari `test_command_delivery_pg.py` icinde.
     monkeypatch.setattr(settings, "command_delivery_ack_required", False, raising=False)
-    monkeypatch.setattr(gw_api, "_signed_json_response", lambda g, m, extra_headers=None: m)
+    monkeypatch.setattr(gw_api, "_signed_json_response", lambda g, m, extra_headers=None, **_: m)
 
     def _sahte(db_, kod, token):
         return db_.scalars(select(Gateway).where(Gateway.code == kod)).first()

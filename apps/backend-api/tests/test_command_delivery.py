@@ -124,7 +124,7 @@ def token_dogrulamasi_baypas(monkeypatch, request):
 @pytest.fixture(autouse=True)
 def imza_baypas(monkeypatch):
     monkeypatch.setattr(
-        gw_api, "_signed_json_response", lambda g, m, extra_headers=None: m
+        gw_api, "_signed_json_response", lambda g, m, extra_headers=None, **_: m
     )
 
 
