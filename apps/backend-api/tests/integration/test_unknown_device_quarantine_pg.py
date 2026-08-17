@@ -358,8 +358,11 @@ def test_C09_es_zamanli_kapasite_baskisi_FAZLADAN_silmez(pg, monkeypatch):
                     payload_json="{}",
                 )
                 bariyer.wait()
-                quarantine.quarantine_batch(db, [kayit])
+                sonuc = quarantine.quarantine_batch(db, [kayit])
                 db.commit()
+                # METRIK SOZLESMESI: sayaclar commit BASARILI olduktan sonra
+                # cagiran tarafindan uygulanir (bkz. QuarantineOutcome).
+                sonuc.apply_metrics()
             finally:
                 db.close()
         except Exception as exc:  # noqa: BLE001

@@ -1048,6 +1048,7 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
         satirlar: list[_Satir] = []
         # Bilinmeyen cihaz dali — bilinen cihaz HIZLI YOLU bu listelere hic
         # dokunmaz, ek sorgu/kilit gormez.
+        karantina_sonucu: quarantine.QuarantineOutcome | None = None
         bilinmeyen_kayitlar: list[quarantine.QuarantineEntry] = []
         bilinmeyen_msgs: list = []
         bilinmeyen_bildirim: dict[str, str | None] = {}
@@ -1125,8 +1126,30 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
         # istisna disari cikar, hicbir mesaj ack EDILMEZ ve JetStream
         # yeniden teslim eder.
         if bilinmeyen_kayitlar:
+            # SAVEPOINT SART — yer acma geri sarilabilmeli.
+            #
+            # `ensure_capacity` yer acmak icin ESKI SATIRLARI SILER. Yer yine
+            # de yetmezse `QuarantineCapacityError` firlar; savepoint olmadan
+            # o silmeler asagidaki `db.commit()` ile BILINEN CIHAZ yazimlarina
+            # takilip KALICI olurdu. Sonuc: yeni payload yazilamamis ama eski
+            # payload'lar silinmis — saf veri kaybi.
+            #
+            # Savepoint ile karantina denemesi TEK PARCA halinde geri sarilir;
+            # ayni parti icindeki bilinen cihaz telemetrisi commit edilmeye
+            # devam eder (onu da kaybetmek gereksiz olurdu).
+            #
+            # `flush` savepoint'ten ONCE: bu noktaya kadar biriken cihaz
+            # mutasyonlari (communication_status, last_update_at) savepoint'in
+            # DISINDA kalsin; aksi halde autoflush onlari savepoint icinde
+            # yazar ve geri sarma onlari da gotururdu.
+            db.flush()
             try:
-                quarantine.quarantine_batch(db, bilinmeyen_kayitlar)
+                with db.begin_nested():
+                    karantina_sonucu = quarantine.quarantine_batch(
+                        db, bilinmeyen_kayitlar
+                    )
+                    for _dcode, _gcode in bilinmeyen_bildirim.items():
+                        quarantine.notify(db, _dcode, _gcode)
             except quarantine.QuarantineCapacityError:
                 # YER ACILAMADI — ARTIK OLAGANDISI BIR DURUM.
                 #
@@ -1140,15 +1163,15 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
                 # sessizlestirmek yerine gorunur birakiyoruz. Batch'in BILINEN
                 # cihaz olcumleri etkilenmez ve normal yazilir — kapasite
                 # arizasi saglam telemetriyi de durdurmamali.
+                # Savepoint geri sarildi: yer acma silmeleri de geri geldi.
                 logger.error(
-                    "unknown_device_quarantine_capacity_block mesaj=%d — ack edilmedi "
+                    "unknown_device_quarantine_capacity_block mesaj=%d — ack edilmedi, "
+                    "yer acma geri sarildi "
                     "(UNKNOWN_TELEMETRY_MAX_ROWS yapilandirmasini gozden gecirin)",
                     len(bilinmeyen_msgs),
                 )
             else:
                 ok_msgs.extend(bilinmeyen_msgs)
-                for _dcode, _gcode in bilinmeyen_bildirim.items():
-                    quarantine.notify(db, _dcode, _gcode)
 
         # TOPLU YAZIM: dort tablo tek geciste (COPY + tek-ifade upsert).
         # Bozuk satir partiyi dusurmez — `_satirlari_yaz` ikiye bolerek
@@ -1196,6 +1219,15 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
                 str(exc)[:500],
             )
             return [], bad_msgs + ok_msgs, [], []
+
+        # COMMIT BASARILI — KARANTINA METRIKLERI ANCAK SIMDI ISLENIR.
+        #
+        # Commit'ten once islenselerdi, geri sarilan bir transaction'in
+        # ardindan `data_shed_total > 0` gorunur ve operator HIC OLMAMIS bir
+        # veri kaybini kovalardi. Sayaclar yalnizca KALICILASMIS gercegi
+        # anlatir.
+        if karantina_sonucu is not None:
+            karantina_sonucu.apply_metrics()
     finally:
         db.close()
 

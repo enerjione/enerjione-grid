@@ -18,7 +18,7 @@ import json
 import logging
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -64,7 +64,14 @@ class QuarantineEntry:
 # --------------------------------------------------------------------------
 _stats_lock = threading.Lock()
 _stats: dict[str, int] = {
+    # TUM SAYACLAR COMMIT SONRASI islenir (bkz. QuarantineOutcome.apply_metrics).
+    # Geri sarilan bir transaction'dan sonra `data_shed_total > 0` gormek,
+    # operatoru GERCEKLESMEMIS bir veri kaybinin pesine dusururdu.
+    #
+    # `..._total` YALNIZCA gercekten yeni acilan satiri sayar; ayni mesajin
+    # yeniden teslimi onu ARTIRMAZ, `..._redelivered_total`i artirir.
     "unknown_device_quarantine_total": 0,
+    "unknown_device_quarantine_redelivered_total": 0,
     # SILME UC AYRI ANLAM TASIR — tek sayacta toplanmamalari BILINCLI:
     #   replayed_cleanup : isi bitmis kayit, kayip yok
     #   expired          : cozulmemis ama retention suresini asmis (politika)
@@ -294,6 +301,70 @@ class ReclaimOutcome:
         return self.replayed_cleanup + self.expired_pending + self.data_shed
 
 
+@dataclass
+class QuarantineOutcome:
+    """Bir karantina isleminde STAGE EDILEN sayilar — henuz commit EDILMEMIS.
+
+    METRIK SOZLESMESI: bu sayaclar `apply_metrics()` ile YALNIZCA cagiranin
+    outer commit'i BASARILI olduktan sonra surece islenir. Aksi halde geri
+    sarilan bir transaction'in ardindan `data_shed_total > 0` gorunur ve
+    operator GERCEKLESMEMIS bir veri kaybini kovalar.
+
+    ANLAMLAR:
+      `inserted`    — GERCEKTEN yeni acilan karantina satiri. Ayni mesajin
+                      yeniden teslimi burayi ARTIRMAZ.
+      `redelivered` — mevcut satirin `seen_count`'u artti (yeniden teslim ya
+                      da es zamanli ikinci consumer). Veri yeni DEGIL.
+    """
+
+    inserted: int = 0
+    redelivered: int = 0
+    reclaim: ReclaimOutcome = field(default_factory=ReclaimOutcome)
+
+    def apply_metrics(self) -> None:
+        """Commit BASARILI olduktan SONRA cagrilir. Tekrar cagirmak
+        sayaclari ikilerdi; cagiran bir kez cagirmakla yukumludur."""
+        _stat_arttir("unknown_device_quarantine_total", self.inserted)
+        _stat_arttir("unknown_device_quarantine_redelivered_total", self.redelivered)
+        _stat_arttir(
+            "unknown_device_quarantine_replayed_cleanup_total",
+            self.reclaim.replayed_cleanup,
+        )
+        _stat_arttir(
+            "unknown_device_quarantine_expired_total", self.reclaim.expired_pending
+        )
+        _stat_arttir(
+            "unknown_device_quarantine_data_shed_total", self.reclaim.data_shed
+        )
+
+
+def _mevcut_dedup_anahtarlari(db, entries: list[QuarantineEntry]) -> set[str]:  # noqa: ANN001
+    """Bu partideki dedup anahtarlarindan tabloda ZATEN var olanlar.
+
+    NEDEN SART (kapasite dogrulugu): `ON CONFLICT DO UPDATE` mevcut bir
+    anahtar icin YENI SATIR ACMAZ. Kapasite hesabini parti buyuklugu
+    uzerinden yapmak, tavan doluyken gelen bir TEKRAR mesaji yuzunden
+    bosuna bir satir dusurulmesine yol acardi — yani yeniden teslim, veri
+    kaybi uretirdi. Gereken kapasite yalnizca GERCEKTEN yeni anahtarlardir.
+
+    Tek, indeksli (`uq_unknown_telemetry_consumer_dedup`) toplu sorgu; parti
+    basina bir kez ve YALNIZCA bilinmeyen cihaz dalinda kosar. Bilinen cihaz
+    hizli yolu bunu HIC gormez.
+    """
+    if not entries:
+        return set()
+    consumer = entries[0].consumer_name
+    anahtarlar = [e.dedup_key for e in entries]
+    return set(
+        db.scalars(
+            select(UnknownDeviceTelemetry.dedup_key).where(
+                UnknownDeviceTelemetry.consumer_name == consumer,
+                UnknownDeviceTelemetry.dedup_key.in_(anahtarlar),
+            )
+        ).all()
+    )
+
+
 def _en_eskileri_sil(db, kosul, adet: int) -> int:  # noqa: ANN001
     """`kosul`a uyan EN ESKI `adet` satiri siler. Commit ETMEZ."""
     if adet <= 0:
@@ -315,7 +386,9 @@ def _en_eskileri_sil(db, kosul, adet: int) -> int:  # noqa: ANN001
     return len(idler)
 
 
-def ensure_capacity(db, eklenecek: int) -> ReclaimOutcome:  # noqa: ANN001
+def ensure_capacity(  # noqa: ANN001
+    db, eklenecek: int, *, entries: list[QuarantineEntry] | None = None
+) -> ReclaimOutcome:
     """Tavan doluysa KONTROLLU yer acar. Cagiranin transaction'inda calisir.
 
     NEDEN "ACK ETME, REDELIVERY BEKLE" TERK EDILDI
@@ -366,10 +439,22 @@ def ensure_capacity(db, eklenecek: int) -> ReclaimOutcome:  # noqa: ANN001
 
     _reclaim_kilidi(db)
 
-    # Kilidi bekledik; bu arada baska bir worker yer acmis olabilir.
+    # KILIT ALTINDA GERCEK IHTIYACI YENIDEN HESAPLA.
+    #
+    # Kilidi beklerken hem tablo hem parti-ici anahtarlarin durumu degismis
+    # olabilir. Daha onemlisi: `ON CONFLICT DO UPDATE` mevcut bir anahtar
+    # icin YENI SATIR ACMAZ. Tavan doluyken gelen bir TEKRAR mesaji parti
+    # buyuklugu uzerinden sayilirsa bosuna bir satir dusurulur — yani
+    # yeniden teslim VERI KAYBI uretirdi. Kilit altinda yapilan bu kontrol
+    # sayimi kesinlestirir ve ayni transaction'da upsert'e devam edildigi
+    # icin araya baska bir yazici giremez.
+    if entries:
+        mevcut_anahtarlar = _mevcut_dedup_anahtarlari(db, entries)
+        eklenecek = sum(1 for e in entries if e.dedup_key not in mevcut_anahtarlar)
+
     mevcut = _taze_sayim(db)
     out.rows_before = mevcut
-    if mevcut + eklenecek <= tavan:
+    if eklenecek <= 0 or mevcut + eklenecek <= tavan:
         out.rows_after = mevcut
         _sayim_onbellegi_bosalt()
         return out
@@ -411,9 +496,9 @@ def ensure_capacity(db, eklenecek: int) -> ReclaimOutcome:  # noqa: ANN001
     out.rows_after = _taze_sayim(db)
     _sayim_onbellegi_bosalt()
 
-    _stat_arttir("unknown_device_quarantine_replayed_cleanup_total", out.replayed_cleanup)
-    _stat_arttir("unknown_device_quarantine_expired_total", out.expired_pending)
-    _stat_arttir("unknown_device_quarantine_data_shed_total", out.data_shed)
+    # METRIKLER BURADA ISLENMEZ: silmeler henuz COMMIT EDILMEDI. Cagiran,
+    # outer commit basarili olduktan sonra `QuarantineOutcome.apply_metrics()`
+    # ile uygular (bkz. o siniflarin docstring'leri).
 
     if gereken > 0:
         # Silinecek pending kalmadi (tablo replayed-ama-taze kayitlarla dolu).
@@ -435,7 +520,7 @@ def ensure_capacity(db, eklenecek: int) -> ReclaimOutcome:  # noqa: ANN001
 # --------------------------------------------------------------------------
 # Yazim
 # --------------------------------------------------------------------------
-def quarantine_batch(db, entries: list[QuarantineEntry]) -> int:  # noqa: ANN001
+def quarantine_batch(db, entries: list[QuarantineEntry]) -> QuarantineOutcome:  # noqa: ANN001
     """Karantina satirlarini TEK ifadeyle yazar. Hata YUKARI FIRLAR.
 
     Commit YAPILMAZ: cagiranin transaction'ina katilir ki "karantina yazildi
@@ -451,11 +536,25 @@ def quarantine_batch(db, entries: list[QuarantineEntry]) -> int:  # noqa: ANN001
     AYNI transaction'dadir ve ikisi de cagiranin TEK commit'ine baglidir.
     Ayri commit edilselerdi "eski kayitlar silindi, yeni satir yazilamadi,
     mesaj ack edilmedi" durumu olusur ve net sonuc SAF VERI KAYBI olurdu.
-    """
-    if not entries:
-        return 0
 
-    reclaim = ensure_capacity(db, len(_tekillestir(entries)))
+    KAPASITE HESABI PARTI BUYUKLUGU DEGIL, GERCEKTEN YENI ANAHTAR SAYISIDIR:
+    tavan doluyken gelen bir TEKRAR mesaji yeni satir acmaz, dolayisiyla
+    kapasite de gerektirmez. Aksi halde yeniden teslim, bosuna bir satirin
+    dusurulmesine — yani VERI KAYBINA — yol acardi.
+
+    METRIKLER BURADA ISLENMEZ: donen `QuarantineOutcome`, cagiranin outer
+    commit'i BASARILI olduktan sonra `apply_metrics()` ile uygulanir.
+    """
+    tekil = _tekillestir(entries)
+    if not tekil:
+        return QuarantineOutcome()
+
+    # Parti basina TEK indeksli sorgu; yalnizca bilinmeyen cihaz dalinda
+    # kosar. Hem kapasite hesabini hem insert/update ayrimini besler.
+    mevcut_anahtarlar = _mevcut_dedup_anahtarlari(db, tekil)
+    gercekten_yeni = [e for e in tekil if e.dedup_key not in mevcut_anahtarlar]
+
+    reclaim = ensure_capacity(db, len(gercekten_yeni), entries=tekil)
 
     simdi = datetime.now(timezone.utc)
     satirlar = [
@@ -479,17 +578,20 @@ def quarantine_batch(db, entries: list[QuarantineEntry]) -> int:  # noqa: ANN001
             "created_at": simdi,
             "updated_at": simdi,
         }
-        for e in _tekillestir(entries)
+        for e in tekil
     ]
 
     db.execute(_upsert_stmt(db, satirlar))
     _sayim_onbellegi_bosalt()
-    _stat_arttir("unknown_device_quarantine_total", len(satirlar))
     # Olay yazimi upsert'ten SONRA ve AYNI transaction'da: silme geri
     # sarilirsa onu duyuran olay da geri sarilir.
     if reclaim.data_shed:
         _shed_olayi(db, reclaim)
-    return len(satirlar)
+    return QuarantineOutcome(
+        inserted=len(gercekten_yeni),
+        redelivered=len(tekil) - len(gercekten_yeni),
+        reclaim=reclaim,
+    )
 
 
 def _shed_olayi(db, reclaim: "ReclaimOutcome") -> None:  # noqa: ANN001
@@ -676,6 +778,18 @@ def health_snapshot(db) -> dict[str, Any]:  # noqa: ANN001
 # --------------------------------------------------------------------------
 # Retention
 # --------------------------------------------------------------------------
+def apply_purge_metrics(silinen: dict[str, int]) -> None:
+    """`purge()` sonucunu sayaclara isler — COMMIT SONRASI cagrilmalidir.
+
+    Suresi DOLMUS pending = `expired`; kapasite icin suresi dolmadan silinen
+    (`data_shed`) ile ayni sayaca GIRMEZ.
+    """
+    _stat_arttir(
+        "unknown_device_quarantine_replayed_cleanup_total", silinen.get("replayed", 0)
+    )
+    _stat_arttir("unknown_device_quarantine_expired_total", silinen.get("pending", 0))
+
+
 def retention_cutoffs(now: datetime | None = None) -> tuple[datetime | None, datetime | None]:
     """(replayed_kesme, pending_kesme) — politikanin TEK KAYNAGI.
 
@@ -735,12 +849,9 @@ def purge(db, *, now: datetime | None = None) -> dict[str, int]:  # noqa: ANN001
 
     if silinen["replayed"] or silinen["pending"]:
         _sayim_onbellegi_bosalt()
-        _stat_arttir(
-            "unknown_device_quarantine_replayed_cleanup_total", silinen["replayed"]
-        )
-        # Suresi DOLMUS pending = `expired`; kapasite icin suresi dolmadan
-        # silinen (`data_shed`) ile ayni sayaca GIRMEZ.
-        _stat_arttir("unknown_device_quarantine_expired_total", silinen["pending"])
+        # METRIK BURADA ISLENMEZ: bu fonksiyon commit ETMEZ. Cagiran commit
+        # ettikten sonra `apply_purge_metrics(silinen)` cagirmakla yukumludur;
+        # aksi halde geri sarilan bir temizlik silinmis gibi raporlanirdi.
         logger.info(
             "unknown_device_quarantine_purged replayed=%d expired_pending=%d",
             silinen["replayed"],

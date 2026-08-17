@@ -40,9 +40,34 @@ from app.services import unknown_device_replay
 # --------------------------------------------------------------------------
 # Kurulum
 # --------------------------------------------------------------------------
+def _sqlite_savepoint_destegi(engine) -> None:  # noqa: ANN001
+    """pysqlite'i SAVEPOINT'lerin GERCEKTEN calisacagi moda alir.
+
+    NEDEN SART: pysqlite surucusu kendi ortuluk transaction yonetimini yapar
+    ve SAVEPOINT/nested transaction ile DOGRU CALISMAZ — `RELEASE SAVEPOINT`
+    fiilen commit gibi davranir. Bu, karantina yolunun savepoint izolasyonunu
+    (yer acma geri sarilmali) SQLite uzerinde SESSIZCE test edilemez hale
+    getirirdi: geri sarilmasi gereken satir kalici gorunurdu.
+
+    SQLAlchemy'nin belgeledigi cozum: sürücünün ortulu BEGIN'ini kapat ve
+    BEGIN'i kendimiz yay. Uretim PostgreSQL; bu yalnizca birim testlerinin
+    uretimle AYNI transaction semantigini gormesi icin.
+    """
+    from sqlalchemy import event
+
+    @event.listens_for(engine, "connect")
+    def _baglanti(dbapi_connection, connection_record):  # noqa: ANN001, ARG001
+        dbapi_connection.isolation_level = None
+
+    @event.listens_for(engine, "begin")
+    def _begin(conn):  # noqa: ANN001
+        conn.exec_driver_sql("BEGIN")
+
+
 @pytest.fixture()
 def Session(monkeypatch):  # noqa: N802
     engine = create_engine("sqlite://", future=True)
+    _sqlite_savepoint_destegi(engine)
     Base.metadata.create_all(engine)
     maker = sessionmaker(bind=engine, future=True, expire_on_commit=False)
     monkeypatch.setattr(telemetry_consumer, "SessionLocal", maker)
@@ -416,6 +441,244 @@ def test_parti_tavandan_BUYUKSE_yapilandirma_hatasi(Session, monkeypatch):  # no
 
 
 # --------------------------------------------------------------------------
+# D01-D03 — TAVANDA TEKRAR MESAJI VERI DUSURMEMELI
+#
+# `ON CONFLICT DO UPDATE` mevcut bir dedup anahtari icin YENI SATIR ACMAZ.
+# Kapasite hesabi parti buyuklugu uzerinden yapilirsa, tavan doluyken gelen
+# bir YENIDEN TESLIM bosuna bir satirin dusurulmesine yol acar — yani
+# broker'in tekrari VERI KAYBI uretir. Hesap yalnizca GERCEKTEN yeni
+# anahtarlari saymali.
+# --------------------------------------------------------------------------
+def test_D01_tavanda_TEKRAR_mesaji_hicbir_seyi_dusurmez(Session, monkeypatch):  # noqa: N803
+    _tavan(monkeypatch, 3)
+    ilk = _payload(message_id="dup-1")
+    telemetry_consumer._persist_batch([FakeMsg(ilk, seq=501)])
+    _pending_ekle(Session, 2, yas_gun=0, onek="dolgu")
+    assert _karantina_sayisi(Session) == 3, "tavan dolu"
+    quarantine.reset_stats_for_test()
+
+    ok, bad, _w, _o = telemetry_consumer._persist_batch([FakeMsg(ilk, seq=501)])
+
+    assert len(ok) == 1 and bad == [], "tekrar mesaji yine ack edilir"
+    assert _karantina_sayisi(Session) == 3, "satir sayisi DEGISMEMELI"
+    s = quarantine.get_stats()
+    assert s["unknown_device_quarantine_data_shed_total"] == 0, "hicbir sey dusurulmedi"
+    assert s["unknown_device_quarantine_expired_total"] == 0
+    assert s["unknown_device_quarantine_replayed_cleanup_total"] == 0
+    assert s["unknown_device_quarantine_total"] == 0, "yeni satir acilmadi"
+    assert s["unknown_device_quarantine_redelivered_total"] == 1
+
+    with Session() as db:
+        satir = db.scalars(
+            select(UnknownDeviceTelemetry).where(
+                UnknownDeviceTelemetry.dedup_key == "dup-1"
+            )
+        ).one()
+        assert satir.seen_count == 2
+
+
+def test_D02_tavanda_2_tekrar_1_yeni_TAM_1_satir_acar(Session, monkeypatch):  # noqa: N803
+    _tavan(monkeypatch, 4)
+    p1 = _payload(message_id="d2-a")
+    p2 = _payload(message_id="d2-b", device_code="DEV-B")
+    telemetry_consumer._persist_batch([FakeMsg(p1, seq=511), FakeMsg(p2, seq=512)])
+    _pending_ekle(Session, 2, yas_gun=0, onek="d2dolgu")
+    assert _karantina_sayisi(Session) == 4
+    quarantine.reset_stats_for_test()
+
+    yeni = _payload(message_id="d2-yeni", device_code="DEV-C")
+    ok, _bad, _w, _o = telemetry_consumer._persist_batch([
+        FakeMsg(p1, seq=511), FakeMsg(p2, seq=512), FakeMsg(yeni, seq=513),
+    ])
+
+    assert len(ok) == 3
+    assert _karantina_sayisi(Session) == 4, "tavan korundu"
+    s = quarantine.get_stats()
+    assert s["unknown_device_quarantine_data_shed_total"] == 1, "TAM 1 satir yer acildi"
+    assert s["unknown_device_quarantine_total"] == 1, "TAM 1 yeni satir"
+    assert s["unknown_device_quarantine_redelivered_total"] == 2
+
+    with Session() as db:
+        anahtarlar = set(db.scalars(select(UnknownDeviceTelemetry.dedup_key)).all())
+        assert "d2-yeni" in anahtarlar
+        assert {"d2-a", "d2-b"} <= anahtarlar, "tekrarlar dusurulmedi"
+        for k in ("d2-a", "d2-b"):
+            satir = db.scalars(
+                select(UnknownDeviceTelemetry).where(
+                    UnknownDeviceTelemetry.dedup_key == k
+                )
+            ).one()
+            assert satir.seen_count == 2
+
+
+def test_D03_tavanda_tekrarli_teslim_satir_sayisini_ASLA_dusurmez(Session, monkeypatch):  # noqa: N803
+    _tavan(monkeypatch, 3)
+    p = _payload(message_id="d3")
+    telemetry_consumer._persist_batch([FakeMsg(p, seq=521)])
+    _pending_ekle(Session, 2, yas_gun=0, onek="d3dolgu")
+    assert _karantina_sayisi(Session) == 3
+
+    for _ in range(5):
+        telemetry_consumer._persist_batch([FakeMsg(p, seq=521)])
+        assert _karantina_sayisi(Session) == 3, "her yeniden teslimde sayi sabit"
+
+    assert quarantine.get_stats()["unknown_device_quarantine_data_shed_total"] == 0
+
+
+# --------------------------------------------------------------------------
+# D04-D05 — BASARISIZ RECLAIM GERI SARILMALI
+#
+# Yer acma icin satir silinip yeni satir YAZILAMAZSA, silmeler kalici
+# OLMAMALI. Aksi halde net sonuc saf veri kaybidir. Ama ayni partideki
+# BILINEN cihaz telemetrisi gereksiz yere kaybedilmemeli.
+# --------------------------------------------------------------------------
+def test_D04_yer_acilamazsa_silmeler_geri_gelir_bilinen_telemetri_COMMIT_edilir(  # noqa: N803
+    Session, monkeypatch
+):
+    with Session() as db:
+        _cihaz(db, code="DEV-VAR")
+    # Tavan 2; tablo suresi dolmus 1 replayed + 1 taze pending.
+    _tavan(monkeypatch, 2)
+    simdi = datetime.now(timezone.utc)
+    with Session() as db:
+        _satir_ekle(db, status=quarantine.STATUS_REPLAYED, key="eski-replayed",
+                    first_seen=simdi - timedelta(days=40),
+                    replayed_at=simdi - timedelta(days=40))
+        _satir_ekle(db, status=quarantine.STATUS_PENDING, key="taze-pending",
+                    first_seen=simdi)
+        db.commit()
+    quarantine._sayim_onbellegi_bosalt()
+
+    # Yer acma sonrasi upsert'i patlat -> savepoint geri sarilmali.
+    def upsert_patlat(*_a, **_k):
+        raise quarantine.QuarantineCapacityError("yer acilamadi (sahte)")
+
+    monkeypatch.setattr(quarantine, "_upsert_stmt", upsert_patlat)
+
+    bilinen = FakeMsg(_payload(message_id="d4-k", device_code="DEV-VAR"), seq=531)
+    bilinmeyen = FakeMsg(_payload(message_id="d4-u"), seq=532)
+    yazilan: list = []
+    monkeypatch.setattr(
+        telemetry_consumer, "_satirlari_yaz",
+        lambda db, satirlar, ts: (yazilan.extend(satirlar) or satirlar, []),
+    )
+
+    ok, bad, _w, _o = telemetry_consumer._persist_batch([bilinen, bilinmeyen])
+
+    assert bilinen in ok, "ayni partideki BILINEN telemetri commit edilmeli"
+    assert bilinmeyen not in ok, "bilinmeyen mesaj ack EDILMEMELI"
+    assert bad == []
+
+    with Session() as db:
+        anahtarlar = set(db.scalars(select(UnknownDeviceTelemetry.dedup_key)).all())
+    assert anahtarlar == {"eski-replayed", "taze-pending"}, (
+        "yer acmak icin silinen satirlar GERI GELMELI"
+    )
+    assert "d4-u" not in anahtarlar, "bilinmeyen satir yazilmadi"
+    assert yazilan, "bilinen cihaz satirlari yazim yoluna girdi"
+
+
+def test_D05_reclaim_sonrasi_insert_istisnasi_hersey_geri_sarilir(Session, monkeypatch):  # noqa: N803
+    """Kapasite disi bir hata (DB arizasi) da ayni izolasyona tabi."""
+    _tavan(monkeypatch, 2)
+    _pending_ekle(Session, 2, yas_gun=0, onek="d5")
+    quarantine.reset_stats_for_test()
+
+    def upsert_patlat(*_a, **_k):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(quarantine, "_upsert_stmt", upsert_patlat)
+
+    with pytest.raises(RuntimeError):
+        telemetry_consumer._persist_batch([FakeMsg(_payload(message_id="d5-u"), seq=541)])
+
+    with Session() as db:
+        anahtarlar = set(db.scalars(select(UnknownDeviceTelemetry.dedup_key)).all())
+    assert anahtarlar == {"d5-0", "d5-1"}, "silinen satirlar geri gelmeli"
+    s = quarantine.get_stats()
+    assert s["unknown_device_quarantine_data_shed_total"] == 0
+    assert s["unknown_device_quarantine_total"] == 0
+
+
+# --------------------------------------------------------------------------
+# D06-D09 — METRIKLER COMMIT EDILMIS GERCEGI ANLATMALI
+# --------------------------------------------------------------------------
+def _commit_patlat(monkeypatch):
+    class Patlayan(Exception):
+        pass
+
+    monkeypatch.setattr(
+        telemetry_consumer.SessionLocal.class_, "commit",
+        lambda self: (_ for _ in ()).throw(Patlayan()), raising=False,
+    )
+    return Patlayan
+
+
+def test_D06_commit_dusunce_data_shed_metrigi_ARTMAZ(Session, monkeypatch):  # noqa: N803
+    _tavan(monkeypatch, 2)
+    _pending_ekle(Session, 2, yas_gun=0, onek="d6")
+    quarantine.reset_stats_for_test()
+    Patlayan = _commit_patlat(monkeypatch)
+
+    with pytest.raises(Patlayan):
+        telemetry_consumer._persist_batch([FakeMsg(_payload(message_id="d6-u"), seq=551)])
+    monkeypatch.undo()
+
+    assert _karantina_sayisi(Session) == 2, "DB satirlari geri geldi"
+    assert quarantine.get_stats()["unknown_device_quarantine_data_shed_total"] == 0
+
+
+def test_D07_commit_dusunce_expired_metrigi_ARTMAZ(Session, monkeypatch):  # noqa: N803
+    _tavan(monkeypatch, 2)
+    _pending_ekle(Session, 2, yas_gun=40, onek="d7")  # suresi dolmus
+    quarantine.reset_stats_for_test()
+    Patlayan = _commit_patlat(monkeypatch)
+
+    with pytest.raises(Patlayan):
+        telemetry_consumer._persist_batch([FakeMsg(_payload(message_id="d7-u"), seq=561)])
+    monkeypatch.undo()
+
+    assert _karantina_sayisi(Session) == 2
+    assert quarantine.get_stats()["unknown_device_quarantine_expired_total"] == 0
+
+
+def test_D08_commit_dusunce_quarantine_total_ARTMAZ(Session, monkeypatch):  # noqa: N803
+    _tavan(monkeypatch, 100)
+    quarantine.reset_stats_for_test()
+    Patlayan = _commit_patlat(monkeypatch)
+
+    with pytest.raises(Patlayan):
+        telemetry_consumer._persist_batch([FakeMsg(_payload(message_id="d8-u"), seq=571)])
+    monkeypatch.undo()
+
+    assert _karantina_sayisi(Session) == 0
+    assert quarantine.get_stats()["unknown_device_quarantine_total"] == 0
+
+
+def test_D09_basarili_commit_metrikleri_TAM_BIR_KEZ_artirir(Session, monkeypatch):  # noqa: N803
+    _tavan(monkeypatch, 2)
+    _pending_ekle(Session, 2, yas_gun=0, onek="d9")
+    quarantine.reset_stats_for_test()
+
+    ok, _bad, _w, _o = telemetry_consumer._persist_batch(
+        [FakeMsg(_payload(message_id="d9-u"), seq=581)]
+    )
+    assert len(ok) == 1
+
+    s = quarantine.get_stats()
+    assert s["unknown_device_quarantine_total"] == 1
+    assert s["unknown_device_quarantine_data_shed_total"] == 1
+    assert s["unknown_device_quarantine_redelivered_total"] == 0
+
+    # Ayni mesajin yeniden teslimi YENI VERI degildir: `_total` artmaz.
+    telemetry_consumer._persist_batch([FakeMsg(_payload(message_id="d9-u"), seq=581)])
+    s2 = quarantine.get_stats()
+    assert s2["unknown_device_quarantine_total"] == 1, "tekrar yeni satir saymamali"
+    assert s2["unknown_device_quarantine_redelivered_total"] == 1
+    assert s2["unknown_device_quarantine_data_shed_total"] == 1, "tekrar dusurme yok"
+
+
+# --------------------------------------------------------------------------
 # T05 / T06 — idempotency ve yaris
 # --------------------------------------------------------------------------
 def test_T05_ayni_mesaj_yeniden_teslimde_TEK_satir(Session):  # noqa: N803
@@ -715,9 +978,21 @@ def test_ack_sozlesmesi_kaynakta_korunuyor():
     import inspect
 
     kaynak = inspect.getsource(telemetry_consumer._persist_batch)
-    idx_try = kaynak.index("quarantine.quarantine_batch(db, bilinmeyen_kayitlar)")
+    idx_try = kaynak.index("quarantine.quarantine_batch(")
     idx_extend = kaynak.index("ok_msgs.extend(bilinmeyen_msgs)")
     assert idx_try < idx_extend, "ack listesi persist'ten ONCE doldurulamaz"
     assert "else:" in kaynak[idx_try:idx_extend], (
         "extend, basarili yazimin `else` dalinda olmali"
+    )
+    # Yer acma geri sarilabilmeli: karantina denemesi savepoint icinde olmali.
+    assert "begin_nested()" in kaynak[:idx_try], (
+        "karantina denemesi SAVEPOINT icinde olmali — aksi halde basarisiz bir "
+        "kapasite denemesinin sildigi satirlar outer commit ile KALICI olur"
+    )
+    # Metrikler commit'ten SONRA islenmeli.
+    idx_commit = kaynak.index("db.commit()")
+    idx_metrik = kaynak.index("karantina_sonucu.apply_metrics()")
+    assert idx_commit < idx_metrik, (
+        "metrikler commit'ten ONCE islenemez — geri sarilan bir transaction "
+        "gerceklesmemis veri kaybi raporlardi"
     )

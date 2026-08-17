@@ -193,7 +193,6 @@ def replay(  # noqa: ANN001
             kayit.last_replay_error = str(exc)[:500]
             kayit.updated_at = simdi
             sonuc._hata("replay_error")
-            quarantine._stat_arttir("unknown_device_replay_failed_total")
             logger.warning(
                 "unknown_device_replay_failed id=%s device=%s error=%s",
                 kayit.id,
@@ -204,13 +203,18 @@ def replay(  # noqa: ANN001
 
         _replayed_isaretle(kayit, simdi)
         sonuc.replayed += 1
-        quarantine._stat_arttir("unknown_device_replay_success_total")
 
     # TEK COMMIT: telemetri satirlari ve karantina durumlari birlikte
     # kalicilasir. Crash commit ONCESI olursa ikisi de geri sarilir ve
     # yeniden replay temiz calisir; commit SONRASI olursa ikisi de yazilmis
     # olur. "Telemetri var ama kayit pending" araligi yok.
     db.commit()
+
+    # METRIKLER COMMIT SONRASI — geri sarilan bir replay "basarili" sayilmaz.
+    quarantine._stat_arttir("unknown_device_replay_success_total", sonuc.replayed)
+    quarantine._stat_arttir(
+        "unknown_device_replay_failed_total", sonuc.errors.get("replay_error", 0)
+    )
     quarantine._sayim_onbellegi_bosalt()
     return sonuc
 
