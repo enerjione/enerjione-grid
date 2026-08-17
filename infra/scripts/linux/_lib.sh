@@ -1126,7 +1126,18 @@ e1_backup_dogrula() {
 
   # Arsiv okunabiliyor mu? pg_restore postgres container'inin icinde;
   # istemci/sunucu surumu tanim geregi ayni.
-  if ! docker compose exec -T postgres pg_restore --list /dev/stdin \
+  #
+  # `/dev/stdin` ARGUMAN OLARAK VERILMEZ. pg_restore bir DOSYA argumani
+  # aldiginda arsivde geri-sarma (seek) yapar; `docker compose exec -T`
+  # stdin'i BORU olarak ilettigi icin container icindeki /dev/stdin seek
+  # edilemez ve pg_restore "did not find magic string in file header" der.
+  # Arsiv SAGLAMDIR, okuma bicimi yanlistir. Argumansiz cagride pg_restore
+  # akisi sirayla okur ve boru ile sorunsuz calisir.
+  #
+  # SAHADA OLCULDU (2026-08-17, 2.98.0 -> 2.99.0): kapinin ILK gercek
+  # kosumuydu ve kendi urettigi saglam yedegi dogrulayamadigi icin
+  # guncellemeyi TAMAMEN blokladi.
+  if ! docker compose exec -T postgres pg_restore --list \
          < "$dosya" >/dev/null 2>&1; then
     printf 'arsiv okunamiyor (pg_restore --list basarisiz)'
     return 1
