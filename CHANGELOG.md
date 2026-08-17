@@ -14,6 +14,28 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.99.1] — 2026-08-17
+
+### Düzeltildi
+
+- **Güncelleme öncesi yedek kapısı, kendi ürettiği sağlam yedeği
+  doğrulayamıyordu ve bu yüzden hiçbir güncelleme başlayamıyordu.** Kapı arşivi
+  `pg_restore --list /dev/stdin` ile doğruluyordu; `/dev/stdin` **argüman olarak**
+  verilince pg_restore onu bir dosya sanıp geri-sarma (seek) yapıyor,
+  `docker compose exec -T` stdin'i **boru** olarak ilettiği için seek edilemiyor
+  ve `did not find magic string in file header` hatası veriyordu. Arşiv
+  sağlamdı; **okuma biçimi yanlıştı**.
+
+  Sahada ölçüldü (2.98.0 → 2.99.0): kapının ilk gerçek koşumuydu ve fail-closed
+  olduğu için güncelleme disk ön kontrolünden hemen sonra çıkış 1 ile duruyordu.
+  Aynı arşiv üzerinde kanıt: `--list /dev/stdin` → exit 1, `--list` → exit 0.
+
+  Önceki testler bunu göremezdi: kabuk testi `docker`'ı stub'lıyor, PG
+  entegrasyon testi ise dump'ı **doğrudan** doğruluyordu — kapının kendi çağrı
+  biçimini hiçbiri sürmüyordu. Yeni T26 kontrolü bu biçimi kilitliyor.
+
+---
+
 ## [2.99.0] — 2026-08-17
 
 İki sessiz arıza kapatıldı: boştaki FTP sunucusu her dakika kendini öldürüyordu,
