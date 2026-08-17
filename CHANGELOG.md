@@ -14,6 +14,22 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.100.1] — 2026-08-17
+
+### Düzeltildi
+
+- **Migration `0070` idempotent yapıldı.** Bu kod tabanında iki kurulum yolu
+  aynı migration'ı görüyor: yükseltmede kolon yok ve alembic ekliyor;
+  temiz kurulum/restore yolunda ise `create_all` kolonu **modelden** zaten
+  oluşturuyor ve ardından zincir koşuyor. Korumasız `add_column` ikinci yolda
+  `column "command_delivery_token" already exists` ile düşüyor ve **restore
+  tamamlanamıyordu**. Gerçek v2.93 yedeğiyle çalışan CI entegrasyon testi
+  yakaladı.
+
+> `2.100.0` tag'i bu nedenle imaj üretmedi; kullanılacak sürüm **2.100.1**.
+
+---
+
 ## [2.100.0] — 2026-08-17
 
 ### Güvenlik
