@@ -612,3 +612,34 @@ jobs:
             echo "::error::VERSION semver degil: ${v_file}"
             exit 1
           fi
+
+  gateway-contract:
+    name: Gateway deployment sozlesmesi — cross-repo parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Vendor edilen sozlesme gateway repo ile AYNI mi
+        run: |
+          set -euo pipefail
+          VENDOR=infra/gateway-contract/v1.11.0.json
+          RAW=https://raw.githubusercontent.com/enerjione/enerjione-grid-dnp3-gateway/main
+          # Runtime'da internet ISTENMEZ; bu YALNIZCA CI kontrolu.
+          curl -fsSL -o /tmp/upstream.json "$RAW/docker/gateway-deployment-contract.json"
+          curl -fsSL -o /tmp/upstream.version "$RAW/VERSION"
+          A="$(sha256sum "$VENDOR" | cut -d" " -f1)"
+          B="$(sha256sum /tmp/upstream.json | cut -d" " -f1)"
+          echo "vendor  : $A"
+          echo "upstream: $B"
+          if [ "$A" != "$B" ]; then
+            echo "::error::Vendor edilen sozlesme gateway repo'sundakinden FARKLI."
+            diff <(python -m json.tool "$VENDOR") <(python -m json.tool /tmp/upstream.json) || true
+            exit 1
+          fi
+          BEKLENEN="$(python -c "import json;print(json.load(open('$VENDOR'))['gateway_release'])")"
+          GERCEK="$(tr -d '[:space:]' < /tmp/upstream.version)"
+          echo "sozlesme: $BEKLENEN   gateway VERSION: $GERCEK"
+          if [ "$BEKLENEN" != "$GERCEK" ]; then
+            echo "::error::Sozlesme $BEKLENEN diyor ama gateway repo $GERCEK yayinda."
+            exit 1
+          fi
+          echo "cross-repo parity OK"
