@@ -80,6 +80,59 @@ def ingest_direct_telemetry(db: Session, readings: list[TelemetryIn]) -> int:
     return accepted
 
 
+#: Gecis uyarisi icin: gateway basina bir kez logla, 1 Hz poll'da bogmasin.
+_f5_legacy_uyarildi: set[str] = set()
+
+
+def validate_gateway_command_delivery_token(
+    gateway: Gateway,
+    x_gateway_command_token: str | None,
+) -> None:
+    """Kuyruklanmis komut duzlemi credential'ini dogrular (F5A).
+
+    Bu, `validate_gateway_token`in YERINE GECMEZ; ONDAN SONRA cagrilir.
+    Komut credential'i tek basina gateway kimligi saymaz — iki dogrulama
+    birlikte gecmelidir (defence-in-depth).
+
+    SOZLESME
+    --------
+      gateway.command_delivery_token NULL  -> GECIS: provision edilmemis
+          gateway eski davranisi surdurur, komut kanali KESILMEZ.
+      gateway.command_delivery_token DOLU  -> STRICT: baslik eksik ya da
+          yanlissa REDDEDILIR. `X-Gateway-Token`a GERI DUSULMEZ.
+
+    Baska bir gateway'in komut token'i burada da tutmaz: karsilastirma
+    yalnizca ILGILI gateway kaydinin kendi sirriyla yapilir.
+    """
+    beklenen = (gateway.command_delivery_token or "").strip()
+    if not beklenen:
+        kod = gateway.code
+        if kod not in _f5_legacy_uyarildi:
+            _f5_legacy_uyarildi.add(kod)
+            logger.warning(
+                "gateway_command_plane_legacy gateway=%s — komut duzlemi icin ayri "
+                "credential provision EDILMEMIS; `X-Gateway-Token` ile calisiliyor. "
+                "Bu GECICI bir durumdur (F5C saha aktivasyonu bekleniyor).",
+                kod,
+            )
+        return
+
+    verilen = (x_gateway_command_token or "").strip()
+    if not verilen or not hmac.compare_digest(
+        verilen.encode("utf-8"), beklenen.encode("utf-8")
+    ):
+        # Sir LOGLANMAZ; yalnizca hangi gateway ve hangi eksiklik.
+        logger.warning(
+            "gateway_command_token_rejected gateway=%s reason=%s",
+            gateway.code,
+            "missing" if not verilen else "mismatch",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid gateway command token",
+        )
+
+
 def validate_gateway_token(
     db: Session,
     gateway_code: str,

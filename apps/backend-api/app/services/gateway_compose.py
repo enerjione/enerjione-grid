@@ -80,7 +80,7 @@ services:
       # Kimlik
       GATEWAY_CODE: "{{GATEWAY_CODE}}"
       GATEWAY_TOKEN: "{{GATEWAY_TOKEN}}"
-      GATEWAY_NAME: "{{GATEWAY_NAME}}"
+{{COMMAND_DELIVERY_TOKEN_BLOCK}}      GATEWAY_NAME: "{{GATEWAY_NAME}}"
       # Ortam
       APP_ENVIRONMENT: "{{APP_ENVIRONMENT}}"
       GATEWAY_MODE: "dnp3"
@@ -158,7 +158,7 @@ _ENV_TEMPLATE = """\
 # Kimlik
 GATEWAY_CODE={{GATEWAY_CODE}}
 GATEWAY_TOKEN={{GATEWAY_TOKEN}}
-GATEWAY_NAME={{GATEWAY_NAME}}
+{{COMMAND_DELIVERY_TOKEN_ENV}}GATEWAY_NAME={{GATEWAY_NAME}}
 
 # Ortam
 APP_ENVIRONMENT={{APP_ENVIRONMENT}}
@@ -202,6 +202,18 @@ SHOW_GATEWAY_TOKEN_ON_START=false
 _CODE_REGEX = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{1,63}$")
 
 
+def generate_command_delivery_token() -> str:
+    """Kuyruklanmis komut duzlemi icin gateway'e OZEL sir uretir (F5A).
+
+    `secrets.token_urlsafe(32)` = 32 bayt CSPRNG entropi. Normal gateway
+    token'i ve legacy `/operate` command_token'i ile AYNI OLMAMALIDIR;
+    cagiran taraf bunu dogrular (bkz. testler).
+    """
+    import secrets
+
+    return secrets.token_urlsafe(32)
+
+
 @dataclass(frozen=True)
 class ComposeRenderInput:
     code: str
@@ -225,6 +237,9 @@ class ComposeRenderInput:
     # KAPALI: acmak saha davranisini degistirir (kotu olcumler alarm
     # degerlendirmesinden bloke olmaya baslar), operator karari olmali.
     publish_dnp3_quality: bool = False
+    #: F5 komut duzlemi sirri. None = provision EDILMEMIS -> env hic
+    #: uretilmez ve gateway v1.11.0 gecis davranisini surdurur.
+    command_delivery_token: str | None = None
 
 
 class ComposeRenderError(ValueError):
@@ -287,6 +302,31 @@ def _insecure_allow_plaintext(backend_url: str) -> str:
     return "false" if backend_url.strip().lower().startswith("https://") else "true"
 
 
+def _command_delivery_block(args: "ComposeRenderInput") -> str:
+    """Compose `environment` blogu icin satir (yoksa BOS).
+
+    Sir provision edilmemisse env HIC uretilmez: gateway v1.11.0 bos degeri
+    "gecis" sayar ve komut uclarini eski gibi calistirir. Bos string
+    yazmak ile satiri hic yazmamak arasinda fark yoktur, ama satiri
+    yazmamak operatore "bu gateway henuz F5 degil" demenin en acik yoludur.
+    """
+    if not args.command_delivery_token:
+        return ""
+    return (
+        '      GATEWAY_COMMAND_DELIVERY_TOKEN: "'
+        + args.command_delivery_token
+        + '"'
+        + chr(10)
+    )
+
+
+def _command_delivery_env(args: "ComposeRenderInput") -> str:
+    """`.env` ciktisi icin ayni satir."""
+    if not args.command_delivery_token:
+        return ""
+    return "GATEWAY_COMMAND_DELIVERY_TOKEN=" + args.command_delivery_token + chr(10)
+
+
 def _replacements(args: ComposeRenderInput) -> dict[str, str]:
     return {
         "GATEWAY_CODE": args.code,
@@ -301,6 +341,8 @@ def _replacements(args: ComposeRenderInput) -> dict[str, str]:
         "APP_ENVIRONMENT": args.app_environment,
         "INITIATING_PORTS_BLOCK": _build_initiating_ports_block(args),
         "PUBLISH_DNP3_QUALITY": "true" if args.publish_dnp3_quality else "false",
+        "COMMAND_DELIVERY_TOKEN_BLOCK": _command_delivery_block(args),
+        "COMMAND_DELIVERY_TOKEN_ENV": _command_delivery_env(args),
     }
 
 
