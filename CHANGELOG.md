@@ -14,6 +14,56 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.99.0] — 2026-08-17
+
+İki sessiz arıza kapatıldı: boştaki FTP sunucusu her dakika kendini öldürüyordu,
+gateway kurulumu ise üç ayrı yerden birbirinden habersiz üretiliyordu.
+
+### Düzeltildi
+
+- **FTP sunucusu boşta her 60 saniyede bir yeniden başlıyordu.** Bekçi haklıydı,
+  atış gerçekten gelmiyordu — ama sunucu da sağlıklıydı, yalnızca **boştu**.
+  `serve_forever()` zaman aşımı verilmeden çağrılıyordu; pyftpdlib bu durumda
+  ilk yinelemede `poll(None)` yapıp **bir soket olayı gelene kadar süresiz
+  blokluyor**, zamanlayıcı ise o satırın ardından geldiği için zamanlanmış kalp
+  atışı hiç çalışmıyordu.
+
+  Arıza kendini saklıyordu: ilk istemci bağlanır bağlanmaz döngü kalıcı olarak
+  düzeliyordu. Sahada ölçüldü — tek bir TCP bağlantısı 61 saniyelik restart
+  döngüsünü anında ve kalıcı olarak durdurdu (RestartCount 29).
+
+  Düzeltme `serve_forever(timeout=IOLOOP_POLL_TIMEOUT_SN)`. Bu değer
+  **istemci/oturum zaman aşımı değildir** (`FTPHandler.timeout` 300 olarak
+  kaldı); yalnızca olay döngüsünün uyanma aralığıdır. Boştaki CPU %0.01.
+
+### Güvenlik
+
+- **Gateway kurulumu artık tek makine-okunur sözleşmeden üretiliyor.**
+  İndirilebilir `.env` çıktısı `DNP3_LIBRARY=dnp3py` üretiyordu ve bu uç
+  üretimden erişilebilir (`GET /gateways/{kod}/docker-compose?format=env`).
+  Operatör farkında olmadan Group 110 desteklemeyen, OpenDNP3 outstation'larıyla
+  tutarsız davranan **legacy adapter'ı** kurabiliyordu.
+
+### Değişti
+
+- Üç üretim yolu (uzak compose, indirilebilir `.env`, yerel `e1-gwd`) tek
+  sözleşmeye bağlandı. Kapatılan kaymalar: `CONFIG_REFRESH_SEC` compose'da hiç
+  yokken `.env`'de 30'du; `TELEMETRY_PUBLISHER` hiçbir yerde explicit değildi;
+  yadnp3'ün **yok saydığı** `DNP3_RESPONSE_TIMEOUT_SEC`/`DNP3_READ_STRATEGY`
+  üretiliyordu; `stop_grace_period` yoktu (in-flight CROB sonucu deftere
+  yazılamadan SIGKILL riski).
+
+  Sözleşmenin sahibi gateway repo'sudur; Grid tam kopyasını vendor eder
+  (`infra/gateway-contract/v1.11.0.json`) ve CI karşılaştırır. **Runtime'da iki
+  repo birbirine bağlanmaz** — on-prem/offline davranış korunur.
+
+  Önceki test yalnızca Grid'in iki çıktısını *birbiriyle* karşılaştırıyordu; iki
+  yanlış şablon birbirine eşit olabilir ve nitekim öyleydi.
+
+Migration yok (head `0069`). Canlı gateway'ler bu sürümde değiştirilmedi.
+
+---
+
 ## [2.98.0] — 2026-08-17
 
 İki **fail-open** davranış kapatıldı: güncelleme artık doğrulanmış bir yedek
