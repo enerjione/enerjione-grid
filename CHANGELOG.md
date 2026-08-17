@@ -14,6 +14,34 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.100.0] — 2026-08-17
+
+### Güvenlik
+
+- **Kuyruklanmış komut düzlemi artık ayrı bir credential ile korunuyor (F5A).**
+  `/config` ile `/pending` aynı `GATEWAY_TOKEN` ile korunuyordu; o token
+  sızarsa yalnızca konfigürasyon değil **fiziksel komut düzlemi** de ele
+  geçerdi — saldırgan komut kuyruğunu okuyabilir, dahası aynı anahtarla
+  **sahte bir `/pending` yanıtı imzalayabilirdi**.
+
+  Ayrım iki katmanlı ve ikisi de gerekli:
+  1. **İstek kimliği** — `X-Gateway-Command-Token`. Normal kimliğin *yerine
+     geçmez*; iki doğrulama birlikte geçmelidir.
+  2. **Yanıt imzası** — `/pending` HMAC anahtarı artık komut sırrı.
+     Yalnızca (1) yapılsaydı ayrım kâğıt üzerinde kalırdı.
+
+  **Geçiş:** `command_delivery_token` NULL olan gateway eski davranışı
+  sürdürür (komut kanalı kesilmez, ama sessiz değil — uyarı loglanır). Sır
+  provision edilen gateway strict moda geçer: eksik/yanlış başlık **reddedilir**
+  ve normal token'a **geri düşülmez**.
+
+  Legacy `/operate` credential'ı (`command_token`) **yeniden kullanılmadı** ve
+  `/operate` yolu canlandırılmadı.
+
+Migration `0070` (nullable). F1/F2/F3/P1/F3C/F4 semantiği değişmedi.
+
+---
+
 ## [2.99.1] — 2026-08-17
 
 ### Düzeltildi
