@@ -14,6 +14,66 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.98.0] — 2026-08-17
+
+İki **fail-open** davranış kapatıldı: güncelleme artık doğrulanmış bir yedek
+olmadan başlamıyor, backend imzalanamayan bir yanıtı imzasız göndermiyor.
+
+### Güvenlik
+
+- **Güncelleme öncesi yedek artık ZORUNLU.** Yedek adımı üç ayrı yolda
+  başarısız olabiliyor ve güncelleme **yine de devam ediyordu**:
+
+  ```
+  diskte 2048 MB'tan az yer  ->  "yedek ATLANDI",              güncelleme devam
+  pg_dump başarısız          ->  "update yine de devam ediyor"
+  Postgres ayakta değil      ->  "yedek atlandı",              güncelleme devam
+  ```
+
+  Üstelik üretilen dosya **hiç doğrulanmıyordu**: `pg_dump` çıkış kodu 0 ise
+  yeterli sayılıyordu; boş ya da kırpılmış bir arşiv "yedek" diye
+  raporlanabiliyordu. Sonuç: veri taşıyan bir saha cihazı, elinde geri
+  dönülebilir **hiçbir nokta olmadan** migration'a girebiliyordu.
+
+  Yeni sözleşme: **yedek alındı ve doğrulandı → güncelleme başlar; başka her
+  durumda başlamaz** (çıkış kodu `42`). Kapı, üretim durumunu değiştiren ilk
+  işlemden **önce** çalışır — kapı kapandığında kurulum değişmemiştir.
+
+- **Yanıt imzası üretilemezse imzasız 200 dönülmüyor.** `/gateways/{kod}/config`
+  ve `/pending` uçlarında imza hesabındaki hata yakalanıp **loglanıyor**, gövde
+  ise `X-Config-Signature` başlığı olmadan 200 ile gönderiliyordu. Gateway
+  tarafındaki doğrulama "başlık varsa doğrula" biçiminde olduğu için iki uç
+  sessizce authenticity'siz çalışabiliyordu — üstelik bu uçlar cihaz kataloğunu
+  ve **fiziksel komut** niyetini taşıyor. Artık tek sonuç var: geçerli imzalı
+  200 ya da 5xx. Tel sözleşmesi (HMAC-SHA256, `gateway.token`, başlık adı)
+  **değişmedi**; gateway v1.9.0 aynı biçimi doğrulamaya devam ediyor.
+
+### Eklendi
+
+- **Yedek doğrulaması ve disk ön kontrolü.** Arşiv artık `.backup.tmp.$$` adına
+  yazılır, `pg_restore --list` ile okunabilirliği doğrulanınca nihai adına
+  atomik olarak taşınır — yarıda kesilen bir dump artık "hazır yedek" görünümlü
+  dosya bırakmıyor. Disk eşiği sabit 2048 MB değil; `pg_database_size` eksi
+  yedek dışı tablolar + rezerv olarak hesaplanır (küçük kurulumda gereksiz
+  engeldi, büyük kurulumda **yetersizdi**). SHA256 ve yapısal log satırları
+  (`pre_update_backup_started|succeeded|failed|validation_failed`) eklendi.
+
+- **Eşzamanlı güncelleme kilidi.** `update.sh` için kilit **yoktu**; iki kopya
+  aynı `backups/` dizinine yazıp aynı çalışma ağacında checkout yapabiliyordu.
+
+### Değişti
+
+- Veri taşıyan kurulum tespiti üç duruma ayrıldı: Postgres **ayakta** → yedek
+  zorunlu; Postgres **kapalı ama veri hacmi var** → yedek alınamaz, **dur**;
+  veri **hiç yok** (ilk kurulum) → yedek gerekmez. Ortadaki durumu "Postgres
+  kapalı" diye atlamak, dolu bir veritabanıyla migration'a girmek demekti.
+
+Arşiv formatı (`-F c --no-owner --no-acl`), `--exclude-table-data` listesi,
+rotasyon (3 kopya) ve dump'ın postgres container'ı içinden alınması
+**değişmedi**. Migration yok (head `0069`).
+
+---
+
 ## [2.97.0] — 2026-08-15
 
 Komut teslimi artık **garantili**: backend komutu yalnızca kiralar, gateway onu
