@@ -53,7 +53,7 @@ from app.services import gateway_compose as gc
 from app.services.gateway_compose import ComposeRenderInput
 
 KOK = Path(__file__).resolve().parents[3]
-SOZLESME_YOLU = KOK / "infra/gateway-contract/v1.10.0.json"
+SOZLESME_YOLU = KOK / "infra/gateway-contract/v1.11.0.json"
 E1GWD_YOLU = KOK / "infra/appliance/e1-gwd.py"
 
 TOKEN = "t" * 48
