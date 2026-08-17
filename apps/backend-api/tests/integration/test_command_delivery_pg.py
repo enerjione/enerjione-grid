@@ -115,7 +115,7 @@ def baypaslar(monkeypatch):
     monkeypatch.setattr(settings, "command_delivery_max_attempts", 5, raising=False)
     monkeypatch.setattr(settings, "command_delivery_ack_required", True, raising=False)
     monkeypatch.setattr(settings, "command_result_timeout_sec", 300, raising=False)
-    monkeypatch.setattr(gw_api, "_signed_json_response", lambda g, m, extra_headers=None: m)
+    monkeypatch.setattr(gw_api, "_signed_json_response", lambda g, m, extra_headers=None, **_: m)
     teslim._legacy_last_warn.clear()
 
     def _sahte(db_, kod, token):

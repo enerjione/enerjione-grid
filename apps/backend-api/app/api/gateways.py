@@ -76,7 +76,13 @@ def _rmq_admin() -> RabbitMqAdminClient:
 router = APIRouter(prefix="/gateways", tags=["gateways"])
 
 
-def _signed_json_response(gateway, model, extra_headers: dict[str, str] | None = None):
+def _signed_json_response(
+    gateway,
+    model,
+    extra_headers: dict[str, str] | None = None,
+    *,
+    context: str = "",
+):
     """Pydantic model'i DETERMINISTIK byte'larla serialize edip HMAC imzali
     Response doner. Hem config hem pending endpoint kullanir.
 
@@ -85,6 +91,22 @@ def _signed_json_response(gateway, model, extra_headers: dict[str, str] | None =
     ciktisindan farkli byte uretir (separators/ensure_ascii). Bu yuzden manuel
     olarak model_dump_json byte'larini yazip imzayi ondan hesapliyoruz.
     MITM/backend-kompromize koruma: gateway imzasiz/yanlis imzali komutu reddeder.
+
+    FAIL-CLOSED — IMZASIZ 200 URETILMEZ
+    -----------------------------------
+    Eski davranis imza uretimindeki hatayi yakalayip LOGLUYOR, ardindan
+    govdeyi BASLIKSIZ 200 olarak donuyordu. Gateway tarafinda imza
+    dogrulamasi "baslik varsa dogrula" seklinde oldugu icin bu, iki ucun
+    birlikte sessizce authenticity'siz calismasi demekti — ve bu iki uc
+    cihaz katalogunu (F1/F2 yetkilendirme girdisi) ve FIZIKSEL KOMUT
+    niyetini tasiyor. Saha gateway'leri backend'e duz HTTP ile baglaniyor;
+    yani imza bu iki uc icin TEK authenticity kontrolu.
+
+    Artik tek bir sonuc var: gecerli imzali 200 ya da 5xx. Cagiran taraf
+    istisnayi yakalayip imzasiz bir yanita DONMEMELIDIR.
+
+    Hata govdesi disariya jeton/govde/imza sizdirmaz; ic log yalnizca
+    gateway kodu ve cagri baglamini tasir.
     """
     import hashlib as _hashlib
     import hmac as _hmac
@@ -94,12 +116,23 @@ def _signed_json_response(gateway, model, extra_headers: dict[str, str] | None =
     body_bytes = model.model_dump_json().encode("utf-8")
     headers: dict[str, str] = dict(extra_headers or {})
     try:
+        # Imza ONCE hesaplanir, basliga SONRA yazilir: yarim kalmis bir
+        # basligin gonderilme ihtimali kalmasin.
         sig = _hmac.new(
             gateway.token.encode("utf-8"), body_bytes, _hashlib.sha256
         ).hexdigest()
-        headers["X-Config-Signature"] = sig
-    except Exception:  # noqa: BLE001
-        logger.exception("gateway_body_signature_failed gateway=%s", gateway.code)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "gateway_body_signature_failed gateway=%s context=%s — imzasiz yanit "
+            "URETILMEDI, istek fail-closed reddedildi",
+            getattr(gateway, "code", "?"),
+            context or "?",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Gateway response signing failed",
+        ) from exc
+    headers["X-Config-Signature"] = sig
     return _Response(content=body_bytes, media_type="application/json", headers=headers)
 
 
@@ -1506,7 +1539,7 @@ def get_gateway_config(
 
     # Deterministik + HMAC imzali response (ETag gibi mevcut header'lari yansit).
     return _signed_json_response(
-        gateway, config_resp, extra_headers=dict(response.headers)
+        gateway, config_resp, extra_headers=dict(response.headers), context="config"
     )
 
 
@@ -1822,7 +1855,7 @@ def get_gateway_pending(
         heartbeat_interval_sec=settings.gateway_heartbeat_interval_sec,
     )
     db.commit()
-    return _signed_json_response(gateway, resp)
+    return _signed_json_response(gateway, resp, context="pending")
 
 
 @router.post("/{gateway_code}/command-delivery-acks")
