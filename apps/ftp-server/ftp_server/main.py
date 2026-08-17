@@ -36,6 +36,19 @@ log = logging.getLogger("ftp-server")
 BEKCI_ESIK_SN = 60.0
 #: Kalp atis araligi.
 BEKCI_ATIS_SN = 5.0
+#: ioloop'un multiplex cagrisina (select/epoll) verilen zaman asimi.
+#:
+#: `None` OLMAMALI. pyftpdlib `IOLoop.loop()` fonksiyonu timeout'suz
+#: cagrilirsa ILK yinelemede `poll(None)` yapar; bu cagri BIR SOKET OLAYI
+#: GELENE KADAR SURESIZ BLOKLAR ve zamanlayici (`sched_poll`) o satirin
+#: ARDINDAN geldigi icin, hicbir istemci baglanmadikca zamanlanmis kalp
+#: atisi HIC calismaz. Acik zaman asimi verilince `loop()` dogrudan
+#: "poll(timeout) -> sched_poll()" dalina girer ve dongu istemci olmasa
+#: da doner.
+#:
+#: Bu deger ISTEMCI/OTURUM zaman asimi DEGILDIR (onlar FTPHandler.timeout
+#: ve DTPHandler.timeout); yalnizca olay dongusunun uyanma araligidir.
+IOLOOP_POLL_TIMEOUT_SN = 1.0
 
 
 def _make_handler(reporter: EventReporter) -> type[FTPHandler]:
@@ -375,9 +388,13 @@ def main() -> None:
 
     # Kalp atisi ioloop'un KENDISINE zamanlanir: dongu donuyorsa atis gelir,
     # `serve_forever` icinde bir sey kilitlenirse zamanlanmis cagri hic
-    # calismaz ve bekci sureci sonlandirir. ioloop soketleri zaman asimiyla
-    # yokladigi icin hicbir cihaz baglanmasa da doner — yani bu olcum
-    # trafikten bagimsizdir (bkz. watchdog.py).
+    # calismaz ve bekci sureci sonlandirir.
+    #
+    # Olcumun trafikten bagimsiz olmasi `serve_forever`e verilen ACIK
+    # zaman asimina baglidir: timeout'suz cagride bos sunucu ilk `poll`
+    # cagrisinda suresiz bloklanir, atis hic gelmez ve bekci SAGLIKLI
+    # sunucuyu 60 sn'de bir oldururdu (bkz. IOLOOP_POLL_TIMEOUT_SN ve
+    # tests/test_ioloop_bos_dongu.py).
     from pyftpdlib.ioloop import IOLoop
 
     IOLoop.instance().call_every(BEKCI_ATIS_SN, watchdog.kalp_at)
@@ -397,7 +414,7 @@ def main() -> None:
         "FTP sunucusu %s:%s dinliyor (root=%s, pasv=%s-%s).",
         s.listen_host, s.listen_port, s.ftp_root, s.pasv_min_port, s.pasv_max_port,
     )
-    server.serve_forever()
+    server.serve_forever(timeout=IOLOOP_POLL_TIMEOUT_SN)
 
 
 if __name__ == "__main__":
