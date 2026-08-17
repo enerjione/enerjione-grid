@@ -58,6 +58,20 @@ class Gateway(Base):
     # Authorization: Bearer olarak yollar; gateway kendi .env
     # GATEWAY_COMMAND_TOKEN ile eslestirir. Bos ise komut endpoint'i devre disi.
     command_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: KUYRUKLANMIS KOMUT DUZLEMI credential'i (F5). `command_token` ile
+    #: KARISTIRILMAMALI: o, legacy dogrudan `POST /operate` yolina aittir.
+    #:
+    #: Bu sir hem `GET /pending`, `POST /command-delivery-acks` ve
+    #: `POST /command-results` isteklerinin kimligini dogrular hem de
+    #: `/pending` yanit imzasinin HMAC ANAHTARIdir. Ikinci kullanim yuzunden
+    #: geri-donusumsuz hash YETMEZ: backend ham anahtar materyaline ihtiyac
+    #: duyar (ayni gerekce `token` icin de gecerli, imza oradan uretiliyor).
+    #:
+    #: NULL = bu gateway icin F5 provision EDILMEMIS -> gecis davranisi:
+    #: komut uclari eski gibi yalnizca `X-Gateway-Token` ile calisir.
+    #: DOLU = strict: iki credential de zorunlu, `/pending` imzasi YALNIZCA
+    #: bu anahtarla uretilir ve normal token'a GERI DUSULMEZ.
+    command_delivery_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # RabbitMQ icin gateway'e ozel olarak provisionlanmis kullanici/parola.
     # Backend gateway create akisinda RabbitMQ Management API uzerinden

@@ -115,11 +115,30 @@ def _signed_json_response(
 
     body_bytes = model.model_dump_json().encode("utf-8")
     headers: dict[str, str] = dict(extra_headers or {})
+
+    # IMZA ANAHTARI UCA GORE AYRILIR (F5A).
+    #
+    # `/config`  -> normal gateway token (config duzlemi)
+    # `/pending` -> command_delivery_token VARSA YALNIZCA o (komut duzlemi)
+    #
+    # Neden: istek credential'ini ayirip imzayi ayni anahtarda birakmak
+    # yarim onlemdir. `GATEWAY_TOKEN` sizarsa saldirgan sahte bir `/pending`
+    # yaniti IMZALAYABILIRDI. Gateway v1.11.0 da bunu boyle bekliyor:
+    # command token doluysa `/pending` yanitini YALNIZCA onunla dogruluyor.
+    #
+    # GERI DUSME YOK: komut sirri tanimliysa normal token'a fallback
+    # yapilmaz; aksi halde ayrim kagit uzerinde kalirdi.
+    imza_anahtari = gateway.token
+    if context == "pending":
+        cdt = getattr(gateway, "command_delivery_token", None)
+        if cdt:
+            imza_anahtari = cdt
+
     try:
         # Imza ONCE hesaplanir, basliga SONRA yazilir: yarim kalmis bir
         # basligin gonderilme ihtimali kalmasin.
         sig = _hmac.new(
-            gateway.token.encode("utf-8"), body_bytes, _hashlib.sha256
+            imza_anahtari.encode("utf-8"), body_bytes, _hashlib.sha256
         ).hexdigest()
     except Exception as exc:  # noqa: BLE001
         logger.exception(
@@ -1291,7 +1310,10 @@ def get_gateway_config(
     # `allow_inactive=True`: is_active=False ise 403 atma; gateway poll'i
     # askiya almak icin 200 + is_active=False donmek istiyoruz (yorumda
     # belirtilmis: collector enable/disable mantigi).
-    from app.services.ingest_service import validate_gateway_token
+    from app.services.ingest_service import (
+        validate_gateway_command_delivery_token,
+        validate_gateway_token,
+    )
 
     gateway = validate_gateway_token(
         db, gateway_code, x_gateway_token, allow_inactive=True
@@ -1548,6 +1570,9 @@ def get_gateway_pending(
     gateway_code: str,
     db: Session = Depends(get_db),
     x_gateway_token: str | None = Header(default=None, alias="X-Gateway-Token"),
+    x_gateway_command_token: str | None = Header(
+        default=None, alias="X-Gateway-Command-Token"
+    ),
     x_gateway_health: str | None = Header(default=None, alias="X-E1-Gateway-Health"),
     x_e1_delivery: str | None = Header(default=None, alias="X-E1-Delivery"),
 ):
@@ -1576,9 +1601,16 @@ def get_gateway_pending(
 
     Protokol: docs/f3c-command-delivery-protocol.md
     """
-    from app.services.ingest_service import validate_gateway_token
+    from app.services.ingest_service import (
+        validate_gateway_command_delivery_token,
+        validate_gateway_token,
+    )
 
     gateway = validate_gateway_token(db, gateway_code, x_gateway_token)
+    # F5A: komut duzlemi AYRI credential ister. Normal kimligin
+    # YERINE GECMEZ; ikisi de gecmelidir. Gateway kaydinda sir yoksa
+    # gecis davranisi surer (bkz. validator docstring).
+    validate_gateway_command_delivery_token(gateway, x_gateway_command_token)
     yetenek = command_delivery_service.parse_delivery_header(x_e1_delivery)
 
     # TEK `now` — TUM PARTI ICIN.
@@ -1864,6 +1896,9 @@ def report_command_delivery_acks(
     payload: CommandDeliveryAckRequest = Body(...),
     db: Session = Depends(get_db),
     x_gateway_token: str | None = Header(default=None, alias="X-Gateway-Token"),
+    x_gateway_command_token: str | None = Header(
+        default=None, alias="X-Gateway-Command-Token"
+    ),
 ):
     """Gateway'in komutu DAYANIKLI olarak kabul ettigini bildirir (batch, F3C).
 
@@ -1880,9 +1915,16 @@ def report_command_delivery_acks(
 
     Protokol: docs/f3c-command-delivery-protocol.md
     """
-    from app.services.ingest_service import validate_gateway_token
+    from app.services.ingest_service import (
+        validate_gateway_command_delivery_token,
+        validate_gateway_token,
+    )
 
     gateway = validate_gateway_token(db, gateway_code, x_gateway_token)
+    # F5A: komut duzlemi AYRI credential ister. Normal kimligin
+    # YERINE GECMEZ; ikisi de gecmelidir. Gateway kaydinda sir yoksa
+    # gecis davranisi surer (bkz. validator docstring).
+    validate_gateway_command_delivery_token(gateway, x_gateway_command_token)
 
     ackler = payload.acks or []
     if not ackler:
@@ -1912,6 +1954,9 @@ def report_command_results(
     results: list[CommandResultItem] = Body(...),
     db: Session = Depends(get_db),
     x_gateway_token: str | None = Header(default=None, alias="X-Gateway-Token"),
+    x_gateway_command_token: str | None = Header(
+        default=None, alias="X-Gateway-Command-Token"
+    ),
 ):
     """Gateway calistirdigi cihaz komutlarinin sonuclarini bildirir (batch).
 
@@ -1922,9 +1967,16 @@ def report_command_results(
     gateway_code — IDOR koruma) status='ok'|'failed' yapilir. Bilinmeyen/baska
     gateway'e ait id sessizce atlanir (idempotent; tekrar bildirim zararsiz).
     """
-    from app.services.ingest_service import validate_gateway_token
+    from app.services.ingest_service import (
+        validate_gateway_command_delivery_token,
+        validate_gateway_token,
+    )
 
-    validate_gateway_token(db, gateway_code, x_gateway_token)
+    gateway = validate_gateway_token(db, gateway_code, x_gateway_token)
+    # F5A: komut duzlemi AYRI credential ister. Normal kimligin
+    # YERINE GECMEZ; ikisi de gecmelidir. Gateway kaydinda sir yoksa
+    # gecis davranisi surer (bkz. validator docstring).
+    validate_gateway_command_delivery_token(gateway, x_gateway_command_token)
 
     if not results:
         return {"updated": 0}
