@@ -60,6 +60,28 @@ done
 
 cd "$SCRIPT_DIR"
 
+# ---- TEK GUNCELLEME AYNI ANDA -------------------------------------------
+#
+# Betikte kilit YOKTU: iki `update.sh` ayni anda baslatilabiliyordu (operator
+# ikinci bir terminal acar, ya da bir SSH oturumu kopup yeniden denenir).
+# Ikisi ayni `backups/` dizinine yazar, ayni `.env`i sed'ler ve ayni calisma
+# agacinda `git checkout` yapar — sonuc ongorulemez.
+#
+# Kilit yedek kapisindan ONCE alinir: kilit almak uretim durumunu
+# DEGISTIRMEZ, yalnizca girisi tekillestirir.
+#
+# `flock` yoksa (cok dar bir kurulum) guncelleme engellenmez; kilit bir
+# iyilestirmedir, yeni bir zorunluluk degil.
+E1_UPDATE_LOCK="${E1_UPDATE_LOCK:-/var/lock/enerjione-grid-update.lock}"
+if command -v flock >/dev/null 2>&1; then
+  if exec 9>"$E1_UPDATE_LOCK" 2>/dev/null; then
+    if ! flock -n 9; then
+      e1_die "Baska bir guncelleme SU AN calisiyor (kilit: ${E1_UPDATE_LOCK}).\n" \
+             "  Ayni anda iki guncelleme ayni dosyalara yazar; bu kosu BASLATILMADI."
+    fi
+  fi
+fi
+
 # .git sahipligini calisma agaciyla hizala — HEM ONCE HEM SONRA.
 # Bu betik root olarak calisir ve git'i de root olarak cagirir; root her
 # dosyaya yazabildigi icin komutlar hata vermez ama `.git` icinde root'a ait
@@ -313,7 +335,48 @@ if [[ ! -s /etc/machine-id ]]; then
   e1_die "/etc/machine-id yok veya bos; lisans makine bagi dogrulanamaz."
 fi
 
+# NOT: `.env` secret onarimi BILEREK yedek kapisindan SONRAYA alindi (asagi).
+# Kapinin "guncelleme BASLAMADI" iddiasi ancak ondan once HICBIR sey
+# degismediyse dogru olur; `.env` yazmak da bir degisikliktir.
+
+# ---- 2/5: GUNCELLEME ONCESI YEDEK — FAIL-CLOSED KAPI --------------------
+#
+# Bu adim eskiden FAIL-OPEN'di: diskte yer yoksa, pg_dump patlarsa ya da
+# Postgres kapaliysa yedek "atlaniyor" ve guncelleme YINE DE devam ediyordu.
+# Yani veri tasiyan bir saha cihazi, elinde geri donulebilir HICBIR NOKTA
+# OLMADAN migration'a girebiliyordu.
+#
+# Artik sozlesme tek yonlu:
+#     yedek ALINDI ve DOGRULANDI  ->  guncelleme baslar
+#     baska her durum             ->  guncelleme BASLAMAZ (cikis 42)
+#
+# KAPI BURADA, CUNKU BURASI MUTASYON SINIRI. Bu satirdan onceki her sey
+# okuma/dogrulama: root kontrolu, internet kontrolu, git temizlik kontrolu,
+# machine-id kontrolu. Uretim durumunu degistiren ILK islem bu adimdan
+# SONRA gelir (`.env` secret onarimi, ardindan git checkout / imaj cekme /
+# migration). Bu yuzden kapi kapandiginda "kurulum DEGISMEDI" demek dogru.
+#
+# Uygulama backend API'sine BAGIMLI DEGIL: dump dogrudan postgres
+# container'i icinden aliniyor. Aksi halde "API cokmus -> yedek alinamiyor
+# -> guncelleme yapilamiyor" kisir dongusu olusurdu; oysa API'nin bozuk
+# oldugu durum tam da guncellemeye en cok ihtiyac duyulan durumdur.
+e1_step "Update oncesi DB yedek aliniyor..."
+
+E1_PRE_UPDATE_KEEP="${E1_PRE_UPDATE_KEEP:-3}"
+
+if ! e1_pre_update_backup_gate "${PREV_VERSION:-bilinmiyor}" "${TARGET_REF:-latest}"; then
+  printf 'update_blocked_backup_failure source=%s target=%s
+'     "${PREV_VERSION:-bilinmiyor}" "${TARGET_REF:-latest}" >&2
+  E1_HELP_HINT="Yer acin ya da Postgres'i ayaga kaldirin, sonra tekrar deneyin."
+  e1_die "Guncelleme oncesi yedek alinamadi ve dogrulanamadi.
+"          "  GUNCELLEME BASLATILMADI — mevcut kurulum DEGISMEDI.
+"          "  (cikis kodu ${E1_EXIT_BACKUP_GATE})"
+fi
+
 # ---- .env: eksik kalmis secret'lari onar ----------------------------------
+#
+# KAPIDAN SONRA: `.env` yazmak bir mutasyondur; yedek alinmadan yapilirsa
+# "kurulum degismedi" iddiasi yalan olur.
 #
 # update.sh'in baska bir .env onarim adimi YOK; yeni bir zorunlu secret
 # eklendiginde ya da install.sh bir tanesini uretmeyi atladiginda ZATEN KURULU
@@ -322,9 +385,7 @@ fi
 # FTP_PASSWORD tam olarak bu duruma dustu: install.sh'in secret uretim
 # listesinde yoktu, `.env.example`'da bos geliyordu, ftp-server her acilista
 # SystemExit(2) verip `restart: unless-stopped` altinda sonsuza kadar yeniden
-# basliyordu. Cihazlar config/firmware yukleyemiyor, sebep hicbir yerde
-# gorunmuyor ve her update sonunda kalici "1 servis calismiyor" uyarisi
-# GERCEK arizalari maskeliyordu.
+# basliyordu.
 #
 # Yalnizca BOS/placeholder degerler doldurulur; dolu bir parolaya dokunulmaz.
 if [[ -f .env ]]; then
@@ -334,88 +395,6 @@ if [[ -f .env ]]; then
     e1_hint "  $(e1_env_get FTP_PASSWORD)"
     e1_chown_target .env
   fi
-fi
-
-# ---- 2/5: DB yedek (otomatik, postgres ayaktaysa) ------------------------
-#
-# BU ADIM CIHAZIN DISKINI DOLDURUYORDU
-# ------------------------------------
-# Eskiden her update `backups/auto-pre-update-*.sql.gz` birakiyordu ve:
-#   * hicbir zaman SILINMIYORDU (rotasyon yok, retention yok),
-#   * `--exclude-table-data` OLMADAN aliniyordu, yani 90 gunluk historian
-#     arsivinin TAMAMI iceride — dosya basina birkac GB,
-#   * duz SQL oldugu icin UI'daki geri yukleme `validate_dump_file`in PGDMP
-#     imza kontrolune takiliyor, yani geri de YUKLENEMIYORDU.
-# 2.25 -> 2.30 arasi bes guncelleme yapan bir cihazda bu dosyalar diskin
-# buyuk kismini yiyor; postgres-data ayni dosya sisteminde oldugu icin sonunda
-# Postgres yazamaz hale geliyor ve telemetri akisi duruyor. Ustelik bu dizin
-# BACKUP_DIR volume'u DEGIL, dolayisiyla ne disk_guard ne UI onu goruyor.
-#
-# Simdi: custom format (-F c, geri yuklenebilir), backend ile AYNI
-# --exclude-table-data listesi, dump ONCESI rotasyon ve bos alan kontrolu.
-e1_step "Update oncesi DB yedek aliniyor..."
-
-# Kac tane pre-update yedegi saklanacak. Budama dump'tan HEM ONCE hem SONRA
-# kosar: once birikmis eski dosyalar (sahadaki .sql.gz yigini) temizlensin,
-# sonra yenisi eklendikten sonra tavan yine KEEP olsun. Boylece dump basarisiz
-# olsa bile elde hic yedek kalmayan bir an olusmaz.
-E1_PRE_UPDATE_KEEP="${E1_PRE_UPDATE_KEEP:-3}"
-[[ "$E1_PRE_UPDATE_KEEP" =~ ^[0-9]+$ ]] && [[ "$E1_PRE_UPDATE_KEEP" -ge 1 ]] || E1_PRE_UPDATE_KEEP=3
-
-# Yedek disi birakilan tablolar `_lib.sh` icindeki `E1_DUMP_EXCLUDE` dizisinde
-# TEK yerde tanimli — `enerjione-grid backup` de ayni listeyi kullanir.
-
-if docker compose ps postgres --status running --quiet 2>/dev/null | grep -q .; then
-  mkdir -p backups
-
-  # Once birikmis eski dosyalari temizle (sahadaki GB'larca .sql.gz dahil).
-  e1_prune_pre_update_backups "$E1_PRE_UPDATE_KEEP"
-
-  # Bos alan kontrolu. Yedek "iyi olsun diye" alinan bir seydir; diski
-  # doldurup CALISAN sistemi bozmasi kabul edilemez. Yer yoksa yedegi
-  # atlayip update'e devam ediyoruz (ve bunu gizlemiyoruz).
-  FREE_MB="$(df -Pm . 2>/dev/null | awk 'NR==2 {print $4}')"
-  FREE_MB="${FREE_MB:-0}"
-  if [[ "$FREE_MB" -lt 2048 ]]; then
-    e1_warn "Diskte yalnizca ${FREE_MB} MB bos alan var — update oncesi yedek ATLANDI."
-    e1_hint "Yer acin (docker system prune, eski yedekler) ve tekrar deneyin."
-  else
-    TS=$(date +%Y%m%d-%H%M%S)
-    BACKUP_FILE="backups/auto-pre-update-${TS}.dump"
-    BACKUP_ERRLOG="$(mktemp)"
-    PG_USER="$(e1_env_get POSTGRES_USER)"
-    PG_DB="$(e1_env_get POSTGRES_DB)"
-    PG_USER="${PG_USER:-enerjione_grid}"
-    PG_DB="${PG_DB:-enerjione_grid}"
-
-    DUMP_ARGS=(-U "${PG_USER}" -d "${PG_DB}" -F c --no-owner --no-acl)
-    e1_dump_exclude_into DUMP_ARGS
-
-    # pg_dump postgres container'inin ICINDEN kosuyor: istemci ve sunucu
-    # surumu tanim geregi ayni, surum uyusmazligi olamaz.
-    if docker compose exec -T postgres pg_dump "${DUMP_ARGS[@]}" \
-         > "${BACKUP_FILE}" 2>"${BACKUP_ERRLOG}"; then
-      SIZE=$(du -h "${BACKUP_FILE}" | cut -f1)
-      e1_ok "Yedek: ${BACKUP_FILE} (${SIZE})"
-      e1_hint "Geri yukleme: Muhendislik > Sistem > Yedekler > Yedek Yukle"
-      e1_chown_target "${BACKUP_FILE}"
-      # Yenisi eklendi; tavani yeniden uygula.
-      e1_prune_pre_update_backups "$E1_PRE_UPDATE_KEEP"
-    else
-      e1_warn "DB yedek alinamadi; update yine de devam ediyor."
-      # Hatayi YUTMA: sebebi gormeden ayni sey her update'te tekrarlanir.
-      if [[ -s "${BACKUP_ERRLOG}" ]]; then
-        tail -n 5 "${BACKUP_ERRLOG}" | while IFS= read -r _l; do e1_hint "$_l"; done
-      fi
-      rm -f "${BACKUP_FILE}"
-    fi
-    rm -f "${BACKUP_ERRLOG}"
-  fi
-else
-  e1_info "Postgres ayakta degil — yedek atlandi (ilk kurulum sonrasi?)."
-  # Postgres kapaliyken de birikmis eski dosyalari temizle: sahada diski
-  # dolduran sey tam olarak bunlar.
-  e1_prune_pre_update_backups "$E1_PRE_UPDATE_KEEP"
 fi
 
 # ---- 3/5: Yayin surumune gec ----------------------------------------------

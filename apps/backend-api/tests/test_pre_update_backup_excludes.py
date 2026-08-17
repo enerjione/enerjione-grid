@@ -151,9 +151,18 @@ def test_dump_komutu_dogru_bayraklarla(beklenen_bayrak: str):
     `validate_dump_file` PGDMP magic'i arar; `.sql.gz` dosyalar reddedilir.
     Yani eski hal yalnizca yer kaplayan, ise yaramaz dosyalar uretiyordu.
     """
-    kaynak = UPDATE_SH.read_text(encoding="utf-8")
+    # KONUMDAN BAGIMSIZ: pre-update dump komutu artik `_lib.sh` icindeki
+    # `e1_pre_update_backup_gate` fonksiyonunda (update.sh onu cagiriyor).
+    # Iddia "hangi dosyada" degil, "guncelleme yolunda bu bayrakla dump
+    # aliniyor" olmali; aksi halde kod tasindiginda test sozlesmeyi degil
+    # yerlesimi korur.
+    kaynak = (
+        UPDATE_SH.read_text(encoding="utf-8")
+        + "\n"
+        + LIB_SH.read_text(encoding="utf-8")
+    )
     assert beklenen_bayrak in kaynak, (
-        f"update.sh pg_dump cagrisinda '{beklenen_bayrak}' yok"
+        f"guncelleme yolundaki pg_dump cagrisinda '{beklenen_bayrak}' yok"
     )
 
 
@@ -165,7 +174,18 @@ def test_rotasyon_cagriliyor():
     dogrulanan sey update.sh'in onu GERCEKTEN cagirdigi. Cagri dusesse
     fonksiyon dogru calismaya devam eder ama dosyalar yine birikir.
     """
-    kaynak = UPDATE_SH.read_text(encoding="utf-8")
-    assert kaynak.count("e1_prune_pre_update_backups") >= 2, (
-        "update.sh rotasyonu cagirmiyor — yedekler yine birikir"
+    # Cagri `_lib.sh` icindeki yedek kapisina tasindi; iddia yine "dump
+    # alinan yerde budama da var" — yalnizca konum degisti.
+    kaynak = (
+        UPDATE_SH.read_text(encoding="utf-8")
+        + "\n"
+        + LIB_SH.read_text(encoding="utf-8")
+    )
+    assert kaynak.count("e1_prune_pre_update_backups(") >= 1, (
+        "rotasyon fonksiyonu tanimli degil"
+    )
+    cagri = kaynak.count("e1_prune_pre_update_backups ")
+    assert cagri >= 2, (
+        f"guncelleme yolu rotasyonu {cagri} kez cagiriyor (>=2 bekleniyor) — "
+        "yedekler yine birikir"
     )
