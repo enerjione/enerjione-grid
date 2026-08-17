@@ -159,6 +159,8 @@ services:
     pull_policy: always
     container_name: e1-gw-{{GATEWAY_CODE_LOWER}}
     restart: unless-stopped
+    # In-flight CROB sonucu deftere yazilabilsin (bkz. deployment contract).
+    stop_grace_period: 30s
     ulimits:
       nofile:
         soft: 65536
@@ -176,24 +178,30 @@ services:
       BACKEND_API_VERIFY_SSL: "true"
       GATEWAY_INSECURE_ALLOW_PLAINTEXT: "{{INSECURE_ALLOW_PLAINTEXT}}"
       # Telemetri
+      TELEMETRY_PUBLISHER: "nats"
       NATS_URL: "{{NATS_URL}}"
       NATS_SUBJECT_PREFIX: "e1.telemetry.raw"
       # Saglik / polling
       WORKER_HEALTH_HOST: "0.0.0.0"
       WORKER_HEALTH_PORT: "8020"
+      # Nonce tetiginin yedegi; ETag ile sartli oldugu icin maliyeti ~sifir.
+      CONFIG_REFRESH_SEC: "30"
       DEFAULT_POLL_INTERVAL_SEC: "1"
       # Cihaz sayisina gore olceklenir; sabit deger havuzu ac birakiyordu.
       MAX_PARALLEL_DEVICES: "{{MAX_PARALLEL_DEVICES}}"
       # Kurulum modu (yerel/uzak) — guncellemede silinmemeli.
       INSTALL_MODE: "local"
       # DNP3
+      DNP3_LIBRARY: "yadnp3"
       DNP3_LOCAL_ADDRESS: "1"
       DNP3_TCP_PORT: "20000"
-      DNP3_RESPONSE_TIMEOUT_SEC: "5"
-      DNP3_READ_STRATEGY: "event_driven"
       DNP3_EVENT_BASELINE_INTERVAL_SEC: "30"
       # Yoksa scan poll araligina duser: cihaz basina saniyede 1 istek.
       DNP3_EVENT_SCAN_INTERVAL_SEC: "5"
+      # opendnp3 IO thread sayisi: 0 = otomatik (min 4).
+      DNP3_MANAGER_THREADS: "0"
+      # Outstation saat senkronizasyonu (RTC drift + guc kesintisi sonrasi reset).
+      DNP3_TIME_SYNC: "lan"
       GATEWAY_PUBLISH_DNP3_QUALITY: "{{PUBLISH_DNP3_QUALITY}}"
       # Log
       LOG_LEVEL: "INFO"
