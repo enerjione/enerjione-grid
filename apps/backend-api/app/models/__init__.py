@@ -62,6 +62,7 @@ from app.models.system_event import SystemEvent
 from app.models.telemetry import Telemetry
 from app.models.telemetry_history import TelemetryHistory
 from app.models.telemetry_latest import TelemetryLatest
+from app.models.unknown_device_telemetry import UnknownDeviceTelemetry
 from app.models.user import User
 from app.models.user_fcm_token import UserFcmToken
 from app.models.user_notification_preference import UserNotificationPreference
@@ -109,6 +110,7 @@ __all__ = [
     "Telemetry",
     "TelemetryHistory",
     "TelemetryLatest",
+    "UnknownDeviceTelemetry",
     "User",
     "UserFcmToken",
     "UserNotificationPreference",

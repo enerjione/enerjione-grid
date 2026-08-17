@@ -267,7 +267,13 @@ def _tuketici_kodu() -> str:
 
     from app.services import telemetry_consumer
 
-    kaynak = inspect.getsource(telemetry_consumer._persist_batch)
+    # Olcum basina is mantigi `process_valid_telemetry`e cikarildi (canli
+    # tuketici ve karantina replay AYNI fonksiyonu kullansin diye). Guard iki
+    # fonksiyonun BIRLESIK kaynagina bakar: mantigin hangisinde durdugu degil,
+    # tuketici yolunda VAR OLMASI onemli.
+    kaynak = inspect.getsource(telemetry_consumer._persist_batch) + inspect.getsource(
+        telemetry_consumer.process_valid_telemetry
+    )
     kaynak = re.sub(r'""".*?"""', "", kaynak, flags=re.DOTALL)
     return re.sub(r"^\s*#.*$", "", kaynak, flags=re.MULTILINE)
 
@@ -349,7 +355,8 @@ def test_CANLI_deger_politikadan_ETKILENMIYOR():
 
     from app.services import telemetry_consumer as tc
 
-    agac = _ast.parse(_inspect.getsource(tc._persist_batch).lstrip())
+    # `canli_satiri` ve arsiv kosulu artik `process_valid_telemetry` icinde.
+    agac = _ast.parse(_inspect.getsource(tc.process_valid_telemetry).lstrip())
     canli_atamalari = [
         n for n in _ast.walk(agac)
         if isinstance(n, _ast.Assign)

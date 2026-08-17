@@ -10,7 +10,7 @@ from sqlalchemy import select as _select, text
 from app.core.license_gate import LicenseGateMiddleware
 from app.core.rate_limit import limiter
 
-from app.api import alarm_rules, alarms, api_keys, auth, backups, bulk_notifications, device_configs, device_models, devices, events, faults, field_tools, firewall, ftp_settings as ftp_settings_api, gateways, grid_topology, health, internal, licensing, map_tiles, network, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, remote_access, responsibility_areas, sessions as sessions_api, signals, system_admin, system_status, telemetry, user_notification_preferences, users, ws_live
+from app.api import alarm_rules, alarms, api_keys, auth, backups, bulk_notifications, device_configs, device_models, devices, events, faults, field_tools, firewall, ftp_settings as ftp_settings_api, gateways, grid_topology, health, internal, licensing, map_tiles, network, notification_settings, notifications as notifications_api, outbound_targets, project_settings as project_settings_api, public, remote_access, responsibility_areas, sessions as sessions_api, signals, system_admin, system_status, telemetry, telemetry_quarantine, user_notification_preferences, users, ws_live
 from app.core.config import settings
 from app.core import service_role
 from app.core.service_role import leader
@@ -128,6 +128,7 @@ app.include_router(notifications_api.router, prefix=settings.api_prefix)
 app.include_router(sessions_api.router, prefix=settings.api_prefix)
 app.include_router(backups.router, prefix=settings.api_prefix)
 app.include_router(system_admin.router, prefix=settings.api_prefix)
+app.include_router(telemetry_quarantine.router, prefix=settings.api_prefix)
 # API Key yonetimi (kullanici kendi PAT'larini olusturup revoke eder).
 app.include_router(api_keys.router, prefix=settings.api_prefix)
 # Public REST API (dis sistemlerin tukettigi, API Key korumali, read-only).

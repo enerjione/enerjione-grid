@@ -97,6 +97,7 @@ from app.db.session import SessionLocal
 from app.models.device import Device
 from app.models.processed_message import ProcessedMessage
 from app.schemas.telemetry import TelemetryIn
+from app.services import unknown_device_quarantine as quarantine
 from app.services.ws_broadcaster import broadcaster as ws_broadcaster
 
 logger = logging.getLogger(__name__)
@@ -769,6 +770,183 @@ def _satirlari_yaz(
         return sol_ok + sag_ok, sol_bad + sag_bad
 
 
+def process_valid_telemetry(  # noqa: ANN001
+    db,
+    *,
+    device,
+    reading: TelemetryIn,
+    payload: dict,
+    message_id: str,
+    msg=None,
+) -> _Satir:
+    """Cihazi BILINEN gecerli bir okumayi DB satirlarina donusturur.
+
+    TEK KAYNAK: canli tuketici yolu ve karantina replay yolu bu fonksiyonu
+    kullanir. Ayni is mantiginin iki kopyasi olsaydi biri sessizce
+    otekinden ayrilirdi — replay edilen olcum canli olcumden farkli kalite,
+    farkli arsiv karari ya da farkli saat degerlendirmesi alirdi.
+
+    Yan etkiler `db` uzerinde ORM mutasyonu olarak birikir (cihaz durumu,
+    last_update_at); satirlar caller tarafindan `_tek_gecis_yaz` ile
+    yazilir. Burada commit YOK.
+    """
+    from app.models.telemetry import Telemetry
+    from app.services.device_clock_service import assess_device_timestamp
+    from app.services import historian_policy
+    from app.services.tag_engine_service import (
+        map_quality_to_status,
+        normalize_quality,
+        process_telemetry_reading,
+        should_write_last_update,
+    )
+
+    # process_telemetry_reading: Telemetry obj + device mutasyonu (ayni
+    # db, commit yok). Patlarsa TUM batch'i rollback ETME -> o mesaji
+    # bad_msgs'e ayir, minimal fallback ile devam.
+    telemetry = None
+    try:
+        telemetry, _event = process_telemetry_reading(device, reading, db=db)
+    except SQLAlchemyError:
+        # DB/transaction hatasinda fallback ile devam edilmez: session
+        # aborted olabilir. Batch exception ile cikar, hicbir msg ack
+        # edilmez; JetStream redeliver eder (veri kaybi yok).
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "telemetry-consumer-process-error msg=%s error=%s", message_id, exc
+        )
+        # Saf is-mantigi hatasinda minimal telemetry + status fallback.
+        nq = normalize_quality(reading.quality)
+        device.communication_status = map_quality_to_status(nq)
+        if device.communication_status.value == "online":
+            # Karar ana yolla AYNI fonksiyondan geliyor; kosulu
+            # kopyalamak, birinin sessizce eski davranisa donmesi
+            # demekti.
+            _simdi = datetime.now(timezone.utc)
+            if should_write_last_update(device.last_update_at, _simdi):
+                device.last_update_at = _simdi
+        _fb_at, _fb_quality = assess_device_timestamp(
+            getattr(reading, "device_event_at", None),
+            reported_quality=getattr(reading, "timestamp_quality", None),
+        )
+        telemetry = Telemetry(
+            device_id=device.id,
+            signal_key=reading.signal_key,
+            value=reading.value,
+            value_string=reading.value_string,
+            quality=nq,
+            source_timestamp=reading.source_timestamp,
+            # Fallback yolunda da damgalanir: aksi halde is-mantigi
+            # hatasi alan mesajlarda saat durumu SESSIZCE kaybolurdu.
+            device_event_at=_fb_at,
+            timestamp_quality=_fb_quality,
+        )
+
+    # `telemetry` ORM'e EKLENMEZ: satiri COPY yazar (bkz.
+    # `_tek_gecis_yaz`). ORM nesnesi yalnizca deger tasiyicisi —
+    # process_telemetry_reading'in damgaladigi alanlar tuple'a
+    # buradan okunur. `processed_messages` dedup satiri da ayni
+    # COPY gecisinde gider.
+    #
+    # Cihazin kendi olay zamani (varsa) + makullugu. `source_timestamp`
+    # AYNEN kaliyor (PK/partition kolonu); bu ikisi yalnizca analiz
+    # icin ayri kolonlarda duruyor. Bkz. device_clock_service.
+    #
+    # Degerlendirme TEKRAR yapilmaz: canli satiri kuran
+    # `process_telemetry_reading` zaten damgaladi. Ikinci kez cagirmak
+    # 7 gunluk pencerenin tam sinirinda iki satirin FARKLI kalite
+    # almasina yol acabilirdi (araya gecen mikrosaniyeler yuzunden).
+    _dev_at = telemetry.device_event_at
+    _ts_quality = telemetry.timestamp_quality
+    # Kalite BIR KEZ normalize edilir ve hem arsiv KARARINA hem
+    # yazilan satirlara ayni deger gider. Karara gecirilmesi sart:
+    # olu bant yalnizca sayiya bakarsa, esik icinde donmus bir
+    # olcumde good->invalid/comm_lost gecisi arsive HIC girmez.
+    _kalite = normalize_quality(reading.quality)
+    # ARSIV POLITIKASI — her okuma arsive yazilmaz.
+    #
+    # Gercek SCADA pratigi: anlik deger her zaman guncel tutulur
+    # (`telemetry_latest`, hemen asagida) ama arsive yalnizca
+    # isaretlenen tag'ler, olu bant suzgecinden gecerek yazilir.
+    # Alarm dogrulugu ETKILENMEZ: alarm-service akis tabanli
+    # calisiyor, gecmis sorgusu yapmiyor.
+    arsiv_satiri = None
+    if historian_policy.should_archive(
+        db,
+        device_id=device.id,
+        signal_key=reading.signal_key,
+        value=reading.value,
+        quality=_kalite,
+        # Arsiv politikasi MODELE aittir: ayni ada sahip sinyal iki
+        # modelde farkli olu banda/arsiv ayarina sahip olabilir.
+        device_model=device.model,
+    ):
+        arsiv_satiri = (
+            device.id, reading.signal_key, reading.value,
+            reading.value_string, _kalite, reading.source_timestamp,
+            _dev_at, _ts_quality,
+        )
+    # `telemetry_latest` satiri — batch-ici tekillestirme burada DEGIL,
+    # `_tek_gecis_yaz` icinde yapilir (dilimlere bolunmus yeniden
+    # denemede de dogru kalsin diye tek yerde).
+    canli_satiri = (
+        device.id, reading.signal_key, reading.value,
+        reading.value_string, _kalite, reading.source_timestamp,
+        _dev_at, _ts_quality, datetime.now(timezone.utc),
+    )
+    # WS yayini ham gateway payload'unu tasir; saat degerlendirmesini
+    # UZERINE YAZIYORUZ. Gateway'in ham bildirimi degil BIZIM
+    # degerlendirmemiz otoriter: gateway hic bir sey demese bile
+    # 2000-01-01 damgasini "invalid" olarak isaretleyen biziz. Aksi
+    # halde canli ekran (WS) ile yenilenmis snapshot (`/signals/live`)
+    # ayni satir icin farkli sey gosterirdi.
+    payload["device_event_at"] = _dev_at.isoformat() if _dev_at else None
+    payload["timestamp_quality"] = _ts_quality
+
+    # Outbound dispatch payload'u — status commit ONCESI yakalanir
+    # (commit sonrasi device expire olabilir). Dispatch commit SONRASI.
+    status_val = (
+        device.communication_status.value
+        if hasattr(device.communication_status, "value")
+        else str(device.communication_status)
+    )
+    sig_source = None
+    if reading.signal_key and "." in reading.signal_key:
+        sig_source = reading.signal_key.split(".", 1)[0].lower()
+    outbound_satiri = {
+        "message_id": message_id,
+        "correlation_id": reading.correlation_id or message_id,
+        "event_kind": "telemetry",
+        "device_code": reading.device_code,
+        "signal_key": reading.signal_key,
+        "signal_source": sig_source,
+        "source_gateway": reading.source_gateway,
+        "value": reading.value,
+        "value_string": reading.value_string,
+        "quality": reading.quality,
+        "status": status_val,
+        "source_timestamp": reading.source_timestamp.isoformat() if reading.source_timestamp else None,
+        "processed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    return _Satir(
+        msg=msg,
+        message_id=message_id,
+        # `telemetry` tablosu ORM nesnesinin damgaladigi alanlardan
+        # yazilir (process_telemetry_reading value/quality'yi
+        # donusturmus olabilir); kolon sirasi _TELEMETRI_KOLONLARI.
+        telemetri=(
+            device.id, telemetry.signal_key, telemetry.value,
+            telemetry.value_string, telemetry.quality,
+            telemetry.source_timestamp, telemetry.device_event_at,
+            telemetry.timestamp_quality,
+        ),
+        arsiv=arsiv_satiri,
+        canli=canli_satiri,
+        ws=payload,
+        outbound=outbound_satiri,
+    )
+
+
 def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
     """Bir fetch batch'ini TEK session + TEK commit ile isler.
 
@@ -810,18 +988,33 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
     outbound_payloads: list = []  # commit sonrasi IEC104/REST/MQTT dispatch
 
     # 1) Parse + message_id'leri topla. Parse hatasi -> bad_msgs (DLQ/nak).
-    parsed: list[tuple[Any, dict, str]] = []  # (msg, payload, message_id)
+    #
+    # 4. eleman `mid_vardi`: message_id payload'da GERCEKTEN var miydi.
+    # Bilinmeyen cihaz karantinasi bunu bilmek ZORUNDA — asagida uretilen
+    # uuid4 her teslimde DEGISIR ve tekillestirme anahtari olarak kullanilirsa
+    # ayni fiziksel mesaj her yeniden teslimde ikinci bir karantina satiri
+    # acardi (bkz. unknown_device_quarantine.dedup_key_for).
+    parsed: list[tuple[Any, dict, str, bool]] = []
     for msg in msgs:
         try:
             payload = json.loads(msg.data.decode("utf-8"))
         except Exception:  # noqa: BLE001
             bad_msgs.append(msg)
             continue
+        # JSON gecerli ama nesne DEGIL (dizi/skaler) olabilir. Asagidaki
+        # `payload.get` o durumda AttributeError firlatir ve istisna
+        # `_persist_batch`ten disari cikip TUM batch'i ack'siz birakirdi —
+        # ayni bozuk mesaj sonsuza kadar yeniden teslim edilirdi. Bu bir
+        # BICIM hatasi, bilinmeyen cihaz degil: DLQ yoluna gider.
+        if not isinstance(payload, dict):
+            bad_msgs.append(msg)
+            continue
         message_id = str(payload.get("message_id") or "")
+        mid_vardi = bool(message_id)
         if not message_id:
             message_id = str(uuid4())
             payload["message_id"] = message_id
-        parsed.append((msg, payload, message_id))
+        parsed.append((msg, payload, message_id, mid_vardi))
 
     if not parsed:
         return ok_msgs, bad_msgs, ok_payloads, outbound_payloads
@@ -831,7 +1024,7 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
         # 2) Idempotency + device lookup: batch basina IKISER sorgu. Onceki
         # davranis mesaj basina device SELECT yapiyordu (500 mesaj -> yuzlerce
         # DB round-trip). Tum code'lari tek IN sorgusuyla cache'le.
-        ids = [mid for (_m, _p, mid) in parsed]
+        ids = [mid for (_m, _p, mid, _v) in parsed]
         seen: set[str] = set(
             db.scalars(
                 select(ProcessedMessage.message_id).where(
@@ -841,7 +1034,7 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
             ).all()
         )
         device_codes = {
-            str(payload.get("device_code") or "") for (_m, payload, _mid) in parsed
+            str(payload.get("device_code") or "") for (_m, payload, _mid, _v) in parsed
         }
         devices = db.scalars(
             select(Device).where(Device.code.in_(device_codes))
@@ -853,8 +1046,13 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
         # kararlari da yazim SONUCUNA baglanir: dusen satirin mesaji ack
         # EDILMEZ, WS/outbound yayini yapilmaz.
         satirlar: list[_Satir] = []
+        # Bilinmeyen cihaz dali — bilinen cihaz HIZLI YOLU bu listelere hic
+        # dokunmaz, ek sorgu/kilit gormez.
+        bilinmeyen_kayitlar: list[quarantine.QuarantineEntry] = []
+        bilinmeyen_msgs: list = []
+        bilinmeyen_bildirim: dict[str, str | None] = {}
 
-        for msg, payload, message_id in parsed:
+        for msg, payload, message_id, mid_vardi in parsed:
             if message_id in seen:
                 ok_msgs.append(msg)  # zaten islenmis -> sadece ack
                 continue
@@ -871,167 +1069,86 @@ def _persist_batch(msgs: list) -> tuple[list, list, list, list]:  # noqa: ANN001
             device = device_cache.get(dcode)
 
             if device is None:
-                logger.warning(
-                    "telemetry-consumer-device-not-found msg=%s device_code=%s",
-                    message_id, dcode,
+                # BILINMEYEN CIHAZ — PAYLOAD ARTIK ATILMIYOR.
+                #
+                # ESKI DAVRANIS VE NEDEN YANLISTI: burada yalnizca uyari
+                # loglaniyor, `processed_messages`'a dedup satiri yazilip
+                # mesaj ack ediliyordu. Payload KALICI OLARAK kayboluyordu:
+                # ack'lenen mesaj bir daha teslim edilmiyor, dedup satiri da
+                # olasi bir yeniden teslimi yutuyordu. Cihaz iki dakika sonra
+                # tanimlansa bile aradaki olcumler geri getirilemezdi.
+                #
+                # `ProcessedMessage` BILEREK YAZILMIYOR: onu yazmak mesaji
+                # "islenmis" saymak demek ve replay'i kalici olarak bloke
+                # ederdi (hem yeniden teslim yolunu hem de karantinadan
+                # replay'i). Tekillestirme gorevini karantina tablosunun
+                # (consumer_name, dedup_key) UNIQUE kisiti ustleniyor.
+                #
+                # Mesaj ack listesine HENUZ girmiyor: karantina yazimi
+                # basarili olmadan ack YOK (bkz. asagidaki yazim blogu).
+                bilinmeyen_kayitlar.append(
+                    quarantine.entry_from_message(
+                        msg,
+                        payload,
+                        consumer_name=CONSUMER_NAME,
+                        message_id=message_id,
+                        device_code=dcode,
+                        payload_had_message_id=mid_vardi,
+                    )
                 )
-                # Bilinmeyen cihaz: idempotency isaretle, mesaji ack'le (sonsuz
-                # redeliver olmasin). Cihaz sonradan eklenirse yeni mesajlar gelir.
-                db.add(ProcessedMessage(
-                    consumer_name=CONSUMER_NAME,
-                    message_id=message_id,
-                    processed_at=datetime.now(timezone.utc),
-                ))
-                seen.add(message_id)
-                ok_msgs.append(msg)
+                bilinmeyen_msgs.append(msg)
+                bilinmeyen_bildirim.setdefault(
+                    dcode, str(payload.get("source_gateway") or "") or None
+                )
                 continue
 
-            # process_telemetry_reading: Telemetry obj + device mutasyonu (ayni
-            # db, commit yok). Patlarsa TUM batch'i rollback ETME -> o mesaji
-            # bad_msgs'e ayir, minimal fallback ile devam.
-            telemetry = None
-            try:
-                telemetry, _event = process_telemetry_reading(device, reading, db=db)
-            except SQLAlchemyError:
-                # DB/transaction hatasinda fallback ile devam edilmez: session
-                # aborted olabilir. Batch exception ile cikar, hicbir msg ack
-                # edilmez; JetStream redeliver eder (veri kaybi yok).
-                raise
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "telemetry-consumer-process-error msg=%s error=%s", message_id, exc
-                )
-                # Saf is-mantigi hatasinda minimal telemetry + status fallback.
-                nq = normalize_quality(reading.quality)
-                device.communication_status = map_quality_to_status(nq)
-                if device.communication_status.value == "online":
-                    # Karar ana yolla AYNI fonksiyondan geliyor; kosulu
-                    # kopyalamak, birinin sessizce eski davranisa donmesi
-                    # demekti.
-                    _simdi = datetime.now(timezone.utc)
-                    if should_write_last_update(device.last_update_at, _simdi):
-                        device.last_update_at = _simdi
-                _fb_at, _fb_quality = assess_device_timestamp(
-                    getattr(reading, "device_event_at", None),
-                    reported_quality=getattr(reading, "timestamp_quality", None),
-                )
-                telemetry = Telemetry(
-                    device_id=device.id,
-                    signal_key=reading.signal_key,
-                    value=reading.value,
-                    value_string=reading.value_string,
-                    quality=nq,
-                    source_timestamp=reading.source_timestamp,
-                    # Fallback yolunda da damgalanir: aksi halde is-mantigi
-                    # hatasi alan mesajlarda saat durumu SESSIZCE kaybolurdu.
-                    device_event_at=_fb_at,
-                    timestamp_quality=_fb_quality,
-                )
-
-            # `telemetry` ORM'e EKLENMEZ: satiri COPY yazar (bkz.
-            # `_tek_gecis_yaz`). ORM nesnesi yalnizca deger tasiyicisi —
-            # process_telemetry_reading'in damgaladigi alanlar tuple'a
-            # buradan okunur. `processed_messages` dedup satiri da ayni
-            # COPY gecisinde gider.
-            #
-            # Cihazin kendi olay zamani (varsa) + makullugu. `source_timestamp`
-            # AYNEN kaliyor (PK/partition kolonu); bu ikisi yalnizca analiz
-            # icin ayri kolonlarda duruyor. Bkz. device_clock_service.
-            #
-            # Degerlendirme TEKRAR yapilmaz: canli satiri kuran
-            # `process_telemetry_reading` zaten damgaladi. Ikinci kez cagirmak
-            # 7 gunluk pencerenin tam sinirinda iki satirin FARKLI kalite
-            # almasina yol acabilirdi (araya gecen mikrosaniyeler yuzunden).
-            _dev_at = telemetry.device_event_at
-            _ts_quality = telemetry.timestamp_quality
-            # Kalite BIR KEZ normalize edilir ve hem arsiv KARARINA hem
-            # yazilan satirlara ayni deger gider. Karara gecirilmesi sart:
-            # olu bant yalnizca sayiya bakarsa, esik icinde donmus bir
-            # olcumde good->invalid/comm_lost gecisi arsive HIC girmez.
-            _kalite = normalize_quality(reading.quality)
-            # ARSIV POLITIKASI — her okuma arsive yazilmaz.
-            #
-            # Gercek SCADA pratigi: anlik deger her zaman guncel tutulur
-            # (`telemetry_latest`, hemen asagida) ama arsive yalnizca
-            # isaretlenen tag'ler, olu bant suzgecinden gecerek yazilir.
-            # Alarm dogrulugu ETKILENMEZ: alarm-service akis tabanli
-            # calisiyor, gecmis sorgusu yapmiyor.
-            arsiv_satiri = None
-            if historian_policy.should_archive(
+            # Cihaz BILINIYOR: olcumu ortak is mantigiyla satirlara cevir.
+            # Ayni fonksiyonu karantina replay yolu da cagirir (bkz.
+            # `process_valid_telemetry`) — iki yolun ayrisamamasi icin.
+            satir = process_valid_telemetry(
                 db,
-                device_id=device.id,
-                signal_key=reading.signal_key,
-                value=reading.value,
-                quality=_kalite,
-                # Arsiv politikasi MODELE aittir: ayni ada sahip sinyal iki
-                # modelde farkli olu banda/arsiv ayarina sahip olabilir.
-                device_model=device.model,
-            ):
-                arsiv_satiri = (
-                    device.id, reading.signal_key, reading.value,
-                    reading.value_string, _kalite, reading.source_timestamp,
-                    _dev_at, _ts_quality,
-                )
-            # `telemetry_latest` satiri — batch-ici tekillestirme burada DEGIL,
-            # `_tek_gecis_yaz` icinde yapilir (dilimlere bolunmus yeniden
-            # denemede de dogru kalsin diye tek yerde).
-            canli_satiri = (
-                device.id, reading.signal_key, reading.value,
-                reading.value_string, _kalite, reading.source_timestamp,
-                _dev_at, _ts_quality, datetime.now(timezone.utc),
+                device=device,
+                reading=reading,
+                payload=payload,
+                message_id=message_id,
+                msg=msg,
             )
             seen.add(message_id)  # ayni batch'te duplicate message_id'ye karsi
-            # WS yayini ham gateway payload'unu tasir; saat degerlendirmesini
-            # UZERINE YAZIYORUZ. Gateway'in ham bildirimi degil BIZIM
-            # degerlendirmemiz otoriter: gateway hic bir sey demese bile
-            # 2000-01-01 damgasini "invalid" olarak isaretleyen biziz. Aksi
-            # halde canli ekran (WS) ile yenilenmis snapshot (`/signals/live`)
-            # ayni satir icin farkli sey gosterirdi.
-            payload["device_event_at"] = _dev_at.isoformat() if _dev_at else None
-            payload["timestamp_quality"] = _ts_quality
+            satirlar.append(satir)
 
-            # Outbound dispatch payload'u — status commit ONCESI yakalanir
-            # (commit sonrasi device expire olabilir). Dispatch commit SONRASI.
-            status_val = (
-                device.communication_status.value
-                if hasattr(device.communication_status, "value")
-                else str(device.communication_status)
-            )
-            sig_source = None
-            if reading.signal_key and "." in reading.signal_key:
-                sig_source = reading.signal_key.split(".", 1)[0].lower()
-            outbound_satiri = {
-                "message_id": message_id,
-                "correlation_id": reading.correlation_id or message_id,
-                "event_kind": "telemetry",
-                "device_code": reading.device_code,
-                "signal_key": reading.signal_key,
-                "signal_source": sig_source,
-                "source_gateway": reading.source_gateway,
-                "value": reading.value,
-                "value_string": reading.value_string,
-                "quality": reading.quality,
-                "status": status_val,
-                "source_timestamp": reading.source_timestamp.isoformat() if reading.source_timestamp else None,
-                "processed_at": datetime.now(timezone.utc).isoformat(),
-            }
-            satirlar.append(_Satir(
-                msg=msg,
-                message_id=message_id,
-                # `telemetry` tablosu ORM nesnesinin damgaladigi alanlardan
-                # yazilir (process_telemetry_reading value/quality'yi
-                # donusturmus olabilir); kolon sirasi _TELEMETRI_KOLONLARI.
-                telemetri=(
-                    device.id, telemetry.signal_key, telemetry.value,
-                    telemetry.value_string, telemetry.quality,
-                    telemetry.source_timestamp, telemetry.device_event_at,
-                    telemetry.timestamp_quality,
-                ),
-                arsiv=arsiv_satiri,
-                canli=canli_satiri,
-                ws=payload,
-                outbound=outbound_satiri,
-            ))
+        # BILINMEYEN CIHAZ KARANTINASI — ack'ten ONCE, ayni transaction'da.
+        #
+        # ACK SOZLESMESI: bu mesajlar `ok_msgs`e ANCAK yazim basarili olursa
+        # girer, ve `ok_msgs` yalnizca asagidaki `db.commit()` gectikten
+        # sonra ack edilir. Yani "karantina persist edilmeden ack" durumu
+        # olusamaz. Yazim istisna firlatirsa (DB erisilemez, kisit ihlali)
+        # istisna disari cikar, hicbir mesaj ack EDILMEZ ve JetStream
+        # yeniden teslim eder.
+        if bilinmeyen_kayitlar:
+            try:
+                quarantine.quarantine_batch(db, bilinmeyen_kayitlar)
+            except quarantine.QuarantineCapacityError:
+                # YER ACILAMADI — ARTIK OLAGANDISI BIR DURUM.
+                #
+                # Normal kapasite baskisinda `ensure_capacity` kontrollu yer
+                # acar (suresi dolmus kayitlar, gerekirse acil veri dusurme)
+                # ve bu dala HIC girilmez. Buraya dusuluyorsa yapilandirma
+                # hatasi vardir: parti tavandan buyuk, ya da silinebilecek
+                # pending kayit kalmamis.
+                #
+                # O halde mesajlari ack ETMEMEK dogru davranis: veri kaybini
+                # sessizlestirmek yerine gorunur birakiyoruz. Batch'in BILINEN
+                # cihaz olcumleri etkilenmez ve normal yazilir — kapasite
+                # arizasi saglam telemetriyi de durdurmamali.
+                logger.error(
+                    "unknown_device_quarantine_capacity_block mesaj=%d — ack edilmedi "
+                    "(UNKNOWN_TELEMETRY_MAX_ROWS yapilandirmasini gozden gecirin)",
+                    len(bilinmeyen_msgs),
+                )
+            else:
+                ok_msgs.extend(bilinmeyen_msgs)
+                for _dcode, _gcode in bilinmeyen_bildirim.items():
+                    quarantine.notify(db, _dcode, _gcode)
 
         # TOPLU YAZIM: dort tablo tek geciste (COPY + tek-ifade upsert).
         # Bozuk satir partiyi dusurmez — `_satirlari_yaz` ikiye bolerek
