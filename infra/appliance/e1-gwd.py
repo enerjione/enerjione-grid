@@ -739,6 +739,11 @@ def _archive_request(raw: dict, result: dict) -> None:
                 safe_params["nats_url"] = re.sub(
                     r"://[^@/]*@", "://***@", str(safe_params["nats_url"])
                 )
+            if "command_delivery_token" in safe_params:
+                # Komut duzlemi sirri: `/pending` yanit imzasinin ANAHTARI.
+                # Arsivde plaintext kalmasi, kimlik dosyasini diske yazmakla
+                # ayni sey olurdu.
+                safe_params["command_delivery_token"] = "***"
             redacted["params"] = safe_params
         _write_json(name, {"request": redacted, "result": result}, dir_fd=dir_fd)
     except OSError as exc:
@@ -814,6 +819,24 @@ def _validate_params(params: object) -> dict:
     if env not in ALLOWED_APP_ENVIRONMENTS:
         raise ValueError(f"app_environment gecersiz: {env!r}")
     out["app_environment"] = env
+
+    # KOPYALANMASI SART (bkz. `image` icin ayni not): kabul listesine
+    # eklemek YETMEZ. Buraya yazilmazsa deger sessizce duser, sablon sirri
+    # gormez ve GATEWAY_COMMAND_DELIVERY_TOKEN uretilmez -> backend strict
+    # moda gecmisken gateway credential'siz kalir ve /pending 401 doner.
+    ham_sir = params.get("command_delivery_token")
+    if ham_sir is not None:
+        sir = str(ham_sir).strip()
+        if sir:
+            # Serbest metin DEGIL: deger cifte tirnakli bir YAML skalerine
+            # giriyor, TOKEN_RE ile ayni guvenli karakter kumesi zorunlu.
+            if not TOKEN_RE.fullmatch(sir):
+                raise ValueError(
+                    "command_delivery_token gecersiz (16-255 guvenli karakter)"
+                )
+            out["command_delivery_token"] = sir
+        # Bos string = provision EDILMEMIS; out'a hic eklenmez ki gateway
+        # gecis davranisinda kalsin.
 
     last = out["initiating_port_base"] + out["initiating_port_count"] - 1
     if out["initiating_port_count"] > 0 and last > 65535:
@@ -902,6 +925,16 @@ def _params_from_compose(path: str) -> tuple[dict, str]:
         "initiating_port_count": count,
         "publish_dnp3_quality": env.get("GATEWAY_PUBLISH_DNP3_QUALITY", "false"),
     }
+    # F5 KOMUT SIRRI KORUNMALI.
+    #
+    # Backend sirradan bir `update` isteginde (orn. yalnizca imaj) bu degeri
+    # GONDERMEZ; compose yeniden uretilirken buradan gelmezse satir DUSER.
+    # O an backend o gateway icin STRICT moddadir: gateway bir daha
+    # `X-Gateway-Command-Token` gonderemez, `/pending` 401 doner ve KOMUT
+    # KANALI KESILIR. Yani basit bir imaj guncellemesi F5'i sessizce bozardi.
+    mevcut_sir = env.get("GATEWAY_COMMAND_DELIVERY_TOKEN", "").strip()
+    if mevcut_sir:
+        params["command_delivery_token"] = mevcut_sir
     return params, env.get("GATEWAY_NAME", "")
 
 
