@@ -332,6 +332,14 @@ jobs:
       # kirilirsa ariza yalnizca aylar sonra, dolu bir diskte gorunur.
       - name: Pre-update yedek rotasyonu
         run: bash infra/scripts/linux/tests/test-pre-update-backup-rotation.sh "$PWD"
+      # GUNCELLEME ONCESI YEDEK KAPISI. Yedek adimi FAIL-OPEN'di: disk yoksa,
+      # pg_dump patlarsa ya da Postgres kapaliysa yedek "atlaniyor" ve
+      # guncelleme YINE DE devam ediyordu — yani veri tasiyan bir cihaz geri
+      # donulebilir hicbir nokta olmadan migration'a girebiliyordu. Test log
+      # metnine degil MUTASYON SAYISINA bakar: kapi kapaliyken durum
+      # degistiren komut sayisi 0 olmak zorunda.
+      - name: Guncelleme oncesi yedek kapisi (fail-closed)
+        run: bash infra/scripts/linux/tests/test-update-backup-gate.sh "$PWD"
       # NATS TLS hazirlama. TLS'in calismasi UC seyin ayni anda dogru olmasina
       # bagli (sertifika, NATS_CA_FILE, NATS_URL* semasi) ve yarim kalirsa
       # ariza SESSIZ: NATS healthcheck'i TLS'siz izleme portunu prob ettigi

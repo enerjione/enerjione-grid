@@ -1005,6 +1005,287 @@ e1_dump_exclude_into() {
   done
 }
 
+# ===========================================================================
+# UPDATE BACKUP GATE — guncelleme oncesi yedek ZORUNLU
+# ===========================================================================
+#
+# KAPATILAN ARIZA
+# ---------------
+# Yedek adimi FAIL-OPEN'di: uc ayri yolda yedek alinamiyor ama guncelleme
+# YINE DE devam ediyordu.
+#
+#   * diskte 2048 MB'tan az yer   -> "yedek ATLANDI",      update devam
+#   * pg_dump basarisiz           -> "update yine de devam ediyor"
+#   * Postgres ayakta degil       -> "yedek atlandi",      update devam
+#
+# Ustelik alinan dosya HIC DOGRULANMIYORDU: `pg_dump` cikis kodu 0 ise yeterli
+# sayiliyordu. Bos, kirpilmis ya da okunamayan bir arsiv "yedek" olarak
+# raporlanabiliyordu — yani geri donus noktasi oldugu SANILAN bir dosya.
+#
+# Sonuc: veri tasiyan bir saha cihazi, elinde GERI DONULEBILIR HICBIR NOKTA
+# OLMADAN migration'a giriyordu. Guncelleme yarida kalirsa geri donecek yer
+# yok.
+#
+# YENI SOZLESME (fail-closed)
+# ---------------------------
+#   yedek ALINDI ve DOGRULANDI  ->  guncelleme baslayabilir
+#   digerlerinin HEPSI          ->  guncelleme BASLAMAZ (cikis 42)
+#
+# "Guncelleme baslamadi" iddiasi ancak kapi TUM mutasyonlardan once kosarsa
+# dogru olur; bu yuzden `update.sh` icinde `.env` onarimi dahil her yazma
+# isleminden ONCE cagriliyor.
+
+#: Yedek kapisi cikis kodu. Genel hatalardan (1) AYIRT EDILEBILIR olmasi
+#: onemli: saha operatoru ve otomasyon "guncelleme baslamadi" durumunu
+#: digerlerinden ayirabilmeli.
+E1_EXIT_BACKUP_GATE=42
+
+#: Yedek disinda tutulacak asgari bos alan (MB). Diski son bayta kadar
+#: doldurmak CALISAN sistemi bozar; postgres-data ayni dosya sisteminde.
+E1_BACKUP_RESERVE_MB="${E1_BACKUP_RESERVE_MB:-1024}"
+
+#: Tahmin edilemedigi durumda kullanilacak asgari gereksinim (MB).
+E1_BACKUP_MIN_MB="${E1_BACKUP_MIN_MB:-512}"
+
+# Bu kurulum VERI TASIYOR mu?
+#
+# Uc durum var ve UCU DE FARKLI davranmali:
+#   0 = veri tasiyor, Postgres AYAKTA        -> yedek ZORUNLU
+#   1 = veri tasiyor ama Postgres KAPALI     -> yedek alinamaz, DUR
+#   2 = veri yok (ilk kurulum)               -> yedek gerekmiyor
+#
+# Ikinci durumu ucuncuden ayirmak sart: "Postgres kapali" gorup yedegi
+# atlamak, tam da dolu bir veritabaniyla migration'a girmek demekti.
+e1_kurulum_veri_durumu() {
+  if docker compose ps postgres --status running --quiet 2>/dev/null | grep -q .; then
+    return 0
+  fi
+  # Postgres kapali. Veri hacmi VAR MI? Varsa bu bir ilk kurulum DEGILDIR.
+  if docker volume ls --format '{{.Name}}' 2>/dev/null | grep -qE '(^|_)postgres-data$'; then
+    return 1
+  fi
+  return 2
+}
+
+# Yedek icin gereken bos alani TAHMIN eder (MB, stdout).
+#
+# Sabit 2048 MB yerine veritabaninin GERCEK boyutundan turetiliyor: kucuk bir
+# kurulumda 2 GB gereksiz yere engel, buyuk bir kurulumda ise YETERSIZ olurdu.
+#
+# Tahmin `pg_database_size` eksi yedek DISI tablolar uzerinden yapilir —
+# `--exclude-table-data` ile atilan historian arsivi dump'a girmiyor.
+# Custom format ustelik SIKISTIRILMIS oldugu icin bu tahmin fazlasiyla
+# guvenli taraftadir (gercek dump daha kucuk cikar).
+#
+# Sorgu basarisiz olursa tahmin yapilmaz ve asgari degere dusulur; sessizce
+# "yer var" demeyiz.
+e1_backup_gerekli_mb() {
+  local pg_user="$1" pg_db="$2"
+  local bayt kalan_mb
+
+  bayt="$(docker compose exec -T postgres psql -U "$pg_user" -d "$pg_db" -tAc "
+    SELECT GREATEST(
+      pg_database_size(current_database())
+      - COALESCE((
+          SELECT SUM(pg_total_relation_size(c.oid))
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname IN ('public','_timescaledb_internal')
+            AND (c.relname LIKE 'telemetry%'
+                 OR c.relname LIKE '_hyper_%'
+                 OR c.relname LIKE '_materialized_hypertable_%'
+                 OR c.relname IN ('outbox_events','processed_messages',
+                                  'gateway_ingest_batches','backup_jobs',
+                                  'backup_schedule'))
+        ), 0), 0)" 2>/dev/null | tr -d '[:space:]')"
+
+  if [[ ! "$bayt" =~ ^[0-9]+$ ]]; then
+    # Olcemedik. Tahmin uydurmak yerine asgari degeri kullan.
+    printf '%s' "$(( E1_BACKUP_MIN_MB + E1_BACKUP_RESERVE_MB ))"
+    return 0
+  fi
+
+  kalan_mb=$(( bayt / 1048576 ))
+  (( kalan_mb < E1_BACKUP_MIN_MB )) && kalan_mb="$E1_BACKUP_MIN_MB"
+  printf '%s' "$(( kalan_mb + E1_BACKUP_RESERVE_MB ))"
+}
+
+# Uretilen arsivi DOGRULAR. `pg_dump` cikis kodu TEK BASINA yeterli degil.
+#
+# Sirayla: dosya var mi -> duz dosya mi -> boyut > 0 -> `pg_restore --list`
+# arsivi okuyabiliyor mu. Sonuncusu belirleyici: kirpilmis ya da bozuk bir
+# arsiv burada duser. Ayni dogrulayici mantik backend'in Safe Restore
+# akisinda da var (`arsiv_on_dogrula`); burada kabuk tarafinda ayni sozlesme
+# uygulaniyor cunku updater backend'in ayakta olmasina BAGLI OLMAMALI.
+e1_backup_dogrula() {
+  local dosya="$1"
+
+  [[ -e "$dosya" ]]  || { printf 'dosya olusmadi'; return 1; }
+  [[ -f "$dosya" ]]  || { printf 'duz dosya degil'; return 1; }
+  [[ -s "$dosya" ]]  || { printf 'dosya bos (0 bayt)'; return 1; }
+
+  # Arsiv okunabiliyor mu? pg_restore postgres container'inin icinde;
+  # istemci/sunucu surumu tanim geregi ayni.
+  if ! docker compose exec -T postgres pg_restore --list /dev/stdin \
+         < "$dosya" >/dev/null 2>&1; then
+    printf 'arsiv okunamiyor (pg_restore --list basarisiz)'
+    return 1
+  fi
+  return 0
+}
+
+# Guncelleme oncesi yedegi ALIR, DOGRULAR ve sonucu raporlar.
+#
+# Basarisizlikta 1 doner; cagiran taraf `e1_die` ile 42 kodunda durur.
+# Basarida yedek yolunu `E1_BACKUP_GATE_FILE` degiskeninde birakir.
+#
+# Kullanim: e1_pre_update_backup_gate <kaynak_surum> <hedef_surum>
+e1_pre_update_backup_gate() {
+  local kaynak="${1:-bilinmiyor}" hedef="${2:-bilinmiyor}"
+  local keep pg_user pg_db ts tmp final gerekli_mb bos_mb sebep t0 sure
+  local boyut sha
+
+  E1_BACKUP_GATE_FILE=""
+
+  keep="${E1_PRE_UPDATE_KEEP:-3}"
+  [[ "$keep" =~ ^[0-9]+$ ]] && [[ "$keep" -ge 1 ]] || keep=3
+
+  e1_kurulum_veri_durumu
+  case "$?" in
+    2)
+      # Gercek ilk kurulum: veritabani hic olusmamis. Yedeklenecek bir sey yok.
+      e1_info "Veritabani henuz olusturulmamis — guncelleme oncesi yedek gerekmiyor."
+      printf 'pre_update_backup_skipped reason=fresh_install source=%s target=%s\n' \
+        "$kaynak" "$hedef" >&2
+      return 0
+      ;;
+    1)
+      e1_err "Veritabani hacmi mevcut ama Postgres AYAKTA DEGIL — yedek alinamaz."
+      printf 'pre_update_backup_failed reason=postgres_unavailable source=%s target=%s\n' \
+        "$kaynak" "$hedef" >&2
+      return 1
+      ;;
+  esac
+
+  mkdir -p backups || {
+    e1_err "backups/ dizini olusturulamadi."
+    printf 'pre_update_backup_failed reason=backup_dir_unwritable source=%s target=%s\n' \
+      "$kaynak" "$hedef" >&2
+    return 1
+  }
+  if [[ ! -w backups ]]; then
+    e1_err "backups/ dizinine yazilamiyor."
+    printf 'pre_update_backup_failed reason=backup_dir_unwritable source=%s target=%s\n' \
+      "$kaynak" "$hedef" >&2
+    return 1
+  fi
+
+  # Once birikmis eski dosyalari temizle (sahadaki GB'larca .sql.gz dahil).
+  # Dump ONCESI budama, yer acmanin da en ucuz yolu.
+  e1_prune_pre_update_backups "$keep"
+
+  pg_user="$(e1_env_get POSTGRES_USER)"; pg_user="${pg_user:-enerjione_grid}"
+  pg_db="$(e1_env_get POSTGRES_DB)";     pg_db="${pg_db:-enerjione_grid}"
+
+  # ---- disk on kontrolu -------------------------------------------------
+  gerekli_mb="$(e1_backup_gerekli_mb "$pg_user" "$pg_db")"
+  bos_mb="$(df -Pm . 2>/dev/null | awk 'NR==2 {print $4}')"
+  bos_mb="${bos_mb:-0}"
+  e1_info "Yedek icin gereken: ${gerekli_mb} MB — diskte bos: ${bos_mb} MB"
+
+  if [[ "$bos_mb" -lt "$gerekli_mb" ]]; then
+    e1_err "Diskte yeterli yer yok (gereken ${gerekli_mb} MB, bos ${bos_mb} MB)."
+    e1_hint "Yer acin (docker system prune, eski yedekler) ve tekrar deneyin."
+    printf 'pre_update_backup_failed reason=insufficient_disk required_mb=%s free_mb=%s source=%s target=%s\n' \
+      "$gerekli_mb" "$bos_mb" "$kaynak" "$hedef" >&2
+    return 1
+  fi
+
+  # ---- dump -------------------------------------------------------------
+  ts="$(date -u +%Y%m%dT%H%M%SZ)"
+  final="backups/auto-pre-update-$(e1_surum_sanitize "$kaynak")_to_$(e1_surum_sanitize "$hedef")-${ts}.dump"
+
+  # GECICI ADA YAZ, SONRA ATOMIK TASI.
+  #
+  # Eskiden dogrudan nihai ada yaziliyordu: `pg_dump` yarida oldurulurse
+  # (SIGKILL, elektrik) diskte NIHAI ADI TASIYAN yarim bir dosya kaliyordu.
+  # Bir sonraki operatorun "yedegim var" diye guvenecegi dosya tam da o.
+  tmp="backups/.backup.tmp.$$"
+  rm -f "$tmp"
+
+  local dump_args=(-U "$pg_user" -d "$pg_db" -F c --no-owner --no-acl)
+  e1_dump_exclude_into dump_args
+
+  local errlog; errlog="$(mktemp)"
+  t0="$(date +%s)"
+  printf 'pre_update_backup_started source=%s target=%s required_mb=%s free_mb=%s\n' \
+    "$kaynak" "$hedef" "$gerekli_mb" "$bos_mb" >&2
+
+  # pg_dump postgres container'inin ICINDEN kosuyor: istemci ve sunucu surumu
+  # tanim geregi ayni, surum uyusmazligi olamaz (backend tarafindaki
+  # `istemci_sunucu_surum_uyumu` kontrolunun karsiligi burada gereksiz).
+  if ! docker compose exec -T postgres pg_dump "${dump_args[@]}" \
+        > "$tmp" 2>"$errlog"; then
+    e1_err "Veritabani yedegi alinamadi (pg_dump basarisiz)."
+    if [[ -s "$errlog" ]]; then
+      tail -n 5 "$errlog" | while IFS= read -r _l; do e1_hint "$_l"; done
+    fi
+    rm -f "$tmp" "$errlog"
+    printf 'pre_update_backup_failed reason=pg_dump_failed source=%s target=%s\n' \
+      "$kaynak" "$hedef" >&2
+    return 1
+  fi
+  rm -f "$errlog"
+
+  # ---- dogrulama --------------------------------------------------------
+  if ! sebep="$(e1_backup_dogrula "$tmp")"; then
+    e1_err "Yedek dogrulanamadi: ${sebep}"
+    rm -f "$tmp"
+    printf 'pre_update_backup_validation_failed reason=%s source=%s target=%s\n' \
+      "${sebep// /_}" "$kaynak" "$hedef" >&2
+    return 1
+  fi
+
+  # ---- atomik yayina alma ----------------------------------------------
+  if ! mv -f "$tmp" "$final"; then
+    e1_err "Yedek dosyasi yerine tasinamadi."
+    rm -f "$tmp"
+    printf 'pre_update_backup_failed reason=rename_failed source=%s target=%s\n' \
+      "$kaynak" "$hedef" >&2
+    return 1
+  fi
+
+  boyut="$(stat -c %s "$final" 2>/dev/null || echo 0)"
+  sha="$(sha256sum "$final" 2>/dev/null | awk '{print $1}')"
+  sha="${sha:-hesaplanamadi}"
+  sure=$(( $(date +%s) - t0 ))
+
+  e1_chown_target "$final"
+  e1_ok "Yedek: ${final} ($(( boyut / 1048576 )) MB)"
+  e1_hint "SHA256: ${sha}"
+  e1_hint "Geri yukleme: Muhendislik > Sistem > Yedekler > Yedek Yukle"
+
+  # Yenisi eklendi; tavani yeniden uygula. Budama YALNIZCA basarili yedekten
+  # sonra kosar, boylece elde hic yedek kalmayan bir an olusmaz.
+  e1_prune_pre_update_backups "$keep"
+
+  printf 'pre_update_backup_succeeded path=%s size=%s sha256=%s source=%s target=%s duration_sec=%s\n' \
+    "$final" "$boyut" "$sha" "$kaynak" "$hedef" "$sure" >&2
+
+  E1_BACKUP_GATE_FILE="$final"
+  return 0
+}
+
+# Surum metnini dosya adinda GUVENLE kullanilabilir hale getirir.
+# Yalnizca [A-Za-z0-9._-] birakilir: kabuk enjeksiyonu ve dizin gecisi
+# (`../`) icin yuzey birakmaz. Bos kalirsa "bilinmiyor".
+e1_surum_sanitize() {
+  local s="${1:-}"
+  s="${s//[^A-Za-z0-9._-]/_}"
+  s="${s#.}"           # basta nokta -> gizli dosya olmasin
+  printf '%s' "${s:-bilinmiyor}"
+}
+
 # Update oncesi otomatik DB yedeklerini en yeni <keep> tanesi kalacak sekilde
 # budar. `auto-pre-update-*` kaliba uyan HER dosya kapsanir; eski surumlerin
 # biraktigi `.sql.gz` yigini da bu sayede temizlenir.
