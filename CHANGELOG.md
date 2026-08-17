@@ -14,6 +14,28 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.100.3] — 2026-08-17
+
+### Düzeltildi
+
+Host ajanında F5 komut sırrıyla ilgili üç kopukluk; üçü de aynı sonuca
+çıkıyordu — **backend strict moddayken gateway credential'sız kalır,
+`/pending` 401 döner ve komut kanalı kesilir**.
+
+- **`_validate_params()` sırrı düşürüyordu.** Allowlist'te kabul ediliyor ama
+  temiz `out` sözlüğüne kopyalanmıyordu; şablon sırrı hiç görmüyordu. Kod bu
+  tuzağı `image` için zaten yazmıştı (*"KOPYALANMASI ŞART"*).
+- **İstek arşivinde plaintext kalıyordu.** `token` ve NATS parolası
+  maskeleniyor, komut sırrı maskelenmiyordu.
+- **Sıradan bir güncelleme sırrı siliyordu.** `_params_from_compose()` mevcut
+  compose'dan sırrı geri kazanmıyordu; yalnızca imaj değiştiren bir update
+  satırı düşürüp F5'i sessizce bozardı. Üçünün en tehlikelisi buydu.
+
+Önceki test yetersizdi: sırrı doğrudan `render_compose`'a veriyor ve
+`_validate_params` halkasını atlıyordu. Yeni testler **gerçek zinciri** sürer.
+
+---
+
 ## [2.100.2] — 2026-08-17
 
 ### Düzeltildi
