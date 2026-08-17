@@ -356,5 +356,27 @@ for kalip in "yedek ATLANDI" "update yine de devam ediyor" "yedek atlandi (ilk k
 done
 
 echo
+
+# ---------------------------------------------------------------------------
+# T26 -- pg_restore DOGRULAMA BICIMI
+#
+# SAHADA PATLADI (2026-08-17, 2.98.0 -> 2.99.0). Kapinin ILK gercek kosumuydu:
+# dump saglam uretildi ama dogrulama "did not find magic string in file header"
+# dedi ve guncelleme TAMAMEN bloklandi.
+#
+# Sebep: `pg_restore --list /dev/stdin` -- /dev/stdin ARGUMAN olarak verilince
+# pg_restore onu bir DOSYA sanip geri-sarma (seek) yapar. `docker compose exec
+# -T` stdin'i BORU olarak ilettigi icin seek edilemez. Argumansiz cagride
+# pg_restore akisi sirayla okur ve boruyla calisir.
+#
+# Onceki testler bunu goremezdi: kabuk testi `docker`i stub'liyor, PG
+# entegrasyon testi ise dump'i DOGRUDAN dogruluyordu -- kapinin kendi cagri
+# bicimini hicbiri surmuyordu.
+# ---------------------------------------------------------------------------
+_k "T26 pg_restore'a /dev/stdin ARGUMAN olarak verilmiyor"   "$(grep -c 'pg_restore --list /dev/stdin' "$LIB" || true)" "0"
+
+# Yorum satirlari degil, GERCEK cagri sayilir.
+_k "T26 dogrulama pg_restore --list kullaniyor"   "$(grep -v '^ *#' "$LIB" | grep -c 'postgres pg_restore --list')" "1"
+
 echo "test-update-backup-gate: ${gecti} gecti, ${basarisiz} basarisiz"
 [[ "$basarisiz" -eq 0 ]]
