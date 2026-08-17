@@ -14,6 +14,39 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.100.2] — 2026-08-17
+
+### Düzeltildi
+
+- **F5 komut sırrı deployment artefaktına taşınmıyordu.** F5A'nın güvenlik
+  mantığı (çift kimlik doğrulama, `/pending` HMAC ayrımı) doğruydu; ama
+  `_build_render_input()` `gateway.command_delivery_token` değerini render
+  girdisine geçirmiyordu. Sonuç production blocker'dı:
+
+  ```
+  DB'ye sır yazılır  -> backend o gateway için STRICT moda geçer
+  artefakt sırsız    -> gateway X-Gateway-Command-Token GÖNDEREMEZ
+                     -> /pending 401 -> KOMUT KANALI KESİLİR
+  ```
+
+  Taşıma yolu uçtan uca bağlandı: indirilen `compose`/`.env` ve yerel kurulum
+  zinciri (`request_install` → `e1-gwd` allowlist + şablon). Sır **yalnızca
+  provision edilmişse** gönderilir.
+
+### Eklendi
+
+- **`POST /gateways/{code}/provision-command-credential`** (installer). CSPRNG
+  sır üretir, **mevcut sırrı sessizce değiştirmez** — üstüne yazmak sahadaki
+  gateway'in komut kanalını sessizce keserdi. Audit olayı bırakır, sır değerini
+  yazmaz.
+
+> Bu çağrı bir **aktivasyondur**: sır DB'ye yazıldığı anda backend o gateway
+> için strict moda geçer. Operatör sırası: (1) provision, (2) artefaktı yeniden
+> üret, (3) gateway'i o artefaktla yeniden başlat. Adım 3 bitene kadar komut
+> kanalı kesintilidir; saha aktivasyonu (F5C) bunu kontrollü pencerede yapar.
+
+---
+
 ## [2.100.1] — 2026-08-17
 
 ### Düzeltildi
