@@ -120,6 +120,8 @@ ALLOWED_PARAM_KEYS = frozenset({
     "image", "token", "backend_url", "nats_url", "host_port",
     "app_environment", "initiating_port_base", "initiating_port_count",
     "publish_dnp3_quality",
+    # F5 komut duzlemi sirri (opsiyonel; yoksa gecis davranisi surer).
+    "command_delivery_token",
 })
 
 # `update` aksiyonunda kabul edilen OPSIYONEL parametreler. Kurulumdan farkli:
@@ -169,7 +171,7 @@ services:
       # Kimlik
       GATEWAY_CODE: "{{GATEWAY_CODE}}"
       GATEWAY_TOKEN: "{{GATEWAY_TOKEN}}"
-      GATEWAY_NAME: "{{GATEWAY_NAME}}"
+{{COMMAND_DELIVERY_TOKEN_BLOCK}}      GATEWAY_NAME: "{{GATEWAY_NAME}}"
       # Ortam
       APP_ENVIRONMENT: "{{APP_ENVIRONMENT}}"
       GATEWAY_MODE: "dnp3"
@@ -959,6 +961,14 @@ def render_compose(code: str, name: str, params: dict) -> str:
             params["initiating_port_base"], params["initiating_port_count"]
         ),
         "PUBLISH_DNP3_QUALITY": "true" if params.get("publish_dnp3_quality") else "false",
+        # Sir yoksa satir HIC uretilmez -> gateway gecis davranisinda kalir.
+        "COMMAND_DELIVERY_TOKEN_BLOCK": (
+            '      GATEWAY_COMMAND_DELIVERY_TOKEN: "'
+            + str(params["command_delivery_token"])
+            + '"' + chr(10)
+            if params.get("command_delivery_token")
+            else ""
+        ),
         "MAX_PARALLEL_DEVICES": str(_max_parallel_devices(params.get("device_count"))),
     }
 

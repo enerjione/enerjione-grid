@@ -191,6 +191,7 @@ def request_install(
     initiating_port_base: int,
     initiating_port_count: int,
     publish_dnp3_quality: bool = False,
+    command_delivery_token: str | None = None,
 ) -> str:
     """Gateway'i bu cihaza kur.
 
@@ -212,6 +213,12 @@ def request_install(
         "initiating_port_count": initiating_port_count,
         "publish_dnp3_quality": bool(publish_dnp3_quality),
     }
+    if command_delivery_token:
+        # YALNIZCA provision edilmisse gonderilir. Bos string gondermek
+        # "provision edilmemis" ile "bos sir" ayrimini kaybettirirdi; ajan da
+        # bilinmeyen/bos anahtari sessizce env'e yazip gateway'i strict moda
+        # sokmus gibi gosterebilirdi.
+        body["params"]["command_delivery_token"] = command_delivery_token
     return _write_request(body)
 
 

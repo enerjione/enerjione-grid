@@ -51,6 +51,7 @@ from app.services.gateway_compose import (
     derive_rabbitmq_url,
     filename_for,
     normalize_backend_url_for_container,
+    generate_command_delivery_token,
     render_compose,
     render_env,
     validate_render_input,
@@ -723,6 +724,11 @@ def _build_render_input(
         # Indirilen compose ile "bu cihaza kur" akisi AYNI degeri tasimali;
         # aksi halde ayni gateway iki farkli davranisla kurulurdu.
         publish_dnp3_quality=bool(getattr(gateway, "publish_dnp3_quality", False)),
+        # F5 komut duzlemi sirri: DB'de NULL ise env HIC uretilmez ve
+        # gateway gecis davranisini surdurur. DOLU ise uretilen artefakt
+        # (compose/.env) sirri tasir -- yoksa backend strict moda gecmis
+        # ama gateway credential'i almamis olur ve komut kanali kesilir.
+        command_delivery_token=gateway.command_delivery_token,
     )
 
 
@@ -935,6 +941,7 @@ def install_gateway_locally(
             initiating_port_base=render_input.initiating_port_base,
             initiating_port_count=render_input.initiating_port_count,
             publish_dnp3_quality=render_input.publish_dnp3_quality,
+            command_delivery_token=render_input.command_delivery_token,
         )
     except GatewayAgentError as exc:
         raise _agent_http_error(exc) from exc
@@ -1888,6 +1895,68 @@ def get_gateway_pending(
     )
     db.commit()
     return _signed_json_response(gateway, resp, context="pending")
+
+
+@router.post("/{gateway_code}/provision-command-credential")
+def provision_command_credential(
+    gateway_code: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.INSTALLER)),
+):
+    """Kuyruklanmis komut duzlemi sirrini uretir (F5 aktivasyonu).
+
+    BU CAGRI BIR AKTIVASYONDUR, sadece bir alan doldurmaz
+    ---------------------------------------------------
+    Sir DB'ye yazildigi ANDA backend o gateway icin STRICT moda gecer:
+    `/pending`, ACK ve sonuc uclari artik `X-Gateway-Command-Token` ISTER ve
+    `/pending` yaniti YALNIZCA bu anahtarla imzalanir. Gateway hala eski
+    kurulumla kosuyorsa istekleri 401 alir ve komut kanali KESILIR.
+
+    Bu yuzden operator akisi sirali olmalidir:
+      1. bu ucu cagir (sir uretilir)
+      2. gateway artefaktini YENIDEN URET/INDIR (compose ya da .env artik
+         `GATEWAY_COMMAND_DELIVERY_TOKEN` tasir)
+      3. gateway'i o artefaktla yeniden baslat
+    Adim 3 bitene kadar o gateway'in komut kanali kesintili olacaktir; saha
+    aktivasyonu (F5C) bunu kontrollu pencerede yapar.
+
+    SESSIZ ROTASYON YOK
+    -------------------
+    Sir zaten varsa DEGISTIRILMEZ. Ustune yazmak, sahadaki gateway eski
+    sirla kosarken kanali sessizce keserdi; bu, kapatmaya calistigimiz
+    ariza sinifinin ta kendisi. Rotasyon ayri ve acik bir istir.
+    """
+    gateway = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
+    if gateway is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
+
+    if gateway.command_delivery_token:
+        # Idempotent: ayni cagri iki kez gelirse ikinci sefer bir sey BOZMAZ.
+        return {"code": gateway.code, "provisioned": True, "created": False}
+
+    sir = generate_command_delivery_token()
+    # Diger iki credential ile CAKISMAMALI (ayri yetki alanlari).
+    if sir in {gateway.token or "", gateway.command_token or ""}:  # pragma: no cover
+        sir = generate_command_delivery_token()
+    gateway.command_delivery_token = sir
+
+    record_event(
+        db,
+        category="gateway",
+        event_type="gateway_command_credential_provisioned",
+        severity="warning",
+        actor_username=current_user.username,
+        # SIR DEGERI YAZILMAZ — yalnizca olayin kendisi.
+        message=(
+            f"{gateway.name} ({gateway.code}) — komut duzlemi credential'i uretildi; "
+            "gateway artefakti yeniden uretilip kurulmalidir"
+        ),
+        metadata={"gateway_code": gateway.code, "strict_command_plane": True},
+        i18n_key="gateway_command_credential_provisioned",
+        i18n_params={"name": gateway.name, "code": gateway.code},
+    )
+    db.commit()
+    return {"code": gateway.code, "provisioned": True, "created": True}
 
 
 @router.post("/{gateway_code}/command-delivery-acks")

@@ -364,6 +364,10 @@ def test_e1gwd_allowlist_hala_yerinde():
         "image", "token", "backend_url", "nats_url", "host_port",
         "app_environment", "initiating_port_base", "initiating_port_count",
         "publish_dnp3_quality",
+        # F5 komut duzlemi sirri (2.100.2). Bilincli ekleme: SKALER bir sir,
+        # yapi/YAML degil. Ajanin "disardan compose kabul etme" siniri
+        # korunuyor; yalnizca bir env degeri daha tasiniyor.
+        "command_delivery_token",
     }
     fazla = mod.ALLOWED_PARAM_KEYS - beklenen
     assert not fazla, (
