@@ -47,10 +47,27 @@ def test_ajan_compose_sablonunda_ayar_var(anahtar: str):
     )
 
 
-def test_install_mode_degerleri_dogru_yerde():
-    """Indirilen dosya uzak makinede kosar (remote); ajan cihaza yerel kurar."""
-    assert re.search(r'INSTALL_MODE:\s*"remote"', _COMPOSE_TEMPLATE)
-    assert re.search(r'INSTALL_MODE:\s*"local"', _ajan_kaynak())
+def test_install_mode_indirilen_dosyada_RENDER_ZAMANI_secilir():
+    """Indirilen sablon modu SABITLEYEMEZ; ajan sablonu hep `local` yazar.
+
+    ESKI HALI SABIT `remote` BEKLIYORDU VE HATAYI KILITLIYORDU. Varsayim
+    suydu: "indirilen dosya uzak makinede kosar". Yanlisti -- "bu cihaza
+    kur" ajan hatasiyla dustugunde sihirbaz kullaniciyi elle kuruluma
+    gonderiyor (GatewayCreateModal `fallbackToManual`) ve o kullanici AYNI
+    MAKINEYE kuracagi dosyayi ayni uctan indiriyordu. Sabit `remote` ile o
+    kurulum, sozlesmenin yerel mod icin YASAKLADIGI sessiz HTTP yedegini
+    kaziniyordu.
+
+    Ajan yolu farkli ve SABIT kalmali: compose'u ajan kendi sablonundan
+    uretir, disardan mod almaz (guvenlik siniri).
+    """
+    assert re.search(r"INSTALL_MODE:\s*\"\{\{\s*INSTALL_MODE\s*\}\}\"", _COMPOSE_TEMPLATE), (
+        "indirilen compose sablonu INSTALL_MODE'u yer tutucu olarak tasimali; "
+        "sabit bir deger yerel kurulum kacisini yanlis modda uretir"
+    )
+    assert re.search(r'INSTALL_MODE:\s*"local"', _ajan_kaynak()), (
+        "ajan sablonu `local` yazmali: NATS zorunlu, sessiz HTTP yedegi YOK"
+    )
 
 
 # --- 2. Imaj etiketi kilidi -------------------------------------------------

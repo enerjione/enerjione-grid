@@ -1666,6 +1666,16 @@ export type GatewayComposeDownloadOptions = {
   appEnvironment?: "development" | "staging" | "production";
   fmt?: "compose" | "env";
   rabbitmqUrl?: string;
+  /** Dosya HANGI cihazda calisacak?
+   *
+   *  `remote` (backend varsayilani) = gateway ayri makinede; NATS erisilemezse
+   *  HTTP'ye duser. `local` = gateway backend/NATS ile AYNI makinede; NATS
+   *  zorunludur, sessiz HTTP yedegi YOKTUR.
+   *
+   *  "Bu cihaza kur" basarisiz olup kullanici elle kuruluma dustugunde
+   *  `local` GONDERILMELIDIR — aksi halde ayni makineye kurulan gateway
+   *  sozlesmenin yerel kurulum icin yasakladigi HTTP yedegini kazanir. */
+  installMode?: "local" | "remote";
 };
 
 export async function downloadGatewayCompose(
@@ -1680,6 +1690,7 @@ export async function downloadGatewayCompose(
   if (opts.appEnvironment) params.set("app_environment", opts.appEnvironment);
   if (opts.fmt) params.set("fmt", opts.fmt);
   if (opts.rabbitmqUrl) params.set("rabbitmq_url", opts.rabbitmqUrl);
+  if (opts.installMode) params.set("install_mode", opts.installMode);
 
   const response = await apiFetch(
     `${API_BASE_URL}/gateways/${gatewayCode}/docker-compose?${params.toString()}`,

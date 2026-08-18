@@ -92,6 +92,16 @@ export function GatewayCreateModal({
   // --- baska cihaz akisi -------------------------------------------------
   const [backendIp, setBackendIp] = useState(() => window.location.hostname);
   const [downloadBusy, setDownloadBusy] = useState(false);
+  // "Bu cihaza kur" basarisiz olup elle kuruluma DUSEREK mi geldik?
+  // Bastan "baska cihaza kur" secen kullanicidan ayirt etmek SART: indirilen
+  // dosyanin INSTALL_MODE'u buna gore uretilir. Yanlis mod, ayni makinede
+  // NATS'a erisilemedigi anda sessiz HTTP yedegi demek (sozlesme bunu yerel
+  // kurulum icin YASAKLAR).
+  const [cameFromLocal, setCameFromLocal] = useState(false);
+  // Indirilecek dosyanin hedefi. Elle kuruluma dusenlerde varsayilan "local"
+  // (kullanici bu cihazi secmisti); yine de degistirilebilir cunku operator
+  // gercekten baska makineye gecmis olabilir -- tahmin etmiyoruz, soruyoruz.
+  const [installMode, setInstallMode] = useState<"local" | "remote">("remote");
 
   const loadAgent = useCallback(async () => {
     setAgent(await fetchGatewayAgentStatus(accessToken));
@@ -179,7 +189,8 @@ export function GatewayCreateModal({
     try {
       const { blob, filename } = await downloadGatewayCompose(accessToken, code.trim(), {
         backendUrl,
-        fmt: "compose"
+        fmt: "compose",
+        installMode
       });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -395,7 +406,17 @@ export function GatewayCreateModal({
                 {applied?.detail ? <pre className="gw-install-log">{applied.detail}</pre> : null}
                 {/* Kurulum basarisiz olsa da gateway KAYDI olustu; kullanici
                     dosyayi indirip elle kurabilsin diye diger yola gecis. */}
-                <button type="button" className="secondary-btn" onClick={() => setStep("remote")}>
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={() => {
+                    // Kullanici BU cihazi secmisti; elle kurulum da bu cihazda
+                    // olacak varsayilir. Alttaki secimle degistirilebilir.
+                    setCameFromLocal(true);
+                    setInstallMode("local");
+                    setStep("remote");
+                  }}
+                >
                   {t("engineering.gateways.wizard.fallbackToManual")}
                 </button>
               </div>
@@ -412,6 +433,23 @@ export function GatewayCreateModal({
         {/* ------------------------------------- 3b. BASKA CIHAZA KURULUM */}
         {step === "remote" ? (
           <div className="gw-wizard-body">
+            {/* Yalnizca "bu cihaza kur" basarisiz olup buraya DUSENLERE sorulur.
+                Bastan "baska cihaza kur" secen kullanici icin belirsizlik yok:
+                mod remote kalir ve secim gosterilmez. */}
+            {cameFromLocal ? (
+              <label className="gw-field">
+                <span>{t("engineering.gateways.wizard.installModeLabel")}</span>
+                <select
+                  value={installMode}
+                  onChange={(e) => setInstallMode(e.target.value as "local" | "remote")}
+                >
+                  <option value="local">{t("engineering.gateways.wizard.installModeLocal")}</option>
+                  <option value="remote">{t("engineering.gateways.wizard.installModeRemote")}</option>
+                </select>
+                <small>{t("engineering.gateways.wizard.installModeHint")}</small>
+              </label>
+            ) : null}
+
             <label className="gw-field">
               <span>{t("engineering.gateways.compose.backendIp")}</span>
               <input

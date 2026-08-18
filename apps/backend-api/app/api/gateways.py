@@ -674,6 +674,7 @@ def _build_render_input(
     host_port: int | None,
     image: str,
     app_environment: str,
+    install_mode: Literal["local", "remote"] = "remote",
 ) -> ComposeRenderInput:
     """compose/env render girdisini hazirla.
 
@@ -729,6 +730,11 @@ def _build_render_input(
         # (compose/.env) sirri tasir -- yoksa backend strict moda gecmis
         # ama gateway credential'i almamis olur ve komut kanali kesilir.
         command_delivery_token=gateway.command_delivery_token,
+        # Kurulum modu: gateway sozlesmesinde NATS erisilemedigi andaki
+        # davranisi belirler. "bu cihaza kur" akisi ajan uzerinden gider ve
+        # compose'u ajan uretir (hep local); buradaki deger indirilen dosya
+        # icindir ve caller ACIKCA gecer.
+        install_mode=install_mode,
     )
 
 
@@ -765,6 +771,16 @@ def download_gateway_compose(
         "compose",
         description="compose: docker-compose YAML (default) | env: Docker disinda dogrudan calistirma icin .env",
     ),
+    install_mode: Literal["local", "remote"] = Query(
+        "remote",
+        description=(
+            "Bu dosya HANGI cihazda calisacak? remote (varsayilan) = gateway ayri "
+            "bir makinede; NATS erisilemezse HTTP'ye duser. local = gateway "
+            "backend/NATS ile AYNI makinede; NATS zorunludur, sessiz HTTP yedegi "
+            "YOKTUR. 'Bu cihaza kur' basarisiz olup kullanici elle kuruluma "
+            "dustugunde frontend BURAYA local gonderir."
+        ),
+    ),
     _: User = Depends(require_role(UserRole.INSTALLER)),
     db: Session = Depends(get_db),
 ):
@@ -793,6 +809,7 @@ def download_gateway_compose(
             host_port=host_port,
             image=image,
             app_environment=app_environment,
+            install_mode=install_mode,
         )
     except (ComposeRenderError, TypeError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -922,6 +939,11 @@ def install_gateway_locally(
             host_port=payload.host_port,
             image=image,
             app_environment=payload.app_environment,
+            # Bu akis TANIMI GEREGI yerel. Compose'u ajan kendi sablonundan
+            # uretir (mod disardan gelmez), yani deger burada render EDILMEZ;
+            # yine de dogru yaziyoruz ki bu girdiden bir gun dosya
+            # uretilirse yanlis modda cikmasin.
+            install_mode="local",
         )
         validate_render_input(render_input)
     except (ComposeRenderError, TypeError) as exc:

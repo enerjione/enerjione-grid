@@ -104,6 +104,9 @@ import "./heatField.test";
 // bos gostermekten kotudur.
 import "./modemStatus.test";
 
+// Gateway kurulum modu (INSTALL_MODE) -- yerel kurulum kacisi.
+import "./gatewayKurulumModu.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   connectionIsDead,

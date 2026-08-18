@@ -53,13 +53,18 @@ from app.services import gateway_compose as gc
 from app.services.gateway_compose import ComposeRenderInput
 
 KOK = Path(__file__).resolve().parents[3]
-# GECERLI sozlesme snapshot'i. Eski surumler (`v1.11.0.json`, `v1.11.1.json`)
+# GECERLI sozlesme snapshot'i. Eski surumler (`v1.11.0.json` ... `v1.11.2.json`)
 # tarihsel kanit olarak dizinde KALIR; testin ve CI'nin baktigi dosya budur ve
 # gateway yayinlandiginda ikisi BIRLIKTE guncellenir.
-SOZLESME_YOLU = KOK / "infra/gateway-contract/v1.11.2.json"
+SOZLESME_YOLU = KOK / "infra/gateway-contract/v1.11.3.json"
 E1GWD_YOLU = KOK / "infra/appliance/e1-gwd.py"
 
 TOKEN = "t" * 48
+
+# Uretilen govdede cozulmemis `{{...}}` aramak icin (uretim modulundeki
+# desenin kopyasi degil: test KENDI olcutunu tasimali, yoksa modulde desen
+# bozulursa test de birlikte kor olur).
+_PLACEHOLDER_RE_TEST = __import__("re").compile(r"\{\{\s*[A-Z0-9_]+\s*\}\}")
 
 
 def _sozlesme() -> dict:
@@ -92,6 +97,32 @@ def _girdi(**kw) -> ComposeRenderInput:
 
 def _uzak_compose() -> dict:
     return yaml.safe_load(gc.render_compose(_girdi()))
+
+
+def _indirilen_yerel_compose() -> dict:
+    """Indirme ucu `install_mode="local"` ile: ELLE yerel kurulum kacisi.
+
+    "Bu cihaza kur" ajan hatasiyla dustugunde kullanici ayni makineye
+    kuracagi dosyayi bu uctan indiriyor (GatewayCreateModal
+    `fallbackToManual`). Bu yol UZUN SURE remote uretiyordu; artik dorduncu
+    bir uretim yolu olarak sozlesmeye tabi.
+    """
+    return yaml.safe_load(gc.render_compose(_girdi(install_mode="local")))
+
+
+def _env_govdesi_ayristir(govde: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for satir in govde.splitlines():
+        satir = satir.strip()
+        if not satir or satir.startswith("#") or "=" not in satir:
+            continue
+        k, v = satir.split("=", 1)
+        out[k] = v
+    return out
+
+
+def _indirilen_yerel_env() -> dict[str, str]:
+    return _env_govdesi_ayristir(gc.render_env(_girdi(install_mode="local")))
 
 
 def _uzak_env() -> dict[str, str]:
@@ -142,8 +173,18 @@ def _env(compose: dict) -> dict[str, str]:
     return {k: str(v) for k, v in _servis(compose)["environment"].items()}
 
 
-# Uc uretim yolunun tamami. Her yeni yol buraya eklenmeli.
-YOLLAR = ("uzak_compose", "yerel_compose", "uzak_env")
+# Uretim yollarinin tamami -> o yolun BEKLENEN kurulum modu.
+# Her yeni yol buraya eklenmeli; mod tahmini degil, BEYAN.
+YOL_MODU: dict[str, str] = {
+    "uzak_compose": "remote",
+    "uzak_env": "remote",
+    # Ajan uzerinden yerel kurulum: compose'u ajan kendi sablonundan uretir.
+    "yerel_compose": "local",
+    # Ajan basarisiz olunca kalan ELLE yerel kurulum kacisi (indirme ucu).
+    "indirilen_yerel_compose": "local",
+    "indirilen_yerel_env": "local",
+}
+YOLLAR = tuple(YOL_MODU)
 
 
 def _yol_env(ad: str) -> dict[str, str]:
@@ -153,6 +194,10 @@ def _yol_env(ad: str) -> dict[str, str]:
         return _env(_yerel_compose())
     if ad == "uzak_env":
         return _uzak_env()
+    if ad == "indirilen_yerel_compose":
+        return _env(_indirilen_yerel_compose())
+    if ad == "indirilen_yerel_env":
+        return _indirilen_yerel_env()
     raise AssertionError(ad)
 
 
@@ -241,17 +286,28 @@ def test_T07_dnp3_kutuphanesi_yadnp3(yol: str):
 
 @pytest.mark.parametrize("yol", YOLLAR)
 def test_T21_T22_install_mode_bildirilmis_degerlerden(yol: str):
+    """Her uretim yolu, BEYAN ETTIGI kurulum modunu EXPLICIT tasimali.
+
+    Iki ayri sey olculuyor:
+      1. Alan HIC YOK ise kirmizi -- gateway'in runtime varsayilanina
+         (`remote`) dusmek uretimde kabul edilemez, cunku bu yerel kurulumda
+         sessiz HTTP yedegi demektir.
+      2. Deger yanlis ise kirmizi -- ozellikle yerel yollarin `remote`
+         uretmesi, sozlesmenin yerel kurulum icin YASAKLADIGI davranistir.
+    """
     izinli = SOZLESME["intentional_mode_differences"]["INSTALL_MODE"]
-    beklenen = {izinli["remote"], izinli["local"]}
+    beklenen_mod = izinli[YOL_MODU[yol]]
     env = _yol_env(yol)
-    assert "INSTALL_MODE" in env, f"`{yol}` INSTALL_MODE uretmiyor"
-    assert env["INSTALL_MODE"] in beklenen
-    if yol == "yerel_compose":
-        assert env["INSTALL_MODE"] == izinli["local"], (
-            "yerel kurulum `local` olmali: NATS zorunlu, sessiz HTTP yedegi YOK"
-        )
-    else:
-        assert env["INSTALL_MODE"] == izinli["remote"]
+    assert "INSTALL_MODE" in env, (
+        f"`{yol}` INSTALL_MODE uretmiyor. Eksik olmasi gateway'in kod "
+        f"varsayilanina (remote) dusmesi demektir."
+    )
+    assert env["INSTALL_MODE"] in {izinli["remote"], izinli["local"]}
+    assert env["INSTALL_MODE"] == beklenen_mod, (
+        f"`{yol}` INSTALL_MODE={env['INSTALL_MODE']!r}, beklenen {beklenen_mod!r}. "
+        f"Yerel bir kurulumun `remote` tasimasi: ayni makinede NATS'a "
+        f"erisilemedigi anda sessiz HTTP yedegi -- sozlesme bunu yasaklar."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -391,3 +447,121 @@ def test_docker_sock_backende_verilmiyor():
     bas = compose.index("backend-api:")
     son = compose.index("tag-engine:", bas)
     assert "/var/run/docker.sock" not in compose[bas:son]
+
+
+# ---------------------------------------------------------------------------
+# v1.11.3 -- izlenebilirlik modeli, yer tutucular, gecis alani
+# ---------------------------------------------------------------------------
+
+
+def test_snapshot_dosya_adi_surumle_tutarli():
+    """`v<surum>.json` adi ile icerideki `gateway_release` ayni olmali.
+
+    Kaydigi anda CI yesil kalirken yanlis sozlesmeye bakilir: dosya adina
+    guvenip icerigi guncellemeyi unutmak en kolay drift.
+    """
+    assert SOZLESME_YOLU.name == f"v{SOZLESME['gateway_release']}.json"
+
+
+def test_eski_snapshotlar_tarihsel_kanit_olarak_duruyor():
+    dizin = SOZLESME_YOLU.parent
+    mevcut = {p.name for p in dizin.glob("v*.json")}
+    for eski in ("v1.11.0.json", "v1.11.1.json", "v1.11.2.json"):
+        assert eski in mevcut, (
+            f"{eski} silinmis. Eski snapshot'lar bir surumun O GUN neyi "
+            f"tasidiginin kanitidir; yenisi eskisinin yerine gecmez."
+        )
+
+
+def test_kaynak_sha_self_referential_DEGIL():
+    """v1.11.3 izlenebilirlik modeli: dosyadaki SHA bu surumun commit'i DEGIL.
+
+    Bir dosya kendi commit'ini tasiyamaz (SHA yazmak yeni commit uretir).
+    Gateway bunu v1.11.3'te acikca beyan etti: alandaki deger, sozlesmenin
+    turetildigi YAYIMLANMIS BASELINE surumun commit'i. Gercek revizyon
+    release aninda uretilir (imaj etiketi `org.opencontainers.image.revision`
+    ve `gateway-deployment-contract.generated.json`).
+
+    Grid bu modeli DOGRU anlamali: parity semasi [0-9a-f]{40} formatini
+    korur ama SHA'yi "bu surumun commit'i" diye YORUMLAMAZ.
+    """
+    import re as _re
+
+    assert _re.fullmatch(r"[0-9a-f]{40}", SOZLESME["gateway_source_sha"]), (
+        "parity semasi 40 haneli SHA formatini bekliyor"
+    )
+    assert SOZLESME["gateway_source_ref"] == f"v{SOZLESME['gateway_release']}", (
+        "gateway_source_ref yazim aninda bilinebilen tag olmali (v<surum>)"
+    )
+    baseline = SOZLESME.get("gateway_source_sha_baseline_ref")
+    assert baseline, "gateway_source_sha_baseline_ref yok: SHA'nin neyi gosterdigi belirsiz"
+    assert baseline != SOZLESME["gateway_source_ref"], (
+        "baseline ref bu surumun kendisi olamaz -- self-referential SHA "
+        "varsayimi tam olarak bu yuzden kaldirildi"
+    )
+    assert len(SOZLESME.get("gateway_source_sha_semantics", "")) > 100, (
+        "SHA semantigi yazili olmali; yoksa bir sonraki kisi yine "
+        "'bu surumun commit'i' diye yorumlar"
+    )
+
+
+@pytest.mark.parametrize("yol", YOLLAR)
+def test_zorunlu_environment_hicbir_yolda_kaybolmadi(yol: str):
+    """`required_environment` -- kimlik/baglanti alanlari regresyonu.
+
+    `environment_defaults` sabit degerleri olcer; bunlar kuruluma OZEL
+    oldugu icin ayri: degeri degil VARLIGI ve bosluksuzlugu kilitlenir.
+    """
+    env = _yol_env(yol)
+    for anahtar in SOZLESME["required_environment"]:
+        assert anahtar in env, f"`{yol}` ciktisinda zorunlu `{anahtar}` YOK"
+        assert env[anahtar].strip(), f"`{yol}` ciktisinda `{anahtar}` bos"
+
+
+@pytest.mark.parametrize(
+    "govde_fn",
+    [
+        lambda: gc.render_compose(_girdi()),
+        lambda: gc.render_env(_girdi()),
+        lambda: gc.render_compose(_girdi(install_mode="local")),
+        lambda: gc.render_env(_girdi(install_mode="local")),
+    ],
+    ids=["uzak_compose", "uzak_env", "yerel_compose", "yerel_env"],
+)
+def test_uretilen_dosyada_cozulmemis_yer_tutucu_kalmaz(govde_fn):
+    """`{{...}}` sizarsa dosya uretime gider ve gateway acilista patlar.
+
+    INSTALL_MODE yer tutucuya cevrildigi icin (v1.11.3) bu artik teorik bir
+    risk degil: degeri doldurmayi unutan bir render yolu sessizce
+    `INSTALL_MODE: "{{INSTALL_MODE}}"` yazardi.
+    """
+    govde = govde_fn()
+    kalan = _PLACEHOLDER_RE_TEST.findall(govde)
+    assert not kalan, f"cozulmemis yer tutucu: {kalan}"
+
+
+def test_gecersiz_install_mode_reddedilir():
+    with pytest.raises(gc.ComposeRenderError):
+        gc.render_compose(_girdi(install_mode="lokal"))
+    with pytest.raises(gc.ComposeRenderError):
+        gc.render_env(_girdi(install_mode=""))
+
+
+@pytest.mark.parametrize("yol", YOLLAR)
+def test_F5A_komut_sirri_varsayilan_render_de_URETILMEZ(yol: str):
+    """Sozlesme ordering constraint'i: F5A sahaya cikmadan provision EDILMEZ.
+
+    Erken verilirse gateway `/pending` yanitini backend'in bilmedigi bir
+    anahtarla dogrular; F4B fail-closed oldugu icin komut duzlemi DURUR.
+    Bu test o sirayi kilitler: sir DB'de yokken hicbir yol env uretmemeli.
+    """
+    gecis = SOZLESME["transition_environment"]["GATEWAY_COMMAND_DELIVERY_TOKEN"]
+    assert gecis["status"] == "optional_until_backend_f5a", (
+        f"sozlesmedeki F5A durumu degismis: {gecis['status']!r}. Bu test "
+        "BILEREK kirilir -- durum `available`a donduyse Grid tarafinda F5A'nin "
+        "GERCEKTEN sahaya ciktigi dogrulanmali, sonra bu bekleme guncellenmeli. "
+        "Sessizce gecmesi, sirrin erken provision edilmesine kapi acar."
+    )
+    assert "GATEWAY_COMMAND_DELIVERY_TOKEN" not in _yol_env(yol), (
+        "komut duzlemi sirri sir provision EDILMEDEN render edilmis"
+    )

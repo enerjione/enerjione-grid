@@ -4,6 +4,25 @@ Frontend "Yeni gateway ekle" akisinda kullanici hazir bir compose dosyasi
 indirir. Backend bu modulu kullanarak compose YAML'ini uretir; token + kod
 veritabaninda olusturulup buradan cekilir.
 
+KURULUM MODU (INSTALL_MODE) — BU MODUL "REMOTE-ONLY" DEGILDIR
+-------------------------------------------------------------
+Uzun sure oyle SANILDI ve INSTALL_MODE bu iki sablonda sabit "remote"
+yaziyordu. Yanlisti: "bu cihaza kur" akisi ajan hatasinda kullaniciyi elle
+kuruluma dusuruyor (GatewayCreateModal `fallbackToManual` -> `setStep("remote")`)
+ve o kullanici AYNI MAKINEYE kuracagi dosyayi bu uctan indiriyor. Sabit
+"remote" ile o kurulum, gateway sozlesmesinin yerel kurulum icin YASAKLADIGI
+sessiz HTTP yedegini kazaniyordu: ayni makinede NATS'a erisememek bir
+yapilandirma hatasidir, gizlenmemeli.
+
+Bu yuzden mod artik render zamani secilir (`ComposeRenderInput.install_mode`)
+ve HER IKI sablonda da EXPLICIT render edilir. Gateway'in kendi runtime
+varsayilanina guvenilmez. Karsilik: gateway repo'sunda `render_compose.py
+--install-mode` de v1.11.3'ten beri ZORUNLUDUR.
+
+Yerel kurulumun ASIL yolu hala `infra/appliance/e1-gwd.py`'dir (ajan compose'u
+kendi sablonundan uretir, sabit "local"); buradaki `install_mode="local"`
+yalnizca o yol basarisiz olunca kalan ELLE kurulum kacisidir.
+
 Tasarim:
   - Sablon string sabit. Yer tutucu format: ``{{KEY}}``.
   - Saha kotuksanir / dogrulanir; eksik degerler hata firlatir (Pydantic FastAPI
@@ -101,7 +120,7 @@ services:
       # Cihaz sayisina gore olceklenir; sabit deger havuzu ac birakiyordu.
       MAX_PARALLEL_DEVICES: "500"
       # Kurulum modu (yerel/uzak) — guncellemede silinmemeli.
-      INSTALL_MODE: "remote"
+      INSTALL_MODE: "{{INSTALL_MODE}}"
       # DNP3
       DNP3_LIBRARY: "yadnp3"
       DNP3_LOCAL_ADDRESS: "1"
@@ -180,7 +199,7 @@ WORKER_HEALTH_PORT=8020
 CONFIG_REFRESH_SEC=30
 DEFAULT_POLL_INTERVAL_SEC=1
 MAX_PARALLEL_DEVICES=500
-INSTALL_MODE=remote
+INSTALL_MODE={{INSTALL_MODE}}
 
 # DNP3
 DNP3_LIBRARY=yadnp3
@@ -240,6 +259,17 @@ class ComposeRenderInput:
     #: F5 komut duzlemi sirri. None = provision EDILMEMIS -> env hic
     #: uretilmez ve gateway v1.11.0 gecis davranisini surdurur.
     command_delivery_token: str | None = None
+    #: Kurulum modu. Gateway sozlesmesi (intentional_mode_differences) bunu
+    #: NATS erisilemedigi andaki davranisin BELIRLEYICISI sayar:
+    #:   local  -> NATS zorunlu, sessiz HTTP yedegi YOK. Ayni makinede NATS'a
+    #:             erisememek bir YAPILANDIRMA HATASIDIR ve gorunur kalmali.
+    #:   remote -> NATS birincil, erisilemezse HTTP'ye duser, NATS gelince doner.
+    #: Varsayilan `remote`: bu modulun ana musterisi "baska cihaza kur"
+    #: akisidir. YEREL kurulum icin cagiran taraf ACIKCA "local" gecmelidir
+    #: (bkz. `GET /gateways/{kod}/docker-compose?install_mode=`). Gateway'in
+    #: kendi runtime varsayilanina (yine `remote`) GUVENILMEZ: deger her iki
+    #: sablonda da her zaman EXPLICIT render edilir.
+    install_mode: Literal["local", "remote"] = "remote"
 
 
 class ComposeRenderError(ValueError):
@@ -247,6 +277,10 @@ class ComposeRenderError(ValueError):
 
 
 def _validate(args: ComposeRenderInput) -> None:
+    if args.install_mode not in ("local", "remote"):
+        raise ComposeRenderError(
+            f"install_mode gecersiz: {args.install_mode!r} (yalnizca 'local' veya 'remote')"
+        )
     if not _CODE_REGEX.match(args.code):
         raise ComposeRenderError(
             f"GATEWAY_CODE gecersiz: {args.code!r} "
@@ -339,6 +373,7 @@ def _replacements(args: ComposeRenderInput) -> dict[str, str]:
         "HOST_HEALTH_PORT": str(args.host_port),
         "IMAGE": args.image,
         "APP_ENVIRONMENT": args.app_environment,
+        "INSTALL_MODE": args.install_mode,
         "INITIATING_PORTS_BLOCK": _build_initiating_ports_block(args),
         "PUBLISH_DNP3_QUALITY": "true" if args.publish_dnp3_quality else "false",
         "COMMAND_DELIVERY_TOKEN_BLOCK": _command_delivery_block(args),
