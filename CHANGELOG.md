@@ -14,6 +14,61 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.101.0] — 2026-08-18
+
+### Eklendi
+
+- **Bilinmeyen cihaz telemetrisi artık kaybolmuyor.** Cihazı henüz tanımlı
+  olmayan bir ölçüm geldiğinde tüketici yalnızca uyarı loglayıp mesajı ack
+  ediyordu; payload kalıcı olarak kayboluyordu (ack'lenen mesaj bir daha
+  teslim edilmiyor, dedup kaydı da olası bir yeniden teslimi yutuyordu).
+  Cihaz iki dakika sonra tanımlansa bile aradaki ölçümler geri
+  getirilemiyordu.
+
+  Payload artık `unknown_device_telemetry` tablosunda dayanıklı olarak
+  saklanıyor ve ack **ancak** kayıt kalıcılaştıktan sonra veriliyor. Cihaz
+  tanımlandıktan sonra canlı yolla **aynı** iş mantığıyla replay edilebilir:
+  `POST /admin/telemetry-quarantine/replay` (installer/engineer). Replay
+  cihaz/profil/sinyal **üretmez** — bu bir veri dayanıklılığı mekanizması,
+  keşif değil. Cihaz hâlâ yoksa kayıt korunur; başka bir gateway'e aitse
+  replay reddedilir.
+
+  Karantina sınırsız büyümez: kapasite dolunca sırayla süresi dolmuş
+  replayed, süresi dolmuş pending ve gerekirse en eski pending kayıtlar
+  temizlenir. Üç kategori **ayrı** sayılır ve süresi dolmadan yapılan silme
+  ayrıca operasyonel olay üretir — sessiz veri kaybı yok.
+
+  Operatör görünümü: `GET /admin/telemetry-quarantine` (hangi kod kaç ölçüm
+  biriktirdi, kod artık tanımlı mı, kapasite doldu mu).
+
+### Düzeltildi
+
+- **Fiziksel komut parametreleri sessizce dönüştürülüyordu.** `count=True`,
+  `count="1"` ve `count=1.0` kabul edilip `1`e çevriliyordu; Python'da
+  `True == 1` olduğu için tip kontrolü de bunu yakalamıyordu. `count=True`
+  gönderen çağıran bir tekrar sayısı **istememişti**. Ayrıca aralık kontrolü
+  yalnızca REST şemasındaydı; servis katmanı hiçbir şey doğrulamıyordu, yani
+  şema dışından gelen bir çağıran gateway'in fiziksel sınırını aşan bir
+  değer yazabilirdi.
+
+  Komut niyeti artık `device_commands` satırı yazılmadan **önce**
+  doğrulanıyor ve doğrulama tüm çağıranlar (arayüz, yapılandırma uygulama,
+  IEC 104) için geçerli. Geçersiz niyette satır hiç oluşmaz ve `/pending`e
+  ulaşmaz. Üretim davranışı değişmedi: her yol bugün de
+  `latch_on / 1 / 0 / 0` üretiyor.
+
+- **JSON geçerli ama nesne olmayan telemetri payload'ı** (`[1,2,3]`) tüm
+  partiyi ack'siz bırakıp sonsuz yeniden teslime sokuyordu; artık biçim
+  hatası olarak DLQ'ya gidiyor.
+
+### Değişti
+
+- Gateway dağıtım sözleşmesi v1.11.1'e senkronlandı (`gateway_release`
+  dışında semantik fark yok). Sözleşmenin sahibi gateway repo'sudur; Grid
+  tam kopyasını vendor eder ve CI karşılaştırır.
+
+---
+
 ## [2.100.3] — 2026-08-17
 
 ### Düzeltildi
