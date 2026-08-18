@@ -14,6 +14,49 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.102.0] — 2026-08-18
+
+### Düzeltildi
+
+- **"Bu cihaza kur" başarısız olunca indirilen dosya yanlış kurulum modunu
+  taşıyordu.** Sihirbazın "bu cihaza kur" adımı host ajanına (e1-gwd) gider ve
+  ajan gateway'i `INSTALL_MODE=local` ile kurar. Ajan başarısız olduğunda
+  ekranda "elle kurulum adımlarını göster" çıkıyor ve akış dosya indirme
+  adımına geçiyordu — ama o uç `INSTALL_MODE` değerini **sabit `remote`**
+  üretiyordu. Sonuç: kullanıcı **aynı makineye** kuracağı dosyayı yanlış modda
+  indiriyordu.
+
+  Etkisi sessizdi ve yalnızca NATS koptuğu anda ortaya çıkıyordu: `remote`
+  modda gateway NATS'a ulaşamayınca geçici olarak HTTP'ye düşer. Aynı makinede
+  NATS'a erişilememesi ise bir **yapılandırma hatasıdır** ve gateway
+  sözleşmesi yerel kurulumda bu yedeği açıkça yasaklar — hata gizlenmemeli,
+  görünür kalmalıdır.
+
+  Kurulum modu artık dosya üretilirken seçiliyor
+  (`GET /gateways/{kod}/docker-compose?install_mode=local|remote`) ve hem
+  compose hem `.env` çıktısına **her zaman açıkça** yazılıyor; gateway'in
+  kendi varsayılanına güvenilmiyor. Elle kuruluma düşen kullanıcıya "bu dosya
+  hangi cihazda çalışacak?" sorusu görünür şekilde soruluyor ve varsayılan
+  "bu cihaz" geliyor. Parametresiz çağrı eskisi gibi `remote` üretir; baştan
+  "başka cihaza kur" seçen akış değişmedi.
+
+  Hatayı kilitleyen test de düzeltildi: `INSTALL_MODE: "remote"` sabitini
+  **şart koşuyordu**, yani doğru davranış yazılsa testi kırardı.
+
+### Eklendi
+
+- Gateway deployment sözleşmesi **v1.11.3** vendor edildi
+  (`infra/gateway-contract/v1.11.3.json`); parity testleri artık bu sürümü
+  esas alıyor. Sözleşmenin yeni izlenebilirlik modeli de doğrulanıyor:
+  dosyadaki kaynak SHA'sı o sürümün kendi commit'i değil, türetildiği
+  **baseline** sürümün commit'idir (bir dosya kendi SHA'sını taşıyamaz).
+- Kurulum modu için regresyon ağı: dört üretim yolunun (uzak compose, uzak
+  `.env`, elle yerel kurulum, ajan kurulumu) her biri beyan ettiği modu
+  açıkça taşımak zorunda; alanın kaybolması, yerel bir kurulumun `remote`
+  üretmesi ve çözülmemiş `{{...}}` yer tutucu kalması testten kırmızı döner.
+
+---
+
 ## [2.101.2] — 2026-08-18
 
 ### Düzeltildi
