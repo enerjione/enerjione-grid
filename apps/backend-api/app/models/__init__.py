@@ -2,19 +2,18 @@
 
 BU DOSYA EKSIK KALIRSA SAHA CIHAZI SESSIZCE BOZULUR
 ---------------------------------------------------
-`scripts/migrate_db.py` semayi IKI ayri yoldan kurar:
+Sema ARTIK bu dosyadan URETILMIYOR — otorite Alembic'tir (temiz kurulum
+`stamp 0071` + `upgrade head`, sema 0072'den gelir). Ama bu liste hala
+KRITIK, cunku `alembic revision --autogenerate` KARSILASTIRMA TARAFINI
+buradan okur. Burada eksik kalan bir model:
 
-  * TEMIZ kurulum (`alembic_version` yok): `Base.metadata.create_all()` +
-    `alembic stamp head`. Migration'lar KOSMAZ.
-  * MEVCUT kurulum: `alembic upgrade head`.
+  * autogenerate tarafindan "DB'de var, modelde yok" sanilir  ->  uretilen
+    migration icin `op.drop_table` yazar,
+  * yeni tablosu icin hicbir migration URETILMEZ  ->  sema sessizce geride
+    kalir.
 
-Yani temiz kurulumda bir tablonun olusmasinin TEK yolu, modelinin bu dosya
-uzerinden `Base.metadata`'ya kayitli olmasidir. Burada eksik kalan bir model:
-
-  * `create_all` tarafindan kurulmaz VE onu kuran migration da `stamp head`
-    yuzunden kosmaz  ->  tablo sifirdan kurulan cihazda HIC OLUSMAZ,
-  * `alembic revision --autogenerate` tarafindan "DB'de var, modelde yok"
-    sanilir  ->  uretilen migration icin `op.drop_table` yazar.
+Gozden kacan tek bir migration `telemetry_latest`i ya da `user_sessions`i
+her saha cihazindan dusurebilir.
 
 Ikisi de hata vermez: gelistirici makinesi ve CI zaten YUKSELTME yolundan
 gectigi icin yesil kalir. 2026-08-13 denetiminde `gateway_health`,

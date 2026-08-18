@@ -1,7 +1,9 @@
 """Alembic migration ortami — env.py.
 
-`Settings.database_url`'tan `sqlalchemy.url`'i override eder; production'da
-secret .env'den gelir, alembic.ini'ye yazilmaz.
+Hedef veritabani ACIK bir precedence ile secilir (bkz. asagidaki
+`_hedef_url`): acik Alembic URL > E1_MIGRATION_DATABASE_URL >
+`settings.database_url`. Production'da secret .env'den gelir, alembic.ini'ye
+yazilmaz.
 
 Autogenerate icin `app.db.base.Base.metadata` referans alinir — tum SQLAlchemy
 model'lerini import eden `app.models.__init__` paketi (veya main.py'deki
@@ -10,6 +12,7 @@ yan etkili imports) Base'e baglar.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from logging.config import fileConfig
@@ -28,6 +31,11 @@ if str(_BACKEND_DIR) not in sys.path:
 from app.core.config import settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
 
+# Hedef secim mantigi — `env.py` import edilince migration kostugu icin
+# ayri, SAF bir modulde tutulur (test edilebilirlik).
+sys.path.insert(0, str(_HERE))
+import hedef_secimi  # noqa: E402
+
 # Model'lerin Base'e register olmasi icin TEK import — liste
 # `app/models/__init__.py` icinde tutulur.
 #
@@ -45,8 +53,28 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# DB URL — Settings'tan oku; alembic.ini placeholder'i override.
-config.set_main_option("sqlalchemy.url", settings.database_url)
+
+# --------------------------------------------------------------------------
+# HEDEF VERITABANI SECIMI
+# --------------------------------------------------------------------------
+# Precedence ve gerekcesi `hedef_secimi.py` icinde (saf + test edilebilir):
+#     acik Alembic URL > E1_MIGRATION_DATABASE_URL > settings.database_url
+#
+# ONEMLI: acikca verilen URL ARTIK EZILMEZ. Eskiden buradaki kosulsuz tek
+# satir cagiranin hedefini sessizce degistiriyordu ve bir migration testini
+# gelistiricinin veritabanina kosturmustu.
+_url, _kaynak = hedef_secimi.hedef_url(
+    acik_url=config.get_main_option("sqlalchemy.url"),
+    ortam_url=os.getenv(hedef_secimi.ORTAM_ADI),
+    ayar_url=settings.database_url,
+)
+config.set_main_option("sqlalchemy.url", _url)
+
+# Hangi hedefe kosuldugu LOG'DA gorunmeli: "yanlis DB'ye migration kostu"
+# olaylarinin tamami hedefin gorunmez olmasindan besleniyordu.
+logging.getLogger("alembic.env").info(
+    "migration hedefi: %s (kaynak: %s)", hedef_secimi.parolasiz(_url), _kaynak
+)
 
 target_metadata = Base.metadata
 

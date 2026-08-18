@@ -2,23 +2,29 @@
 
 NEDEN BU TEST VAR
 -----------------
-`create_tables` startup event'i, ~160 DDL ifadesini tek transaction'da
-kosturan legacy bootstrap blogunu cagirir. Oradan bir exception CIKARSA:
+Startup event'inden cikan HER exception uvicorn'u "Application startup
+failed." ile sonlandirir:
 
-    uvicorn "Application startup failed." der ve process'i sonlandirir
-      -> Dockerfile CMD `migrate_db && exec uvicorn` zinciri oldugu icin
-         container cikar
-      -> compose `restart: unless-stopped` ile SONSUZ CRASH-LOOP
-      -> appliance tamamen karanlik; operator arayuze ulasip teshis bile
-         yapamaz.
+    -> Dockerfile CMD `migrate_db && exec uvicorn` zinciri oldugu icin
+       container cikar
+    -> compose `restart: unless-stopped` ile SONSUZ CRASH-LOOP
+    -> appliance tamamen karanlik; operator arayuze ulasip teshis bile
+       yapamaz.
 
-Yani tek bir kilit cakismasi ya da beklenmedik bir satir, sahayi komple
-durdurabilir. Bu testler o yolun kapali kaldigini kilitler.
+DEGISEN NE
+----------
+Eskiden bu dosya `create_tables` / `_legacy_bootstrap_ddl` ikilisini
+koruyordu: acilista ~124 DDL ifadesi kosuyor ve hatasi yutuluyordu. O blok
+0072 ile Alembic'e devredildi ve KALDIRILDI.
 
-Bu blok LEGACY'dir: gercek sema otoritesi Alembic'tir ve `scripts/migrate_db`
-uvicorn'dan ONCE kosup gercek bir sema sorununda zaten gurultulu sekilde
-patlar. Dolayisiyla buradaki basarisizligi yutup acilmaya devam etmek
-dogru takastir.
+Korunan RISK aynen duruyor, yalnizca sahibi degisti. Bugun acilista kosan
+iki kanca var ve ikisi de appliance'i karartmamali:
+
+  * `dogrula_sema_uyumlulugu` — SALT OKUNUR sema kontrolu
+  * `seed_fabrika_verisi`     — sinyal katalogu + fabrika config sablonu
+
+Gercek bir sema sorunu zaten `scripts/migrate_db` tarafindan uvicorn
+BASLAMADAN once, gurultulu bicimde yakalanir.
 """
 
 from __future__ import annotations
@@ -26,61 +32,93 @@ from __future__ import annotations
 import app.main as main_module
 
 
-def test_create_tables_swallows_bootstrap_failure(monkeypatch, caplog):
-    """Bootstrap patlarsa startup DEVAM ETMELI (crash-loop olmamali)."""
+# --------------------------------------------------------------------------
+# Sema kontrolu — okur, karartmaz
+# --------------------------------------------------------------------------
+def test_sema_kontrolu_startupi_DURDURMAZ(monkeypatch):
+    """Kontrol patlasa bile acilis SURMELI."""
+    from app.db import schema_guard
 
-    def _boom() -> None:
-        raise RuntimeError("simulasyon: DDL patladi")
+    def _boom(_engine):
+        raise RuntimeError("simulasyon: sema kontrolu patladi")
 
-    monkeypatch.setattr(main_module, "_legacy_bootstrap_ddl", _boom)
+    monkeypatch.setattr(schema_guard, "dogrula_ve_isaretle", _boom)
 
-    # Exception DISARI SIZMAMALI.
-    main_module.create_tables()
+    try:
+        main_module.dogrula_sema_uyumlulugu()
+    except Exception as exc:  # noqa: BLE001
+        raise AssertionError(
+            f"sema kontrolu startup'i durdurdu ({exc!r}) — crash-loop riski"
+        ) from exc
 
-    assert any(
-        "legacy_bootstrap_ddl_failed" in r.message or "legacy_bootstrap_ddl_failed" in r.getMessage()
-        for r in caplog.records
-    ), "hata yutuldu ama LOGLANMADI — sessiz yutma kabul edilemez"
 
+def test_sema_kontrolu_DB_hatasinda_NOT_READY_yapmaz(monkeypatch):
+    """DB'ye ulasilamamasi bir SEMA karari degildir.
 
-def test_create_tables_propagates_nothing_even_on_db_error(monkeypatch):
-    """DB baglanti hatasi da startup'i durdurmamali.
-
-    Saha senaryosu: Postgres healthcheck'i gecti ama backend DDL'i kosarken
-    kisa bir kesinti oldu. Bu, backend'in HIC acilmamasi icin sebep degil.
+    Baglanti hatasinda uygulamayi NOT READY'ye cakmak teshisi zorlastirirdi;
+    `/health/ready` zaten ayri bir DB probe'u yapiyor.
     """
     from sqlalchemy.exc import OperationalError
 
-    def _boom() -> None:
-        raise OperationalError("SELECT 1", {}, Exception("baglanti koptu"))
+    from app.db import schema_guard
 
-    monkeypatch.setattr(main_module, "_legacy_bootstrap_ddl", _boom)
-    main_module.create_tables()  # patlamamali
+    class _Kirik:
+        def connect(self):
+            raise OperationalError("SELECT 1", {}, Exception("baglanti koptu"))
+
+    schema_guard.DURUM.update(uyumlu=True, sebep=None)
+    schema_guard.dogrula_ve_isaretle(_Kirik())
+
+    hazir, _ = schema_guard.hazir_mi()
+    assert hazir is True, "baglanti hatasi sema uyumsuzlugu gibi raporlandi"
 
 
-def test_bootstrap_sets_lock_timeout():
-    """Legacy bootstrap KILIT BEKLEME TAVANI koymali.
-
-    Tavan olmadan `ALTER TABLE ... IF NOT EXISTS` no-op olsa bile ACCESS
-    EXCLUSIVE kilidi ister ve cakisan bir kilit varsa (pg_dump, restore,
-    operator psql'i, idle-in-transaction baglanti) SONSUZA KADAR bekler.
-    Bu, restart ile COZULMEYEN bir kilitlenmedir: her deneme ayni kilide
-    girer.
-
-    Kaynak metnini kontrol ediyoruz cunku davranisi calistirarak dogrulamak
-    canli bir PostgreSQL + cakisan kilit gerektirir (o dogrulama ayrica
-    elle yapildi: kilit altinda blok 5.0 sn sonra hata verdi).
-    """
+def test_sema_kontrolu_SEMA_DEGISTIRMEZ():
+    """Kanca yalnizca DOGRULAR — `upgrade`/`stamp`/`create_all` YOK."""
     import inspect
 
-    src = inspect.getsource(main_module._legacy_bootstrap_ddl)
-    assert "SET LOCAL lock_timeout" in src, (
-        "engine.begin() blogunda lock_timeout yok — cakisan kilitte boot "
-        "sonsuza kadar bekler"
+    src = inspect.getsource(main_module.dogrula_sema_uyumlulugu)
+    kod = "\n".join(
+        satir for satir in src.splitlines() if not satir.strip().startswith("#")
     )
-    assert "SET LOCAL statement_timeout" in src, (
-        "statement_timeout yok — tek bir agir ifade boot'u kilitleyebilir"
-    )
-    assert "SET lock_timeout" in src, (
-        "autocommit (ALTER TYPE) blogunda lock_timeout yok"
-    )
+    # Docstring bilerek eski davranisi anlatiyor; govdeyi ayikla.
+    govde = kod.split('"""')[-1]
+    for yasak in ("create_all", "upgrade", "stamp", "ALTER TABLE", "CREATE TABLE"):
+        assert yasak not in govde, f"startup sema kontrolu mutasyon iceriyor: {yasak}"
+
+
+# --------------------------------------------------------------------------
+# Tohumlama — eksik kalabilir, karartmamali
+# --------------------------------------------------------------------------
+def test_seed_hatasi_startupi_DURDURMAZ(monkeypatch, caplog):
+    """Tohumlama patlarsa acilis DEVAM ETMELI ve hata LOGLANMALI.
+
+    Bu koruma eskiden `create_tables`'in try/except'inden geliyordu; DDL
+    blogu kaldirilinca `seed_fabrika_verisi` icinde ACIKCA yeniden kuruldu.
+    Bu test o kaymanin sessizce geri gelmesini engeller.
+    """
+    import app.main as m
+
+    def _boom(*_a, **_k):
+        raise RuntimeError("simulasyon: seed patladi")
+
+    monkeypatch.setattr(m, "SessionLocal", _boom)
+
+    m.seed_fabrika_verisi()  # exception DISARI SIZMAMALI
+
+    assert any(
+        "fabrika_verisi_seed_basarisiz" in r.getMessage() for r in caplog.records
+    ), "hata yutuldu ama LOGLANMADI — sessiz yutma kabul edilemez"
+
+
+# --------------------------------------------------------------------------
+# Kaldirilan legacy blok geri gelmemeli
+# --------------------------------------------------------------------------
+def test_legacy_bootstrap_DDL_geri_gelmedi():
+    """`_legacy_bootstrap_ddl` / `create_tables` yeniden eklenmemeli.
+
+    Sema otoritesi Alembic'tir (0072). Acilista DDL kosturan bir blok geri
+    gelirse bu test duser.
+    """
+    assert not hasattr(main_module, "_legacy_bootstrap_ddl")
+    assert not hasattr(main_module, "create_tables")

@@ -8,21 +8,13 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import inspect, text
 
-from app.db.base import Base
 from app.db.session import engine
 
-# Tum metadata kayitlari create_all icin gerekli.
-# Modellerin `Base.metadata`'ya kaydi icin TEK import — liste `app/models/__init__.py`
-# icinde tutulur.
-#
-# ESKIDEN BURADA AYRI BIR LISTE VARDI ve eksikti: `gateway_health`,
-# `device_purge_job`, `ftp_settings`, `device_model_settings` yoktu. Temiz
-# kurulumda `create_all` bu tablolari kurmuyor, `stamp head` de onlari kuran
-# migration'lari atliyordu — yani sifirdan kurulan sahada bu dort tablo HIC
-# olusmuyordu. `gateway_health` yoklugu staleness watchdog'u her turda
-# UndefinedTable ile dusurup susmus gateway'in cihazlarini haritada ONLINE
-# takili birakiyordu. Liste iki yerde (burada ve alembic/env.py) elle
-# tutuldugu surece tekrar kacar; bu yuzden tek kaynaga indirildi.
+# Model'lerin import edilmesi Alembic autogenerate/`env.py` ile ayni tek
+# kaynaktan (`app/models/__init__.py`) gelir. Sema ARTIK modellerden
+# uretilmiyor (bkz. `_migrate_locked`), ama `alembic` yapilandirmasi ayni
+# surecte yuklendigi icin kayitlarin eksiksiz olmasi teshis/autogenerate
+# tarafinda onemini koruyor.
 import app.models  # noqa: F401
 
 log = logging.getLogger(__name__)
@@ -31,6 +23,13 @@ log = logging.getLogger(__name__)
 # `service_role._BACKGROUND_LOCK_KEY` ile ayni OLMAMALI: o kilit surec omru
 # boyunca tutulur, bu ise yalnizca migration suresince. Ayni anahtari
 # paylassalardi migration biter bitmez liderlik de dusmus olurdu.
+# Temiz kurulumda zincirin "uygulanmis" sayildigi taban revizyon. 0072
+# guncel semanin tamamini kurdugu icin ondan ONCEKI zincir bos DB'de
+# oynatilmaz (oynatilamaz da: 52 revizyon "UndefinedTable" ile kirilir).
+# YENI MIGRATION EKLERKEN BU DEGERI ILERLETME — 0072 sonrasi her revizyon
+# temiz kurulumda da GERCEKTEN kosmalidir.
+_TEMIZ_KURULUM_TABANI = "0071"
+
 _MIGRATION_LOCK_KEY = 0x0E1_6D_1167
 
 # Kilidi beklerken ust sinir. Sinirsiz beklemek container'i "starting"
@@ -86,48 +85,6 @@ def migrate() -> None:
             except Exception:  # noqa: BLE001
                 # Baglanti nasil olsa kapaniyor; session-level kilit onunla duser.
                 log.debug("migration advisory unlock basarisiz", exc_info=True)
-
-
-def _atlanan_tablolari_geri_doldur() -> None:
-    """`stamp head` yuzunden hic olusmamis tablolari modelden kurar.
-
-    NEDEN GEREKLI
-    -------------
-    Temiz kurulum `create_all` + `stamp head` yapar; migration'lar KOSMAZ.
-    `create_all` yalnizca `Base.metadata`'ya KAYITLI modelleri kurar. Bu
-    liste eskiden `migrate_db.py` icinde elle tutuluyordu ve eksikti —
-    `gateway_health`, `device_purge_jobs`, `ftp_settings` ve
-    `device_model_settings` sifirdan kurulan sahalarda HIC olusmadi.
-    O sahalar `stamp head` yemis oldugu icin, tablolari kuran migration'lar
-    (0024/0039, 0046, 0053...) bir daha ASLA kosmayacak: `upgrade head`
-    zaten "head'deyim" der ve hicbir sey yapmaz.
-
-    Bu yuzden eksik tablo yalnizca BURADAN geri gelebilir.
-
-    NEDEN `upgrade`DEN SONRA
-    ------------------------
-    ONCE cagirmak tehlikeli olurdu: bekleyen bir migration'in yaratacagi
-    tabloyu `create_all` guncel (yani migration SONRASI) sekliyle kurar,
-    ardindan migration'in `op.create_table`'i "already exists" ile patlar —
-    dosyanin basindaki DuplicateColumn hikayesinin aynisi. `upgrade head`
-    bittikten SONRA ise sema zaten head'dedir; hala eksik olan her tablo,
-    tanimi gereği `stamp` yuzunden atlanmis olandir ve modelden kurulmasi
-    doğru sonucu verir.
-
-    `create_all` MEVCUT tablolara DOKUNMAZ (checkfirst): kolon eklemez,
-    kisit degistirmez. Yani bu adim yalnizca "hic yok"u onarir; sema
-    evrimi migration'larin isi olmaya devam eder.
-    """
-    inspector = inspect(engine)
-    mevcut = set(inspector.get_table_names())
-    eksik = [t for t in Base.metadata.sorted_tables if t.name not in mevcut]
-    if not eksik:
-        return
-    log.warning(
-        "Semada eksik tablo bulundu, modelden kuruluyor: %s",
-        ", ".join(t.name for t in eksik),
-    )
-    Base.metadata.create_all(bind=engine, tables=eksik)
 
 
 class SemaIleridedeHatasi(RuntimeError):
@@ -209,24 +166,25 @@ def _migrate_locked() -> None:
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "alembic_migrations"))
     if not inspect(engine).has_table("alembic_version"):
-        # TEMIZ KURULUM: `create_all` semayi GUNCEL MODELLERDEN kurar, yani
-        # sonuc dogrudan HEAD semasidir. Damga da head olmali.
+        # TEMIZ KURULUM — sema ALEMBIC'ten gelir, modelden DEGIL.
         #
-        # ESKIDEN "0006" DAMGALANIYORDU ve kurulum bu yuzden COKUYORDU:
-        # sema zaten eksiksizken alembic 0007..head arasini bastan
-        # oynatiyor, ilk kolon ekleyen migration var olan kolona carpip
-        # patliyordu:
+        # ESKIDEN burada `Base.metadata.create_all()` + `stamp head` vardi:
+        # sema SQLAlchemy modellerinden uretiliyor, Alembic yalnizca damga
+        # atiyordu. Sema otoritesi fiilen modeldi ve migration gecmisi
+        # semayi TARIF ETMIYORDU.
         #
-        #     psycopg2.errors.DuplicateColumn: column "device_event_at"
-        #     of relation "telemetry_history" already exists
+        # NEDEN `stamp 0071` + `upgrade`, duz `upgrade head` DEGIL:
+        # 0001 baseline'i BOS ve 39 tabloyu hicbir migration kurmuyor. Bos
+        # bir DB'de zincir olculdu: 71 revizyonun 52'si "UndefinedTable" ile
+        # kiriliyor ve geriye 8 tablo kaliyor. Yani 0001-0071 bos DB'de
+        # GECILEMEZ. O gecmis DEGISTIRILMEDI; bunun yerine 0072 guncel
+        # semanin tamamini explicit operasyonlarla kuruyor.
         #
-        # Backend acilamiyor -> healthcheck dusuyor -> kurulum
-        # "backend-api is unhealthy" ile duruyor. HER TEMIZ KURULUMDA olur;
-        # 0025 yalnizca sirada ILK carpandi (0007, 0020, 0024, 0026, 0027,
-        # 0028, 0032, 0036 da ayni riski tasiyordu). Tek tek yamalamak
-        # kostebek oyunu olurdu — kaynak burasi.
-        Base.metadata.create_all(bind=engine)
-        command.stamp(config, "head")
+        # Sonuc: 0071'e kadar olan zincir "zaten uygulanmis" sayilir (bos
+        # DB icin dogru: o revizyonlarin tarif ettigi sema 0072 icinde),
+        # ardindan 0072 semayi bastan kurar.
+        command.stamp(config, _TEMIZ_KURULUM_TABANI)
+        command.upgrade(config, "head")
     else:
         # MEVCUT kurulum: gercek gecmisi oynat.
         # Once sema bu imajin ILERISINDE mi bak (surum geri alindi mi):
@@ -236,13 +194,12 @@ def _migrate_locked() -> None:
         if _sema_ileride_mi_kontrol(config):
             return
         command.upgrade(config, "head")
-        _atlanan_tablolari_geri_doldur()
 
     # ---- Historian depolamasi: hypertable + saklama politikalari ----------
     #
     # SEMADAN AYRI BIR ADIM, cunku bunlar SQLAlchemy modelinde tarif
-    # EDILEMEZ. Yukaridaki temiz-kurulum dali semayi `create_all` ile
-    # modellerden kuruyor; `create_all` ise YALNIZCA DUZ TABLOLARI yaratir.
+    # EDILEMEZ: Alembic operasyonlari (0072 dahil) YALNIZCA DUZ TABLOLARI
+    # kurar; hypertable'a cevirme ve saklama politikasi ayri bir adimdir.
     # Hypertable'a cevirme ve 90 gunluk saklama politikasi migration
     # govdesinde yasadigi icin, hicbir migration kosmayan temiz kurulumda
     # sessizce ATLANIYORDU:

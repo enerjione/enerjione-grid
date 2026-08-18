@@ -114,6 +114,11 @@ def _build_health_body(db: Session) -> tuple[dict, int]:
     NATS'i duzeltmez.
     """
     db_ok, db_err, db_ms = _probe_db(db)
+    # Sema uyumlulugu SALT OKUNUR bir bayraktir (acilista bir kez olculur;
+    # bkz. app/db/schema_guard.py). Burada DB'ye ek sorgu ATILMAZ.
+    from app.db import schema_guard
+
+    schema_ok, schema_sebep = schema_guard.hazir_mi()
     js_ok, js_err = _probe_jetstream()
     nats_ok, nats_err, nats_ms = _probe_tcp(settings.nats_url, default_port=4222)
     rmq_ok, rmq_err, rmq_ms = _probe_tcp(settings.rabbitmq_url, default_port=5672)
@@ -123,6 +128,12 @@ def _build_health_body(db: Session) -> tuple[dict, int]:
             "ok": db_ok,
             "latency_ms": round(db_ms, 1),
             **({"error": db_err} if db_err else {}),
+        },
+        "schema": {
+            "ok": schema_ok,
+            "expected": schema_guard.DURUM.get("beklenen"),
+            "actual": schema_guard.DURUM.get("gercek"),
+            **({"error": schema_sebep} if not schema_ok else {}),
         },
         "nats_tcp": {
             "ok": nats_ok,
@@ -153,13 +164,25 @@ def _build_health_body(db: Session) -> tuple[dict, int]:
 
     background = _leader.status()
 
-    # Kritiklik siniri YALNIZCA Postgres. Gerekcesi docstring'te.
-    if not db_ok:
+    # Kritik: Postgres ERISILEBILIR olmali VE sema bu imajla UYUMLU olmali.
+    #
+    # Sema neden kritik: uyumsuz semayla acilmak "yesil yalan"dir — surec
+    # saglikli gorunur, ilk sorguda patlar. Eski davranis daha da kotusuydu:
+    # acilista `create_all` + ~124 DDL ile eksigi SESSIZCE tamamlamak.
+    #
+    # Pratikte bu dal Docker yolunda ULASILMAZ: komut `migrate_db && uvicorn`
+    # zinciri ve `migrate_db` sema tasiyamazsa NON-ZERO ile biter, uvicorn hic
+    # baslamaz. Buradaki kontrol, migration'i atlayan elle kurulumlar ve
+    # yarim kalmis bir tasima icin son emniyet kemeri.
+    kritik = [ad for ad, ok in (("database", db_ok), ("schema", schema_ok)) if not ok]
+    if kritik:
+        if not schema_ok:
+            logger.error("health_unhealthy sema uyumsuz: %s", schema_sebep)
         body = {
             "status": "unhealthy",
             "dependencies": deps,
             "background": background,
-            "degraded_reasons": ["database"],
+            "degraded_reasons": kritik,
         }
         return body, status.HTTP_503_SERVICE_UNAVAILABLE
 

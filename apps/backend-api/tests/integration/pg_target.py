@@ -16,8 +16,10 @@ TEK KAYNAK: test PG adresi yalnizca `E1_TEST_PG_URL` ortam degiskeninden
 gelir. Ortulu varsayilan, `settings.database_url` yedegi ve `localhost`
 tahmini YOKTUR.
 
-NOT: bu task `env.py` mimarisini DEGISTIRMEZ (Alembic Schema Authority ayri
-bir is). Burada yalnizca test tarafi fail-closed izole edilir.
+GUNCELLEME (Alembic Schema Authority): `env.py` artik hedefi ACIK bir
+precedence ile secer ve acikca verilen URL'i EZMEZ. Bu modulun guard'i yine de
+durur — precedence dogru hedefi SECER, guard ise hedefin gercekten gecici bir
+test DB'si oldugunu DOGRULAR. Ikisi farkli isler yapar.
 """
 
 from __future__ import annotations
@@ -135,16 +137,31 @@ def _ayni_hedef(a: str, b: str) -> bool:
     )
 
 
+#: `settings.database_url` icin ZEHIRLI yedek. Bilerek baglanilamaz: port 1'de
+#: dinleyen yok, ad da neyin yanlis gittigini soyluyor.
+ZEHIRLI_YEDEK = "postgresql+psycopg2://e1_guard@127.0.0.1:1/e1_guard_KULLANILMAMALI"
+
+
 def alembic_config(url: str, monkeypatch):  # noqa: ANN001
     """Dogrulanmis hedefe bagli Alembic yapilandirmasi uretir.
 
     IKI YAN ETKI ACIKCA ELE ALINIR:
 
-    1. `env.py` `sqlalchemy.url`'i `settings.database_url` ile ezer. Bu
-       yuzden ayar da monkeypatch ile hedefe cekilir — yoksa migration
-       sessizce gelistirici DB'sine kosar.
+    1. HEDEF SECIMI. `env.py` artik ACIK precedence uygular: acikca verilen
+       `sqlalchemy.url` > `E1_MIGRATION_DATABASE_URL` > `settings.database_url`.
+       Burada hedef 1. siradan verilir.
 
-    2. `env.py` `fileConfig(config.config_file_name)` cagirir; bu,
+       `settings.database_url` HEDEFE CEKILMEZ — bilerek ZEHIRLENIR. Eskiden
+       hedefe cekiliyordu (env.py kosulsuz ezdigi icin mecburdu) ama bu,
+       regresyonu MASKELERDI: env.py yeniden `settings` ile ezmeye baslasa
+       bile iki deger ayni oldugu icin test yine gecerdi.
+
+       Zehirli yedek ile davranis gozlemlenebilir olur:
+         * env.py DOGRU  -> acik URL kullanilir, test GECER.
+         * env.py REGRESE -> yedege duser, baglanti REDDEDILIR, test PATLAR
+           ve gelistirici/uretim veritabanina ASLA dokunulmaz.
+
+    2. LOGGING. `env.py` `fileConfig(config.config_file_name)` cagirir; bu,
        `disable_existing_loggers=True` varsayilaniyla UYGULAMANIN TUM
        LOGGER'LARINI SUSTURUR ve ayni pytest surecinde sonradan kosan
        `caplog` testleri hicbir kayit goremez (ALAKASIZ testler duser).
@@ -158,7 +175,10 @@ def alembic_config(url: str, monkeypatch):  # noqa: ANN001
     from alembic.config import Config
     from app.core.config import settings as _s
 
-    monkeypatch.setattr(_s, "database_url", url, raising=False)
+    monkeypatch.setattr(_s, "database_url", ZEHIRLI_YEDEK, raising=False)
+    # Ortam degiskeni yedegi de kapatilir: precedence'in 2. basamagi testin
+    # acik hedefini golgelememeli.
+    monkeypatch.delenv("E1_MIGRATION_DATABASE_URL", raising=False)
 
     ham = Config("alembic.ini")
     script_location = ham.get_main_option("script_location")
