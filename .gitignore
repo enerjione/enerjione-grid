@@ -101,7 +101,14 @@ tokenler.txt
 #     gerekiyor ve bu her guncellemede tekrarliyor.
 #  2. Icindeki per-gateway compose dosyalari GATEWAY_TOKEN tasiyor.
 #     Yanlislikla commit'lenmesi secret sizintisi olurdu.
-gateways/
+#
+# ANCHOR SART: bastaki `/` olmadan kural, adi `gateways` olan HER dizine
+# uyar -- `apps/frontend-web/src/features/gateways/` dahil. O dizindeki yeni
+# bir kaynak dosyasi sessizce ignore ediliyordu (mevcut 4 dosya kural
+# eklenmeden once takibe girmisti, o yuzden fark edilmedi). Saha cihazinda
+# repo koku /opt/enerjione-grid'dir, calisma dizini de /opt/enerjione-grid/
+# gateways; anchor'li hali onu aynen kapsar, iki gerekce de korunur.
+/gateways/
 
 # Elle uretilen sema dokumu (kolon listesi) — denetim/analiz sirasinda
 # olusuyor, depoya ait degil. Ignore edilmezse `git status` her oturumda
