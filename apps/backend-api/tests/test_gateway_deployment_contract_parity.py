@@ -53,10 +53,10 @@ from app.services import gateway_compose as gc
 from app.services.gateway_compose import ComposeRenderInput
 
 KOK = Path(__file__).resolve().parents[3]
-# GECERLI sozlesme snapshot'i. Eski surumler (`v1.11.0.json`) tarihsel kanit
-# olarak dizinde KALIR; testin ve CI'nin baktigi dosya budur ve gateway
-# yayinlandiginda ikisi BIRLIKTE guncellenir.
-SOZLESME_YOLU = KOK / "infra/gateway-contract/v1.11.1.json"
+# GECERLI sozlesme snapshot'i. Eski surumler (`v1.11.0.json`, `v1.11.1.json`)
+# tarihsel kanit olarak dizinde KALIR; testin ve CI'nin baktigi dosya budur ve
+# gateway yayinlandiginda ikisi BIRLIKTE guncellenir.
+SOZLESME_YOLU = KOK / "infra/gateway-contract/v1.11.2.json"
 E1GWD_YOLU = KOK / "infra/appliance/e1-gwd.py"
 
 TOKEN = "t" * 48
