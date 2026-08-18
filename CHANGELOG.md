@@ -14,6 +14,75 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.102.1] — 2026-08-18
+
+### Eklendi
+
+- Gateway deployment sözleşmesi **v1.11.4** vendor edildi
+  (`infra/gateway-contract/v1.11.4.json`); parity testleri ve CI artık bu
+  sürümü esas alıyor. Eski anlık görüntüler tarihsel kanıt olarak duruyor.
+
+- **Gateway güncelleme modeli teste bağlandı**
+  (`apps/backend-api/tests/test_gateway_guncelleme_modeli.py`). Ürün kararı
+  şu ve artık kilitli:
+
+  | Aksiyon | Davranış |
+  |---|---|
+  | Gateway Güncelle | `:latest` **pull** → kayıt defterindeki son release ile **recreate** |
+  | Yeniden başlat | **mevcut** imajla restart — pull yok, yükseltme yok |
+  | Başlat | **mevcut** imajla start — pull yok, yükseltme yok |
+
+  Testler iki katmanı birlikte doğruluyor: backend'in isteğe ne yazdığını
+  (`request_update` → `:latest`; `request_restart`/`request_start` → imaj/pull
+  parametresi **yok**) ve appliance ajanının o isteği hangi docker komutuna
+  çevirdiğini (`restart` → `docker compose restart`, `start` → `start`,
+  yalnızca `update` → `pull` + `up -d`).
+
+  Bu ayrım sahada kritik: "bir yeniden başlatayım" diyen operatör farkında
+  olmadan sürüm yükseltirse, arızanın sebebi ile çözümü aynı anda değişir.
+
+### Değişti
+
+- **Sözleşme artık release workflow'unun ürettiği artifact'tan vendor ediliyor**
+  (`gateway-deployment-contract.generated.json`), gateway repo'sunun
+  `main`'indeki dosyadan değil. Gövde aynı; fark izlenebilirlikte:
+  generated artifact'ta `gateway_source_sha` **gerçek release commit'idir**
+  (workflow `GITHUB_SHA` ile enjekte eder) ve `gateway_source_sha_baseline_ref`
+  düşer.
+
+  Önceki modelde repo içindeki dosya kendi commit'ini taşıyamadığı için alan
+  bir *önceki* sürümün commit'ini gösteriyordu (`v1.11.3.json` içinde
+  v1.11.2'nin commit'i). İzlenebilirlik alanı, tam da izini sürmek istediğimiz
+  şeyi göstermiyordu.
+
+- **CI cross-repo parity `main` yerine release tag'ine bakıyor** ve kontrol
+  ikiye ayrıldı: gövde (provenance dışı alanlar) tag'deki dosyayla birebir,
+  provenance ise tag'in **gerçek commit sha'sıyla**. Böylece "gövde kaymış" da
+  "yanlış commit vendor edilmiş" de yakalanıyor. `main`'e bakmak, gateway bir
+  sonraki sürüme geçtiğinde yayınlanmamış bir sözleşmeyi doğrulama riski
+  taşıyordu.
+
+- **F5 komut düzlemi credential'ı sözleşmede `available`** oldu (gateway
+  v1.11.4: "F5 TAMAMLANDI, saha kabulü yapıldı"). Parity testindeki tripwire
+  bilerek kırıldı ve Grid tarafında F5A'nın gerçekten sahaya çıktığı
+  doğrulandı (migration 0070, `_build_render_input` taşıması, dual auth).
+
+  Güvenlik invariant'ı **değişmedi**: sır DB'de yokken hiçbir render yolu
+  `GATEWAY_COMMAND_DELIVERY_TOKEN` üretmez. `available` olması "her kuruluma
+  sır bas" demek değildir.
+
+### Notlar
+
+- `pull_policy: always` **korundu**. Alan yalnızca container *oluşturan*
+  komutlarca (`up`/`create`/`run`) okunur; `docker compose restart`/`start`
+  mevcut container üzerinde çalışır ve bu alanı hiç okumaz. Cihaz yeniden
+  başlatmasında container'ı Docker daemon `restart: unless-stopped` ile
+  **kayıtlı imaj ID'siyle** kaldırır — pull tetiklenmez.
+- Bu sürümde **üretim kodu değişmedi**: yalnızca vendor edilen sözleşme, CI
+  ve testler. Şema/migration değişikliği yok.
+
+---
+
 ## [2.102.0] — 2026-08-18
 
 ### Düzeltildi
