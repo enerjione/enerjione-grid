@@ -14,6 +14,20 @@
  * hic calismadi. Yani "felaket kurtarmanin tek arayuz adimi" duzeltilmis
  * SANILIYORDU — duzeltme yanlis yola yazilmisti.
  *
+ * IKINCI ARIZA (2026-08-18) — SONDAKI SLASH
+ * -----------------------------------------
+ * Yukaridaki duzeltme yolu dogrulttu ama blogu `^~ /api/v1/admin/backups/`
+ * (SONDA SLASH) olarak yazdi. nginx, prefix'i slash ile biten ve proxy_pass'e
+ * giden bir location varsa slash'siz istege KENDILIGINDEN 301 uretir. Liste
+ * ucu (`@router.get("")`) tam olarak slash'siz yolda oturdugu icin:
+ *     GET /api/v1/admin/backups   -> nginx 301   -> .../backups/
+ *     GET /api/v1/admin/backups/  -> FastAPI 307 -> .../backups
+ * ...sonsuz dongu. nginx'in 301'i mutlak URL + ic port (8080) yazdigindan
+ * hedef baska bir origin oluyor, CSP `connect-src 'self'` engelliyor ve
+ * arayuz "Failed to fetch" diyor. Yedek yonetimi sayfasi HIC ACILMIYORDU.
+ *
+ * Yani bu blok iki kosulu AYNI ANDA saglamali: dogru yol + slash'siz prefix.
+ *
  * BU TEST NEDEN SABIT METIN KULLANMIYOR
  * -------------------------------------
  * Yolun iki ucu iki ayri dilde, iki ayri dosyada yasiyor: prefix Python
@@ -45,13 +59,16 @@ const confKod = conf
   .filter((satir) => !satir.trim().startsWith("#"))
   .join("\n");
 
+/** conf'taki tum `location ^~ <yol>` prefix'leri. */
+function prefixLocationlari() {
+  return [...confKod.matchAll(/location\s+\^~\s+(\S+)\s*\{/g)].map((m) => m[1]);
+}
+
 test("yedek blogu router'in GERCEK yoluna bakiyor", () => {
   const prefix = routerPrefix(backupsPy); // ornek: /admin/backups
-  const beklenen = `/api/v1${prefix}/`;
+  const beklenen = `/api/v1${prefix}`;
 
-  const locations = [...confKod.matchAll(/location\s+\^~\s+(\S+)\s*\{/g)].map(
-    (m) => m[1]
-  );
+  const locations = prefixLocationlari();
 
   assert.ok(
     locations.includes(beklenen),
@@ -62,9 +79,36 @@ test("yedek blogu router'in GERCEK yoluna bakiyor", () => {
   );
 });
 
+test("yedek blogunun prefix'i slash ile BITMIYOR (301 dongusu)", () => {
+  const prefix = routerPrefix(backupsPy);
+  const slashli = `/api/v1${prefix}/`;
+
+  assert.ok(
+    !prefixLocationlari().includes(slashli),
+    `nginx.conf icinde "location ^~ ${slashli}" var — SONDAKI SLASH KALKMALI.\n` +
+      "nginx, prefix'i slash ile biten ve proxy_pass'e giden bir location " +
+      "icin slash'siz istege KENDILIGINDEN 301 uretir; FastAPI da slash'liyi " +
+      "307 ile geri gonderir. Liste ucu (@router.get(\"\")) slash'siz yolda " +
+      "oldugu icin sayfa sonsuz donguye girer ve 'Failed to fetch' verir. " +
+      "Slash'siz prefix zaten alt yollari da kapsar."
+  );
+});
+
+test("nginx urettigi yonlendirmelerde ic portu yazmiyor", () => {
+  // Container 8080 dinler, disariya 80 olarak cikar. nginx mutlak URL'e
+  // $server_port koyarsa yonlendirme baska bir origin'e gider ve CSP
+  // `connect-src 'self'` fetch'i keser.
+  assert.match(
+    confKod,
+    /port_in_redirect\s+off\s*;/,
+    "server blogunda `port_in_redirect off;` yok — nginx'in urettigi her " +
+      "301 ic portu (:8080) sizdirir ve tarayicida cross-origin olur."
+  );
+});
+
 test("yedek blogu buyuk govde + tamponsuz akis ayarlarini tasiyor", () => {
   const prefix = routerPrefix(backupsPy);
-  const beklenen = `/api/v1${prefix}/`;
+  const beklenen = `/api/v1${prefix}`;
   // Blogun govdesini al: location satirindan ilk kapanan suslu parantezin
   // oncesine kadar (ic blok yok, bu yeterli).
   const i = confKod.indexOf(`location ^~ ${beklenen}`);
