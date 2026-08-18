@@ -53,10 +53,15 @@ from app.services import gateway_compose as gc
 from app.services.gateway_compose import ComposeRenderInput
 
 KOK = Path(__file__).resolve().parents[3]
-# GECERLI sozlesme snapshot'i. Eski surumler (`v1.11.0.json` ... `v1.11.2.json`)
+# GECERLI sozlesme snapshot'i. Eski surumler (`v1.11.0.json` ... `v1.11.3.json`)
 # tarihsel kanit olarak dizinde KALIR; testin ve CI'nin baktigi dosya budur ve
 # gateway yayinlandiginda ikisi BIRLIKTE guncellenir.
-SOZLESME_YOLU = KOK / "infra/gateway-contract/v1.11.3.json"
+#
+# v1.11.4'TEN ITIBAREN KAYNAK DEGISTI: vendor edilen dosya artik gateway
+# repo'sunun main'indeki dosya DEGIL, release workflow'unun URETTIGI
+# `gateway-deployment-contract.generated.json` artifact'idir. Govde ayni;
+# fark provenance alanlarinda (bkz. test_kaynak_sha_gercek_release_commiti).
+SOZLESME_YOLU = KOK / "infra/gateway-contract/v1.11.4.json"
 E1GWD_YOLU = KOK / "infra/appliance/e1-gwd.py"
 
 TOKEN = "t" * 48
@@ -466,24 +471,41 @@ def test_snapshot_dosya_adi_surumle_tutarli():
 def test_eski_snapshotlar_tarihsel_kanit_olarak_duruyor():
     dizin = SOZLESME_YOLU.parent
     mevcut = {p.name for p in dizin.glob("v*.json")}
-    for eski in ("v1.11.0.json", "v1.11.1.json", "v1.11.2.json"):
+    for eski in ("v1.11.0.json", "v1.11.1.json", "v1.11.2.json", "v1.11.3.json"):
         assert eski in mevcut, (
             f"{eski} silinmis. Eski snapshot'lar bir surumun O GUN neyi "
             f"tasidiginin kanitidir; yenisi eskisinin yerine gecmez."
         )
 
 
-def test_kaynak_sha_self_referential_DEGIL():
-    """v1.11.3 izlenebilirlik modeli: dosyadaki SHA bu surumun commit'i DEGIL.
+def test_kaynak_sha_gercek_release_commiti():
+    """v1.11.4 izlenebilirlik modeli: SHA ARTIK gercek release commit'idir.
 
-    Bir dosya kendi commit'ini tasiyamaz (SHA yazmak yeni commit uretir).
-    Gateway bunu v1.11.3'te acikca beyan etti: alandaki deger, sozlesmenin
-    turetildigi YAYIMLANMIS BASELINE surumun commit'i. Gercek revizyon
-    release aninda uretilir (imaj etiketi `org.opencontainers.image.revision`
-    ve `gateway-deployment-contract.generated.json`).
+    ONCEKI MODEL (v1.11.3 ve oncesi) ve NEDEN DEGISTI
+    -------------------------------------------------
+    Vendor edilen dosya gateway repo'sunun main'indeki
+    `docker/gateway-deployment-contract.json` idi. O dosya KENDI commit'ini
+    TASIYAMAZ (dosyaya SHA yazmak yeni bir commit uretir), bu yuzden alan
+    turetildigi BASELINE surumun commit'ini tasiyordu ve yaninda
+    `gateway_source_sha_baseline_ref` ile hangi surum oldugu yaziliyordu.
 
-    Grid bu modeli DOGRU anlamali: parity semasi [0-9a-f]{40} formatini
-    korur ama SHA'yi "bu surumun commit'i" diye YORUMLAMAZ.
+    Pratikte bu, vendor edilen her snapshot'in BIR ONCEKI surumun commit'ini
+    tasimasi demekti: v1.11.3.json icinde v1.11.2'nin commit'i vardi. Alan
+    izlenebilirlik icin vardi ama tam da izini surmek istedigimiz seyi
+    (bu surum hangi koddan cikti) GOSTERMIYORDU.
+
+    YENI MODEL
+    ----------
+    Vendor edilen dosya artik release workflow'unun URETTIGI artifact:
+    `gateway-deployment-contract.generated.json`. Workflow release aninda
+    `GITHUB_SHA`yi enjekte eder, yani alan GERCEKTEN bu surumun commit'idir
+    ve `gateway_source_sha_baseline_ref` DUSER -- baseline'a artik gerek yok.
+
+    Bu test yeni modelin sekilsel kosullarini kilitler. SHA'nin gercekten
+    `v<surum>` tag'inin commit'i OLDUGU ise burada dogrulanamaz (offline
+    test, ag yok): onu CI'daki `gateway-contract` job'i tag'in commit'ine
+    karsi dogrular. Buradaki kilit, main'deki BASELINE dosyanin yanlislikla
+    yeniden vendor edilmesini yakalamaktir -- o dosyada baseline_ref VARDIR.
     """
     import re as _re
 
@@ -491,17 +513,18 @@ def test_kaynak_sha_self_referential_DEGIL():
         "parity semasi 40 haneli SHA formatini bekliyor"
     )
     assert SOZLESME["gateway_source_ref"] == f"v{SOZLESME['gateway_release']}", (
-        "gateway_source_ref yazim aninda bilinebilen tag olmali (v<surum>)"
+        "gateway_source_ref release tag'i olmali (v<surum>)"
     )
-    baseline = SOZLESME.get("gateway_source_sha_baseline_ref")
-    assert baseline, "gateway_source_sha_baseline_ref yok: SHA'nin neyi gosterdigi belirsiz"
-    assert baseline != SOZLESME["gateway_source_ref"], (
-        "baseline ref bu surumun kendisi olamaz -- self-referential SHA "
-        "varsayimi tam olarak bu yuzden kaldirildi"
+    assert "gateway_source_sha_baseline_ref" not in SOZLESME, (
+        "`gateway_source_sha_baseline_ref` VAR: bu alan yalnizca gateway "
+        "repo'sunun main'indeki BASELINE dosyada bulunur. Demek ki generated "
+        "artifact yerine repo icindeki dosya vendor edilmis. Release "
+        "workflow'unun `gateway-deployment-contract` artifact'ini kullan."
     )
-    assert len(SOZLESME.get("gateway_source_sha_semantics", "")) > 100, (
-        "SHA semantigi yazili olmali; yoksa bir sonraki kisi yine "
-        "'bu surumun commit'i' diye yorumlar"
+    semantik = SOZLESME.get("gateway_source_sha_semantics", "")
+    assert len(semantik) > 50, "SHA semantigi yazili olmali"
+    assert "GENERATED" in semantik.upper(), (
+        f"semantik generated artifact modelini anlatmiyor: {semantik!r}"
     )
 
 
@@ -548,22 +571,44 @@ def test_gecersiz_install_mode_reddedilir():
 
 
 @pytest.mark.parametrize("yol", YOLLAR)
-def test_F5A_komut_sirri_varsayilan_render_de_URETILMEZ(yol: str):
-    """Sozlesme ordering constraint'i: F5A sahaya cikmadan provision EDILMEZ.
+def test_F5A_komut_sirri_SIR_YOKKEN_render_EDILMEZ(yol: str):
+    """Sir DB'de yokken hicbir render yolu komut duzlemi sirrini URETMEZ.
 
-    Erken verilirse gateway `/pending` yanitini backend'in bilmedigi bir
-    anahtarla dogrular; F4B fail-closed oldugu icin komut duzlemi DURUR.
-    Bu test o sirayi kilitler: sir DB'de yokken hicbir yol env uretmemeli.
+    SOZLESME DURUMU DEGISTI (gateway v1.11.4)
+    -----------------------------------------
+    v1.11.3'e kadar bu alan `optional_until_backend_f5a` idi ve burada bir
+    TRIPWIRE vardi: durum `available`a donerse test BILEREK kirilsin, once
+    Grid tarafinda F5A'nin gercekten sahaya ciktigi DOGRULANSIN, sonra
+    bekleme guncellensin.
+
+    Tripwire calisti ve dogrulama YAPILDI (2.102.1). Grid tarafinda F5A
+    tamamdir:
+      * `Gateway.command_delivery_token` alani + migration 0070
+        (`2026_08_17_0008-0070_komut_duzlemi_credential.py`)
+      * `gateway_compose.generate_command_delivery_token`
+      * `api.gateways._build_render_input` sirri `ComposeRenderInput`e TASIR
+        (tasima yolu `test_f5a_provisioning_wiring.py` ile kilitli)
+      * dual auth / `/pending` HMAC ayrimi
+        (`test_f5a_command_plane_credential.py`)
+    Sozlesme de bunu teyit ediyor: rollout "F5 TAMAMLANDI (backend F5A +
+    gateway F5B, gateway 1.11.0). Saha kabulu yapildi."
+
+    NE DEGISMEDI: asil guvenlik invariant'i. Alanin `available` olmasi
+    "her kuruluma sir bas" DEMEK DEGILDIR -- sir DB'de YOKKEN artefakta
+    girmemelidir. Girerse bos/yanlis bir deger yazilir, gateway
+    `X-Gateway-Command-Token` gonderir, backend dogrulayamaz ve komut
+    kanali kesilir. Bu testin kilitledigi sey odur ve DEGISMEDI.
     """
     gecis = SOZLESME["transition_environment"]["GATEWAY_COMMAND_DELIVERY_TOKEN"]
-    assert gecis["status"] == "optional_until_backend_f5a", (
-        f"sozlesmedeki F5A durumu degismis: {gecis['status']!r}. Bu test "
-        "BILEREK kirilir -- durum `available`a donduyse Grid tarafinda F5A'nin "
-        "GERCEKTEN sahaya ciktigi dogrulanmali, sonra bu bekleme guncellenmeli. "
-        "Sessizce gecmesi, sirrin erken provision edilmesine kapi acar."
+    assert gecis["status"] == "available", (
+        f"sozlesmedeki F5 durumu beklenmedik: {gecis['status']!r}. v1.11.4 "
+        "`available` diyor. Geriye donduyse gateway tarafinda bir sey "
+        "geri alinmis demektir; sessizce gecirme."
     )
     assert "GATEWAY_COMMAND_DELIVERY_TOKEN" not in _yol_env(yol), (
-        "komut duzlemi sirri sir provision EDILMEDEN render edilmis"
+        "komut duzlemi sirri, DB'de sir YOKKEN render edilmis. Sozlesme "
+        "`available` olsa bile sir provision EDILMEDEN artefakta girmemeli "
+        "(bkz. backward_compatibility: bos ise GATEWAY_TOKEN kullanilir)."
     )
 
 

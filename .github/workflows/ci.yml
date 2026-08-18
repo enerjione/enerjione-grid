@@ -618,32 +618,77 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Vendor edilen sozlesme gateway repo ile AYNI mi
+      - name: Vendor edilen sozlesme gateway RELEASE ile AYNI mi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           # SURUM IKI YERDE SABIT: burasi ve parity testindeki SOZLESME_YOLU
           # (apps/backend-api/tests/test_gateway_deployment_contract_parity.py).
           # Ikisi ayrisirsa CI yanlis surumu karsilastirir; bir bekci test
           # esitligi zorunlu kilar (test_ci_workflow_ayni_snapshota_bakiyor).
-          VENDOR=infra/gateway-contract/v1.11.3.json
-          RAW=https://raw.githubusercontent.com/enerjione/enerjione-grid-dnp3-gateway/main
+          VENDOR=infra/gateway-contract/v1.11.4.json
+          REPO=enerjione/enerjione-grid-dnp3-gateway
+          RAW=https://raw.githubusercontent.com/$REPO
+          # NE VENDOR EDILIYOR (v1.11.4'ten beri): release workflow'unun
+          # URETTIGI artifact (`gateway-deployment-contract.generated.json`),
+          # repo icindeki dosya DEGIL. Fark YALNIZCA provenance alanlarinda:
+          # generated artifact'ta `gateway_source_sha` GERCEK release
+          # commit'idir (release workflow GITHUB_SHA ile enjekte eder) ve
+          # `gateway_source_sha_baseline_ref` DUSER. Repo icindeki dosya bunu
+          # tasiyamaz -- bir dosya kendi commit'ini iceremez.
+          #
+          # Bu yuzden karsilastirma IKI PARCA:
+          #   1) GOVDE (provenance disi)  -> TAG'deki dosya ile BIREBIR
+          #   2) PROVENANCE               -> tag'in GERCEK commit sha'si ile
+          # Boylece hem "govde kaymis" hem "yanlis commit vendor edilmis" yakalanir.
+          #
+          # main YERINE TAG: main bir sonraki surume gecmis olabilir; vendor
+          # edilen surum YAYINLANMIS bir release olmalidir.
           # Runtime'da internet ISTENMEZ; bu YALNIZCA CI kontrolu.
-          curl -fsSL -o /tmp/upstream.json "$RAW/docker/gateway-deployment-contract.json"
-          curl -fsSL -o /tmp/upstream.version "$RAW/VERSION"
-          A="$(sha256sum "$VENDOR" | cut -d" " -f1)"
-          B="$(sha256sum /tmp/upstream.json | cut -d" " -f1)"
-          echo "vendor  : $A"
-          echo "upstream: $B"
-          if [ "$A" != "$B" ]; then
-            echo "::error::Vendor edilen sozlesme gateway repo'sundakinden FARKLI."
-            diff <(python -m json.tool "$VENDOR") <(python -m json.tool /tmp/upstream.json) || true
+          REF="$(python -c "import json;print(json.load(open('$VENDOR'))['gateway_source_ref'])")"
+          echo "vendored ref: $REF"
+          curl -fsSL -o /tmp/upstream.json "$RAW/$REF/docker/gateway-deployment-contract.json"
+          curl -fsSL -o /tmp/upstream.version "$RAW/$REF/VERSION"
+
+          # 1) GOVDE parity -- provenance disi her alan birebir ayni olmali.
+          python -c "
+          import json, sys
+          PROV = {'gateway_source_sha', 'gateway_source_sha_baseline_ref', 'gateway_source_sha_semantics'}
+          v = json.load(open(sys.argv[1], encoding='utf-8'))
+          u = json.load(open(sys.argv[2], encoding='utf-8'))
+          a = {k: x for k, x in v.items() if k not in PROV}
+          b = {k: x for k, x in u.items() if k not in PROV}
+          if a != b:
+              for k in sorted(set(a) | set(b)):
+                  if a.get(k) != b.get(k):
+                      print('::error::sozlesme govdesi ayristi: ' + k)
+                      print('  vendor  : ' + json.dumps(a.get(k), ensure_ascii=False)[:400])
+                      print('  upstream: ' + json.dumps(b.get(k), ensure_ascii=False)[:400])
+              sys.exit(1)
+          print('govde parity OK')
+          " "$VENDOR" /tmp/upstream.json
+
+          # 2) PROVENANCE -- vendor edilen sha TAG'in GERCEK commit'i mi.
+          # `commits/<ref>` hem lightweight hem annotated tag'i commit'e cozer.
+          SHA_GERCEK="$(curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github.sha" \
+            "https://api.github.com/repos/$REPO/commits/$REF")"
+          SHA_VENDOR="$(python -c "import json;print(json.load(open('$VENDOR'))['gateway_source_sha'])")"
+          echo "vendor sha: $SHA_VENDOR"
+          echo "tag    sha: $SHA_GERCEK"
+          if [ "$SHA_VENDOR" != "$SHA_GERCEK" ]; then
+            echo "::error::Vendor edilen gateway_source_sha $REF tag'inin commit'i DEGIL."
+            echo "::error::Repo icindeki (baseline) dosya mi vendor edildi? GENERATED artifact gerekiyor."
             exit 1
           fi
+
           BEKLENEN="$(python -c "import json;print(json.load(open('$VENDOR'))['gateway_release'])")"
           GERCEK="$(tr -d '[:space:]' < /tmp/upstream.version)"
           echo "sozlesme: $BEKLENEN   gateway VERSION: $GERCEK"
           if [ "$BEKLENEN" != "$GERCEK" ]; then
-            echo "::error::Sozlesme $BEKLENEN diyor ama gateway repo $GERCEK yayinda."
+            echo "::error::Sozlesme $BEKLENEN diyor ama $REF tag'inde VERSION $GERCEK."
             exit 1
           fi
           echo "cross-repo parity OK"
