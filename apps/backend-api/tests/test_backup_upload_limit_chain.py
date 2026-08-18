@@ -54,16 +54,26 @@ def _yedek_yolu() -> str:
 
     SABIT DIZE YAZILMAZ. Bu test bir donem `location ^~ /api/v1/backups/`
     ariyordu ve YESILDI; oysa router prefix'i `/admin/backups` oldugu icin
-    gercek yol `/api/v1/admin/backups/` idi ve nginx blogu HIC ESLESMIYORDU.
+    gercek yol `/api/v1/admin/backups` idi ve nginx blogu HIC ESLESMIYORDU.
     Yani test, kusurun kendisini kilitliyordu: yukleme genel `/api/` blogunun
     10 MB limitine takiliyor, felaket kurtarma calismiyordu — ama zincir
     "dogrulanmis" sayiliyordu (denetim 2026-08-13).
 
     Prefix artik kaynaktan okunur; router tasinirsa test kirmizi olur.
+
+    SONDA SLASH YOK — VE OLMAMALI
+    -----------------------------
+    Bu yol bir donem sonda slash ile aranıyordu ve nginx blogu da oyle
+    yaziliydi. nginx, prefix'i slash ile biten ve `proxy_pass`'e giden bir
+    location icin slash'siz istege KENDILIGINDEN 301 uretir; yedek listesi
+    ucu (`GET /admin/backups`) tam olarak slash'siz yolda oturdugu icin
+    nginx 301 -> FastAPI 307 -> ... sonsuz donguye giriliyordu ve Yedek
+    Yonetimi sayfasi hic acilmiyordu. Slash'i buraya geri eklemek o hatayi
+    da geri getirir; `^~` prefix'i alt yollari zaten kapsar.
     """
     from app.api.backups import router
 
-    return f"/api/v1{router.prefix}/"
+    return f"/api/v1{router.prefix}"
 
 
 def _yedek_blogu(kaynak: str) -> str:
