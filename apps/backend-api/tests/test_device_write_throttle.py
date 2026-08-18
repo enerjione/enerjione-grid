@@ -139,7 +139,9 @@ def test_hata_yolu_ANA_YOL_ile_ayni():
     """Ikisi ayrisirsa hata yolu sessizce eski (kisilmamis) davranisa doner."""
     from app.services import telemetry_consumer
 
-    kaynak = _kod(inspect.getsource(telemetry_consumer._persist_batch))
+    # Hata yolu (fallback) `process_valid_telemetry`e cikarildi; canli
+    # tuketici ve karantina replay ayni fonksiyonu kullaniyor.
+    kaynak = _kod(inspect.getsource(telemetry_consumer.process_valid_telemetry))
     # Ad, fonksiyon ICINDEKI import satirinda da geciyor; asil aranan
     # CAGRI. Ilk yazimda sabiti aradim ve mutasyon kacti.
     assert kaynak.count("should_write_last_update(") >= 1, (

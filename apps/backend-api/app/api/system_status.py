@@ -862,6 +862,46 @@ class TelemetryPipelineReport(BaseModel):
 
     running: bool = Field(..., description="Tuketici thread'i ayakta mi")
     connected: bool = Field(..., description="NATS baglantisi kurulu mu")
+    # BILINMEYEN CIHAZ KARANTINASI — yalnizca SUREC-ICI sayaclar.
+    #
+    # `pending` ve `oldest_pending_age` bilincli olarak BURADA YOK: ikisi de
+    # DB sorgusu ister ve bu uc "maliyeti sifira yakin" olmak uzere
+    # tasarlandi. Onlar DB'ye zaten dokunan
+    # `GET /admin/telemetry-quarantine` ozetinden gelir.
+    unknown_device_quarantine_total: int = Field(
+        default=0, description="Bu surecte karantinaya alinan olcum sayisi"
+    )
+    # UC SILME KATEGORISI AYRI RAPORLANIR — anlamlari farkli:
+    unknown_device_quarantine_replayed_cleanup_total: int = Field(
+        default=0,
+        description="Isi bitmis (replayed) ve retention suresi dolmus kayit silindi. Kayip yok.",
+    )
+    unknown_device_quarantine_expired_total: int = Field(
+        default=0,
+        description=(
+            "Cozulmemis ama retention suresini ASMIS kayit silindi. "
+            "Acik saklama politikasinin sonucu."
+        ),
+    )
+    unknown_device_quarantine_data_shed_total: int = Field(
+        default=0,
+        description=(
+            "ACIL VERI DUSURME: retention suresi DOLMADAN, yalnizca kapasite "
+            "tavanini korumak icin silinen kayit. >0 ise gercek veri kaybi "
+            "olmustur; kapasite ya da replay ihmali incelenmelidir."
+        ),
+    )
+    unknown_device_quarantine_capacity_rejected_total: int = Field(
+        default=0,
+        description=(
+            "Yer ACILAMADIGI icin kabul edilmeyen olcum sayisi. Kontrollu yer "
+            "acma devrede oldugu icin normal kapasite baskisinda ARTMAZ; >0 "
+            "yapilandirma hatasidir (parti tavandan buyuk ya da silinebilecek "
+            "pending kayit yok). Bu durumda mesajlar ack edilmez."
+        ),
+    )
+    unknown_device_replay_success_total: int = Field(default=0)
+    unknown_device_replay_failed_total: int = Field(default=0)
     source: str | None = Field(
         default=None,
         description=(
@@ -1086,4 +1126,22 @@ def get_telemetry_pipeline_status(
         backlog_warn_threshold=threshold,
         severity=severity,
         stages=asamalar,
+        **_karantina_sayaclari(),
     )
+
+
+def _karantina_sayaclari() -> dict[str, int]:
+    """Surec-ici karantina sayaclari. DB'ye DOKUNMAZ."""
+    from app.services import unknown_device_quarantine as quarantine
+
+    s = quarantine.get_stats()
+    alanlar = (
+        "unknown_device_quarantine_total",
+        "unknown_device_quarantine_replayed_cleanup_total",
+        "unknown_device_quarantine_expired_total",
+        "unknown_device_quarantine_data_shed_total",
+        "unknown_device_quarantine_capacity_rejected_total",
+        "unknown_device_replay_success_total",
+        "unknown_device_replay_failed_total",
+    )
+    return {ad: int(s.get(ad) or 0) for ad in alanlar}

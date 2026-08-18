@@ -339,6 +339,7 @@ class RetentionWorker:
             ["system_events", lambda: settings.system_events_interval_sec, self._purge_system_events, 0.0],
             ["alarm_events", lambda: settings.alarm_events_interval_sec, self._purge_alarm_events, 0.0],
             ["outbox_events", lambda: settings.outbox_purge_interval_sec, self.purge_outbox_events, 0.0],
+            ["unknown_device_telemetry", lambda: settings.unknown_telemetry_purge_interval_sec, self.purge_unknown_quarantine, 0.0],
             # Disk guard: yukaridaki TTL'lerin hepsi dogru calissa BILE diskin
             # dolmadigini gercek olcumle dogrular; dolmaya yaklasilirsa
             # yeniden uretilebilir veriden baslayarak alan acar.
@@ -487,6 +488,56 @@ class RetentionWorker:
                 cutoff.isoformat(),
             )
         return total
+
+    def purge_unknown_quarantine(self) -> int:
+        """Bilinmeyen cihaz karantinasinin retention'i.
+
+        IKI AYRI ESIK, bilincli olarak farkli:
+          * `replayed` — is bitmis, kayit yalnizca kanit; kisa tutulur.
+          * `pending`  — payload HALA kurtarilabilir. Silmek VERI KAYBIDIR,
+            bu yuzden penceresi acikca daha genis.
+
+        Esikler `unknown_device_quarantine.retention_cutoffs` ile ortak:
+        politika tek kaynakta dursun, iki uygulama sessizce ayrismasin.
+        """
+        from app.models.unknown_device_telemetry import UnknownDeviceTelemetry
+        from app.services import unknown_device_quarantine as quarantine
+
+        replayed_kesme, pending_kesme = quarantine.retention_cutoffs()
+        removed = 0
+
+        if replayed_kesme is not None:
+            n = _batch_delete(
+                UnknownDeviceTelemetry,
+                (UnknownDeviceTelemetry.status == quarantine.STATUS_REPLAYED)
+                & (UnknownDeviceTelemetry.replayed_at.is_not(None))
+                & (UnknownDeviceTelemetry.replayed_at < replayed_kesme),
+                label="unknown_device_telemetry_replayed",
+                pause=self._pause,
+            )
+            quarantine._stat_arttir(
+                "unknown_device_quarantine_replayed_cleanup_total", n
+            )
+            removed += n
+
+        if pending_kesme is not None:
+            n = _batch_delete(
+                UnknownDeviceTelemetry,
+                (UnknownDeviceTelemetry.status == quarantine.STATUS_PENDING)
+                & (UnknownDeviceTelemetry.first_seen_at < pending_kesme),
+                label="unknown_device_telemetry_pending",
+                pause=self._pause,
+            )
+            quarantine._stat_arttir("unknown_device_quarantine_expired_total", n)
+            removed += n
+
+        # Periyodik retention da kapasite yolundaki AYNI ucuncu-kategori
+        # ayrimini kullanir: burada silinen pending kayitlar "suresi dolmus"
+        # sayilir, kapasite icin suresi DOLMADAN silinenler (`data_shed`)
+        # ile ayni sayaca girmez.
+        if removed:
+            quarantine._sayim_onbellegi_bosalt()
+        return removed
 
     def purge_processed_messages(self, *, retention_hours: int | None = None) -> int:
         """Eski idempotency kayitlarini siler.

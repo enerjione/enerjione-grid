@@ -497,6 +497,51 @@ class Settings(BaseSettings):
     # sure ne olursa olsun canli ekran bosalmaz.
     telemetry_retention_minutes: int = 30
     telemetry_retention_interval_sec: int = 300
+    # --- Bilinmeyen cihaz karantinasi -----------------------------------
+    #
+    # Cihazi tanimli olmayan telemetri ATILMAZ, `unknown_device_telemetry`
+    # tablosunda tutulur ve cihaz eklenince replay edilir.
+    #
+    # KAPASITE NEDEN SART: yanlis yapilandirilmis TEK bir gateway saniyede
+    # yuzlerce bilinmeyen kod uretebilir. Sinir olmasa bu tablo telemetri
+    # hiziyla buyur ve diski doldururdu.
+    #
+    # SINIRA GELINDIGINDE: mesaj ack ETMEYIP broker'in yeniden teslimine
+    # guvenmek TERK EDILDI — consumer `max_deliver` ile kosuyor, yani ack
+    # etmemek mesajin sonsuza kadar guvende olmasi DEMEK DEGIL; ustelik
+    # surekli yeniden teslim retry firtinasi ve backlog baskisi uretir.
+    # Bunun yerine KONTROLLU yer acilir (bkz. unknown_device_quarantine.
+    # ensure_capacity): once suresi dolmus replayed, sonra suresi dolmus
+    # pending, gerekirse en eski pending'den ACIL VERI DUSURME. Ucu de AYRI
+    # sayilir ve dusurme ayrica operasyonel olay uretir — SESSIZ DROP YOK.
+    unknown_telemetry_max_rows: int = 100_000
+    # Kapasite sayimi her bilinmeyen mesajda COUNT(*) yapmasin diye kisa
+    # sureli onbellek. Yalnizca bilinmeyen dalinda okunur; bilinen cihaz
+    # hizli yolu bu sorguyu HIC gormez.
+    unknown_telemetry_count_cache_sec: int = 30
+    # Replay edilmis kayit kanit olarak kisa sure durur, sonra silinir.
+    unknown_telemetry_replayed_retention_days: int = 7
+    # Cozulmemis (pending) kayit daha uzun durur: operator cihazi haftalar
+    # sonra tanimlayabilir. Ustunde tutmak diski riske atar.
+    #
+    # ACIK POLITIKA: bu sureyi asan COZULMEMIS bilinmeyen telemetri sistem
+    # tarafindan SILINIR. Bu bilincli bir saklama karariidr, sessiz veri
+    # kaybi degildir: silme ayri sayilir (`..._expired_total`) ve retention
+    # penceresi dolmadan yapilan kapasite kaynakli silme (`..._data_shed_total`)
+    # bundan AYRI tutulur, ayrica operasyonel olay uretir.
+    unknown_telemetry_pending_retention_days: int = 30
+    # Acil veri dusurme olayinin en kisa tekrar araligi. Kapasite baskisi
+    # dakikalarca surebilir; her partide olay yazmak olay tablosunu doldurur.
+    unknown_telemetry_shed_event_interval_sec: int = 300
+    # Tek replay cagrisinda islenecek en fazla kayit. Ust sinir: tek istekte
+    # on binlerce satiri tek transaction'a almak DB'yi kilitlerdi.
+    unknown_telemetry_replay_max_limit: int = 5_000
+    # Ayni cihaz kodu icin uyari logu / olay uretim araligi. 1 Hz telemetride
+    # her mesaj icin log basmak diski ve olay tablosunu doldururdu.
+    unknown_telemetry_log_interval_sec: int = 300
+    # Karantina retention taramasi. Tablo telemetri hizinda buyumedigi
+    # (yalnizca TANIMSIZ kod uretildiginde artar) icin saatlik yeterli.
+    unknown_telemetry_purge_interval_sec: int = 3600
     # `processed_messages` — idempotency defteri (ayni mesaj iki kez islenmesin).
     #
     # GERCEK redelivery penceresi ack_wait(60s) x max_deliver(10) = 10 DAKIKA.
