@@ -14,6 +14,52 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.103.0] — 2026-08-18
+
+### Değişti
+
+- **Veritabanı şemasının tek otoritesi artık Alembic.** Bu sürüme kadar şema
+  fiilen çalışma zamanında yönetiliyordu: backend her açılışta
+  `Base.metadata.create_all()` çağırıp ~124 idempotent DDL ifadesi (106
+  `ALTER TABLE`, 11 `CREATE TABLE`, 12 `CREATE INDEX`, 2 `ALTER TYPE`)
+  koşuyordu; temiz kurulum da şemayı migration'lardan değil SQLAlchemy
+  modellerinden üretiyordu. Yani eksik bir şema sessizce "onarılıyor" ve
+  uygulama yarım şemayla ayağa kalkabiliyordu.
+
+  Ölçülen kanıt: boş bir veritabanında `alembic upgrade head` 71 revizyonun
+  52'sinde kırılıyor ve geriye 8 tablo bırakıyordu. 50 model tablosunun
+  39'unu (`users`, `devices`, `gateways`, `alarm_events`, `lines`, `poles`,
+  `telemetry` ...) hiçbir migration kurmuyordu.
+
+  Yeni `0072` migration'ı güncel şemanın tamamını explicit Alembic
+  operasyonlarıyla kuruyor. Temiz kurulum artık `alembic stamp 0071` +
+  `upgrade head`; **production'da `create_all` sıfır**. Mevcut kurulumlarda
+  `0072` hiçbir tabloya dokunmaz (no-op), yalnızca `alembic_version` ilerler.
+  `0001`–`0071` **değiştirilmedi**.
+
+- **Açılışta şema değişmiyor, yalnızca doğrulanıyor.** Yerine salt-okunur bir
+  uyumluluk kontrolü geldi: şema eski, ileri ya da hiç kurulmamışsa
+  `/health/ready` 503 döner ve sebep log'a yazılır. Otomatik `upgrade`,
+  `downgrade`, `stamp` veya "onarım" **yok** — şema taşıma açık bir deploy
+  adımı olarak kalıyor.
+
+### Düzeltildi
+
+- **Migration hedefi artık sessizce değiştirilemiyor.** `alembic_migrations/env.py`
+  açıkça verilen `sqlalchemy.url`'i koşulsuz olarak `settings.database_url` ile
+  eziyordu; bu yüzden bir migration testi bir kez geliştiricinin kendi
+  veritabanını 0063'ten 0071'e taşımıştı. Hedef seçimi artık açık bir öncelik
+  sırasına bağlı: açık Alembic URL > `E1_MIGRATION_DATABASE_URL` >
+  `settings.database_url`. Seçilen hedef parola sızdırmadan log'lanıyor.
+
+- **Şebeke topolojisinde eksik referans bütünlüğü.** `lines.branched_from_pole_id
+  -> poles.id` kısıtı, `poles.line_id -> lines.id` ile karşılıklı bağımlı olduğu
+  için `create_all` ile kurulan şemalarda hiç oluşmuyordu; yetim
+  `branched_from_pole_id` değerleri mümkündü. `0072` kısıtı tablolar
+  kurulduktan sonra ayrı bir adımda ekliyor.
+
+---
+
 ## [2.102.1] — 2026-08-18
 
 ### Eklendi
