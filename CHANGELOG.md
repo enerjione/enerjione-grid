@@ -14,6 +14,30 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.101.1] — 2026-08-18
+
+### Değişti
+
+- Gateway dağıtım sözleşmesi **v1.11.2**'ye senkronlandı. Gateway tarafındaki
+  1.11.2 içeriği F7-G (doğrudan `POST /operate` sertleştirmesi); **dağıtım
+  sözleşmesine yansıyan tek şey sürüm alanıdır** — 80 alanın 80'i
+  karşılaştırıldı, yalnızca `gateway_release` değişti (1.11.1 → 1.11.2).
+
+  Komut düzlemine dokunan hiçbir değer değişmedi: `DNP3_LIBRARY`,
+  `TELEMETRY_PUBLISHER`, poll/refresh aralıkları, `DNP3_TIME_SYNC`,
+  `stop_grace_period` ve F5 komut düzlemi wiring'i
+  (`GATEWAY_COMMAND_DELIVERY_TOKEN`) aynı kaldı.
+
+  Sözleşmenin sahibi gateway repo'sudur; Grid tam kopyasını vendor eder ve
+  CI karşılaştırır. CI ile parity testi birlikte v1.11.2'ye alındı — tek yer
+  güncellenseydi kontrol sessizce eski sürümü doğrulamaya devam ederdi.
+  Eski snapshot'lar (`v1.11.0.json`, `v1.11.1.json`) tarihsel kanıt olarak
+  dizinde kalıyor.
+
+  Uygulama davranışında değişiklik yok; şema değişikliği ve migration yok.
+
+---
+
 ## [2.101.0] — 2026-08-18
 
 ### Eklendi
