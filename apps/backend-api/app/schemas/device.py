@@ -146,9 +146,17 @@ class DeviceCommandRequest(BaseModel):
     """
 
     command: str = Field(min_length=1, max_length=80)
-    count: int = Field(default=1, ge=1, le=10)
-    on_time_ms: int = Field(default=0, ge=0, le=60000)
-    off_time_ms: int = Field(default=0, ge=0, le=60000)
+    # `strict=True` — SESSIZ TIP DONUSUMU YOK.
+    #
+    # Lax modda `"1"` -> 1, `True` -> 1 ve `1.0` -> 1 donusuyordu. Bu, HTTP
+    # istemcisinin tip hatasini "duzeltip" fiziksel komut uretmek demek:
+    # `count=True` gonderen bir cagiran 1 tekrar ISTEMEDI, bir bayrak
+    # gonderdigini saniyordu. Dogru tepki tahmin etmek degil reddetmektir.
+    # Aralik sinirlari `device_command_service` ile AYNI olmak zorunda
+    # (bkz. test_f6b_command_intent: sema/servis kaymasi testi).
+    count: int = Field(default=1, ge=1, le=10, strict=True)
+    on_time_ms: int = Field(default=0, ge=0, le=60000, strict=True)
+    off_time_ms: int = Field(default=0, ge=0, le=60000, strict=True)
 
 
 class DeviceCommandQueued(BaseModel):

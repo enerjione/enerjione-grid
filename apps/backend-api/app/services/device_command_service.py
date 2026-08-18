@@ -43,6 +43,112 @@ logger = logging.getLogger(__name__)
 #: Genisletmek bilincli bir urun karari olmali — bkz. modul docstring'i.
 PROTOCOL_ALLOWED_SLUGS = frozenset({"reset_all_fcis"})
 
+# ---------------------------------------------------------------------------
+# F6-B: KOMUT NIYETI SINIRI
+#
+# Bu sinir gateway'in FIZIKSEL dogrulayicisinin (F6-G, v1.11.1) kopyasi
+# DEGILDIR ve olmamalidir. Gateway "cihaz bunu kabul eder mi" sorusunu
+# cevaplar; backend "biz bunu ISTEDIK mi" sorusunu. Backend sinirlari
+# gateway'inkinden DAR olabilir ve burada oyledir — asagidaki degerler
+# uydurulmadi, `schemas/device.DeviceCommandRequest` icinde ZATEN yururlukte
+# olan uretim sinirlaridir; tek fark artik TUM cagiranlar icin gecerli
+# olmalari.
+#
+# NEDEN SERVISTE (router'da degil): REST semasi yalnizca arayuz kapisini
+# korur. `queue_command` bugun uc yerden cagriliyor (arayuz, config uygulama,
+# IEC 104) ve hicbir tip/aralik kontrolu YOKTU; sema disindan gelen bir
+# cagiran istedigi degeri yazabilirdi. Sinir, satirin yazildigi yere en
+# yakin ortak noktada durmali.
+# ---------------------------------------------------------------------------
+
+#: Kabul edilen operasyon turleri. Horstmann SN2 Device Profile PULSE
+#: DESTEKLEMEZ; uretimde tek deger `latch_on`.
+#:
+#: ALIAS/NORMALIZASYON YOK: "LATCH_ON", "latch-on", "Latch_On" gibi
+#: varyantlar SESSIZCE duzeltilmez. Cagiranin yazim hatasini "tahmin edip"
+#: fiziksel komut uretmek, tam da kapatmaya calistigimiz sinifta bir hata.
+OP_TYPE_LATCH_ON = "latch_on"
+ALLOWED_OP_TYPES = frozenset({OP_TYPE_LATCH_ON})
+
+#: CROB tekrar sayisi. Ust sinir gateway'in fiziksel tavani (uint8, 255)
+#: DEGIL, backend'in mevcut uretim sozlesmesidir.
+COUNT_MIN = 1
+COUNT_MAX = 10
+
+#: LATCH islemlerinde zamanlama alanlari ANLAMSIZDIR ve uretimde daima 0'dir.
+#: Ust sinir yine mevcut sema sozlesmesinden gelir (gateway uint32 kabul eder).
+TIME_MIN = 0
+TIME_MAX = 60_000
+
+
+def _tam_sayi(ad: str, deger: object, alt: int, ust: int) -> int:
+    """Kesin tamsayi + aralik kontrolu. COERCION YOK.
+
+    `bool` ACIKCA reddedilir. Python'da `True == 1` ve `isinstance(True, int)`
+    dogrudur; kontrol `isinstance` ile yazilsaydi `count=True` sessizce
+    `count=1` olur, yani cagiranin GONDERMEDIGI bir niyet uretilirdi. Ayni
+    sebeple `"1"` (metin) ve `1.0` (float) de kabul edilmez: bunlar cagiranin
+    tip hatasidir ve dogru tepki duzeltmek degil REDDETMEKTIR.
+    """
+    if isinstance(deger, bool) or type(deger) is not int:
+        raise CommandRejected(
+            "invalid_parameter_type",
+            f"{ad} tam sayi olmali (bool/metin/ondalik kabul edilmez); "
+            f"gelen: {type(deger).__name__}",
+        )
+    if not (alt <= deger <= ust):
+        raise CommandRejected(
+            "parameter_out_of_range",
+            f"{ad} {alt}..{ust} araliginda olmali; gelen: {deger}",
+        )
+    return deger
+
+
+def validate_command_intent(
+    *,
+    slug: str,
+    op_type: object,
+    count: object,
+    on_time_ms: object,
+    off_time_ms: object,
+    model: str | None = None,
+) -> None:
+    """Komut NIYETINI satir yazilmadan ONCE dogrular.
+
+    Basarisizlikta `CommandRejected` firlar; cagiran satiri HIC olusturmaz,
+    dolayisiyla gecersiz niyet `/pending`e de ulasamaz.
+
+    `slug`/`model` bugun karar degistirmiyor ama imzada duruyor: komut basina
+    kural gerektiginde (or. yalnizca belirli bir komutta tekrar sayisi) sinir
+    yine TEK yerde kalsin, cagiranlara dagilmasin.
+    """
+    if not isinstance(op_type, str) or op_type not in ALLOWED_OP_TYPES:
+        raise CommandRejected(
+            "invalid_op_type",
+            f"Desteklenmeyen operasyon turu: {op_type!r} "
+            f"(kabul edilen: {', '.join(sorted(ALLOWED_OP_TYPES))})",
+        )
+
+    sayi = _tam_sayi("count", count, COUNT_MIN, COUNT_MAX)
+    acik = _tam_sayi("on_time_ms", on_time_ms, TIME_MIN, TIME_MAX)
+    kapali = _tam_sayi("off_time_ms", off_time_ms, TIME_MIN, TIME_MAX)
+
+    # DESTEKLENMEYEN KOMBINASYON: LATCH'te zamanlama anlamsizdir.
+    #
+    # Cihaz bu alanlari zaten yok sayar; sifirdan farkli bir deger kabul
+    # etmek, operatore uygulanmayacak bir sure verdigimizi dusundururdu.
+    # Uretimde her yol bugun 0 gonderiyor, yani bu kural mevcut davranisi
+    # DEGISTIRMEZ.
+    if op_type.startswith("latch") and (acik != 0 or kapali != 0):
+        raise CommandRejected(
+            "unsupported_parameter_combination",
+            f"{op_type} islemi zamanlama kullanmaz; on_time_ms/off_time_ms 0 olmali "
+            f"(gelen: {acik}/{kapali})",
+        )
+
+    del sayi  # aralik kontrolu icin cozuldu; deger cagiranda kalir
+
+
 
 class CommandRejected(Exception):
     """Komut kuyruga ALINAMADI. `reason` makine tarafindan okunabilir."""
@@ -135,13 +241,27 @@ def queue_command(
 
     index, label = resolve_command_index(db, slug, model=hedef.model)
 
+    # NIYET SINIRI — satir yazilmadan ONCE. Gecersizse `CommandRejected`
+    # firlar, `DeviceCommand` HIC olusmaz ve `/pending`e hicbir sey ulasmaz.
+    validate_command_intent(
+        slug=slug,
+        op_type=OP_TYPE_LATCH_ON,
+        count=count,
+        on_time_ms=on_time_ms,
+        off_time_ms=off_time_ms,
+        model=hedef.model,
+    )
+
     cmd = DeviceCommand(
         gateway_code=gateway.code,
         device_code=hedef.code,
         command=slug,
         dnp3_index=index,
         # Horstmann SN2 Device Profile PULSE DESTEKLEMEZ (yalniz LATCH_ON/OFF).
-        op_type="latch_on",
+        # BACKEND SABITI: cagiran taraf op_type SECEMEZ; API semasinda da
+        # boyle bir alan yok. Dogrulayici yine de kontrol ediyor ki sabit
+        # ileride degistirilirse sessizce sozlesme disina cikilmasin.
+        op_type=OP_TYPE_LATCH_ON,
         count=count,
         on_time_ms=on_time_ms,
         off_time_ms=off_time_ms,
