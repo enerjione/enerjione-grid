@@ -12,6 +12,10 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ## [Yayınlanmamış]
 
+---
+
+## [2.101.2] — 2026-08-18
+
 ### Düzeltildi
 
 - **Yedek Yönetimi sayfası hiç açılmıyordu** (`Failed to fetch`). nginx'teki
