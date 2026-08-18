@@ -621,7 +621,11 @@ jobs:
       - name: Vendor edilen sozlesme gateway repo ile AYNI mi
         run: |
           set -euo pipefail
-          VENDOR=infra/gateway-contract/v1.11.2.json
+          # SURUM IKI YERDE SABIT: burasi ve parity testindeki SOZLESME_YOLU
+          # (apps/backend-api/tests/test_gateway_deployment_contract_parity.py).
+          # Ikisi ayrisirsa CI yanlis surumu karsilastirir; bir bekci test
+          # esitligi zorunlu kilar (test_ci_workflow_ayni_snapshota_bakiyor).
+          VENDOR=infra/gateway-contract/v1.11.3.json
           RAW=https://raw.githubusercontent.com/enerjione/enerjione-grid-dnp3-gateway/main
           # Runtime'da internet ISTENMEZ; bu YALNIZCA CI kontrolu.
           curl -fsSL -o /tmp/upstream.json "$RAW/docker/gateway-deployment-contract.json"

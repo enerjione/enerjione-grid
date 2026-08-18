@@ -565,3 +565,29 @@ def test_F5A_komut_sirri_varsayilan_render_de_URETILMEZ(yol: str):
     assert "GATEWAY_COMMAND_DELIVERY_TOKEN" not in _yol_env(yol), (
         "komut duzlemi sirri sir provision EDILMEDEN render edilmis"
     )
+
+
+def test_ci_workflow_ayni_snapshota_bakiyor():
+    """Sozlesme surumu IKI yerde sabit; ayrismalari sessiz bir kor nokta.
+
+    YASANDI (2.102.0): parity testindeki `SOZLESME_YOLU` v1.11.3'e tasindi
+    ama `.github/workflows/ci.yml` icindeki `VENDOR=` satiri v1.11.2'de
+    kaldi. Yerelde `pytest` yesildi -- o adim pytest'e ait degil, ayri bir
+    CI job'i. CI ise ARTIK YAYINDA OLMAYAN v1.11.2 snapshot'ini gateway
+    repo'sunun main'indeki v1.11.3 sozlesmesiyle karsilastirdi ve release
+    fail-closed kapisindan donduruldu.
+
+    Bu test iki pin'i birbirine baglar: birini bump eden digerini de bump
+    etmek zorunda kalir.
+    """
+    import re as _re
+
+    ci = (KOK / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    m = _re.search(r"^\s*VENDOR=(\S+)\s*$", ci, _re.MULTILINE)
+    assert m, "ci.yml icinde VENDOR= satiri bulunamadi (job yeniden mi yazildi?)"
+    ci_yolu = (KOK / m.group(1)).resolve()
+    assert ci_yolu == SOZLESME_YOLU.resolve(), (
+        f"CI `{m.group(1)}` snapshot'ina bakiyor ama parity testi "
+        f"`{SOZLESME_YOLU.relative_to(KOK).as_posix()}` kullaniyor. Ikisi ayni "
+        f"olmali; yoksa CI yanlis surumu dogrular."
+    )
