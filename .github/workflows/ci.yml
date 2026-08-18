@@ -621,7 +621,7 @@ jobs:
       - name: Vendor edilen sozlesme gateway repo ile AYNI mi
         run: |
           set -euo pipefail
-          VENDOR=infra/gateway-contract/v1.11.1.json
+          VENDOR=infra/gateway-contract/v1.11.2.json
           RAW=https://raw.githubusercontent.com/enerjione/enerjione-grid-dnp3-gateway/main
           # Runtime'da internet ISTENMEZ; bu YALNIZCA CI kontrolu.
           curl -fsSL -o /tmp/upstream.json "$RAW/docker/gateway-deployment-contract.json"
