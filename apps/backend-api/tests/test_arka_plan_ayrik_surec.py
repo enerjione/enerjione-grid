@@ -475,12 +475,13 @@ def test_ACILIS_yolunda_outbox_YAYINI_yapilmiyor(monkeypatch):
 
     monkeypatch.setattr(m, "seed_default_signals", _sahte_seed)
 
-    m._legacy_bootstrap_ddl()
+    m.seed_fabrika_verisi()
 
-    # Once VAKUM KONTROLU: bootstrap gercekten SONUNA kadar kosmus olmali.
-    # Aksi halde erken patlayan bir bootstrap bu testi bedavadan yesil yapar.
+    # Once VAKUM KONTROLU: tohumlama gercekten kosmus olmali. Aksi halde
+    # erken patlayan bir kanca bu testi bedavadan yesil yapar. (Kanca hatayi
+    # bilerek yutuyor — bkz. test_startup_resilience — yani bu kontrol sart.)
     assert tohumlandi == [True], (
-        "bootstrap sonuna ulasmadi — asagidaki iddia hicbir sey kanitlamaz"
+        "tohumlama kosmadi — asagidaki iddia hicbir sey kanitlamaz"
     )
     assert yayinlar == [], (
         "acilis yolundan outbox yayini yapiliyor — bu kod her uvicorn "

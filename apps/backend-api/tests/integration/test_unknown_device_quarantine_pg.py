@@ -447,9 +447,10 @@ def _tabloyu_dusur(url: str, ad: str) -> None:
 # Migration 0002 `ALTER TYPE ... ADD VALUE` icin baglantiyi AUTOCOMMIT'e
 # ceker; alembic'in acik transaction'i yuzunden bos bir DB'de tum zinciri
 # TEK surecte oynatmak `InvalidRequestError` verir. Bu bir uretim yolu da
-# DEGILDIR: temiz kurulum `create_all` + `stamp head` yapar (bkz.
-# scripts/migrate_db.py), zinciri hic kosturmaz. Asagidaki iki test
-# uretimde GERCEKTEN var olan iki yolu taklit eder.
+# DEGILDIR: temiz kurulum `stamp <taban>` + `upgrade head` yapar (bkz.
+# scripts/migrate_db.py) ve semayi 0072'den alir; 0001-0071 zincirini hic
+# kosturmaz. Asagidaki iki test uretimde GERCEKTEN var olan iki yolu
+# taklit eder.
 
 
 def test_T30_yukseltme_yolu_0070_den_head_e(monkeypatch):
@@ -514,4 +515,6 @@ def test_T29_alembic_tek_head():
 
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     heads = list(script.get_heads())
-    assert heads == ["0071"], f"tek head olmali, bulunan: {heads}"
+    # Head SABIT DEGIL: her yeni migration onu ilerletir. Iddia "tek head"
+    # olmasidir — dallanma (coklu head) migration'lari sessizce atlatir.
+    assert len(heads) == 1, f"tek head olmali, bulunan: {heads}"

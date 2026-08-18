@@ -1236,9 +1236,9 @@ def get_or_create_schedule(db: Session) -> BackupSchedule:
 
     NEDEN MIGRATION DEGIL
     ---------------------
-    Temiz kurulum semayi `Base.metadata.create_all()` + `stamp head` ile
-    kuruyor (bkz. scripts/migrate_db.py); migration'lar KOSMUYOR. Yani
-    satiri seed eden bir migration tam da hedefledigimiz senaryoda —
+    Temiz kurulum 0001-0071 zincirini OYNATMAZ: `stamp 0071` + `upgrade head`
+    ile sema dogrudan 0072'den gelir (bkz. scripts/migrate_db.py). Yani
+    satiri seed eden ESKI bir migration tam da hedefledigimiz senaryoda —
     yeni sahada — hic calismazdi. Varsayilanin domain katmaninda durmasi
     bu yuzden tercih degil zorunluluk.
 

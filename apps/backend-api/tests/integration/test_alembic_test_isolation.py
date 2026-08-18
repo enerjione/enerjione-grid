@@ -75,6 +75,19 @@ def _tablo_var_mi(url: str, ad: str) -> bool:
         eng.dispose()
 
 
+def _head() -> str:
+    """Bu imajin head revizyonu — SABIT YAZILMAZ.
+
+    Testler eskiden "0071" bekliyordu; her yeni migration onlari kirardi ve
+    duzeltme sirasinda gercek iddia (migration DOGRU HEDEFE kostu mu)
+    gozden kacabilirdi.
+    """
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    return ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
+
+
 def _revizyon(url: str) -> str | None:
     eng = create_engine(url)
     try:
@@ -101,7 +114,7 @@ def test_A01_explicit_izole_hedefte_migration_PASS(gecici_db, monkeypatch):
     command.stamp(cfg, "0070")
     command.upgrade(cfg, "head")
 
-    assert _revizyon(url) == "0071"
+    assert _revizyon(url) == _head()
     assert _tablo_var_mi(url, "unknown_device_telemetry")
 
 
@@ -157,7 +170,7 @@ def test_A02c_env_degiskeni_yoksa_FAIL_CLOSED(monkeypatch):
 # --------------------------------------------------------------------------
 # A03 / A04 / A05 — migration yollari
 # --------------------------------------------------------------------------
-def test_A03_create_all_stamp0070_upgrade0071_PASS(gecici_db, monkeypatch):
+def test_A03_create_all_stamp0070_upgrade_head_PASS(gecici_db, monkeypatch):
     """Temiz kurulum/restore yolu: tablo MODELDEN gelmis, 0071 yine kosar."""
     from alembic import command
 
@@ -170,7 +183,7 @@ def test_A03_create_all_stamp0070_upgrade0071_PASS(gecici_db, monkeypatch):
     command.stamp(cfg, "0070")
     command.upgrade(cfg, "head")  # korumasiz create_table burada patlardi
 
-    assert _revizyon(url) == "0071"
+    assert _revizyon(url) == _head()
     assert _tablo_var_mi(url, "unknown_device_telemetry")
 
 
@@ -194,7 +207,7 @@ def test_A04_0070_semasindan_0071_PASS(gecici_db, monkeypatch):
     assert _tablo_var_mi(url, "unknown_device_telemetry")
 
 
-def test_A05_0071_tekrar_kosmasi_idempotent(gecici_db, monkeypatch):
+def test_A05_head_tekrar_kosmasi_idempotent(gecici_db, monkeypatch):
     """0071'e ikinci kez `upgrade head` no-op olmali; `downgrade` + tekrar
     `upgrade` de temiz calismali."""
     from alembic import command
@@ -208,13 +221,14 @@ def test_A05_0071_tekrar_kosmasi_idempotent(gecici_db, monkeypatch):
     command.stamp(cfg, "0070")
     command.upgrade(cfg, "head")
     command.upgrade(cfg, "head")  # no-op
-    assert _revizyon(url) == "0071"
+    assert _revizyon(url) == _head()
     assert _tablo_var_mi(url, "unknown_device_telemetry")
 
     command.downgrade(cfg, "0070")
     assert not _tablo_var_mi(url, "unknown_device_telemetry")
     command.upgrade(cfg, "head")
     assert _tablo_var_mi(url, "unknown_device_telemetry")
+    assert _revizyon(url) == _head()
 
 
 # --------------------------------------------------------------------------

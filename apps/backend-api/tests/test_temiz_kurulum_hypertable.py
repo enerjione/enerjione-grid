@@ -222,15 +222,12 @@ def test_kurulum_akisi_depolama_kurulumunu_cagirir(monkeypatch) -> None:
             sira.append("stamp")
 
         @staticmethod
-        def upgrade(*_a, **_kw):  # pragma: no cover — temiz kurulumda cagrilmaz
+        def upgrade(*_a, **_kw):
             sira.append("upgrade")
 
     monkeypatch.setattr(md, "engine", _SahteEngine())
     monkeypatch.setattr(md, "inspect", lambda _e: _SahteInspector())
     monkeypatch.setattr(md, "command", _SahteCommand)
-    monkeypatch.setattr(
-        md.Base.metadata, "create_all", lambda **_kw: sira.append("create_all")
-    )
     monkeypatch.setattr(
         timescale_setup,
         "ensure_historian_storage",
@@ -240,8 +237,11 @@ def test_kurulum_akisi_depolama_kurulumunu_cagirir(monkeypatch) -> None:
     md.migrate()
 
     assert "historian" in sira, "migrate_db depolama kurulumunu cagirmiyor"
-    # Sema kurulduktan SONRA cagrilmali; once cagrilirsa tablo henuz yok.
-    assert sira.index("create_all") < sira.index("historian")
+    # Temiz kurulum artik `create_all` DEGIL, `stamp <taban>` + `upgrade head`
+    # yapiyor: sema 0072'den geliyor. Depolama kurulumu semadan SONRA
+    # cagrilmali; once cagrilirsa telemetry_history tablosu henuz yoktur.
+    assert sira[:2] == ["stamp", "upgrade"], f"temiz kurulum sirasi: {sira}"
+    assert sira.index("upgrade") < sira.index("historian")
 
 
 def test_SIKISTIRMA_ESIGI_disk_butcesiyle_TUTARLI() -> None:

@@ -655,8 +655,9 @@ def staging_migrate(staging: str) -> tuple[bool, str]:
     Iki bagimsiz baglanti kaynagi var ve ikisi de MODUL YUKLENIRKEN
     sabitlenir:
 
-      * `alembic_migrations/env.py` calistiginda `sqlalchemy.url`u
-        KOSULSUZ `settings.database_url` ile ezer (`-x` destegi yok).
+      * `alembic_migrations/env.py` acik bir URL verilmediginde hedefi
+        `settings.database_url`'tan alir ve `Settings` modul yuklenirken
+        sabitlenir.
       * `app/db/session.py` engine'i modul govdesinde kurar ve
         `scripts/migrate_db.py` onu YEDI ayri noktada kullanir
         (advisory lock, `inspect`, `create_all`, sema kontrolu, historian).
