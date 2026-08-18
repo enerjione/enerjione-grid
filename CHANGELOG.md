@@ -12,6 +12,26 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ## [Yayınlanmamış]
 
+### Düzeltildi
+
+- **Yedek Yönetimi sayfası hiç açılmıyordu** (`Failed to fetch`). nginx'teki
+  yedek bloğu `location ^~ /api/v1/admin/backups/` — **sonda slash** ile
+  yazılmıştı. nginx, prefix'i slash ile biten ve `proxy_pass`'e giden bir
+  location için slash'siz isteğe kendiliğinden `301` üretir; yedek listesi ucu
+  (`GET /admin/backups`) tam olarak slash'siz yolda oturuyor. Sonuç sonsuz
+  döngü: nginx `301` → `.../backups/`, FastAPI `307` → `.../backups`. Üstelik
+  nginx'in `301`'i mutlak URL'e iç portu (`:8080`) yazdığı için hedef başka bir
+  origin oluyor, CSP `connect-src 'self'` isteği kesiyordu. Prefix slash'siz
+  hale getirildi (alt yolları da kapsar; 2 GiB gövde ve tamponsuz akış
+  ayarları korundu) ve `port_in_redirect off` ile nginx'in ürettiği hiçbir
+  yönlendirme iç portu sızdırmıyor.
+
+  Sayfayı bozan şey 2.85.0 denetiminde bu bloğun yolunu düzelten değişiklikti;
+  yol doğrulanmıştı ama slash tuzağı görünmemişti, çünkü önceki yanlış yol
+  hiçbir istekle eşleşmiyordu. Bekçi test o dönem slash'lı yolu **şart
+  koştuğu** için düzeltmeyi geri alırdı; test de güncellendi ve iki yeni
+  bekçi eklendi (prefix slash ile bitmemeli, `port_in_redirect off` bulunmalı).
+
 ---
 
 ## [2.101.0] — 2026-08-18
