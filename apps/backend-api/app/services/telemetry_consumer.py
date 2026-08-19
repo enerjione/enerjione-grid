@@ -1249,6 +1249,25 @@ def _dispatch_outbound(outbound_payloads: list) -> None:  # noqa: ANN001
         targets = list(
             db.scalars(select(OutboundTarget).where(OutboundTarget.is_active.is_(True))).all()
         )
+        # ISLEM PENCERESI BURADA KAPANIR — dagitim dongusu transaction'siz kosar.
+        #
+        # NEDEN: bu session yalnizca yukaridaki SELECT icin gerekli. Eskiden
+        # transaction dagitim dongusu BOYUNCA acik kaliyordu ve dongu icinde
+        # `time.sleep` vardi (bkz. outbound_dispatch_service fail-fast notu):
+        # Postgres oturumlari `idle in transaction / Client:ClientRead`
+        # durumunda 17 DAKIKAYA kadar asili kaldi. Bu tek basina bir ariza:
+        # acik transaction en eski xmin'i sabitler, VACUUM ilerleyemez ve
+        # tablolar sisir.
+        #
+        # SIRA ONEMLI — `expunge_all` ONCE:
+        #   `SessionLocal` varsayilan `expire_on_commit=True` ile kurulu
+        #   (db/session.py). Once `rollback()` deseydik nesneler EXPIRE olur,
+        #   asagidaki `target.protocol` erisimi tembel bir yenileme tetikler
+        #   ve YENI bir transaction acardi — yani tam kacindigimiz sey.
+        #   `expunge_all()` nesneleri session'dan cikarir; DETACHED nesne
+        #   yuklenmis kolon degerlerini korur ve rollback onlara dokunmaz.
+        db.expunge_all()
+        db.rollback()
         for op in outbound_payloads:
             try:
                 dispatch_event(
