@@ -59,7 +59,7 @@ from app.schemas.dnp3_extended import (
     merge_dnp3_extended,
 )
 from app.schemas.gateway import GatewayConfigDevice, GatewayConfigSignal
-from app.services import gateway_fleet_alarm
+from app.services import gateway_fleet_alarm, license_service
 from app.services.gateway_health_service import (
     device_link_states,
     smart_counts,
@@ -88,6 +88,19 @@ def db():
     finally:
         s.close()
         eng.dispose()
+
+
+@pytest.fixture(autouse=True)
+def lisans_acik(monkeypatch):
+    """Lisans dosyasi testlerde YOK; kota kapisi bu dosyanin konusu degil.
+
+    Kotanin KENDISI ayri bir testte gercek fonksiyonla olculuyor (bkz.
+    `test_lisans_*`). Bu fixture olmadan testler YEREL makinede `.env`
+    sayesinde gecip CI'da 403 ile duser — nitekim ilk kosuda oyle oldu.
+    """
+    monkeypatch.setattr(
+        license_service, "lock_and_assert_device_capacity", lambda db: None
+    )
 
 
 @pytest.fixture()
