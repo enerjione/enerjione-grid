@@ -28,15 +28,16 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 import psutil
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_roles
 from app.core import service_role
 from app.core.config import settings
 from app.db.session import engine, get_db
+from app.models.enums import UserRole
 from app.models.user import User
 
 
@@ -1145,3 +1146,34 @@ def _karantina_sayaclari() -> dict[str, int]:
         "unknown_device_replay_failed_total",
     )
     return {ad: int(s.get(ad) or 0) for ad in alanlar}
+
+
+# ===========================================================================
+# DEPOLAMA HARITASI — Disk Guardian gorunurlugu
+# ===========================================================================
+
+
+@router.get("/storage")
+def get_storage_map(
+    _: User = Depends(require_roles([UserRole.INSTALLER, UserRole.ENGINEER])),
+):
+    """Bilesen bazli disk kullanimi + guard seviyesi.
+
+    ONBELLEKTEN OKUR. Bu uc AGAC TARAMASI YAPMAZ: anlik goruntuyu arka plan
+    disk guard tick'i uretir (bkz. services/storage_snapshot). Aksi halde
+    sayfayi acan her kullanici diski taratirdi ve tam da olcmeye calistigimiz
+    baskiyi biz uretirdik.
+
+    `host_only` bloğu bilincli olarak `measured=False` doner: Docker
+    imajlari, build cache ve journald backend konteynerinden erisilebilir
+    degil (docker.sock mount edilmiyor). Uydurma deger uretmiyoruz.
+    """
+    from app.services import storage_snapshot
+
+    veri = storage_snapshot.snapshot()
+    if veri is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Depolama anlik goruntusu henuz uretilmedi.",
+        )
+    return veri

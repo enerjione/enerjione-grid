@@ -401,7 +401,9 @@ class RetentionWorker:
         """
         from app.services import disk_guard
 
-        disk_guard.tick()
+        # Tick + bilesen anlik goruntusunun tazelenmesi. Gorunurluk arka
+        # planda uretilir ki Sistem Durumu istegi disk taramasi yapmasin.
+        disk_guard.tick_with_snapshot()
 
     def purge_telemetry(self, *, retention_minutes: int | None = None) -> int:
         """Eski telemetri satirlarini siler — AMA her (device_id, signal_key)

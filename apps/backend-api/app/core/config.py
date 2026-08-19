@@ -694,6 +694,57 @@ class Settings(BaseSettings):
     disk_guard_reserve_percent: int = 10
     disk_guard_reserve_min_gb: int = 5
     disk_guard_interval_sec: int = 300
+
+    # --- ESIK MODELI: yuzde + mutlak bos alan + inode ----------------------
+    #
+    # NEDEN UCU BIRDEN (biri digerinin yerine gecmez)
+    # -----------------------------------------------
+    # * YUZDE olcekten bagimsizdir ama BUYUK diskte gec kalir: 4 TB'lik bir
+    #   diskte %90 dolu hala 400 GB bos demektir; oysa %90'a gelmis bir disk
+    #   zaten yanlis giden bir sey oldugunu soyler.
+    # * MUTLAK BOS ALAN kucuk diskte anlamsizlasir: 64 GB'lik bir kutuda
+    #   "50 GiB'den az bos" daha ilk gunden dogrudur.
+    # * INODE tamamen ayri bir tukenme eksenidir. Disk %7 dolu olsa bile
+    #   inode'lar bitebilir (harita karo onbellegi 6.365 kucuk dosya, FTP
+    #   yuklemeleri, chunk basina dosyalar). Yalnizca bayta bakan bir guard
+    #   bu tukenmeyi HIC gormez ve "yer var" derken yazma ENOSPC alir.
+    #
+    # En KOTU sinyal kazanir (bkz. disk_guard.classify).
+    #
+    # 456 GB'lik saha diskinde rezerv modeli (%10 = 45,6 GB) zaten
+    # %80/%90/%95 sinirlarini uretiyordu; asagidaki mutlak degerler onunla
+    # CELISMEZ, yalnizca cok buyuk/cok kucuk disklerde tabani korur.
+    #
+    # YEDEK HARD-STOP ILE UYUM: `backup_scheduler` %95'te yedegi ATLAR
+    # (_DISK_BLOCK_THRESHOLD). Guard'in ACIL esigi de %95'tir; yani yedek
+    # durdugunda guard da acil seviyededir — iki katman ayni noktada
+    # konusur. Guard UYARIYI cok daha erken (%80) verir.
+    disk_guard_warning_used_percent: int = 80
+    disk_guard_critical_used_percent: int = 90
+    disk_guard_emergency_used_percent: int = 95
+    disk_guard_warning_free_gb: int = 50
+    disk_guard_critical_free_gb: int = 25
+    disk_guard_emergency_free_gb: int = 10
+    #: Inode tukenmesi. Bayt esikleriyle ayni seviyelere eslenir.
+    disk_guard_warning_inode_percent: int = 80
+    disk_guard_critical_inode_percent: int = 90
+    disk_guard_emergency_inode_percent: int = 95
+
+    # Ayni seviyede tekrar tekrar olay yazilmasin. Seviye DEGISTIGINDE olay
+    # her zaman yazilir; ayni seviyede kalindiginda bu sure beklenir.
+    # 5 dakikalik tick ile bu olmadan gunde 288 satir birikirdi.
+    disk_guard_event_cooldown_sec: int = 3600
+
+    #: Bilesen bazli depolama anlik goruntusunun tazeleme araligi.
+    #: HTTP istegi basina `du` KOSMAZ — arka plan tick'i doldurur, API
+    #: onbellekten okur (bkz. disk_guard.storage_snapshot).
+    disk_guard_snapshot_interval_sec: int = 600
+
+    #: FTP yarim transfer artiklarinin (`*.tmp`, `.tmp_*`) "bayat" sayilma
+    #: esigi. Bir config yazimi saniyeler surer; 6 saat sonra hala duran bir
+    #: gecici dosya tanim geregi coptur (yazan surec olmus ya da guc
+    #: kesilmis). AKTIF config dosyalarina (FTP-T0) ASLA dokunulmaz.
+    disk_guard_ftp_temp_stale_hours: int = 6
     # Olculecek yol. Bos ise BACKUP_DIR kullanilir — o GERCEK bir mount'tur
     # (docker volume), container'in `/` overlay'inden daha dogru bir
     # gostergedir. O da yoksa `/` (Windows'ta C:\).
