@@ -9,7 +9,11 @@ from app.models.enums import UserRole
 from app.models.user import User
 from app.schemas.auth import InviteUserResponse
 from app.schemas.user import ResetPasswordRequest, UserCreate, UserInvite, UserRead, UserUpdate
-from app.services.auth_service import get_password_hash
+from app.services.auth_service import (
+    clear_password_reset_token,
+    get_password_hash,
+    revoke_user_sessions,
+)
 from app.services.event_service import record_event
 from app.services.invitation_service import (
     build_setup_url,
@@ -367,6 +371,25 @@ def reset_password(
     target.locked_until = None
     target.failed_login_count = 0
 
+    # PAROLA RESETLENDI -> HEDEFIN ONCEDEN VERILMIS HER OTURUMU DUSER.
+    #
+    # Bu ucun asil kullanim sebebi zaten "hesap ele gecirildi / calisan ayrildi".
+    # Iptal olmadan reset o senaryoda ISE YARAMIYORDU: hesabi elinde tutanin
+    # JWT'si kendi TTL'i (8 saat, "beni hatirla" ile 7 GUN) boyunca tam
+    # yetkiyle calismaya devam ediyordu.
+    #
+    # `actor_user_id` reseti yapan yonetici: 'Aktif Oturumlar' denetiminde
+    # oturumu kimin dusurdugu gorunur.
+    #
+    # Iptal AYNI transaction'da: asagidaki tek `db.commit()` hem yeni hash'i
+    # hem `revoked_at` satirlarini yazar.
+    dusen = revoke_user_sessions(db, target.id, actor_user_id=current_user.id)
+
+    # Bekleyen davet/reset bileti de duser. Aksi halde reset, hesabi elinde
+    # tutan icin bir engel degil sadece bir gecikme olurdu: eski link hala
+    # 7 gun boyunca parolayi yeniden belirlemeye yetiyordu.
+    bilet_dustu = clear_password_reset_token(target)
+
     record_event(
         db,
         category="user",
@@ -374,7 +397,12 @@ def reset_password(
         severity="warning",
         actor_username=current_user.username,
         message=f"{current_user.username} reset password for {target.username}",
-        metadata={"target_username": target.username},
+        # Yalnizca hedef kullanici adi + sayi — parola/token DEGIL.
+        metadata={
+            "target_username": target.username,
+            "revoked_sessions": dusen,
+            "reset_token_cleared": bilet_dustu,
+        },
         i18n_key="password_reset",
         i18n_params={"actor": current_user.username, "user": target.username},
     )

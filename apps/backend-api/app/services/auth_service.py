@@ -88,6 +88,74 @@ def is_jti_revoked(jti: str | None) -> bool:
         return True
 
 
+def revoke_user_sessions(db, user_id: int, *, actor_user_id: int | None = None) -> int:
+    """Kullanicinin TUM aktif oturumlarini kapat; kapatilan sayiyi don.
+
+    Parola degisimi/reset'inde cagrilir. `get_current_user` her istekte
+    `UserSession.revoked_at` bakiyor; dolayisiyla o kullaniciya ait ONCEDEN
+    verilmis her JWT bir sonraki istekte 401 alir. Ek bir dogrulama sorgusu
+    GEREKMEZ — lookup zaten auth yolunda var.
+
+    COMMIT YAPMAZ. Cagiranin transaction'ina katilir; boylece yeni parola
+    hash'i ile oturum iptali AYNI commit'te yazilir. "Parola degisti ama
+    iptal hic yapilmadi" durumu olusamaz: iptal patlarsa parola da yazilmaz.
+
+    In-memory blacklist (`revoke_jti`) commit'ten ONCE dolduruluyor: commit
+    geri alinirsa jti'ler bellekte iptalli kalir — yani hata durumunda
+    kullanici bosuna bir kez daha giris yapar (ESKI parolasiyla, cunku
+    degisiklik yazilmadi). Fail-closed; tersi (iptal edilmemis token)
+    kabul edilemez.
+    """
+    from sqlalchemy import select as _select
+
+    from app.models.user_session import UserSession
+
+    now = datetime.now(timezone.utc)
+    # Token'in gercek exp'i bilinmiyorsa (0015 oncesi satirlar) en uzun
+    # olasi TTL kadar blacklist'te tut — erken dusurup token'i dirilme.
+    max_minutes = max(settings.access_token_minutes, settings.remember_me_token_minutes)
+
+    oturumlar = list(
+        db.execute(
+            _select(UserSession).where(
+                UserSession.user_id == user_id,
+                UserSession.revoked_at.is_(None),
+            )
+        ).scalars()
+    )
+    for sess in oturumlar:
+        sess.revoked_at = now
+        sess.revoked_by_user_id = actor_user_id
+        exp = sess.expires_at or (now + timedelta(minutes=max_minutes))
+        if exp.tzinfo is None:
+            # SQLite gibi tz tasimayan backend'lerde naive doner; UTC yazildi.
+            exp = exp.replace(tzinfo=timezone.utc)
+        revoke_jti(sess.jti, exp.timestamp())
+    return len(oturumlar)
+
+
+def clear_password_reset_token(user) -> bool:
+    """Kullanicinin bekleyen davet/reset bileti varsa gecersiz kil.
+
+    Parola BASARIYLA degistigi her yolda cagrilir. Commit YAPMAZ; cagiranin
+    transaction'ina katilir (parola hash'i + oturum iptali ile ayni commit).
+
+    YASANAN ACIK: `password_reset_token_hash` yalnizca `setup-password`
+    kullanildiginda temizleniyordu. Yoneticinin reset'i ve kullanicinin kendi
+    parola degisimi ona hic dokunmuyordu; dolayisiyla 7 gun TTL'li eski davet
+    linki parola degistikten SONRA da calisiyordu. Elinde o link olan biri
+    parolayi tekrar kendi belirledigi bir degere cekip hesabi geri alabilirdi
+    — yani "parolami degistirdim" da "kullanicinin parolasini resetledim" de
+    erisimi gercekten kesmiyordu.
+
+    Donus: bilet gercekten temizlendiyse True (audit icin).
+    """
+    vardi = bool(user.password_reset_token_hash or user.password_reset_token_expires_at)
+    user.password_reset_token_hash = None
+    user.password_reset_token_expires_at = None
+    return vardi
+
+
 def create_access_token(subject: str, remember_me: bool = False) -> tuple[str, int, str]:
     """JWT olusturur. `jti` (UUID) revocation icin sart; `exp` JWT spec'i.
 

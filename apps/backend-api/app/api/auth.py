@@ -69,7 +69,13 @@ class FcmTokenDeleteRequest(BaseModel):
 # bu listeye hem de frontend resources/<code>.json dosyasina ekle.
 SUPPORTED_LANGUAGES = {"tr", "en"}
 from app.api.deps import get_current_user
-from app.services.auth_service import create_access_token, get_password_hash, verify_password
+from app.services.auth_service import (
+    clear_password_reset_token,
+    create_access_token,
+    get_password_hash,
+    revoke_user_sessions,
+    verify_password,
+)
 from app.services.event_service import record_event
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -170,10 +176,21 @@ def login(
 
     # Aktif oturum kaydi — installer 'Aktif Oturumlar' sayfasinda gorur
     # ve istedigini revoke edebilir.
-    try:
-        from app.core.client_ip import client_ip_from_request
-        from app.models.user_session import UserSession
+    #
+    # BU BLOK BEST-EFFORT DEGILDIR (eskiden oyleydi; bkz. asagidaki 503 yolu).
+    # Kural: BASARILI TOKEN == KALICI OLARAK YAZILMIS UserSession.
+    #
+    # YASANAN ACIK: insert `except Exception: pass` ile yutuluyordu ve token
+    # yine de kullaniciya donuyordu. Satiri olmayan token'i HICBIR SEY iptal
+    # EDEMEZ: `revoke_user_sessions` onu bulamaz (parola degisimi etkisiz
+    # kalir), installer 'Aktif Oturumlar'da goremez, surec yeniden basladiginda
+    # bellek blacklist'i de bosalir. Yani tam olarak DB'nin sikintili oldugu
+    # anda -- iptal etme ihtimalinin en dusuk oldugu anda -- iptal edilemez,
+    # 7 gune kadar yasayan bir token uretiliyordu.
+    from app.core.client_ip import client_ip_from_request
+    from app.models.user_session import UserSession
 
+    try:
         client_ip = client_ip_from_request(request)
         ua = (request.headers.get("user-agent") or "")[:255] or None
         now = datetime.now(timezone.utc)
@@ -212,11 +229,36 @@ def login(
             # sorgusu gecmis oturumlari filtreleyebilsin.
             expires_at=now + timedelta(seconds=ttl_sec),
         ))
-    except Exception:  # noqa: BLE001
-        # Session insert fail olsa bile login basarili kabul edilir;
-        # session tracking advisory bir feature, kritik degil.
+        # Audit kaydi da AYNI transaction'da: oturum satiri ile giris olayi
+        # birlikte yazilir ya da hic yazilmaz.
+        record_event(
+            db,
+            category="auth",
+            event_type="user_login",
+            severity="info",
+            actor_username=user.username,
+            message=f"{user.username} signed in",
+            i18n_key="user_login",
+            i18n_params={"user": user.username},
+        )
+        # Cerez/token URETILMEDEN once kalicilik garanti altina alinir.
+        db.commit()
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        # Ham DB hatasi / SQL parametreleri LOGLANMAZ (jti, IP, token
+        # parcalari oraya sizabilir); yalnizca kullanici adi + hata SINIFI.
         import logging
-        logging.getLogger(__name__).exception("user_session_insert_failed username=%s", user.username)
+        logging.getLogger(__name__).error(
+            "user_session_persist_failed username=%s error=%s",
+            user.username, type(exc).__name__,
+        )
+        # Kimlik dogrulamasi GECTI ama oturum kaydi yazilamadi: token
+        # verilmez. 503 = "sunucu su an giris veremiyor"; 401 yaniltici
+        # olurdu (parola dogruydu) ve istemciyi parolayi degistirmeye iterdi.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Oturum kaydi olusturulamadi, lutfen tekrar deneyin.",
+        ) from exc
 
     # HttpOnly cookie — XSS sonrasi token exfiltrate olmaz. Cookie max_age
     # token'in gercek TTL'i ile ayni (remember_me=true ise 7 gun, aksi
@@ -257,17 +299,6 @@ def login(
         path="/",
     )
 
-    record_event(
-        db,
-        category="auth",
-        event_type="user_login",
-        severity="info",
-        actor_username=user.username,
-        message=f"{user.username} signed in",
-        i18n_key="user_login",
-        i18n_params={"user": user.username},
-    )
-    db.commit()
     return TokenResponse(
         access_token=access_token,
         role=user.role,
@@ -322,18 +353,31 @@ def setup_password(
             detail="Token gecersiz veya kullanilmis.",
         )
     now = datetime.now(timezone.utc)
-    if user.password_reset_token_expires_at is None or user.password_reset_token_expires_at < now:
+    son_gecerlilik = user.password_reset_token_expires_at
+    if son_gecerlilik is not None and son_gecerlilik.tzinfo is None:
+        # Kolon `DateTime(timezone=True)`; Postgres aware doner. SQLite gibi
+        # tz tasimayan backend'lerde naive gelir ve karsilastirma TypeError
+        # ile 500 uretirdi. Yazarken UTC yazildigi icin UTC sayiyoruz
+        # (`consume_ws_ticket` ayni deseni kullaniyor).
+        son_gecerlilik = son_gecerlilik.replace(tzinfo=timezone.utc)
+    if son_gecerlilik is None or son_gecerlilik < now:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Token suresi dolmus. Admin'den yeni davet linki isteyin.",
         )
 
     user.hashed_password = get_password_hash(new_pwd)
-    user.password_reset_token_hash = None
-    user.password_reset_token_expires_at = None
+    # TEK KULLANIM: bilet burada tuketilir. Ayni link ikinci kez calismaz
+    # (yukaridaki hash aramasi artik eslesmez).
+    clear_password_reset_token(user)
     user.must_change_password = False
     user.failed_login_count = 0
     user.locked_until = None
+    # Bu da bir parola BELIRLEME yolu: davet akisinda normalde acik oturum
+    # olmaz (parolasiz hesap giris yapamaz), ama admin reset'i token'i
+    # temizlemedigi icin "parolasi olan hesap + hala gecerli davet linki"
+    # bilesimi mumkun. Ayni kurali burada da uygula.
+    revoke_user_sessions(db, user.id, actor_user_id=user.id)
 
     record_event(
         db,
@@ -428,6 +472,7 @@ def update_my_language(
 @limiter.limit("10/minute")
 def change_my_password(
     request: Request,
+    response: Response,
     payload: SelfPasswordChangeRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -451,6 +496,28 @@ def change_my_password(
     current_user.must_change_password = False
 
     current_user.hashed_password = get_password_hash(payload.new_password)
+
+    # PAROLA DEGISTI -> ONCEDEN VERILMIS HER OTURUM DUSER.
+    #
+    # YASANAN ACIK: parola degisimi yalnizca hash'i guncelliyordu. Parolasinin
+    # ele gecirildigini fark edip degistiren kullanici, saldirganin elindeki
+    # JWT'yi HIC etkilemiyordu: o token kendi TTL'i (8 saat, "beni hatirla"
+    # ile 7 GUN) boyunca tam yetkiyle calismaya devam ediyordu. Yani parola
+    # degistirmek ele gecirilmis bir oturumu kapatmiyordu.
+    #
+    # Kendi oturumu da dusurulur (baska cihazda acik olan da). Arayuz bir
+    # sonraki cagrida 401 alip giris ekranina duser; kullanici YENI parolasiyla
+    # girer. "Sadece digerlerini dusur" secenegi bilerek yok: parolasini
+    # degistiren kullanicinin niyeti "her yerde kes"tir.
+    #
+    # Iptal AYNI transaction'da: asagidaki tek `db.commit()` hem hash'i hem
+    # `revoked_at` satirlarini yazar. Ikisi birlikte olur ya da hic olmaz.
+    dusen = revoke_user_sessions(db, current_user.id, actor_user_id=current_user.id)
+
+    # Bekleyen davet/reset bileti de duser: parola degistikten sonra eski
+    # link ile hesabi geri almak mumkun olmamali.
+    bilet_dustu = clear_password_reset_token(current_user)
+
     record_event(
         db,
         category="auth",
@@ -458,10 +525,16 @@ def change_my_password(
         severity="info",
         actor_username=current_user.username,
         message=f"{current_user.username} changed password",
+        # Yalnizca sayi/bayrak — token/hash/parola DEGIL.
+        metadata={"revoked_sessions": dusen, "reset_token_cleared": bilet_dustu},
         i18n_key="password_changed",
         i18n_params={"user": current_user.username},
     )
     db.commit()
+
+    # Artik gecersiz olan oturum cerezini de temizle; aksi halde tarayici
+    # olu bir cookie tasimaya devam eder ve her istek 401 log'u uretir.
+    response.delete_cookie(key=_AUTH_COOKIE_NAME, path="/")
     return None
 
 
