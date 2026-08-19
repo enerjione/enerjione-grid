@@ -89,6 +89,65 @@ def _probe_jetstream() -> tuple[bool, str | None]:
         return False, str(exc)[:200]
 
 
+#: `/health` icinde YEDEK DAYANIKLILIGI durumu.
+#:
+#: NEDEN VAR (saha, 2026-08-19): 192.168.2.99 uzerinde `backup_schedule`
+#: satiri `enabled=false, last_run_at=NULL` durumdaydi — yani o kurulumda
+#: TEK BIR zamanlanmis yedek bile alinmamisti. Model varsayilani `True`
+#: olmasina ragmen: varsayilan YALNIZCA satir ILK KEZ yaratilirken okunur,
+#: mevcut satirlara dokunmaz. Iyilestirme yukseltilmis sahalara ULASMADI.
+#:
+#: Gorunurluk de yoktu: `/health` "ok" diyordu ve `backup_scheduler` arka
+#: plan is listesinde KAYITLI gorunuyordu (kayitli ama her turda hemen
+#: donuyordu). Operator "yedekleme calisiyor" saniyordu.
+#:
+#: BILINCLI KAPATMA MESRUDUR — bu yuzden otomatik ACMIYORUZ. Ama sessiz de
+#: kalmiyoruz: durum `degraded` olur, sistem calismaya devam eder (503 DEGIL).
+_BACKUP_DISABLED_REASON = "backup_schedule_disabled"
+_BACKUP_NEVER_RAN_REASON = "backup_schedule_never_run"
+
+
+def _backup_durability(db: Session) -> dict:
+    """Zamanlanmis yedegin acik olup olmadigini ve hic kosup kosmadigini olcer.
+
+    Olculemezse (tablo henuz yok, DB gecici hata) `ok=True` doneriz: yedek
+    durumu HAKKINDA BIR SEY BILMIYORUZ demek, "yedek yok" demek degildir —
+    burada degraded'a dusmek yanlis alarm uretirdi.
+    """
+    from app.models.backup import BackupSchedule
+
+    try:
+        sch = db.get(BackupSchedule, 1)
+    except Exception:  # noqa: BLE001
+        return {"ok": True, "measured": False}
+
+    if sch is None:
+        # Henuz yaratilmamis: `get_or_create_schedule` ilk cagrida bugunku
+        # varsayilanla (enabled=True) yaratacak. Ariza degil.
+        return {"ok": True, "measured": False}
+
+    enabled = bool(sch.enabled)
+    hic_kosmadi = sch.last_run_at is None
+    return {
+        "ok": enabled,
+        "measured": True,
+        "enabled": enabled,
+        "never_ran": hic_kosmadi,
+        **(
+            {}
+            if enabled
+            else {
+                "error": (
+                    "Zamanlanmis yedekleme kapali ve bu kurulumda hic zamanlanmis "
+                    "yedek alinmamis."
+                    if hic_kosmadi
+                    else "Zamanlanmis yedekleme kapali."
+                )
+            }
+        ),
+    }
+
+
 def _build_health_body(db: Session) -> tuple[dict, int]:
     """Tum probe'lari calistir; en kotu durumu HTTP status'a yansit.
 
@@ -149,6 +208,7 @@ def _build_health_body(db: Session) -> tuple[dict, int]:
             "latency_ms": round(rmq_ms, 1),
             **({"error": rmq_err} if rmq_err else {}),
         },
+        "backup_schedule": _backup_durability(db),
     }
 
     # Rol + liderlik: arka plan islerini KIMIN calistirdigi gorunur olmali.
@@ -191,6 +251,17 @@ def _build_health_body(db: Session) -> tuple[dict, int]:
         for name, ok in (("nats_tcp", nats_ok), ("jetstream_bus", js_ok), ("rabbitmq_tcp", rmq_ok))
         if not ok
     ]
+
+    # Yedek dayanikliligi — 503 DEGIL, degraded. Operator bilincli olarak
+    # kapatmis olabilir (saha esnekligi korunur) ama bu durum GORUNUR olmali.
+    yedek = deps["backup_schedule"]
+    if yedek.get("measured") and not yedek.get("enabled"):
+        degraded_reasons.append(_BACKUP_DISABLED_REASON)
+        if yedek.get("never_ran"):
+            # Ayri sebep: "operator kapatti" ile "hic calismamis" farkli
+            # sorunlar. Ikincisi neredeyse her zaman yukseltme kaynakli
+            # sessiz bir bosluktur, bilincli bir karar degil.
+            degraded_reasons.append(_BACKUP_NEVER_RAN_REASON)
     if degraded_reasons:
         # Sessizce degraded kalmak da bir ariza modudur: kimse /health'e
         # bakmiyorsa telemetri gunlerce akmayabilir. Log'a yaz ki journalctl

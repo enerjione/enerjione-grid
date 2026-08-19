@@ -78,11 +78,17 @@ def _dusur(ad: str) -> None:
     _admin(f'DROP DATABASE IF EXISTS "{ad}"')
 
 
-def _lib_exclude_listesi() -> list[str]:
-    """`_lib.sh` icindeki `E1_DUMP_EXCLUDE` dizisini okur.
+def _lib_exclude_listesi(db: str | None = None) -> list[str]:
+    """`update.sh` yolunun GERCEK dislama listesi.
 
     Kopyalamak yerine kaynaktan okunuyor: liste degistiginde bu test de
     otomatik olarak yeni listeyi kullanir, yani sessizce eskimez.
+
+    IKI PARCA: duz tablo adlari (`E1_DUMP_EXCLUDE`) + historian chunk kumesi
+    (`E1_HISTORIAN_EXCLUDE_SQL` ile KATALOGDAN turetilir). Ikincisi sabit bir
+    kalip degil cunku sikistirilmis chunk'lar `compress_hyper_<id>_*` adiyla
+    durur ve eski sabit kalip onlara hic degmiyordu (bkz.
+    `test_historian_backup_exclusion_pg.py`).
     """
     metin = LIB_SH.read_text(encoding="utf-8")
     m = re.search(r"E1_DUMP_EXCLUDE=\((.*?)\n\)", metin, re.S)
@@ -93,6 +99,12 @@ def _lib_exclude_listesi() -> list[str]:
         if satir:
             girdiler.append(satir)
     assert girdiler, "E1_DUMP_EXCLUDE bos okundu"
+
+    if db is not None:
+        s = re.search('E1_HISTORIAN_EXCLUDE_SQL="(.*?)\n"', metin, re.S)
+        assert s, "_lib.sh icinde E1_HISTORIAN_EXCLUDE_SQL bulunamadi"
+        for (kalip,) in _q(db, s.group(1)):
+            girdiler.append(kalip)
     return girdiler
 
 
@@ -173,7 +185,7 @@ def gate_dump(uretim, paylasim) -> Path:
         "-d", uretim,
         "-F", "c", "--no-owner", "--no-acl",
     ]
-    for t in _lib_exclude_listesi():
+    for t in _lib_exclude_listesi(uretim):
         args += ["--exclude-table-data", t]
     args += ["-f", str(gecici)]
 

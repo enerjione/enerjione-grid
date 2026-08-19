@@ -349,7 +349,7 @@ EXCLUDED_DATA_TABLES = (
     # DIKKAT: asagidaki isimler duz tablo halini kapsar. `telemetry_history`
     # bir TimescaleDB HYPERTABLE oldugunda satirlar `_timescaledb_internal`
     # semasindaki chunk'larda durur ve tablo adiyla haric tutmak YETMEZ —
-    # chunk pattern'i icin bkz. _EXCLUDED_DATA_PATTERNS.
+    # chunk kumesi icin bkz. historian_exclude_patterns().
     "telemetry_history",
     "telemetry_history_1m",
     "telemetry_history_1h",
@@ -362,25 +362,115 @@ EXCLUDED_DATA_TABLES = (
 )
 
 
-# TimescaleDB chunk'lari icin pattern. Hypertable satirlari asil tabloda
-# DEGIL, `_timescaledb_internal._hyper_<N>_<M>_chunk` tablolarinda durur;
-# `--exclude-table-data telemetry_history` bunlari KAPSAMAZ. Bu pattern hem
-# ham historian chunk'larini hem continuous aggregate materialization
-# chunk'larini kapsar.
+# ---------------------------------------------------------------------------
+# HISTORIAN DISLAMASI — KATALOGDAN TURETILIR
+# ---------------------------------------------------------------------------
+# YASANAN ARIZA (saha, 2026-08-19, PG16.6 + TimescaleDB 2.17.2)
+# -------------------------------------------------------------
+# Onceki surum iki SABIT kalip kullaniyordu:
 #
-# DIKKAT: ileride BASKA bir tablo hypertable yapilirsa onun verisi de bu
-# pattern'e takilir ve SESSIZCE yedek disi kalir. Yeni bir hypertable
-# eklerken burayi gozden gecirin.
-_EXCLUDED_DATA_PATTERNS = (
-    "_timescaledb_internal._hyper_*",
-    "_timescaledb_internal._materialized_hypertable_*",
+#     _timescaledb_internal._hyper_*
+#     _timescaledb_internal._materialized_hypertable_*
+#
+# Bunlar SIKISTIRILMAMIS chunk'lari dogru disliyordu. Ama sikistirilmis bir
+# hypertable'in satirlari o chunk'larda DURMAZ; ayri bir depoya tasinir:
+#
+#     _timescaledb_internal.compress_hyper_<sikistirilmis_ht_id>_<M>_chunk
+#
+# Bu ad `_hyper_` ile BASLAMADIGI icin kalip ona HIC degmiyordu. Sahada
+# 272 chunk'in 240'i sikistirilmisti — yani historian'in neredeyse TAMAMI
+# her yedege giriyordu. Olculdu: yedekten geri yuklenen `telemetry_history`
+# 131.091 satir dondu (bos gelmesi gerekiyordu).
+#
+# NEDEN `--exclude-table-data-and-children` DEGIL
+# ------------------------------------------------
+# PG16'nin bu secenegi ayni ortamda OLCULDU ve REDDEDILDI: TimescaleDB
+# chunk'lari pg_dump'in "children" tanimina girmiyor. Aday, ham chunk'lari
+# da geri getirdi (dump 3,5 MB -> 9,3 MB).
+#
+# NEDEN GENIS KALIP DEGIL
+# -----------------------
+# `compress_hyper_*` eklemek ariza sinifini kapatirdi ama gelecekte
+# eklenecek BASKA bir hypertable'in verisini de SESSIZCE yedek disi
+# birakirdi. Bunun yerine kume KATALOGDAN turetiliyor: yalnizca historian
+# hypertable'larinin kimlikleri, onlarin sikistirilmis esleri ve continuous
+# aggregate materialization tablolari. Yeni ve ilgisiz bir hypertable farkli
+# bir kimlik alir ve dislanmaz — yedege GIRER, ki dogrusu budur.
+
+#: Historian koku ve ozet gorunumleri. Kume tanimi BURADA; asagidaki SQL
+#: yalnizca bu adlardan yurur.
+HISTORIAN_ROOT_TABLE = "telemetry_history"
+HISTORIAN_CAGG_VIEWS = ("telemetry_history_1m", "telemetry_history_1h")
+
+#: Historian'a ait TUM veri tablolarinin `--exclude-table-data` kaliplarini
+#: dondurur. `_lib.sh` AYNI sorguyu kullanir (bkz. E1_HISTORIAN_EXCLUDE_SQL);
+#: ikisinin ayni kalmasini `test_pre_update_backup_excludes.py` kilitler.
+#:
+#: Donen her satir tek bir `--exclude-table-data` argumanidir.
+HISTORIAN_EXCLUDE_SQL = """
+WITH kok AS (
+    SELECT h.id, h.compressed_hypertable_id
+      FROM _timescaledb_catalog.hypertable h
+     WHERE h.schema_name = 'public' AND h.table_name = 'telemetry_history'
+    UNION
+    SELECT h.id, h.compressed_hypertable_id
+      FROM timescaledb_information.continuous_aggregates c
+      JOIN _timescaledb_catalog.hypertable h
+        ON h.schema_name = c.materialization_hypertable_schema
+       AND h.table_name  = c.materialization_hypertable_name
+     WHERE c.view_schema = 'public'
+       AND c.view_name IN ('telemetry_history_1m', 'telemetry_history_1h')
+), tum AS (
+    SELECT id FROM kok
+    UNION
+    SELECT compressed_hypertable_id FROM kok WHERE compressed_hypertable_id IS NOT NULL
 )
+SELECT h.schema_name || '.' || h.table_name
+  FROM tum t JOIN _timescaledb_catalog.hypertable h ON h.id = t.id
+UNION ALL
+SELECT '_timescaledb_internal._hyper_' || t.id || '_*' FROM tum t
+UNION ALL
+SELECT '_timescaledb_internal.compress_hyper_' || t.id || '_*' FROM tum t
+"""
+
+
+def historian_exclude_patterns() -> list[str]:
+    """Katalogdan historian dislama kaliplarini uretir.
+
+    TimescaleDB kurulu degilse (ya da historian henuz hypertable degilse)
+    BOS liste doner — duz tablo adi `EXCLUDED_DATA_TABLES` uzerinden zaten
+    dislanir, dolayisiyla bu dogru davranistir.
+
+    Sorgu beklenmedik sekilde patlarsa GENIS kaliplara duseriz: az secici
+    ama historian'i yedek disinda tutar. Sessizce historian'i yedege ALMAK
+    kabul edilebilir bir basarisizlik modu degildir — sahada diski dolduran
+    tam olarak buydu.
+    """
+    from sqlalchemy import text
+
+    from app.db.session import engine
+
+    try:
+        with engine.connect() as conn:
+            satirlar = conn.execute(text(HISTORIAN_EXCLUDE_SQL)).scalars().all()
+        return [s for s in satirlar if s]
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "historian_exclude_katalog_sorgusu_basarisiz — genis kaliba dusuluyor",
+            exc_info=True,
+        )
+        return [
+            "_timescaledb_internal._hyper_*",
+            "_timescaledb_internal._materialized_hypertable_*",
+            "_timescaledb_internal.compress_hyper_*",
+            "_timescaledb_internal._compressed_hypertable_*",
+        ]
 
 
 def run_pg_dump(file_path: Path) -> tuple[bool, str]:
     """pg_dump calistir, custom format (.dump) yaz. (success, error_msg).
 
-    EXCLUDED_DATA_TABLES tablolari (ve _EXCLUDED_DATA_PATTERNS ile TimescaleDB
+    EXCLUDED_DATA_TABLES tablolari (ve historian_exclude_patterns() ile TimescaleDB
     chunk'lari) icin --exclude-table-data kullanilir: schema (CREATE TABLE)
     yedek dosyasinda kalir, ama satir verisi atlanir. Bu sayede yedek dosyasi
     yalnizca config/ayar + operasyonel gecmis verisini icerir ve onemli olcude
@@ -402,10 +492,11 @@ def run_pg_dump(file_path: Path) -> tuple[bool, str]:
     ]
     for tbl in EXCLUDED_DATA_TABLES:
         cmd.extend(["--exclude-table-data", tbl])
-    # Hypertable chunk'lari — tablo adiyla haric tutmak yetmez (bkz.
-    # _EXCLUDED_DATA_PATTERNS). Pattern eslesmezse pg_dump hata VERMEZ,
-    # sessizce gecer; TimescaleDB kurulu olmayan ortamda da sorunsuz.
-    for pattern in _EXCLUDED_DATA_PATTERNS:
+    # Historian chunk'lari — tablo adiyla haric tutmak YETMEZ ve sabit kalip
+    # da yetmedi (sikistirilmis chunk'lar `compress_hyper_*` adiyla duruyor).
+    # Kume katalogdan turetilir; bkz. historian_exclude_patterns().
+    # Eslesmeyen kalip pg_dump'ta hata URETMEZ, sessizce gecer.
+    for pattern in historian_exclude_patterns():
         cmd.extend(["--exclude-table-data", pattern])
     try:
         completed = subprocess.run(
