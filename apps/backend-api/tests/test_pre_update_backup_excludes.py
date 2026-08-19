@@ -13,7 +13,7 @@ NEDEN BU TEST VAR
 -----------------
 Liste iki yerde duruyor ve DURMAK ZORUNDA:
 
-  * backend  : `backup_service.EXCLUDED_DATA_TABLES` (+ `_EXCLUDED_DATA_PATTERNS`)
+  * backend  : `backup_service.EXCLUDED_DATA_TABLES` (+ `HISTORIAN_EXCLUDE_SQL`)
   * update.sh: `E1_DUMP_EXCLUDE` dizisi
 
 Paket (.deb) kurulumunda cihazda backend KAYNAGI YOKTUR — uygulama kodu
@@ -33,7 +33,7 @@ from pathlib import Path
 import pytest
 
 from app.services.backup_service import (
-    _EXCLUDED_DATA_PATTERNS,
+    HISTORIAN_EXCLUDE_SQL,
     EXCLUDED_DATA_TABLES,
 )
 
@@ -105,7 +105,7 @@ def test_exclude_listesi_backend_ile_AYNI():
     "guncelleme oncesi yedegim var" diyen operator geri yukledginde o verinin
     kaybini ancak o an fark eder.
     """
-    beklenen = set(EXCLUDED_DATA_TABLES) | set(_EXCLUDED_DATA_PATTERNS)
+    beklenen = set(EXCLUDED_DATA_TABLES)
     bulunan = set(_update_sh_exclude_list())
 
     eksik = sorted(beklenen - bulunan)
@@ -123,19 +123,45 @@ def test_exclude_listesi_backend_ile_AYNI():
     )
 
 
-def test_timescaledb_chunk_patternleri_DAHIL():
-    """Hypertable satirlari asil tabloda DEGIL chunk'larda durur.
+def _lib_historian_sql() -> str:
+    metin = LIB_SH.read_text(encoding="utf-8")
+    m = re.search('E1_HISTORIAN_EXCLUDE_SQL="(.*?)\n"', metin, re.S)
+    assert m, "_lib.sh icinde E1_HISTORIAN_EXCLUDE_SQL bulunamadi"
+    return m.group(1)
 
-    `--exclude-table-data telemetry_history` bunlari KAPSAMAZ; pattern
-    olmadan historian verisi tablo adiyla haric tutulmus GORUNUR ama dump'a
-    yine de tamamen girer. A12'nin en kolay gozden kacan parcasi budur.
+
+def _normalize(sql: str) -> str:
+    """Bosluk/girinti farkini yok sayarak SQL karsilastir."""
+    return re.sub(r"\s+", " ", sql).strip()
+
+
+def test_historian_dislamasi_KATALOGDAN_turetiliyor():
+    """Sabit chunk kalibi KULLANILMAMALI.
+
+    YASANAN ARIZA: `_timescaledb_internal._hyper_*` kalibi sikistirilmis
+    chunk'lara (`compress_hyper_<id>_<M>_chunk`) HIC degmiyordu ve historian
+    her yedege giriyordu. Kume artik katalogdan turetiliyor.
     """
-    bulunan = _update_sh_exclude_list()
-    for pattern in _EXCLUDED_DATA_PATTERNS:
-        assert pattern in bulunan, (
-            f"update.sh chunk pattern'ini icermiyor: {pattern} — historian "
-            "verisi dump'a tamamen girer"
+    for kaynak, ad in ((LIB_SH.read_text(encoding="utf-8"), "_lib.sh"),):
+        m = re.search("E1_DUMP_EXCLUDE=\\((.*?)\n\\)", kaynak, re.S)
+        assert m, f"{ad} icinde E1_DUMP_EXCLUDE bulunamadi"
+        assert "_hyper_*" not in m.group(1), (
+            f"{ad} hala sabit chunk kalibi tasiyor — sikistirilmis chunk'lari "
+            "kacirir (bkz. saha olcumu 2026-08-19)"
         )
+
+
+def test_historian_SQL_i_backend_ile_AYNI():
+    """update.sh ile backend AYNI katalog sorgusunu kullanmali.
+
+    Ayrisirlarsa iki yol farkli kumeleri dislar: biri historian'siz, digeri
+    historian'li yedek uretir ve fark ancak diskin dolmasiyla anlasilir.
+
+    NOT: bu yalnizca METIN paritesidir. Iki yolun GERCEKTEN historian'siz
+    dump urettigini `tests/integration/test_historian_backup_exclusion_pg.py`
+    kanitlar (HX02/HX03/HX04).
+    """
+    assert _normalize(_lib_historian_sql()) == _normalize(HISTORIAN_EXCLUDE_SQL)
 
 
 @pytest.mark.parametrize(

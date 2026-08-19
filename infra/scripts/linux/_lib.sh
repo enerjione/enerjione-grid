@@ -980,7 +980,8 @@ e1_env_ensure_secret() {
 # dump ediyordu.
 #
 # Hypertable satirlari asil tabloda DEGIL `_timescaledb_internal` chunk'larinda
-# durur; tablo adiyla haric tutmak YETMEZ — son iki kalip onun icin.
+# durur; tablo adiyla haric tutmak YETMEZ. Chunk kumesi SABIT KALIP DEGIL,
+# KATALOGDAN turetilir — bkz. E1_HISTORIAN_EXCLUDE_SQL.
 E1_DUMP_EXCLUDE=(
   telemetry
   outbox_events
@@ -991,18 +992,78 @@ E1_DUMP_EXCLUDE=(
   telemetry_history
   telemetry_history_1m
   telemetry_history_1h
-  '_timescaledb_internal._hyper_*'
-  '_timescaledb_internal._materialized_hypertable_*'
 )
 
-# Yukaridaki listeyi pg_dump argumanlarina cevirip verilen dizi degiskenine
-# ekler.  Kullanim:  e1_dump_exclude_into DUMP_ARGS
+# Historian chunk dislama kaliplarini KATALOGDAN ureten sorgu.
+#
+# Backend'deki `backup_service.HISTORIAN_EXCLUDE_SQL` ile AYNI olmali;
+# senkron kalmasini `test_pre_update_backup_excludes.py` dogruluyor ve
+# `tests/integration/test_historian_backup_exclusion_pg.py` iki yolun da
+# gercekten historian'siz dump urettigini KANITLIYOR.
+#
+# NEDEN SABIT KALIP YETMEDI: sikistirilmis hypertable'in satirlari
+# `_hyper_*` chunk'larinda DEGIL `compress_hyper_<id>_*` tablolarinda durur.
+# Eski kalip bu ada hic degmiyordu ve historian her yedege giriyordu
+# (sahada olculdu: geri yuklenen telemetry_history 131.091 satir).
+E1_HISTORIAN_EXCLUDE_SQL="
+WITH kok AS (
+    SELECT h.id, h.compressed_hypertable_id
+      FROM _timescaledb_catalog.hypertable h
+     WHERE h.schema_name = 'public' AND h.table_name = 'telemetry_history'
+    UNION
+    SELECT h.id, h.compressed_hypertable_id
+      FROM timescaledb_information.continuous_aggregates c
+      JOIN _timescaledb_catalog.hypertable h
+        ON h.schema_name = c.materialization_hypertable_schema
+       AND h.table_name  = c.materialization_hypertable_name
+     WHERE c.view_schema = 'public'
+       AND c.view_name IN ('telemetry_history_1m', 'telemetry_history_1h')
+), tum AS (
+    SELECT id FROM kok
+    UNION
+    SELECT compressed_hypertable_id FROM kok WHERE compressed_hypertable_id IS NOT NULL
+)
+SELECT h.schema_name || '.' || h.table_name
+  FROM tum t JOIN _timescaledb_catalog.hypertable h ON h.id = t.id
+UNION ALL
+SELECT '_timescaledb_internal._hyper_' || t.id || '_*' FROM tum t
+UNION ALL
+SELECT '_timescaledb_internal.compress_hyper_' || t.id || '_*' FROM tum t
+"
+
+# Duz tablo listesini + katalogdan turetilen historian kumesini pg_dump
+# argumanlarina cevirip verilen dizi degiskenine ekler.
+#
+# Kullanim:  e1_dump_exclude_into DUMP_ARGS [pg_user] [pg_db]
+#
+# Katalog sorgusu calismazsa (TimescaleDB yok, postgres kapali) GENIS
+# kaliplara duseriz: az secici ama historian'i disarida tutar. Sessizce
+# historian'i yedege ALMAK kabul edilebilir degil.
 e1_dump_exclude_into() {
   local -n _hedef="$1"
-  local _t
+  local _pg_user="${2:-${POSTGRES_USER:-enerjione_grid}}"
+  local _pg_db="${3:-${POSTGRES_DB:-enerjione_grid}}"
+  local _t _kaliplar
+
   for _t in "${E1_DUMP_EXCLUDE[@]}"; do
     _hedef+=(--exclude-table-data "$_t")
   done
+
+  _kaliplar="$(docker compose exec -T postgres psql -U "$_pg_user" -d "$_pg_db" \
+                 -tAc "$E1_HISTORIAN_EXCLUDE_SQL" 2>/dev/null)"
+
+  if [[ -z "$_kaliplar" ]]; then
+    _hedef+=(--exclude-table-data '_timescaledb_internal._hyper_*'
+             --exclude-table-data '_timescaledb_internal._materialized_hypertable_*'
+             --exclude-table-data '_timescaledb_internal.compress_hyper_*'
+             --exclude-table-data '_timescaledb_internal._compressed_hypertable_*')
+    return 0
+  fi
+
+  while IFS= read -r _t; do
+    [[ -n "$_t" ]] || continue
+    _hedef+=(--exclude-table-data "$_t")
+  done <<< "$_kaliplar"
 }
 
 # ===========================================================================
@@ -1083,20 +1144,39 @@ e1_backup_gerekli_mb() {
   local pg_user="$1" pg_db="$2"
   local bayt kalan_mb
 
+  # TAHMIN ILE GERCEK DUMP AYNI KUMEYI DUSMELI.
+  #
+  # Onceki surum kor kaliplarla (`relname LIKE '_hyper_%'`) dusuyordu. Iki
+  # yonde birden yanlisti: (a) `compress_hyper_*` tablolarini HIC dusmuyordu
+  # ama dump onlari da yazmiyordu -> tahmin gereksiz buyuktu; (b) gelecekte
+  # eklenecek ILGISIZ bir hypertable'i da dusurdu -> dump onu YAZACAGI halde
+  # tahmin onu yok sayardi ve disk kapisi yanlis "yer var" derdi.
+  #
+  # Artik dusulen kume, dump'in disladigi kumenin AYNISI: historian koku ve
+  # ozet katmanlari. `hypertable_size()` sikistirilmis depoyu da kapsar, bu
+  # yuzden `compress_hyper_*` ayrica sayilmaz (cift dusme olurdu).
   bayt="$(docker compose exec -T postgres psql -U "$pg_user" -d "$pg_db" -tAc "
     SELECT GREATEST(
       pg_database_size(current_database())
       - COALESCE((
+          SELECT SUM(hypertable_size(format('%I.%I', h.schema_name, h.table_name)::regclass))
+          FROM _timescaledb_catalog.hypertable h
+          WHERE (h.schema_name = 'public' AND h.table_name = 'telemetry_history')
+             OR EXISTS (
+                  SELECT 1 FROM timescaledb_information.continuous_aggregates c
+                  WHERE c.materialization_hypertable_schema = h.schema_name
+                    AND c.materialization_hypertable_name   = h.table_name
+                    AND c.view_schema = 'public'
+                    AND c.view_name IN ('telemetry_history_1m','telemetry_history_1h'))
+        ), 0)
+      - COALESCE((
           SELECT SUM(pg_total_relation_size(c.oid))
           FROM pg_class c
           JOIN pg_namespace n ON n.oid = c.relnamespace
-          WHERE n.nspname IN ('public','_timescaledb_internal')
-            AND (c.relname LIKE 'telemetry%'
-                 OR c.relname LIKE '_hyper_%'
-                 OR c.relname LIKE '_materialized_hypertable_%'
-                 OR c.relname IN ('outbox_events','processed_messages',
-                                  'gateway_ingest_batches','backup_jobs',
-                                  'backup_schedule'))
+          WHERE n.nspname = 'public'
+            AND c.relname IN ('telemetry','outbox_events','processed_messages',
+                              'gateway_ingest_batches','backup_jobs',
+                              'backup_schedule')
         ), 0), 0)" 2>/dev/null | tr -d '[:space:]')"
 
   if [[ ! "$bayt" =~ ^[0-9]+$ ]]; then

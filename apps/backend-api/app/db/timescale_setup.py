@@ -74,7 +74,20 @@ RETENTION_DAYS = 90
 # icin bir gunluk pencere fazlasiyla yeterli (gateway tamponu saatler
 # mertebesinde, gunler degil).
 COMPRESS_AFTER_DAYS = 1
-CHUNK_INTERVAL = "1 day"
+# CHUNK ARALIGI — URETIM SOZLESMESI, TEK OTORITE BURASI.
+#
+# 1 GUN DEGIL. Migration 0030 bunu olcumle 1 gunden 1 saate cekti: 600 cihaz
+# olceginde (103,68M satir/gun) tek gunluk chunk ~17 GB eder ve Postgres
+# container'inin `shared_buffers` degeri 1 GB'tir. TimescaleDB'nin
+# boyutlandirma kurali YAZILAN chunk'in bellege sigmasidir; sigmadiginda her
+# ekleme ve her sorgu diske iner.
+#
+# BURADAKI DEGER NEDEN ONEMLI: `create_hypertable` yalnizca TEMIZ KURULUMDA
+# kosar. Deger 1 gun kaldigi surece yeni kurulan her saha, migration 0030'un
+# olcerek reddettigi aralikla baslardi; yalnizca ilk `update.sh` kosumunda
+# duzelirdi. Yani "temiz kurulum" ile "yukseltilmis kurulum" farkli
+# davranirdi — sahada tam olarak bu sinif hatalar yasandi.
+CHUNK_INTERVAL = "1 hour"
 
 # (view adi, kova araligi, policy start_offset, calisma araligi)
 _AGGREGATES: tuple[tuple[str, str, str, str], ...] = (
@@ -218,6 +231,26 @@ def ensure_historian_storage(bind: Connection) -> dict[str, Any]:
             rapor["skipped"] = "hypertable_failed"
             return rapor
         _yap("create_hypertable")
+
+    # 1b) CHUNK ARALIGINI HIZALA — mevcut hypertable'da da.
+    #
+    # `create_hypertable` yukarida YALNIZCA tablo henuz hypertable degilse
+    # kosar; `if_not_exists => TRUE` mevcut bir hypertable'da sessiz no-op
+    # olur ve chunk araligina DOKUNMAZ. Dolayisiyla eski (1 gunluk) araliga
+    # sahip bir kurulum, yalnizca bu cagri sayesinde uretim sozlesmesine
+    # gelir. `set_chunk_time_interval` yalnizca BUNDAN SONRAKI chunk'lari
+    # etkiler: veri tasimaz, kilit tutmaz, idempotenttir — zaten dogruysa
+    # katalog degeri ayni kalir.
+    _try(
+        bind,
+        "set_chunk_time_interval",
+        lambda: bind.execute(
+            sa.text(
+                f"SELECT set_chunk_time_interval('{TABLE}',"
+                f" INTERVAL '{CHUNK_INTERVAL}')"
+            )
+        ),
+    )
 
     # 2) Saklama politikasi — ASIL MESELE. Yoksa disk dolar.
     if not _has_job(bind, "policy_retention"):

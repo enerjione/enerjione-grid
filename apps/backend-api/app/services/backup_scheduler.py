@@ -88,6 +88,8 @@ class BackupSchedulerWorker:
     def __init__(self) -> None:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        # "Zamanlanmis yedek kapali" uyarisi surec basina bir kez verilir.
+        self._kapali_uyarisi_verildi = False
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -115,11 +117,53 @@ class BackupSchedulerWorker:
                 logger.exception("backup_scheduler_tick_failed")
             self._stop.wait(_tick_sec())
 
+    def _kapali_uyar(self, db, sch) -> None:  # noqa: ANN001
+        """Zamanlanmis yedek KAPALI iken operatore bir kez haber ver.
+
+        NEDEN SADECE "HIC KOSMAMIS" DURUMU
+        ----------------------------------
+        Operatorun bilincli olarak kapattigi bir programi her acilista
+        uyariya cevirmek gurultudur; sahada bilincli kapatma mesru bir
+        tercihtir. Ama `last_run_at IS NULL` bambaska bir sey soyler: bu
+        kurulumda zamanlanmis yedek HIC alinmamis. Neredeyse her zaman
+        yukseltmeden gelen sessiz bir bosluktur (model varsayilani `True`
+        olsa bile mevcut satira dokunulmaz), bilincli bir karar degil.
+
+        SUREC BASINA BIR KEZ: 5 dakikalik tick olay tablosunu doldurmasin.
+        `/health` zaten her istekte guncel durumu gosteriyor; buradaki olay
+        yalnizca "bir kez dikkat cek" gorevini goruyor.
+        """
+        if self._kapali_uyarisi_verildi:
+            return
+        self._kapali_uyarisi_verildi = True
+        if sch.last_run_at is not None:
+            # Bilincli kapatma + gecmiste kosmus: sessiz kal.
+            return
+        logger.warning(
+            "backup_schedule_never_run — zamanlanmis yedekleme kapali ve hic kosmamis"
+        )
+        _olay_yaz(
+            db,
+            event_type="backup_schedule_never_run",
+            severity="warning",
+            message=(
+                "Zamanlanmis yedekleme kapali ve bu kurulumda hic zamanlanmis "
+                "yedek alinmamis."
+            ),
+            metadata={
+                "enabled": False,
+                "interval_hours": sch.interval_hours,
+                "retention_count": sch.retention_count,
+            },
+            i18n_key="backup_schedule_never_run",
+        )
+
     def _maybe_run(self) -> None:
         db = SessionLocal()
         try:
             sch = get_or_create_schedule(db)
             if not sch.enabled:
+                self._kapali_uyar(db, sch)
                 return
             now = datetime.now(timezone.utc)
             if sch.last_run_at is not None:
