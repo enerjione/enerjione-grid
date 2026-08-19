@@ -1,4 +1,5 @@
 import json
+import logging
 import threading
 import time
 import urllib.request
@@ -12,8 +13,47 @@ from app.models.outbound_target import OutboundTarget
 from app.services.event_service import record_event
 from app.services.iec104.server import manager as iec104_manager
 
+logger = logging.getLogger(__name__)
+
 MAX_RETRY = 3
 BASE_BACKOFF_SECONDS = 0.7
+
+#: TELEMETRI akisinda generic dispatcher'in SAHIBI OLMADIGI protokoller.
+#:
+#: Her biri KENDI sahibi tarafindan ASENKRON tasinir; burada senkron gonderim
+#: yapmak ayni okumayi iki kez gondermek olurdu:
+#:   rest   -> outbound_telemetry_batcher (5 sn pencere + dedup, kendi commit'i)
+#:   mqtt   -> mqtt_publisher_service (hedef basina worker thread + buffer)
+#:   modbus -> modbus-outbound koprusu (AYRI container; `e1.telemetry.normalized.>`
+#:             konusunu NATS'tan kendi tuketir, plani `/internal/modbus-plans`
+#:             ucundan alir). Backend'in telemetri yolunda hicbir rolu YOK.
+#:
+#: `iec104` bu kumede DEGIL: onu asagida INLINE ve BELLEK-ICI guncelliyoruz
+#: (`_dispatch_iec104`) — ag I/O'su yok, bu yuzden ACK yolunda guvenli.
+#:
+#: NEDEN BIR KUME OLARAK YAZILDI: eskiden burada yalnizca `("rest", "mqtt")`
+#: atlaniyordu ve `modbus` sessizce `_dispatch_with_retry`'a DUSUYORDU. O
+#: fonksiyon modbus'u tanimadigi icin her payload'da istisna firlatiyor,
+#: retry dongusune giriyor ve payload basina 0,7 + 1,4 = 2,1 saniye
+#: `time.sleep` yapiyordu. Bu uyku telemetri yolunda DB COMMIT'i ile NATS
+#: ACK'i ARASINDA calistigi icin 500'luk bir parti ~1.050 saniye ACK'siz
+#: kaliyordu: `telemetry-persist-prio-v1` sahada 8.700+ mesaj birikimiyle
+#: kilitlendi ve Postgres oturumu 17 dakika `idle in transaction` kaldi.
+#: Yeni bir protokol eklendiginde bu listeye de eklenmeli.
+TELEMETRY_NOT_DISPATCHER_OWNED = frozenset({"rest", "mqtt", "modbus"})
+
+#: `_dispatch_with_retry`'in GERCEKTEN gonderebildigi protokoller. Bunun
+#: disindaki her deger bir YAPILANDIRMA/SOZLESME hatasidir, ag hatasi DEGIL —
+#: yeniden denemek anlamsizdir (bkz. `_dispatch_with_retry`).
+RETRYABLE_PROTOCOLS = frozenset({"rest", "mqtt"})
+
+#: Desteklenmeyen protokol uyarisi hedef basina bu araliktan sik yazilmaz.
+#: Denetim kaydi bir ARIZA BILDIRIMIDIR, bir olcum akisi degil: alarm yolunda
+#: saniyede onlarca event olabilir ve her biri icin satir yazmak
+#: `system_events`'i (2 yil saklanir) doldururdu.
+_UNSUPPORTED_WARN_INTERVAL_SEC = 300.0
+_unsupported_lock = threading.Lock()
+_unsupported_last_warn: dict[int, float] = {}
 
 # UI 'Durum' sutunu icin in-memory delivery tracker.
 # Restart sonrasi sifir — bilincli (calisan target'lar 1. event'te kendini gosterir).
@@ -60,10 +100,37 @@ def dispatch_event(
 ) -> None:
     """Outbound dispatcher entry point.
 
-    NOT: telemetry event'leri icin REST/MQTT hedefleri ATLANIR —
-    `outbound_telemetry_batcher` ayni readings'i 5sn pencerede dedup edip
-    batch POST yolluyor (kullanici tercihi). Burada sadece IEC104 anlik
-    gunceller. Alarm event'leri tum protocol'lerde anlik gonderilir.
+    SAHIPLIK SOZLESMESI (event_kind x protocol)
+    -------------------------------------------
+    TELEMETRY — yuksek hacim (hedef olcek 6.810 msj/sn). Bu fonksiyon
+    telemetri yolunda YALNIZCA bellek-ici is yapar; ag I/O'su ve bekleme
+    YASAKTIR (cagiran `telemetry_consumer._dispatch_outbound` bunu DB
+    commit'i ile NATS ACK'i ARASINDA calistirir):
+        iec104 -> BU MODUL, inline + bellek-ici (`_dispatch_iec104`)
+        rest   -> outbound_telemetry_batcher   (5 sn pencere, kendi commit'i)
+        mqtt   -> mqtt_publisher_service       (hedef basina worker + buffer)
+        modbus -> modbus-outbound koprusu      (AYRI container, NATS tuketicisi)
+    Son ucu icin bkz. `TELEMETRY_NOT_DISPATCHER_OWNED` — orada ATLANIR.
+
+    ALARM (ve telemetri disi diger kind'lar) — dusuk hacim, anlik teslim:
+        rest   -> `_dispatch_with_retry` -> `_send_rest`   (senkron + retry)
+        mqtt   -> `_dispatch_with_retry` -> `_send_mqtt`   (senkron + retry)
+        iec104 -> no-op (`_dispatch_iec104` telemetri disini reddeder)
+        modbus -> desteklenmiyor -> FAIL-FAST (retry/sleep YOK)
+
+    DENETIM KAYDI COMMIT SAHIPLIGI
+    ------------------------------
+    `record_event(db, ...)` yalnizca `db.add(...)` yapar; COMMIT CAGIRANINDIR.
+    Bu bilincli: alarm yazimi ile denetim kaydinin ayni transaction'da atomik
+    kalmasi gerekir.
+        * alarm yolu  -> `api/internal.py` sonunda `db.commit()` YAPAR      (OK)
+        * batcher     -> `outbound_telemetry_batcher._flush_once` COMMIT eder (OK)
+        * telemetri yolu -> `_dispatch_outbound` COMMIT ETMEZ. Bu yuzden bu
+          modul telemetri yolunda cagiranin session'ina denetim kaydi YAZMAZ;
+          ariza bildirimi gereken tek yer (`_record_unsupported_protocol`)
+          KENDI kisa transaction'ini acar ve kendi commit'ini yapar.
+    `record_event` icine global bir commit EKLENMEDI — cagiranlarin
+    atomikligini bozardi.
 
     `targets` batch consumer optimizasyonu: 500 payload icin ayni aktif hedef
     sorgusunu 500 kez yapmak yerine caller bir kez ceker. Diger caller'lar
@@ -80,14 +147,101 @@ def dispatch_event(
         if target.protocol == "iec104":
             _dispatch_iec104(db=db, target=target, event_kind=event_kind, payload=payload)
             continue
-        # Telemetry icin REST/MQTT = batcher sorumlulugu. Ayni readings'i iki
-        # kez gondermemek icin burada atla.
-        if event_kind == "telemetry" and target.protocol in ("rest", "mqtt"):
+        # Telemetry icin REST/MQTT/MODBUS = BASKA bir sahibin sorumlulugu.
+        # Ayni okumayi iki kez gondermemek (ve ACK yolunu bloklamamak) icin
+        # burada atla. Gerekce ve sahip listesi:
+        # TELEMETRY_NOT_DISPATCHER_OWNED.
+        if event_kind == "telemetry" and target.protocol in TELEMETRY_NOT_DISPATCHER_OWNED:
             continue
         _dispatch_with_retry(db=db, target=target, event_kind=event_kind, payload=payload)
 
 
+def _record_unsupported_protocol(
+    *, target: OutboundTarget, event_kind: str
+) -> None:
+    """Desteklenmeyen protokol icin BIR KEZ, KENDI transaction'inda kayit yaz.
+
+    NEDEN AYRI SESSION: `record_event(db, ...)` yalnizca `db.add(...)` yapar —
+    commit CAGIRANIN sorumlulugudur (bkz. modul sonundaki sahiplik notu).
+    Telemetri yolundaki cagiran (`telemetry_consumer._dispatch_outbound`)
+    session'i COMMIT ETMEDEN kapatiyor; oraya yazilan her denetim kaydi
+    sessizce geri sariliyordu. Sahada olculdu: 12 gun boyunca telemetri
+    yolundan TEK BIR `outbound_dead_letter` satiri kalmamisti.
+
+    `record_event`'e global bir commit EKLENMEDI — o fonksiyon baska
+    transaction'larin (alarm yazimi gibi) parcasi ve oradaki atomikligi
+    bozmak, tam da onlemeye calistigimiz turden sessiz bir hata uretirdi.
+    Bunun yerine ariza bildirimi kendi KISA ve SINIRLI transaction'ini
+    yonetiyor; cagiranin transaction'ina hic dokunmuyor.
+
+    Rate-limit hedef basinadir: bu bir ariza bildirimidir, olcum akisi degil.
+    """
+    now = time.monotonic()
+    with _unsupported_lock:
+        onceki = _unsupported_last_warn.get(target.id)
+        if onceki is not None and now - onceki < _UNSUPPORTED_WARN_INTERVAL_SEC:
+            return
+        _unsupported_last_warn[target.id] = now
+
+    logger.error(
+        "outbound_unsupported_protocol target=%s protocol=%s event_kind=%s — "
+        "hedef teslim EDILEMIYOR; yeniden deneme YAPILMIYOR (yapilandirma hatasi, "
+        "ag hatasi degil). Hedefi pasiflestirin ya da destekli bir protokole alin.",
+        target.name,
+        target.protocol,
+        event_kind,
+    )
+    # Kendi kisa omurlu session'i — cagiranin transaction'indan bagimsiz.
+    from app.db.session import SessionLocal
+
+    db = SessionLocal()
+    try:
+        record_event(
+            db,
+            category="outbound",
+            event_type="outbound_unsupported_protocol",
+            severity="error",
+            message=(
+                f"Hedef {target.name} icin '{target.protocol}' protokolu "
+                f"desteklenmiyor; teslimat yapilamiyor"
+            ),
+            metadata={
+                "target": target.name,
+                "target_id": target.id,
+                "protocol": target.protocol,
+                "event_kind": event_kind,
+            },
+            i18n_key="outbound_unsupported_protocol",
+            i18n_params={"target": target.name, "protocol": target.protocol},
+        )
+        db.commit()
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        logger.debug("outbound_unsupported_protocol_event_failed", exc_info=True)
+    finally:
+        db.close()
+
+
 def _dispatch_with_retry(db: Session, *, target: OutboundTarget, event_kind: str, payload: dict) -> None:
+    # DESTEKLENMEYEN PROTOKOL: YENIDEN DENEME YOK — FAIL-FAST.
+    #
+    # Bu kontrol dongunun ICINDE degil ONUNDE olmak zorunda. Eskiden boyle
+    # bir kontrol YOKTU: `_send_rest`/`_send_mqtt` disindaki her protokol
+    # dongunun icinde `ValueError` firlatiyor ve retry/backoff'a giriyordu.
+    # Sonuc, payload BASINA 0,7 + 1,4 = 2,1 saniye `time.sleep` idi.
+    #
+    # Yeniden deneme AG hatasi icindir: bir sonraki denemede duzelme SANSI
+    # oldugu icin anlamlidir. Desteklenmeyen bir protokol bir YAPILANDIRMA/
+    # SOZLESME hatasidir; ikinci denemede de desteklenmeyecektir. Beklemek
+    # yalnizca cagiran akisi geciktirir — telemetri yolunda bu gecikme
+    # dogrudan NATS ACK'ini erteliyor ve tuketiciyi kilitliyordu.
+    if target.protocol not in RETRYABLE_PROTOCOLS:
+        _record_unsupported_protocol(target=target, event_kind=event_kind)
+        _record_delivery(
+            target.id, ok=False, error=f"unsupported protocol: {target.protocol}"
+        )
+        return
+
     last_error: Exception | None = None
     event_id = payload.get("message_id") or payload.get("event_id") or "unknown"
     correlation_id = payload.get("correlation_id") or event_id
