@@ -107,6 +107,11 @@ import "./modemStatus.test";
 // Gateway kurulum modu (INSTALL_MODE) -- yerel kurulum kacisi.
 import "./gatewayKurulumModu.test";
 
+// B5 akilli oturum: `smart` yalnizca `initiating` ile gecerlidir. Arayuz
+// gecersiz kombinasyonu URETMEMELI -- backend onu 422 ile reddediyor ve
+// operator anlamadigi bir hata gorurdu.
+import "./b5SmartSession.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   connectionIsDead,

@@ -93,7 +93,7 @@ def apply_link_states(db) -> int:
     dönük uyumlu.
     """
     from app.models.gateway_health import GatewayHealth
-    from app.services.gateway_health_service import device_link_states
+    from app.services.gateway_health_service import device_link_states, smart_counts
 
     saglik = db.scalars(select(GatewayHealth)).all()
     if not saglik:
@@ -116,7 +116,21 @@ def apply_link_states(db) -> int:
             # comm_lost event'lerinde kalir.
             kayip = int(getattr(satir, "devices_lost", 0) or 0)
             online = int(getattr(satir, "devices_online", 0) or 0)
-            if kayip > 0 and online == 0:
+            # AKILLI UYKU BU CIKARIMI GECERSIZ KILAR (gateway v1.12.0).
+            #
+            # Toplu dusurme "hicbir cihaz ayakta degil" varsayimina dayanir.
+            # Akilli modda `online=0` bunu ARTIK GOSTERMEZ: cihazlar raporunu
+            # gonderip baglantiyi kapatmistir ve gateway onlari `smart_idle`
+            # sayar — saglikli uyku. O halde bu satirdaki `lost` bir baska
+            # cihaza ait olsa bile, hangi cihazin uyudugunu hangisinin
+            # koptugunu SAYIDAN ayirt edemeyiz (kod haritasi yok, zaten bu
+            # dalin varlik sebebi o).
+            #
+            # Emin olmadigimizda dokunmuyoruz: uyuyan cihazi OFFLINE yapmak,
+            # gece boyunca tum sahayi yanlislikla kirmiziya boyar. Kismi
+            # kopmada karar zaten telemetri comm_lost olaylarinda.
+            akilli = smart_counts(getattr(satir, "raw_json", None))
+            if kayip > 0 and online == 0 and akilli["smart_idle"] == 0:
                 sonuc = db.execute(
                     update(Device)
                     .where(

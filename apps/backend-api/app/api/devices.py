@@ -27,6 +27,12 @@ from app.schemas.device import (
     DeviceRead,
     DeviceUpdate,
 )
+from app.schemas.dnp3_extended import (
+    Dnp3ExtendedSettings,
+    effective_dnp3_extended,
+    merge_dnp3_extended,
+    validate_session_policy,
+)
 from app.schemas.telemetry import TelemetryAggregatePoint, TelemetryHistoryPoint
 from app.services import (
     device_command_service,
@@ -118,6 +124,10 @@ def create_device(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
+    # Akilli oturum kombinasyonu (smart + listening) daha CIHAZ OLUSMADAN
+    # reddedilir; yaratildiktan sonra duzeltmek gateway'e bir tur gecersiz
+    # config gitmesi demekti.
+    _require_valid_dnp3_session(None, payload.dnp3_extended)
     try:
         _require_gateway(db, payload.gateway_code)
         _require_unique_endpoint(
@@ -237,6 +247,51 @@ def _require_unique_endpoint(
         )
 
 
+#: Denetim kaydinda eski -> yeni gosterilecek DNP3 oturum alanlari.
+#:
+#: Tum sozlugu diff'lemiyoruz: `dnp3_extended` icinde operatorun nadiren
+#: dokundugu bir suru alan var ve hepsini olay kaydina yazmak, gercekten
+#: onemli olan degisikligi gurultude bogardi. Bu dort alan haberlesmenin
+#: KURULUM SEKLINI degistirir.
+_DENETLENEN_DNP3_ALANLARI = (
+    "ip_endpoint_type",
+    "session_policy",
+    "smart_max_silence_sec",
+    "master_ip_port",
+)
+
+
+def _dnp3_denetim_farki(
+    onceki: Dnp3ExtendedSettings, sonraki: Dnp3ExtendedSettings
+) -> dict[str, dict[str, object]]:
+    """Denetime girecek alanlarin eski -> yeni farki (degismeyen alan yazilmaz)."""
+    fark: dict[str, dict[str, object]] = {}
+    for alan in _DENETLENEN_DNP3_ALANLARI:
+        eski = getattr(onceki, alan, None)
+        yeni = getattr(sonraki, alan, None)
+        if eski != yeni:
+            fark[alan] = {"old": eski, "new": yeni}
+    return fark
+
+
+def _require_valid_dnp3_session(
+    stored: dict | None, incoming: Dnp3ExtendedSettings | None
+) -> Dnp3ExtendedSettings:
+    """Yazma sonrasi olusacak ayari dogrular ve doner. Gecersizse 422.
+
+    Dogrulama EFEKTIF durum uzerinden yapilir; gerekcesi
+    `schemas/dnp3_extended.effective_dnp3_extended` docstring'inde.
+    """
+    efektif = effective_dnp3_extended(stored, incoming)
+    try:
+        validate_session_policy(efektif)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    return efektif
+
+
 def _require_gateway(db: Session, gateway_code: str | None) -> None:
     if not gateway_code:
         return
@@ -295,6 +350,15 @@ def update_device(
     # Hangi alanlar degisti — operator/muhendis paneli icin event'e koy.
     changes = payload.model_dump(exclude_unset=True)
     old_gateway_code = device.gateway_code
+    # DNP3 oturum ayari: yalnizca istemci gercekten dokunduysa dogrulanir.
+    # Her PATCH'te dogrulamak, alanla ilgisi olmayan bir istegi (or. yalnizca
+    # `name`) eski bir kaydin gecersiz kombinasyonu yuzunden reddederdi.
+    dnp3_oncesi = merge_dnp3_extended(device.dnp3_extended)
+    dnp3_sonrasi: Dnp3ExtendedSettings | None = None
+    if "dnp3_extended" in changes:
+        dnp3_sonrasi = _require_valid_dnp3_session(
+            device.dnp3_extended, payload.dnp3_extended
+        )
     if "gateway_code" in changes:
         _require_gateway(db, payload.gateway_code)
     # Uc nokta cakismasi — ASIL HATA BURADA YAPILMISTI: mevcut bir cihazin
@@ -370,6 +434,12 @@ def update_device(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
             ) from exc
 
+    # Fark, yazma SONRASI efektif ayar uzerinden. `dnp3_sonrasi` yalnizca
+    # istemci alana dokunduysa dolu; dokunmadiysa fark da yoktur.
+    dnp3_farki = (
+        _dnp3_denetim_farki(dnp3_oncesi, dnp3_sonrasi) if dnp3_sonrasi is not None else {}
+    )
+
     record_event(
         db,
         category="device",
@@ -378,7 +448,15 @@ def update_device(
         actor_username=current_user.username,
         device_code=updated.code,
         message=f"Device updated: {updated.name} ({updated.code})",
-        metadata={"device_id": updated.id, "fields": list(changes.keys())},
+        metadata={
+            "device_id": updated.id,
+            "fields": list(changes.keys()),
+            # Haberlesmenin kurulum seklini degistiren alanlar ESKI -> YENI
+            # yazilir. Yalnizca alan ADINI kaydetmek ("dnp3_extended degisti")
+            # denetim sorusunu cevaplamiyordu: cihaz ne zaman akilli moda
+            # alindi, esigi kim degistirdi?
+            **({"dnp3_changes": dnp3_farki} if dnp3_farki else {}),
+        },
         i18n_key="device_updated",
         i18n_params={"name": updated.name, "code": updated.code},
     )

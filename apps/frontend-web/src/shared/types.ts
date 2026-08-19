@@ -2,6 +2,40 @@
 
 export type IpEndpointType = "initiating" | "listening";
 
+/** Gateway v1.12.0 oturum politikasi.
+ *
+ *  `continuous` — gateway periyodik DNP3 taramasi yapar (bugune kadarki
+ *  davranis). `smart` — cihaz raporunu gonderip baglantiyi kapattiginda bu
+ *  NORMAL UYKU sayilir; gateway aktif yoklamaya girmez.
+ *
+ *  `smart` YALNIZCA `initiating` ile gecerlidir: uykudaki cihaza gateway
+ *  baglanamaz, baglantiyi cihaz kurar. Backend de bu kombinasyonu 422 ile
+ *  reddeder — arayuz onu hic uretmemeli (bkz. `sessionPolicyForEndpoint`).
+ */
+export type SessionPolicy = "continuous" | "smart";
+
+/** Cihaz seviyesi sessizlik esigi araligi (gateway v1.12.0 sozlesmesi).
+ *
+ *  0 BILEREK DISARIDA: 0, gateway ENV ayarindaki "devre disi" anlamidir.
+ *  Cihazda "ozel esik yok" demenin yolu alani BOS birakmaktir (null).
+ */
+export const SMART_MAX_SILENCE_MIN_SEC = 60;
+export const SMART_MAX_SILENCE_MAX_SEC = 2592000;
+
+/** Uc nokta tipine gore GECERLI oturum politikasi.
+ *
+ *  Operator uc nokta tipini `listening` yaptiginda akilli oturum anlamini
+ *  yitirir ve `continuous`a doner. Bu kural saf tutuldu ki hem form hem
+ *  kaydetme yolu AYNI karari versin: formda gorunen ile govdeye giren
+ *  ayrisirsa, backend'in 422'si kullaniciya sebepsiz gorunurdu.
+ */
+export function sessionPolicyForEndpoint(
+  endpoint: IpEndpointType,
+  policy: SessionPolicy
+): SessionPolicy {
+  return endpoint === "initiating" ? policy : "continuous";
+}
+
 export type Dnp3ExtendedSettings = {
   ip_endpoint_type: IpEndpointType;
   master_ip_address: string;
@@ -20,6 +54,12 @@ export type Dnp3ExtendedSettings = {
   validate_source_address: boolean;
   session_timeout_listening_sec: number;
   socket_listening_timeout_sec: number;
+  /** Oturum politikasi — gateway v1.12.0. Yalnizca `initiating` ile
+   *  `smart` olabilir. */
+  session_policy: SessionPolicy;
+  /** Cihaz seviyesi sessizlik esigi (sn). `null` = bu cihaz icin OZEL esik
+   *  yok; gateway kendi genel ayarini kullanir. DEVRE DISI DEMEK DEGILDIR. */
+  smart_max_silence_sec: number | null;
 };
 
 /** Backend ile aynı varsayılanlar (merge edilmemiş cevaplar için) */
@@ -35,7 +75,9 @@ export const DEFAULT_DNP3_EXTENDED: Dnp3ExtendedSettings = {
   enable_self_address: false,
   validate_source_address: false,
   session_timeout_listening_sec: 60,
-  socket_listening_timeout_sec: 600
+  socket_listening_timeout_sec: 600,
+  session_policy: "continuous",
+  smart_max_silence_sec: null
 };
 
 /** Kayitli ayarlari varsayilanlarla tamamlar.

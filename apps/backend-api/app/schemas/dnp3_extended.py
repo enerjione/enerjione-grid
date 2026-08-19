@@ -4,6 +4,26 @@ from pydantic import BaseModel, Field
 
 IpEndpointType = Literal["initiating", "listening"]
 
+#: Gateway v1.12.0 oturum politikasi.
+#:
+#: `continuous` — gateway periyodik DNP3 taramasi yapar (bugune kadarki tek
+#: davranis, varsayilan).
+#: `smart` — cihaz raporunu gonderip baglantiyi kapatinca bu NORMAL UYKU
+#: sayilir; gateway aktif yoklamaya girmez. YALNIZCA `initiating` uc nokta
+#: tipiyle anlamlidir: uykudaki cihaza gateway BAGLANAMAZ, baglantiyi cihaz
+#: kurar.
+SessionPolicy = Literal["continuous", "smart"]
+
+#: `smart_max_silence_sec` icin CIHAZ SEVIYESI gecerli araligi (gateway
+#: v1.12.0 sozlesmesi).
+#:
+#: 0 BILEREK DISARIDA: gateway tarafinda 0, ENV duzeyindeki
+#: `DNP3_SMART_MAX_SILENCE_SEC` icin "devre disi" anlamina gelir. Cihaz
+#: seviyesinde ayni degeri kabul etmek iki farkli anlami tek alana yuklerdi;
+#: cihazda "esik yok" demenin yolu None'dir (bkz. asagidaki alan).
+SMART_MAX_SILENCE_MIN_SEC = 60
+SMART_MAX_SILENCE_MAX_SEC = 2_592_000  # 30 gun
+
 #: Horstmann SN2 fabrika master (link layer) adresi. Frontend
 #: `DEFAULT_DNP3_EXTENDED.master_address` ile AYNI olmali — ayrisirsa okuma
 #: yolu `null` doner, formdaki 100 ezilir ve saha cihazi susar (v2.54.1-2.54.3).
@@ -55,6 +75,26 @@ class Dnp3ExtendedSettings(BaseModel):
     session_timeout_listening_sec: int = Field(default=60, ge=1, le=86400)
     socket_listening_timeout_sec: int = Field(default=600, ge=1, le=86400)
 
+    # ----- B5 / gateway v1.12.0: akilli oturum ---------------------------
+    #
+    # `smart` YALNIZCA `initiating` ile birlikte gecerlidir; kombinasyon
+    # dogrulamasi burada DEGIL, `validate_session_policy` ile EFEKTIF
+    # (birlestirilmis) durum uzerinde yapilir. Gerekce: PATCH kismi gelir ve
+    # model icindeki `ip_endpoint_type` o istekte gonderilmemis olabilir —
+    # model uzerinde dogrulamak, yalnizca `session_policy` gonderen gecerli
+    # bir istegi VARSAYILAN "listening" yuzunden reddederdi.
+    session_policy: SessionPolicy = "continuous"
+
+    #: Cihaz seviyesi sessizlik esigi. None/eksik = "bu cihaz icin OZEL esik
+    #: YOK" — devre disi DEMEK DEGILDIR. Gateway cozum sirasi:
+    #: 1) gecerli cihaz degeri, 2) `DNP3_SMART_MAX_SILENCE_SEC` env,
+    #: 3) devre disi.
+    smart_max_silence_sec: int | None = Field(
+        default=None,
+        ge=SMART_MAX_SILENCE_MIN_SEC,
+        le=SMART_MAX_SILENCE_MAX_SEC,
+    )
+
 
 def merge_dnp3_extended(stored: dict | None) -> Dnp3ExtendedSettings:
     """Kayitli sozlugu GORUNTULEME icin tamamlar (eksik alanlara varsayilan).
@@ -105,3 +145,55 @@ def dnp3_extended_to_store(value: object) -> dict | None:
     if isinstance(value, dict):
         return {k: v for k, v in value.items() if k not in ("tls_dnp3",)}
     return None
+
+
+def effective_dnp3_extended(stored: dict | None, incoming: object) -> Dnp3ExtendedSettings:
+    """Yazma SONRASI olusacak ayari hesaplar — dogrulama bunun uzerinden yapilir.
+
+    NEDEN AYRI BIR ADIM (B5): PATCH govdesi KISMI gelir ve depo katmani
+    gonderilen anahtarlari mevcut sozlugun UZERINE bindirir (bkz.
+    `DeviceRepository.update`). Dolayisiyla "gecerli mi" sorusunun cevabi ne
+    yalnizca gelen govdeden ne de yalnizca diskteki kayittan okunabilir:
+
+      * Yalnizca govdeye bakmak — diskte `initiating` olan bir cihaza
+        `session_policy=smart` gonderen GECERLI istegi, modeldeki varsayilan
+        `listening` yuzunden reddederdi.
+      * Yalnizca diske bakmak — diskte `smart` olan bir cihazi
+        `ip_endpoint_type=listening` ile guncelleyen GECERSIZ istegi kabul
+        ederdi; yasak kombinasyon sessizce diske yazilirdi.
+
+    Ikisinin BIRLESIMI tek dogru zemindir.
+
+    `incoming is None` = istemci alani acikca `null` gonderdi: depo katmani
+    sozlugun TAMAMINI siler ve varsayilanlar gecerli olur; burada da oyle
+    modellenir.
+    """
+    birlesik: dict = dict(stored) if isinstance(stored, dict) else {}
+    gelen = dnp3_extended_to_store(incoming)
+    if gelen is None:
+        birlesik = {}
+    else:
+        birlesik.update(gelen)
+    return merge_dnp3_extended(birlesik)
+
+
+def validate_session_policy(settings: Dnp3ExtendedSettings) -> None:
+    """`smart` + `listening` kombinasyonunu reddeder. Hata: ValueError.
+
+    NEDEN BACKEND'DE (gateway zaten guvenli davraniyorken): gateway v1.12.0
+    bu kombinasyonda `continuous`a DUSER, yani saha kirilmaz. Ama o zaman
+    arayuzde "Akilli" yazarken cihaz surekli modda calisir — operatorun
+    GORDUGU ile sahada OLAN ayrisir. Sessiz ayrisma, gorunur bir hatadan
+    daha pahalidir; kombinasyon uretildigi yerde durdurulur.
+
+    Cagiran taraf HTTP 422'ye cevirir (bkz. `api/devices.py`).
+    """
+    if settings.session_policy != "smart":
+        return
+    if settings.ip_endpoint_type != "initiating":
+        raise ValueError(
+            "Akilli oturum (smart) yalnizca 'initiating' uc nokta tipiyle "
+            "kullanilabilir: uykudaki cihaza gateway baglanamaz, baglantiyi "
+            "cihaz kurar. Uc nokta tipini 'initiating' yapin ya da oturum "
+            "politikasini 'continuous' olarak birakin."
+        )

@@ -214,6 +214,20 @@ _LINK_STATE_MAP = {
     "disconnected": "offline",
 }
 
+#: AKILLI UYKU — gateway v1.12.0. Cihaz raporunu gonderip baglantiyi
+#: kapatmistir; bu SAGLIKLI bir durumdur, kopma DEGILDIR.
+#:
+#: Bu kume `_LINK_STATE_MAP`e EKLENMEZ ve buraya asla `offline` eslemesi
+#: yazilmamalidir. Akilli modda cihaz gunun buyuk bolumunu uykuda gecirir;
+#: uykuyu kopma saymak, sahanin tamamini kalici olarak kirmiziya boyar ve
+#: gercek arizayi gorunmez yapar. Eslenmedigi icin cihaz SON BILINEN
+#: durumunda kalir — "bilmiyoruz" demek, yanlis bir sey soylemekten iyidir.
+#:
+#: Sozlesmede TEK isim var (`smart_idle`); es anlamli varyant UYDURULMADI.
+#: Taninmayan bir durum zaten disarida kaliyor, yani gevsetmek bir sey
+#: kazandirmaz — yalnizca sozlesmede olmayan bir kelimeyi mesrulastirirdi.
+_SMART_IDLE_STATES = frozenset({"smart_idle"})
+
 
 def device_link_states(raw_json: str | None) -> dict[str, str]:
     """`raw_json` icinden cihaz bazinda haberlesme durumu cikarir.
@@ -244,7 +258,64 @@ def device_link_states(raw_json: str | None) -> dict[str, str]:
     for kod, durum in states.items():
         if not isinstance(kod, str) or not kod:
             continue
-        esleme = _LINK_STATE_MAP.get(str(durum).strip().lower())
+        normal = str(durum).strip().lower()
+        if normal in _SMART_IDLE_STATES:
+            # Akilli uyku: haberlesme durumuna DOKUNULMAZ (bkz.
+            # `_SMART_IDLE_STATES`). Bilinmeyen durumla ayni sonuc, ama
+            # kasitli — gateway v1.12.0 bu degeri gercekten gonderiyor.
+            continue
+        esleme = _LINK_STATE_MAP.get(normal)
         if esleme is not None:
             sonuc[kod[:50]] = esleme
     return sonuc
+
+
+def smart_idle_codes(raw_json: str | None) -> set[str]:
+    """`states` haritasindaki akilli-uyku cihaz kodlari.
+
+    `device_link_states` bu cihazlari BILEREK disarida birakir; kimlerin
+    uyudugunu gormek isteyen (arayuz, bekci) buradan okur.
+    """
+    payload = _health_payload(raw_json)
+    states = ((payload.get("devices") or {}) if payload else {}).get("states")
+    if not isinstance(states, dict):
+        return set()
+    return {
+        kod[:50]
+        for kod, durum in states.items()
+        if isinstance(kod, str) and kod and str(durum).strip().lower() in _SMART_IDLE_STATES
+    }
+
+
+def smart_counts(raw_json: str | None) -> dict[str, int]:
+    """`devices.smart_idle` / `devices.smart_lost` sayaclari (gateway v1.12.0).
+
+    NEDEN KOLON ACILMADI: `gateway_health` satiri zaten ham govdeyi
+    (`raw_json`) sakliyor ve model docstring'i bunu tam da bu amac icin
+    yaziyor — "gateway surumleri farkli alanlar gonderebilir ve backend'in
+    yeni bir alan yuzunden veri kaybetmesini istemiyoruz". Sayac icin sema
+    degistirmek, migration'i olmayan bir sozlesme icin kalici bir borc
+    olurdu.
+
+    Alan gondermeyen gateway (v1.11.x) icin 0 doner — "akilli cihaz yok"
+    dogru cevaptir.
+    """
+    payload = _health_payload(raw_json)
+    devices = (payload or {}).get("devices")
+    if not isinstance(devices, dict):
+        return {"smart_idle": 0, "smart_lost": 0}
+    return {
+        "smart_idle": _as_int(devices.get("smart_idle")) or 0,
+        "smart_lost": _as_int(devices.get("smart_lost")) or 0,
+    }
+
+
+def _health_payload(raw_json: str | None) -> dict[str, Any] | None:
+    """`raw_json`i savunmaci coz. Bozuk govde cihaz durumlarini BOZMAMALI."""
+    if not raw_json:
+        return None
+    try:
+        payload = json.loads(raw_json)
+    except (TypeError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
