@@ -107,29 +107,57 @@ def get_current_user(
         if username is None:
             logger.warning("auth_401_no_sub source=%s", source)
             raise credentials_exception
-        # Logout sonrasi revoke edilen jti'leri reddet — once in-memory
-        # blacklist'i kontrol et (hizli), sonra DB'deki UserSession.revoked_at'a
-        # bak (container restart sonrasi memory list bos olsa bile installer'in
-        # 'oturum at' aksiyonu kalici olur).
+        # OTURUM DOGRULAMASI — FAIL-CLOSED.
+        #
+        # Otorite `user_sessions` TABLOSUDUR, surec-ici blacklist degil.
+        # `_REVOKED_JTI` yalnizca hizli yoldur ve guvenlik kaynagi OLAMAZ:
+        # `E1_API_WORKERS>1` iken her uvicorn iscisi kendi dict'ini tutar
+        # (iptali yapan surec disindakiler token'i kabul etmeye devam eder)
+        # ve container restart'ta dict bosalir.
+        #
+        # YASANAN ACIK: DB kontrolu `except Exception: pass` ile sariliydi.
+        # Yani `user_sessions` sorgusu patladigi anda -- baglanti havuzu
+        # tukendiginde, restore sirasinda, tablo kilitliyken -- iptal kontrolu
+        # SESSIZCE ATLANIYOR ve istek 200 ile devam ediyordu. Iptal edilmis
+        # bir token tam da bu anlarda gecerli hale geliyordu.
         jti = payload.get("jti")
-        if jti:
-            from app.services.auth_service import is_jti_revoked
+        if not jti:
+            # Her token `create_access_token` ile uretilir ve MUTLAKA jti
+            # tasir. jti'siz bir token dogrulanabilir bir oturuma baglanamaz.
+            logger.warning("auth_401_no_jti source=%s", source)
+            raise credentials_exception
 
-            if is_jti_revoked(jti):
-                logger.warning("auth_401_jti_revoked source=%s jti=%s", source, jti[:8])
-                raise credentials_exception
-            # DB tarafindaki revoke kontrolu
-            try:
-                from app.models.user_session import UserSession
-                sess = db.get(UserSession, str(jti))
-                if sess is not None and sess.revoked_at is not None:
-                    logger.warning("auth_401_session_revoked_db source=%s jti=%s", source, str(jti)[:8])
-                    raise credentials_exception
-            except HTTPException:
-                raise
-            except Exception:  # noqa: BLE001
-                # DB lookup hatasi auth'u bloklamasin
-                pass
+        from app.services.auth_service import is_jti_revoked
+
+        if is_jti_revoked(jti):
+            logger.warning("auth_401_jti_revoked source=%s jti=%s", source, jti[:8])
+            raise credentials_exception
+
+        from app.models.user_session import UserSession
+
+        try:
+            sess = db.get(UserSession, str(jti))
+        except Exception as ex:  # noqa: BLE001
+            # Oturum durumu BILINMIYOR. Bilinmeyeni "gecerli" saymak, iptali
+            # bir DB arizasiyla atlatilabilir hale getirir. Istegi reddet.
+            # Ham hata/SQL parametresi loglanmaz; yalnizca hata SINIFI.
+            logger.error(
+                "auth_503_session_lookup_failed source=%s error=%s",
+                source, type(ex).__name__,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Oturum dogrulanamiyor, lutfen tekrar deneyin.",
+            ) from ex
+
+        if sess is None:
+            # Satiri olmayan token iptal EDILEMEZ; gecerli sayilamaz.
+            # (Login artik satir yazilmadan token vermiyor — bkz. auth.py.)
+            logger.warning("auth_401_session_missing source=%s jti=%s", source, str(jti)[:8])
+            raise credentials_exception
+        if sess.revoked_at is not None:
+            logger.warning("auth_401_session_revoked_db source=%s jti=%s", source, str(jti)[:8])
+            raise credentials_exception
     except JWTError as ex:
         logger.warning("auth_401_jwt_decode_failed source=%s error=%s", source, ex)
         raise credentials_exception from ex
