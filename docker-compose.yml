@@ -383,6 +383,11 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD .env'de olmali}
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
+      # URUN FARKINDA DISK ESIGI. RabbitMQ varsayilani 50 MB'dir ve 456 GB'lik
+      # saha diskinde ancak %99,99 dolulukta alarm uretir — Disk Guardian'in
+      # ACIL esiginden cok sonra, yani koruma olarak olu. Bkz. dosyanin kendi
+      # basligi ve tests/test_disk_guard_policy.py (esik sirasi kilitli).
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/conf.d/20-e1-disk.conf:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 15s
