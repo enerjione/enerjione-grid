@@ -214,19 +214,17 @@ _LINK_STATE_MAP = {
     "disconnected": "offline",
 }
 
-#: AKILLI UYKU — gateway v1.12.0. Cihaz raporunu gonderip baglantiyi
-#: kapatmistir; bu SAGLIKLI bir durumdur, kopma DEGILDIR.
+#: AKILLI UYKU BURAYA GIRMEZ — ve buraya `smart_idle: "offline"` gibi bir
+#: satir ASLA eklenmemelidir.
 #:
-#: Bu kume `_LINK_STATE_MAP`e EKLENMEZ ve buraya asla `offline` eslemesi
-#: yazilmamalidir. Akilli modda cihaz gunun buyuk bolumunu uykuda gecirir;
-#: uykuyu kopma saymak, sahanin tamamini kalici olarak kirmiziya boyar ve
-#: gercek arizayi gorunmez yapar. Eslenmedigi icin cihaz SON BILINEN
-#: durumunda kalir — "bilmiyoruz" demek, yanlis bir sey soylemekten iyidir.
+#: Sozlesme (gateway v1.12.0): uyku bilgisi cihaz bazinda DEGIL, yalnizca
+#: SAYAC olarak tasinir (`devices.smart_idle` / `devices.smart_lost`,
+#: bkz. `smart_counts`). Gateway uyuyan cihazi `devices.states` haritasina
+#: hic koymaz ve `devices.lost` sayacina da katmaz.
 #:
-#: Sozlesmede TEK isim var (`smart_idle`); es anlamli varyant UYDURULMADI.
-#: Taninmayan bir durum zaten disarida kaliyor, yani gevsetmek bir sey
-#: kazandirmaz — yalnizca sozlesmede olmayan bir kelimeyi mesrulastirirdi.
-_SMART_IDLE_STATES = frozenset({"smart_idle"})
+#: Not olarak duruyor cunku hata yonu tek: uykuyu kopma saymak, akilli
+#: moddaki sahayi her gece kirmiziya boyar ve gercek arizayi o yiginin
+#: icinde gorunmez yapar.
 
 
 def device_link_states(raw_json: str | None) -> dict[str, str]:
@@ -258,33 +256,10 @@ def device_link_states(raw_json: str | None) -> dict[str, str]:
     for kod, durum in states.items():
         if not isinstance(kod, str) or not kod:
             continue
-        normal = str(durum).strip().lower()
-        if normal in _SMART_IDLE_STATES:
-            # Akilli uyku: haberlesme durumuna DOKUNULMAZ (bkz.
-            # `_SMART_IDLE_STATES`). Bilinmeyen durumla ayni sonuc, ama
-            # kasitli — gateway v1.12.0 bu degeri gercekten gonderiyor.
-            continue
-        esleme = _LINK_STATE_MAP.get(normal)
+        esleme = _LINK_STATE_MAP.get(str(durum).strip().lower())
         if esleme is not None:
             sonuc[kod[:50]] = esleme
     return sonuc
-
-
-def smart_idle_codes(raw_json: str | None) -> set[str]:
-    """`states` haritasindaki akilli-uyku cihaz kodlari.
-
-    `device_link_states` bu cihazlari BILEREK disarida birakir; kimlerin
-    uyudugunu gormek isteyen (arayuz, bekci) buradan okur.
-    """
-    payload = _health_payload(raw_json)
-    states = ((payload.get("devices") or {}) if payload else {}).get("states")
-    if not isinstance(states, dict):
-        return set()
-    return {
-        kod[:50]
-        for kod, durum in states.items()
-        if isinstance(kod, str) and kod and str(durum).strip().lower() in _SMART_IDLE_STATES
-    }
 
 
 def smart_counts(raw_json: str | None) -> dict[str, int]:

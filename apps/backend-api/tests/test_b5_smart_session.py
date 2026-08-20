@@ -60,11 +60,7 @@ from app.schemas.dnp3_extended import (
 )
 from app.schemas.gateway import GatewayConfigDevice, GatewayConfigSignal
 from app.services import gateway_fleet_alarm, license_service
-from app.services.gateway_health_service import (
-    device_link_states,
-    smart_counts,
-    smart_idle_codes,
-)
+from app.services.gateway_health_service import device_link_states, smart_counts
 from app.services.gateway_staleness_watchdog import apply_link_states
 from app.services.ingest_service import hash_gateway_token
 
@@ -536,19 +532,31 @@ def test_hash_ozel_kod_ile_DEGIL_payloaddan_turuyor():
 # ---------------------------------------------------------------------------
 
 
-def test_B5_12_smart_idle_offline_SAYILMAZ():
-    """Uyku saglikli durumdur; `offline` esleseydi filo gece boyunca kirmizi
-    olurdu ve gercek ariza o yiginda kaybolurdu."""
-    ham = _saglik(states={"d1": "smart_idle", "d2": "lost", "d3": "connected"})
+def test_B5_12_uyku_lost_sayacina_KARISMAZ():
+    """Sozlesme: uyku ayri bir sayacta tasinir, `devices.lost`a katilmaz.
+
+    Karisirsa akilli moddaki her gece "filo koptu" gibi okunur ve gercek
+    ariza o yiginin icinde gorunmez olur.
+    """
+    ham = _saglik(total=10, online=1, lost=0, smart_idle=9)
+    assert smart_counts(ham)["smart_idle"] == 9
+    assert not gateway_fleet_alarm.degraded(total=10, lost=0, esik=0.5)
+
+
+def test_B5_12_uyku_cihaz_durum_haritasina_GIRMEZ():
+    """Sozlesme: uyuyan cihaz `devices.states` haritasinda YER ALMAZ.
+
+    Bu yuzden haritada uyku aranmiyor — gercek gateway govdesinde yalnizca
+    baglantisi olan/kopan cihazlar bulunur. Buradaki kilit, haritanin
+    ayristirmasinin akilli moddan ETKILENMEDIGI: bilinen durumlar dogru
+    eslenmeye devam eder.
+    """
+    ham = _saglik(
+        total=5, online=1, lost=1, smart_idle=3,
+        states={"d2": "lost", "d3": "connected"},
+    )
     durumlar = device_link_states(ham)
-    assert "d1" not in durumlar, "smart_idle bir haberlesme durumuna eslendi"
-    assert durumlar["d2"] == "offline"
-    assert durumlar["d3"] == "online"
-
-
-def test_B5_12_smart_idle_cihaz_kodlari_ayrica_okunabilir():
-    ham = _saglik(states={"d1": "smart_idle", "d2": "connected"})
-    assert smart_idle_codes(ham) == {"d1"}
+    assert durumlar == {"d2": "offline", "d3": "online"}
 
 
 def test_B5_14_smart_lost_ve_smart_idle_sayaclari_okunur():
@@ -577,16 +585,27 @@ def test_B5_13_filo_alarmi_uyuyan_cihazlar_icin_tetiklenmez():
     assert gateway_fleet_alarm.degraded(total=10, lost=0, esik=0.5) is False
 
 
-def test_B5_13_toplu_offline_dusurmesi_uyku_varken_CALISMAZ(db, gateway):
-    """Sayi bazli guvenli cikarim akilli modda GECERSIZDIR.
+def _saglik_satiri(db, *, online: int, lost: int, smart_idle: int | None = None):
+    ham = {"total": 5, "online": online, "lost": lost}
+    if smart_idle is not None:
+        ham["smart_idle"] = smart_idle
+    db.add(
+        GatewayHealth(
+            gateway_code=GW,
+            status="ok",
+            devices_total=5,
+            devices_online=online,
+            devices_lost=lost,
+            raw_json=_saglik(**ham),
+            reported_at=datetime.now(timezone.utc),
+        )
+    )
 
-    `online=0` artik "hicbir cihaz ayakta degil" demek degil; cihazlar
-    raporunu gonderip baglantiyi kapatmis olabilir. Hangisinin uyudugunu
-    hangisinin koptugunu SAYIDAN ayirt edemeyiz — emin olmadan dokunmuyoruz.
-    """
+
+def _online_cihaz(db, kod: str) -> Device:
     d = Device(
-        code="DEV-1",
-        name="DEV-1",
+        code=kod,
+        name=kod,
         gateway_code=GW,
         ip_address="10.0.0.5",
         latitude=39.0,
@@ -594,17 +613,31 @@ def test_B5_13_toplu_offline_dusurmesi_uyku_varken_CALISMAZ(db, gateway):
         communication_status=CommunicationStatus.ONLINE,
     )
     db.add(d)
-    db.add(
-        GatewayHealth(
-            gateway_code=GW,
-            status="ok",
-            devices_total=5,
-            devices_online=0,
-            devices_lost=2,
-            raw_json=_saglik(total=5, online=0, lost=2, smart_idle=3),
-            reported_at=datetime.now(timezone.utc),
-        )
-    )
+    return d
+
+
+def test_B5_13_HEPSI_uyuyorken_toplu_offline_YOK(db, gateway):
+    """Akilli modun normal gece gorunumu: online=0, lost=0, smart_idle>0.
+
+    Filo SAGLIKLI. Tek bir cihazin bile durumu degismemeli.
+    """
+    d = _online_cihaz(db, "DEV-UYKU")
+    _saglik_satiri(db, online=0, lost=0, smart_idle=3)
+    db.flush()
+
+    apply_link_states(db)
+    assert db.get(Device, d.id).communication_status == CommunicationStatus.ONLINE
+
+
+def test_B5_13_KISMI_kopmada_da_uyku_varsa_dokunulmaz(db, gateway):
+    """online=0, lost>0, smart_idle>0 — korumanin ASIL varlik sebebi.
+
+    Sayacta hem uyuyan hem kopan var; hangisinin hangisi oldugunu SAYIDAN
+    ayirt edemeyiz (sozlesme geregi uyuyan cihaz `states` haritasina da
+    girmez). Toplu dusurme burada uyuyan cihazlari da OFFLINE yapardi.
+    """
+    d = _online_cihaz(db, "DEV-KARISIK")
+    _saglik_satiri(db, online=0, lost=2, smart_idle=3)
     db.flush()
 
     apply_link_states(db)
@@ -614,32 +647,24 @@ def test_B5_13_toplu_offline_dusurmesi_uyku_varken_CALISMAZ(db, gateway):
 
 
 def test_uyku_YOKKEN_toplu_offline_dusurmesi_CALISIR(db, gateway):
-    """Karsi kontrol: koruma, gercek toplu kopmayi KACIRMAMALI.
+    """Karsi kontrol: online=0, lost>0, smart_idle=0 -> GERCEK toplu kopma.
 
     Bu davranis sahada telemetri kuyrugu bosaldiginda cihazlarin ONLINE
-    takili kalmasini duzeltmisti; akilli mod korumasi onu iptal etmemeli.
+    takili kalmasini duzeltmisti; akilli mod korumasi onu IPTAL ETMEMELI.
     """
-    d = Device(
-        code="DEV-2",
-        name="DEV-2",
-        gateway_code=GW,
-        ip_address="10.0.0.6",
-        latitude=39.0,
-        longitude=35.0,
-        communication_status=CommunicationStatus.ONLINE,
-    )
-    db.add(d)
-    db.add(
-        GatewayHealth(
-            gateway_code=GW,
-            status="degraded",
-            devices_total=5,
-            devices_online=0,
-            devices_lost=5,
-            raw_json=_saglik(total=5, online=0, lost=5),
-            reported_at=datetime.now(timezone.utc),
-        )
-    )
+    d = _online_cihaz(db, "DEV-KOPUK")
+    _saglik_satiri(db, online=0, lost=5, smart_idle=0)
+    db.flush()
+
+    apply_link_states(db)
+    assert db.get(Device, d.id).communication_status == CommunicationStatus.OFFLINE
+
+
+def test_ESKI_gateway_toplu_offline_davranisi_AYNEN_korunur(db, gateway):
+    """v1.11.x `smart_idle` alanini hic gondermez — sayac 0 okunur ve
+    yukseltme oncesi davranis birebir surer."""
+    d = _online_cihaz(db, "DEV-ESKI-GW")
+    _saglik_satiri(db, online=0, lost=5)  # smart_idle anahtari YOK
     db.flush()
 
     apply_link_states(db)

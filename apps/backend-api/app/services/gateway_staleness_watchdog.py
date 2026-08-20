@@ -120,11 +120,14 @@ def apply_link_states(db) -> int:
             #
             # Toplu dusurme "hicbir cihaz ayakta degil" varsayimina dayanir.
             # Akilli modda `online=0` bunu ARTIK GOSTERMEZ: cihazlar raporunu
-            # gonderip baglantiyi kapatmistir ve gateway onlari `smart_idle`
-            # sayar — saglikli uyku. O halde bu satirdaki `lost` bir baska
-            # cihaza ait olsa bile, hangi cihazin uyudugunu hangisinin
-            # koptugunu SAYIDAN ayirt edemeyiz (kod haritasi yok, zaten bu
-            # dalin varlik sebebi o).
+            # gonderip baglantiyi kapatmistir ve gateway onlari ayri bir
+            # sayacta (`devices.smart_idle`) bildirir — saglikli uyku.
+            #
+            # Uyuyan cihazlari TEK TEK ayirt etmenin yolu da yok: sozlesme
+            # geregi gateway onlari `devices.states` haritasina koymaz, yani
+            # harita gelse bile uyuyani gosteren bir kayit icermez. Elimizde
+            # yalnizca sayac var; `lost > 0` gordugumuzde bunun hangi cihaz
+            # oldugunu bilemeyiz.
             #
             # Emin olmadigimizda dokunmuyoruz: uyuyan cihazi OFFLINE yapmak,
             # gece boyunca tum sahayi yanlislikla kirmiziya boyar. Kismi
