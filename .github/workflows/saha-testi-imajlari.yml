@@ -1,0 +1,260 @@
+# Saha testi imajlari — SURUM CIKARMADAN, tek bir kaynak commit'ten.
+#
+# NE ISE YARAR
+# ------------
+# Gateway 1.15 gibi bir aday, fiziksel kurulumda ancak Grid tarafi da o
+# ozelligi tasiyan bir imajla kosarken denenebilir. Ama saha kabulu HENUZ
+# verilmemisken `v2.107.0` cikarmak yanlis olurdu: saha cihazlari surumu
+# TAG'den takip ediyor ve `:latest` guncellenince kabul edilmemis kod butun
+# kurulumlarin yayilma yoluna girer.
+#
+# Bu akis o yuzden RELEASE DEGIL. Yalnizca `sha-<kisa>` etiketli DEGISMEZ
+# imajlar basar; `VERSION`a, `:latest`e, GitHub Release'e ve VDS'e DOKUNMAZ.
+#
+# NEDEN AYRI DOSYA — `release.yml`e "surum cikarma" bayragi EKLENMEDI
+# -------------------------------------------------------------------
+# `release.yml`in on kosulu `tag == VERSION == package.json`; saha adayinin
+# tanimi geregi boyle bir tag'i YOKTUR. Oraya bir bayrak eklemek, en riskli
+# uc adimi (`:latest`, GitHub Release, VDS deploy) bir KOSULA baglamak
+# olurdu — ve o kosul yanlis degerlendigi gun, kabul edilmemis bir imaj
+# butun sahalara giden yola girerdi. Burada o adimlar HIC YOK: yanlislikla
+# calisamazlar cunku yazili degiller.
+#
+# ETIKET NEDEN `sha-`, NEDEN SURUM BENZERI DEGIL
+# ----------------------------------------------
+# `sha-bb27ee7` hicbir surum sirasina girmez: `update.sh`in surum
+# karsilastirmasi onu "daha yeni" sayamaz ve bir cihaz kazara ona
+# yukseltilemez. Saha testi bitince etiket geride kalsa bile zararsizdir.
+
+name: Saha testi imajlari
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Derlenecek KAYNAK commit — tam 40 karakter SHA (dal adi DEGIL)"
+        required: true
+        type: string
+      services:
+        description: "Servisler, virgulle. Varsayilan: backend-api,frontend-web"
+        required: false
+        default: "backend-api,frontend-web"
+        type: string
+      allow_red_ci:
+        description: "Ana CI yesil olmasa da bas (VARSAYILAN: hayir)"
+        required: false
+        default: false
+        type: boolean
+      overwrite:
+        description: "Ayni sha- etiketi varsa uzerine yaz (DEGISMEZLIGI BOZAR)"
+        required: false
+        default: false
+        type: boolean
+
+# Ayni kaynak commit icin iki kosu ust uste calismasin: ikisi ayni etiketi
+# yazar ve hangisinin kazandigi kosuya baglidir.
+concurrency:
+  group: saha-testi-${{ inputs.sha }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ github.repository }}   # enerjione/enerjione-grid
+
+jobs:
+  hazirla:
+    name: Girdi dogrulama + CI kapisi
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read      # CI kapisi kosum listesini okur
+      contents: read
+      packages: read     # etiket zaten var mi diye bakar
+    outputs:
+      sha: ${{ steps.g.outputs.sha }}
+      kisa: ${{ steps.g.outputs.kisa }}
+      matris: ${{ steps.g.outputs.matris }}
+    steps:
+      # SHA bicimi checkout'tan ONCE dogrulanir: hatali girdide checkout'un
+      # anlasilmaz hatasi yerine net bir mesaj cikar.
+      - name: SHA bicimi
+        run: |
+          set -euo pipefail
+          sha='${{ inputs.sha }}'
+          # DAL ADI KABUL EDILMEZ. Dal ucu HAREKET EDER; "sha-abc1234"
+          # etiketinin isaret ettigi kaynak ise sonsuza kadar sabit olmali.
+          # Kisa SHA da kabul edilmez: ileride cakisabilir ve OCI
+          # `revision` etiketi tam SHA tasimali.
+          if ! printf '%s' "$sha" | grep -qE '^[0-9a-f]{40}$'; then
+            echo "::error::sha TAM 40 karakter kucuk-harf hex olmali (dal/tag adi degil): '$sha'"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          # Derlenecek kaynagin TA KENDISI. Dalin ucuna bakilmaz.
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0
+
+      - id: g
+        name: Servis listesi + kisa SHA
+        run: |
+          set -euo pipefail
+          sha='${{ inputs.sha }}'
+          # Checkout gercekten istenen commit'i mi acti — sessiz kayma olmasin.
+          gercek="$(git rev-parse HEAD)"
+          if [ "$gercek" != "$sha" ]; then
+            echo "::error::checkout $gercek acti, beklenen $sha"
+            exit 1
+          fi
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "kisa=${sha:0:7}" >> "$GITHUB_OUTPUT"
+
+          # ALLOWLIST: `context` girdiden geliyor; serbest birakmak deponun
+          # herhangi bir dizinini imaj baglamina cevirmek olurdu.
+          izinli="backend-api frontend-web tag-engine alarm-service notification-worker iec104-outbound modbus-outbound ftp-server whatsapp-web-gateway"
+          liste="$(printf '%s' '${{ inputs.services }}' | tr ',' ' ' | tr -s ' ' | sed -e 's/^ //' -e 's/ $//')"
+          [ -n "$liste" ] || { echo "::error::services bos"; exit 1; }
+          json=""
+          for s in $liste; do
+            case " $izinli " in
+              *" $s "*) ;;
+              *) echo "::error::bilinmeyen servis: '$s'"; exit 1 ;;
+            esac
+            # Servis O COMMIT'te gercekten var mi (eski bir SHA'da olmayabilir).
+            [ -f "apps/$s/Dockerfile" ] || { echo "::error::apps/$s/Dockerfile ${sha:0:7} icinde yok"; exit 1; }
+            json="${json}${json:+,}\"$s\""
+          done
+          echo "matris=[${json}]" >> "$GITHUB_OUTPUT"
+          echo "Derlenecek: [${json}]  kaynak=${sha}"
+
+      # ANA CI KAPISI — fail-closed, `release.yml` ile AYNI betik.
+      #
+      # Gerekce de ayni (v2.95.0): bu imajlar FIZIKSEL kuruluma iniyor.
+      # "Saha testi" olmasi kapiyi gevsetmez — aksine, kirmizi CI'li bir
+      # imajla sahada gorulen ariza gateway'e mi Grid'e mi ait, ayirt
+      # edilemez hale gelir ve testin kendisi degersizlesir.
+      - name: Ana CI sonucu (fail-closed)
+        if: ${{ !inputs.allow_red_ci }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          E1_GATE_TIMEOUT_SEC: "2700"
+        run: bash infra/scripts/linux/release-ci-gate.sh '${{ inputs.sha }}'
+
+      - name: CI kapisi ATLANDI uyarisi
+        if: ${{ inputs.allow_red_ci }}
+        run: echo "::warning::allow_red_ci=true — ana CI sonucuna BAKILMADI. Sahada gorulen ariza Grid kaynakli olabilir."
+
+      # DEGISMEZLIK: ayni etiket zaten varsa, uzerine yazmak onu okuyan
+      # herkesin elindeki anlami sessizce degistirir (temel imaj kaymis
+      # olabilir). Bilincli tekrar icin `overwrite` var.
+      - name: Etiket zaten var mi
+        if: ${{ !inputs.overwrite }}
+        run: |
+          set -euo pipefail
+          echo '${{ secrets.GITHUB_TOKEN }}' | docker login "${REGISTRY}" -u '${{ github.actor }}' --password-stdin
+          cakisan=""
+          for s in $(printf '%s' '${{ steps.g.outputs.matris }}' | tr -d '[]"' | tr ',' ' '); do
+            ref="${REGISTRY}/${IMAGE_NAMESPACE}/${s}:sha-${{ steps.g.outputs.kisa }}"
+            if docker manifest inspect "$ref" >/dev/null 2>&1; then
+              cakisan="${cakisan} ${ref}"
+            fi
+          done
+          if [ -n "$cakisan" ]; then
+            echo "::error::Bu etiketler ZATEN VAR:${cakisan} — bilincli yeniden basmak icin overwrite=true."
+            exit 1
+          fi
+
+  bas:
+    name: ${{ matrix.service }}
+    needs: hazirla
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      # Bir servis kirilirsa digerinin sonucunu da gorelim.
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.hazirla.outputs.matris) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.hazirla.outputs.sha }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: GHCR login
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/${{ matrix.service }}
+          push: true
+          # `release.yml` ile AYNI platform; saha mini PC'si ve VDS x86.
+          platforms: linux/amd64
+          # TEK ETIKET. `:latest` ve surum benzeri etiket BILEREK YOK.
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.service }}:sha-${{ needs.hazirla.outputs.kisa }}
+          # Release onbelleginden OKUR ama ONA YAZMAZ: saha adayinin ara
+          # katmanlari surum derlemelerinin onbellegini kirletmemeli.
+          cache-from: type=gha,scope=${{ matrix.service }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.hazirla.outputs.sha }}
+            org.opencontainers.image.version=sha-${{ needs.hazirla.outputs.kisa }}
+            org.opencontainers.image.description=Saha testi imaji — surum DEGIL, kabul edilmemis aday.
+
+  dogrula:
+    name: ${{ matrix.service }} dogrulama
+    needs: [hazirla, bas]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.hazirla.outputs.matris) }}
+    steps:
+      - name: GHCR login
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # BASILAN SEYI GERI CEKIP OKUR. Derleme adiminin "basardim" demesi
+      # yeterli degil: etiketin gercekten registry'de durdugunu ve dogru
+      # kaynak commit'i tasidigini ancak cekip bakarak bilebiliriz.
+      - name: Cek, digest ve revision dogrula
+        env:
+          SHA: ${{ needs.hazirla.outputs.sha }}
+          REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.service }}:sha-${{ needs.hazirla.outputs.kisa }}
+        run: |
+          set -euo pipefail
+          docker pull -q "$REF"
+          digest="$(docker image inspect "$REF" --format '{{index .RepoDigests 0}}')"
+          rev="$(docker image inspect "$REF" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+          ver="$(docker image inspect "$REF" --format '{{index .Config.Labels "org.opencontainers.image.version"}}')"
+          echo "ref=$REF"
+          echo "digest=$digest"
+          echo "revision=$rev"
+          if [ "$rev" != "$SHA" ]; then
+            echo "::error::revision etiketi $rev, beklenen $SHA"
+            exit 1
+          fi
+          {
+            echo "### ${{ matrix.service }}"
+            echo ""
+            echo '```'
+            echo "etiket   : $REF"
+            echo "digest   : ${digest#*@}"
+            echo "revision : $rev"
+            echo "version  : $ver"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
