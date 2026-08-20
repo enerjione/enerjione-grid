@@ -21,7 +21,7 @@ from app.models.signal_catalog import SignalCatalog
 from app.data.device_models import DEFAULT_MODEL
 from app.models.user import User
 from app.repositories.device_repository import DeviceRepository
-from app.schemas.dnp3_extended import merge_dnp3_extended
+from app.schemas.dnp3_extended import cozulmus_max_silence_sec, merge_dnp3_extended
 from app.schemas.gateway_update import (
     GatewayUpdatePrepareRequest,
     GatewayUpdateState,
@@ -45,6 +45,8 @@ from app.schemas.gateway import (
     GatewayRead,
     GatewayUpdate,
 )
+from app.services import device_config_service
+from app.services import gateway_compatibility
 from app.services import command_delivery_service, gateway_agent_service
 from app.services import gateway_update_service
 from app.services.gateway_update_service import GatewayUpdateError
@@ -1667,6 +1669,17 @@ def get_gateway_config(
         initiating_port_map[d.code] = port_base + idx
 
     config_devices = []
+    # GATEWAY SURUMU — dongu disinda BIR KEZ okunur (cihaz basina sorgu,
+    # 600 cihazli bir gateway'de 600 gereksiz sorgu demekti).
+    #
+    # Kaynak gateway'in KENDI heartbeat'idir: uzak gateway'ler icin surumun
+    # tek kaynagi budur, ajan onlari hic gormez. Bildirmemisse None kalir ve
+    # yetenek kapisi guvenli tarafa duser (bkz. `eksik_yetenekler`).
+    from app.models.gateway_health import GatewayHealth
+
+    _saglik = db.get(GatewayHealth, gateway_code)
+    gateway_surumu = (getattr(_saglik, "gateway_version", None) or None) if _saglik else None
+
     for device in devices:
         # master_address (DNP3 link layer local addr) — saha cihazi bu adresi
         # BEKLER; yanlis/eksik olursa istegi sessizce atar (bkz.
@@ -1683,16 +1696,58 @@ def get_gateway_config(
             raw_endpoint = str(ext.get("ip_endpoint_type") or "listening").strip().lower()
             if raw_endpoint in ("initiating", "listening"):
                 endpoint_type = raw_endpoint
-        # AKILLI OTURUM — yayinda normalize edilir (B5 / gateway v1.12.0).
+        # AKILLI OTURUM — YAYINDA SURUM KAPISINDAN GECER (gateway v1.14.0).
         #
-        # Yazma yolu `smart` + `listening` kombinasyonunu zaten reddediyor
-        # (bkz. schemas/dnp3_extended.py `validate_session_policy`). Buradaki
-        # ikinci kontrol o dogrulamadan ONCE yazilmis ya da elle duzenlenmis
-        # bir kayit icindir: gateway o kombinasyonda kendi `continuous`una
-        # duser, yani sahada kirilma olmaz — ama backend'in gonderdigi
-        # payload ile gateway'in uyguladigi davranis AYRISIR. Ayrisma
-        # `config_version` uzerinden de gorunmez oldugu icin burada kapatilir.
-        session_policy = ayar.session_policy if endpoint_type == "initiating" else "continuous"
+        # ISTENEN (desired) ile RENDER EDILEN ayni sey DEGILDIR. Operator
+        # `listening` + `auto` isteyebilir ve bu istek DOGRUDUR — ama o
+        # gateway 1.13 ise sozlesme geregi tanimsiz `auto` degeri TUM
+        # config'i reddeder (`session_policy_invalid_behavior: reject_config`)
+        # ve o gateway'deki ILGISIZ CIHAZLAR da donar. Bu yuzden desteklenmeyen
+        # kombinasyon burada guvenli tarafa (`continuous`) DUSURULUR.
+        #
+        # Dusurme SESSIZ DEGILDIR: ayni yetenek hesabi uyumluluk uyarisini da
+        # uretir (bkz. `gateway_compatibility.eksik_yetenekler`), yani
+        # operatore ozelligin sahada HENUZ AKTIF OLMADIGI soylenir. Diskteki
+        # istenen deger DEGISTIRILMEZ; gateway yukseltilince bir sonraki
+        # config render'i dogru payload'i kendiliginden uretir.
+        eksik = gateway_compatibility.eksik_yetenekler(
+            ayar.session_policy, endpoint_type, gateway_surumu
+        )
+        session_policy = "continuous" if eksik else ayar.session_policy
+
+        # Sessizlik esigi politikadan BAGIMSIZ tasinir (asagidaki gerekce),
+        # ama Dial-In'den TURETILEN deger yalnizca esigi anlayan gateway'e
+        # gider. Turetme tek kaynakta: `cozulmus_max_silence_sec`.
+        max_silence = cozulmus_max_silence_sec(ayar)
+
+        # v1.14-ONLY ALANLAR. Eski gateway'e GONDERILMEZ: 1.14.0 bilinmeyen
+        # cihaz alanlarini "ignored" sayar ama daha eski surumlerde bu garanti
+        # YOKTUR ve tek bir fazladan alan tum config'i dusurebilir.
+        # DIAL-IN: ISTENEN DEGIL, CIHAZDA GECERLI OLAN GIDER.
+        #
+        # Gateway bu degerle "rapor gecikti mi" hesabini yapar. Operatorun
+        # yeni sectigi degeri cihaz onu uygulamadan once gondermek iki yonde
+        # de yanlis olcum uretir: 60 dk'da raporlayan bir cihaz icin 240
+        # beklemek, gercekten olmus cihazi 4 saat SAGLIKLI gosterir; tersi
+        # ise saglikli cihazi surekli GECIKMIS damgalar ve operator alarmlara
+        # guvenmeyi birakir.
+        #
+        # Kanit yoksa (cihaz kendi dosyasini hic yazmadiysa) None gider ve
+        # gateway Dial-In farkindali takibi yapmaz — "bilmiyorum"da ozelligi
+        # kapatmak, yanlis ana gore alarm uretmekten guvenlidir.
+        dial_in_gonder = (
+            device_config_service.gateway_dial_in(
+                db, device.id, ayar.dial_in_interval_min
+            )
+            if gateway_compatibility.supports("dial_in_health", gateway_surumu) is True
+            else None
+        )
+        reconnect_gonder = (
+            ayar.smart_listen_reconnect_max_sec
+            if gateway_compatibility.supports("smart_listen_reconnect", gateway_surumu)
+            is True
+            else None
+        )
         config_devices.append(
             GatewayConfigDevice(
                 code=device.code,
@@ -1711,11 +1766,13 @@ def get_gateway_config(
                     initiating_port_map.get(device.code) if endpoint_type == "initiating" else None
                 ),
                 session_policy=session_policy,
+                dial_in_interval_min=dial_in_gonder,
+                smart_listen_reconnect_max_sec=reconnect_gonder,
                 # Esik cihaz seviyesinde OZEL bir deger; politikadan bagimsiz
                 # tasinir. `continuous` cihazda gateway onu okumaz, ama
                 # operator politikayi geri cevirdiginde degeri kaybetmis
                 # olmayiz.
-                smart_max_silence_sec=ayar.smart_max_silence_sec,
+                smart_max_silence_sec=max_silence,
                 poll_interval_sec=device.poll_interval_sec,
                 timeout_ms=device.timeout_ms,
                 retry_count=device.retry_count,

@@ -264,9 +264,16 @@ def test_duzenleme_sonrasi_checksum_GECERLI(db, cihaz) -> None:
 
 
 def test_sigmayan_deger_SURUM_YARATMADAN_reddedilir(db, cihaz) -> None:
+    """Codec'in UZUNLUK kontrolu — alan kuralindan BAGIMSIZ olarak calismali.
+
+    Girdi bilerek `320001` (4 baytlik voltaj): `2010C6` artik alan ozel bir
+    kuraldan (1440'in boleni) gectigi icin oradaki tasma hic codec'e
+    ulasmiyordu ve bu test aslinda ARTIK BASKA BIR SEYI olcuyordu. Kural
+    eklemek, codec kontrolunu olcusuz birakmamali.
+    """
     svc.create_version(db, device_id=cihaz.id, raw=_dosya(), source="yuklendi")
     with pytest.raises(ConfigParseError):
-        svc.apply_changes(db, device_id=cihaz.id, changes={"2010C6": 70000})
+        svc.apply_changes(db, device_id=cihaz.id, changes={"320001": 2**33})
 
 
 def test_surum_yokken_duzenleme_ACIK_hata(db, cihaz) -> None:
@@ -362,3 +369,96 @@ def test_gomulu_katalog_GERCEK_dosyanin_alanlarini_kapsiyor() -> None:
     ]
     eksik = [ci for ci in gercek_alanlar if ci not in katalog]
     assert not eksik, f"katalogda olmayan gercek alanlar: {eksik}"
+
+
+# ---------------------------------------------------------------------------
+# Dial-In (2010C6) — CIHAZIN KENDI kabul kurali
+#
+# Codec yalnizca "2 bayta siger mi" diye bakar; Horstmann ayrica degerin
+# 1440'in boleni olmasini ister. Bu kural olmadan 100 dk kaydedilir, dosya
+# cihaza gonderilir, cihaz REDDEDER ve operator ayarin uygulandigini sanir.
+# ---------------------------------------------------------------------------
+
+
+def test_dial_in_1440un_boleni_olmayan_deger_REDDEDILIR():
+    from app.services.device_config_service import _alan_kurallarini_dogrula
+
+    for gecersiz in (100, 70, 500, 1000):
+        with pytest.raises(ValueError, match="boleni"):
+            _alan_kurallarini_dogrula({"2010C6": gecersiz})
+
+
+def test_dial_in_arali_disi_deger_REDDEDILIR():
+    from app.services.device_config_service import _alan_kurallarini_dogrula
+
+    for gecersiz in (30, 59, 1441, 2880):
+        with pytest.raises(ValueError):
+            _alan_kurallarini_dogrula({"2010C6": gecersiz})
+
+
+def test_dial_in_gecerli_degerler_KABUL_edilir():
+    from app.schemas.dnp3_extended import dial_in_gecerli_degerler
+    from app.services.device_config_service import _alan_kurallarini_dogrula
+
+    for gecerli in dial_in_gecerli_degerler():
+        _alan_kurallarini_dogrula({"2010C6": gecerli})  # patlamamali
+
+    # Urunun sundugu hazir secenekler gercekten gecerli mi?
+    for sunulan in (60, 120, 240, 360, 720, 1440):
+        _alan_kurallarini_dogrula({"2010C6": sunulan})
+
+
+def test_dial_in_disindaki_girdiler_ETKILENMEZ():
+    """Kural YALNIZCA 2010C6 icin; diger girdiler codec'e birakilir."""
+    from app.services.device_config_service import _alan_kurallarini_dogrula
+
+    _alan_kurallarini_dogrula({"2010C4": 37, "210703": 100})  # patlamamali
+
+
+# ---------------------------------------------------------------------------
+# DIAL-IN: OTORITE CIHAZ AYARLARIDIR (2026-08-20 urun karari)
+#
+# ONCEKI KARAR DEGISTI. Eskiden gateway'e yalnizca cihazin kendi dosyasindan
+# okunan (readback) deger gidiyor, kanit yoksa None kaliyordu. Gerekce
+# saglamdi ama varsayimi sahada tutmadi: fiziksel config readback yeterince
+# guvenilir degil ve sonuc, dogru yapilandirilmis cihazlarda Dial-In
+# farkindali takibin hic devreye girmemesiydi.
+#
+# Artik operatorun sectigi deger dogrudan gecerlidir. Readback yalnizca
+# TANILAMA bilgisidir ve hicbir gateway karari ona dayanmaz.
+# ---------------------------------------------------------------------------
+
+
+def test_dial_in_readback_YOKKEN_de_yapilandirilan_deger_gecerli(db, cihaz) -> None:
+    """B: readback yoksa Dial-In takibi KAPANMAZ."""
+    svc.create_version(db, device_id=cihaz.id, raw=_dosya(60), source="yuklendi")
+    assert svc.gateway_dial_in(db, cihaz.id, 240) == 240
+    assert svc.dial_in_readback_durumu(db, cihaz.id, 240) == ("yok", None)
+
+
+def test_dial_in_ESKI_readback_yeni_secimi_EZMEZ(db, cihaz) -> None:
+    """C: cihazda 60 okunuyor, operator 240 secti -> gateway 240 alir."""
+    svc.create_version(db, device_id=cihaz.id, raw=_dosya(60), source="cihazdan_cekildi")
+    assert svc.gateway_dial_in(db, cihaz.id, 240) == 240
+    # Readback bilgi olarak durur ama karara girmez.
+    assert svc.dial_in_readback_durumu(db, cihaz.id, 240) == ("farkli", 60)
+
+
+def test_dial_in_readback_ESLESINCE_durum_eslesiyor(db, cihaz) -> None:
+    svc.create_version(db, device_id=cihaz.id, raw=_dosya(240), source="cihazdan_cekildi")
+    assert svc.dial_in_readback_durumu(db, cihaz.id, 240) == ("eslesiyor", 240)
+
+
+def test_dial_in_readback_BOZUKSA_takip_KAPANMAZ(db, cihaz) -> None:
+    """D: readback arizasi Dial-In saglik takibini devre disi BIRAKMAZ."""
+    svc.create_version(db, device_id=cihaz.id, raw=_dosya(60), source="cihazdan_cekildi")
+    # Readback ne derse desin, yapilandirilan deger gateway'e gider.
+    assert svc.gateway_dial_in(db, cihaz.id, 120) == 120
+    assert svc.gateway_dial_in(db, cihaz.id, None) is None  # hic secilmemisse yok
+
+
+def test_dial_in_readback_yalnizca_CIHAZIN_yazdigini_okur(db, cihaz) -> None:
+    """Tanilama dogru kalsin: bizim yazdigimiz surum readback SAYILMAZ."""
+    svc.create_version(db, device_id=cihaz.id, raw=_dosya(60), source="cihazdan_cekildi")
+    svc.create_version(db, device_id=cihaz.id, raw=_dosya(240), source="duzenlendi")
+    assert svc.uygulanan_dial_in(db, cihaz.id) == 60

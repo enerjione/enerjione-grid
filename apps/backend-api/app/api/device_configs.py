@@ -35,6 +35,7 @@ from app.models.device import Device
 from app.models.device_config import DeviceConfigTemplate
 from app.models.enums import UserRole
 from app.models.user import User
+from app.schemas.dnp3_extended import merge_dnp3_extended
 from app.schemas.device_config import (
     BulkApplyRequest,
     BulkApplyResult,
@@ -162,7 +163,7 @@ def config_ozeti(db: Session = Depends(get_db), _u: User = _YETKI) -> list[dict]
 def guncel_config(
     device_id: int, db: Session = Depends(get_db), _u: User = _YETKI
 ) -> ConfigCurrentRead:
-    _device(db, device_id)
+    cihaz = _device(db, device_id)
     surum = svc.current_version(db, device_id)
     if surum is None:
         raise HTTPException(
@@ -190,11 +191,23 @@ def guncel_config(
             _TL.signal_key == "master.info_last_configuration_update",
         )
     ).scalar()
+    # Dial-In: YAPILANDIRILAN (otorite) ile cihazdan OKUNAN (tanilama) ayri
+    # bildirilir. Readback saha kosullarinda guvenilir olmadigi icin hicbir
+    # gateway karari ona dayanmaz; yalnizca operatore gosterilir.
+    _ayar = merge_dnp3_extended(
+        cihaz.dnp3_extended if isinstance(cihaz.dnp3_extended, dict) else None
+    )
+    _yapilandirilan = _ayar.dial_in_interval_min
+    _durum, _okunan = svc.dial_in_readback_durumu(db, device_id, _yapilandirilan)
+
     return ConfigCurrentRead(
         version=_version_read(surum, raw),
         filename=dosya_adi,
         rows=svc.describe(raw),
         device_last_update=(son_guncelleme or None),
+        dial_in_configured_min=_yapilandirilan,
+        dial_in_readback_min=_okunan,
+        dial_in_readback_status=_durum,
     )
 
 

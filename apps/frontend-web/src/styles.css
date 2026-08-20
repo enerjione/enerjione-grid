@@ -3666,6 +3666,10 @@ body {
   color: #0f172a;
 }
 
+.dnp3-settings-title--advanced {
+  margin-top: 14px;
+}
+
 .dnp3-settings-hint {
   margin: 0 0 10px !important;
   font-size: 12px !important;
@@ -3724,6 +3728,77 @@ body {
   color: #64748b;
   font-weight: 600;
   white-space: nowrap;
+}
+
+/* Dial-In: ISTENEN vs CIHAZDAN DOGRULANAN. Iki sutunu birden kaplar; ayar
+   alanlarindan gorsel olarak ayrilir cunku bu bir GIRDI degil KANITTIR. */
+.dnp3-status-block {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+/* Istenen ile dogrulanan AYRISIYOR. Notr birakmak, ayarin sahada gecerli
+   oldugu izlenimini verirdi. */
+.dnp3-status-block--warn {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.dnp3-status-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.dnp3-status-key {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.dnp3-status-val {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.dnp3-status-note {
+  margin: 2px 0 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: #92400e;
+}
+
+/* Gateway yetenek uyarisi — kaydetmeyi ENGELLEMEZ, yalnizca secilen ayarin
+   bu gateway surumunde sahada gecerli olmadigini soyler. */
+.dnp3-compat-warn {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  background: #fffbeb;
+  font-size: 12px;
+  font-weight: 500;
+  color: #92400e;
+}
+
+.dnp3-compat-action {
+  border: 1px solid #b45309;
+  border-radius: 6px;
+  background: #fff;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 8px;
+  cursor: pointer;
 }
 
 .device-form-actions {

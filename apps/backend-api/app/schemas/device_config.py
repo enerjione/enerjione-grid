@@ -67,6 +67,22 @@ class ConfigCurrentRead(BaseModel):
     # komut sonrasi bu damga degistiyse cihaz dosyayi uygulamistir.
     device_last_update: str | None = None
 
+    # --- DIAL-IN: ISTENEN vs CIHAZDAKI ---
+    #
+    # Arayuz "kaydettim = sahada gecerli" izlenimi VERMEMELI. Bu uc alan o
+    # ayrimi tasir; ucu de tek kaynaktan (`device_config_service`) gelir.
+    #
+    #: OTORITE: operatorun Cihaz Ayarlari'nda sectigi deger. Gateway'in
+    #: gecikme hesabi da, cihaza yazilan `2010C6` da budur.
+    dial_in_configured_min: int | None = None
+    #: Cihazin KENDI yazdigi dosyadan okunan deger — YALNIZCA TANILAMA.
+    #: Saha kosullarinda readback guvenilir degil, bu yuzden hicbir gateway
+    #: karari buna dayanmaz. Adlandirma bilerek `applied` DEGIL.
+    dial_in_readback_min: int | None = None
+    #: `eslesiyor` | `farkli` | `yok`. `farkli` bir ARIZA IDDIASI DEGILDIR:
+    #: cihaz dosyasini henuz yazmamis ya da eski bir kopya yazmis olabilir.
+    dial_in_readback_status: str = "yok"
+
 
 class ConfigDiffRow(BaseModel):
     cat_index: str

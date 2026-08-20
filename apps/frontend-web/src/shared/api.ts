@@ -3690,7 +3690,8 @@ import type {
   ConfigDiffRow,
   ConfigRow,
   ConfigTemplate,
-  ConfigVersion
+  ConfigVersion,
+  DialInReadbackStatus
 } from "./types";
 
 type ApiConfigRow = {
@@ -3729,13 +3730,28 @@ export async function fetchDeviceConfig(token: string, deviceId: number): Promis
   const data = (await response.json()) as {
     version: ApiConfigVersion; filename: string | null; rows: ApiConfigRow[];
     device_last_update?: string | null;
+    dial_in_configured_min?: number | null;
+    dial_in_readback_min?: number | null;
+    dial_in_readback_status?: string | null;
   };
   return {
     version: mapConfigVersion(data.version),
     filename: data.filename,
     rows: data.rows.map(mapConfigRow),
-    deviceLastUpdate: data.device_last_update ?? null
+    deviceLastUpdate: data.device_last_update ?? null,
+    dialInConfiguredMin: data.dial_in_configured_min ?? null,
+    dialInReadbackMin: data.dial_in_readback_min ?? null,
+    dialInReadbackStatus: dialInReadbackStatus(data.dial_in_readback_status)
   };
+}
+
+/** Bilinmeyen/eksik durum metni "yok"a duser.
+ *
+ *  Backend alani duz `str` doner. Tanimadigimiz bir degeri "eslesiyor"
+ *  saymak, hic okunmamis bir cihaz icin dogrulama iddiasinda bulunmak
+ *  olurdu — guvenli taraf her zaman "yok". */
+function dialInReadbackStatus(ham: string | null | undefined): DialInReadbackStatus {
+  return ham === "eslesiyor" || ham === "farkli" ? ham : "yok";
 }
 
 /** Sablonun ayar satirlari — sablon duzenleyicisi cihaz kartiyla ayni izgara. */

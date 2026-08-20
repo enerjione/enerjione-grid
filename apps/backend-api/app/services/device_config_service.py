@@ -420,6 +420,43 @@ def apply_template_changes(
     return sablon
 
 
+def _alan_kurallarini_dogrula(changes: dict[str, int]) -> None:
+    """Cihazin KENDI kabul kurallari — codec'in goremedigi kisitlar.
+
+    Su an tek kural Dial-In Interval (`2010C6`): Horstmann bu degerin 1440'in
+    boleni olmasini ister (katalog `desc`). 100 dk 2 bayta pekala siger, yani
+    codec gecirir; cihaz ise reddeder ve bunu Grid'e SOYLEMEZ. Sonuc:
+    ekranda 100 yazar, sahada eski deger calisir — sessiz ayrisma.
+
+    Yeni bir alan kurali cikarsa buraya eklenir; boylece hem tekil duzenleme
+    hem toplu sablon uygulama ayni kapidan gecer.
+    """
+    from app.schemas.dnp3_extended import (
+        DIAL_IN_CAT_INDEX,
+        DIAL_IN_DAY_MINUTES,
+        DIAL_IN_INTERVAL_MAX,
+        DIAL_IN_INTERVAL_MIN,
+        dial_in_gecerli_degerler,
+    )
+
+    ham = changes.get(DIAL_IN_CAT_INDEX)
+    if ham is None:
+        return
+    deger = int(ham)
+    if not (DIAL_IN_INTERVAL_MIN <= deger <= DIAL_IN_INTERVAL_MAX):
+        raise ValueError(
+            f"Dial-In araligi {deger} dk gecersiz: "
+            f"{DIAL_IN_INTERVAL_MIN}-{DIAL_IN_INTERVAL_MAX} dk arasinda olmalidir."
+        )
+    if DIAL_IN_DAY_MINUTES % deger != 0:
+        gecerli = ", ".join(str(d) for d in dial_in_gecerli_degerler())
+        raise ValueError(
+            f"Dial-In araligi {deger} dk gecersiz: deger 1440'in (24 saat) "
+            f"boleni olmalidir, yoksa cihaz yapilandirmayi kabul etmez. "
+            f"Gecerli degerler: {gecerli}."
+        )
+
+
 def apply_changes(
     db: Session,
     *,
@@ -433,10 +470,20 @@ def apply_changes(
     `changes`: CatIndex -> yeni sayisal deger (orn. {"2010C6": 720}).
     Uzunluk asimi ve olmayan girdi codec tarafindan reddedilir; buradan
     sessizce gecmez.
+
+    ALAN OZEL KURALLAR (codec'in bilmedigi)
+    ---------------------------------------
+    Codec yalnizca "deger bu kac bayta siger mi" diye bakar. Bazi girdilerin
+    CIHAZIN KENDISINDEN gelen ek kurallari var ve onlar buradan gecerse
+    dosya yazilir, cihaza gonderilir, cihaz REDDEDER ve operator ayarin
+    uygulandigini sanir. `_alan_kurallarini_dogrula` o sessiz basarisizligi
+    kapatir.
     """
     guncel = current_version(db, device_id)
     if guncel is None:
         raise ConfigNotFound(f"cihaz {device_id} icin yapilandirma surumu yok")
+
+    _alan_kurallarini_dogrula(changes)
 
     doc = parse(bytes(guncel.raw))
     for cat_index, deger in changes.items():
@@ -577,3 +624,109 @@ def diff(onceki: bytes, sonraki: bytes) -> list[dict]:
             }
         )
     return farklar
+
+
+# ---------------------------------------------------------------------------
+# DIAL-IN — ISTENEN vs CIHAZDA GECERLI OLAN
+#
+# Ayni urun ayarinin iki tuketicisi var:
+#   * `dnp3_extended.dial_in_interval_min` -> gateway "rapor gecikti mi" hesabi
+#   * CSV `2010C6`                          -> cihazin GERCEK raporlama sikligi
+#
+# Bu bolum ikisini birbirine baglar ve en onemli soruyu cevaplar: gateway'e
+# HANGI degeri gonderecegiz?
+# ---------------------------------------------------------------------------
+
+#: Cihazin KENDI yazdigi surumun kaynagi. Fiziksel gerceğin TEK kaniti budur:
+#: dosyayi cihaz FTP'ye kendisi koydu, yani icindeki deger cihazda GECERLI.
+_READBACK_SOURCE = "cihazdan_cekildi"
+
+
+def uygulanan_dial_in(db: Session, device_id: int) -> int | None:
+    """Cihazda GERCEKTEN gecerli olan Dial-In (dk); kanit yoksa None.
+
+    NEDEN `applied_at` YETMEZ: o alanin kendi belgelendirmesi acik —
+    "dosya cihazin okuyacagi yere kondu ve komut kuyruga alindi", cihazin
+    dosyayi GERCEKTEN okudugu an degil (bkz. api/device_configs.py
+    `cihaza_uygula`). Komut kuyrukta beklerken ya da cihaz dosyayi hic
+    okumadan `applied_at` dolar.
+
+    TEK GECERLI KANIT cihazin FTP'ye KENDI yazdigi dosyadir
+    (`source="cihazdan_cekildi"`): o baytlari cihaz uretti, yani icindeki
+    `2010C6` cihazda o an gecerli olan degerdir.
+
+    Kanit yoksa None doner ve cagiran taraf FAIL-SAFE davranir — uydurma
+    yapmaz (bkz. `gateway_dial_in`).
+    """
+    from app.schemas.dnp3_extended import DIAL_IN_CAT_INDEX
+
+    satir = db.execute(
+        select(DeviceConfigVersion)
+        .where(
+            DeviceConfigVersion.device_id == device_id,
+            DeviceConfigVersion.source == _READBACK_SOURCE,
+        )
+        .order_by(DeviceConfigVersion.version.desc())
+        .limit(1)
+    ).scalars().first()
+    if satir is None:
+        return None
+    try:
+        girdi = parse(bytes(satir.raw)).get(DIAL_IN_CAT_INDEX)
+    except ConfigParseError:
+        # Bozuk readback: "bilmiyorum" demek, yanlis bir sayi soylemekten iyi.
+        return None
+    if girdi is None:
+        return None
+    try:
+        return girdi.as_int()
+    except (ValueError, ConfigParseError):
+        return None
+
+
+def gateway_dial_in(db: Session, device_id: int, yapilandirilan: int | None) -> int | None:
+    """Gateway'e GONDERILECEK Dial-In — CIHAZ AYARLARINDA secilen deger.
+
+    URUN KARARI (2026-08-20, onceki karari DEGISTIRIR)
+    -------------------------------------------------
+    Otorite Device Settings'tir. Onceki tasarim gateway'e yalnizca cihazin
+    KENDI dosyasindan okunan (readback) degeri gonderiyor, kanit yoksa None
+    birakiyordu. Gerekce saglamdi ama VARSAYIMI sahada tutmadi: fiziksel
+    config readback yeterince guvenilir degil. Sonuc, dogru yapilandirilmis
+    cihazlarda Dial-In farkindali gecikme takibinin — hicbir sey bozuk
+    olmadigi halde — HIC devreye girmemesiydi.
+
+    Artik operatorun sectigi deger dogrudan gecerlidir: readback beklenmez,
+    eksik readback yuzunden None'a DUSULMEZ ve eski readback yeni secimi
+    EZMEZ.
+
+    Readback tamamen atilmadi ama rolu degisti: yalnizca TANILAMA bilgisidir
+    (bkz. `dial_in_readback_durumu`) ve hicbir gateway kararina girmez.
+    """
+    return yapilandirilan
+
+
+def dial_in_readback_durumu(
+    db: Session, device_id: int, yapilandirilan: int | None
+) -> tuple[str, int | None]:
+    """(durum, cihazdan_okunan) — YALNIZCA TANILAMA.
+
+    Bu fonksiyonun donusu hicbir gateway/saglik kararina GIRMEZ. Amaci tek:
+    operatore "cihazin kendi dosyasinda ne yaziyor" bilgisini vermek.
+
+    Readback saha kosullarinda guvenilir olmadigi icin buradaki `farkli`
+    sonucu bir ARIZA IDDIASI DEGILDIR — cihaz dosyasini henuz yazmamis,
+    eski bir kopya yazmis ya da hic yazmamis olabilir. Arayuz bunu
+    "uygulanmadi" diye sunmamali; adlandirma da bu yuzden `applied` degil
+    `readback`.
+
+      * `yok`        — cihazdan gelen bir dosya hic gorulmedi.
+      * `eslesiyor`  — okunan deger yapilandirilanla ayni.
+      * `farkli`     — okunan deger farkli (bilgi amacli).
+    """
+    okunan = uygulanan_dial_in(db, device_id)
+    if okunan is None:
+        return ("yok", None)
+    if yapilandirilan is None or okunan == yapilandirilan:
+        return ("eslesiyor", okunan)
+    return ("farkli", okunan)

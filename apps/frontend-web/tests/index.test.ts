@@ -107,14 +107,30 @@ import "./modemStatus.test";
 // Gateway kurulum modu (INSTALL_MODE) -- yerel kurulum kacisi.
 import "./gatewayKurulumModu.test";
 
-// B5 akilli oturum: `smart` yalnizca `initiating` ile gecerlidir. Arayuz
-// gecersiz kombinasyonu URETMEMELI -- backend onu 422 ile reddediyor ve
-// operator anlamadigi bir hata gorurdu.
+// B5 akilli oturum: form/panel sozlesmesi. NOT -- eskiden burada "smart
+// yalnizca initiating ile gecerlidir" yaziyordu; gateway v1.14.0'da o kisit
+// KALKTI (bkz. asagidaki dosya).
 import "./b5SmartSession.test";
+
+// Gateway v1.14.0: uc nokta tipi ile oturum politikasi ORTOGONAL -- alti
+// kombinasyon da gecerli. Bastiran kapi geri gelirse listening bir Horstmann
+// Smart calistirilamaz ve kimse bir hata mesaji gormez.
+import "./gatewayV114OturumPolitikasi.test";
 
 // Calisma modu (Akilli/Boost): `comm_lost` ile gelen 0.0 "Boost" DEGILDIR.
 // Ikisi de gecerli bir mod oldugu icin bu yanlis ekranda fark edilmez.
 import "./operationMode.test";
+
+// ISTENEN vs SAHADA GECERLI: Dial-In dogrulamasi ve gateway yetenek kapisi.
+// Yetenek matrisi backend'in AYNASIDIR; ayrisirsa arayuz "destekleniyor"
+// derken payload sessizce dusurulur ve kimse bir hata gormez.
+import "./dialInGatewayUyumluluk.test";
+
+// Ayni iki ozelligin DAVRANIS tarafi: surum karsilastirmasi SAYISAL olmali
+// ("1.9.0" leksikografik olarak "1.14.0"dan buyuk gorunur ve eski bir
+// gateway sessizce "yeterli" sayilir), Dial-In kaniti uc durumlu kalmali ve
+// kanit yokken hicbir metin ayarin sahada gecerli oldugunu soylememeli.
+import "./gatewayUyumlulukVeDialInDurumu.test";
 
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {

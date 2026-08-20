@@ -7,6 +7,7 @@ import i18n from "../../shared/i18n";
 import type {
   DeviceModelOption,
   DeviceRow,
+  DialInReadbackStatus,
   Dnp3ExtendedSettings,
   Gateway,
   GatewayAgentStatus,
@@ -20,8 +21,7 @@ import {
   PMK_SET_MODEL,
   POLE_MASTER_KIT_MODEL,
   isKitModel,
-  mergeDnp3Extended,
-  sessionPolicyForEndpoint
+  mergeDnp3Extended
 } from "../../shared/types";
 import {
   deviceStatusUnderGateway,
@@ -29,7 +29,9 @@ import {
   type GatewayLivenessState
 } from "../../shared/gatewayLiveness";
 import {
+  fetchDeviceConfig,
   fetchGatewayAgentStatus,
+  fetchGatewayUpdate,
   restartGatewayLocally,
   startGatewayLocally,
   stopGatewayLocally
@@ -580,6 +582,72 @@ export function DeviceManagementPanel({
     }
   }, [selectedDevice, devicePropsTab]);
 
+  // --- DNP3 formunun KANIT girdileri -------------------------------------
+  //
+  // Ikisi de AYAR DEGIL: "kaydedilen ayar sahada gercekten gecerli mi"
+  // sorusunun kanitidir. Bu yuzden formda degil BURADA cekilir ve prop
+  // olarak gecer — form saf kalir, tek isi ayar yazmaktir.
+  //
+  // `undefined` = SORULMADI/OGRENILEMEDI. Blok cizilmez; eksik veriyi
+  // "eslesiyor" ya da "sorun yok" gibi gostermek, bu iki ozelligin kapatmak
+  // icin var oldugu hata sinifinin ta kendisidir.
+  const [dialInDurumu, setDialInDurumu] = useState<
+    { readbackMin: number | null; status: DialInReadbackStatus } | undefined
+  >(undefined);
+  // Gateway surumu UC DURUMLU: undefined = sorulmadi, null = soruldu ama
+  // gateway bildirmedi (uyari "bilinmiyor" der), metin = bildirilen surum.
+  const [gatewaySurumu, setGatewaySurumu] = useState<string | null | undefined>(undefined);
+
+  // Istekler YALNIZCA form gorunurken atilir: cihaz listesinde gezinirken her
+  // tiklamada iki ek istek atmak 600 cihazlik sahada bosuna yuktur.
+  const dnp3PanelAcik = canSeeDnp3 && devicePropsTab === "comms";
+  const dnp3CihazId = dnp3PanelAcik ? (selectedDevice?.id ?? null) : null;
+  const dnp3GatewayKodu = dnp3PanelAcik ? (selectedDeviceGateway?.code ?? null) : null;
+
+  useEffect(() => {
+    setDialInDurumu(undefined);
+    if (dnp3CihazId === null) return;
+    let iptal = false;
+    void (async () => {
+      try {
+        const cfg = await fetchDeviceConfig(accessToken, dnp3CihazId);
+        if (iptal) return;
+        // 404 -> `null`: cihazin yapilandirma dosyasi hic yok, yani cihazdan
+        // okunmus bir kanit da yok. Bu bir HATA degil, olagan bir baslangic
+        // durumu; blok yine de cizilmez.
+        setDialInDurumu(
+          cfg ? { readbackMin: cfg.dialInReadbackMin, status: cfg.dialInReadbackStatus } : undefined
+        );
+      } catch {
+        // Okunamadi — sessiz. Cihaz kaydetmeyi engellemez, yalnizca kanit
+        // gosterilmez.
+        if (!iptal) setDialInDurumu(undefined);
+      }
+    })();
+    return () => {
+      iptal = true;
+    };
+  }, [accessToken, dnp3CihazId]);
+
+  useEffect(() => {
+    setGatewaySurumu(undefined);
+    if (!dnp3GatewayKodu) return;
+    let iptal = false;
+    void (async () => {
+      try {
+        const durum = await fetchGatewayUpdate(dnp3GatewayKodu);
+        if (!iptal) setGatewaySurumu(durum.current_version);
+      } catch {
+        // SORULDU ama ogrenilemedi. `null` = bilinmiyor; backend de
+        // bilinmeyen surumu EKSIK sayar (guvenli taraf), arayuz de oyle.
+        if (!iptal) setGatewaySurumu(null);
+      }
+    })();
+    return () => {
+      iptal = true;
+    };
+  }, [dnp3GatewayKodu]);
+
   const applySelectedDeviceToForm = (device: DeviceRow) => {
     setName(device.name);
     setSerial(device.serialNumber ?? "");
@@ -788,14 +856,9 @@ export function DeviceManagementPanel({
             dnp3Ext.ip_endpoint_type === "initiating"
               ? selectedInitiatingMasterPort
               : dnp3Ext.master_ip_port,
-          // Form uc nokta tipi degisince politikayi zaten geri aliyor; bu
-          // ikinci kontrol gonderim aninda calisir. Ikisi de AYNI saf
-          // fonksiyonu kullanir, boylece "formda gorunen" ile "govdeye
-          // giren" ayrisamaz.
-          session_policy: sessionPolicyForEndpoint(
-            dnp3Ext.ip_endpoint_type,
-            dnp3Ext.session_policy
-          )
+          // session_policy spread ile OLDUGU GIBI gider: gateway v1.14.0'dan
+          // beri uc tipi ile mod ortogonal, uc kombinasyonu bastiran bir
+          // duzeltme operatorun sectigi modu sessizce degistirirdi.
         },
         poll_interval_sec: Number(pollIntervalSec),
         timeout_ms: Number(timeoutMs),
@@ -858,11 +921,7 @@ export function DeviceManagementPanel({
         dnp3_extended: {
           ...createDnp3Ext,
           master_ip_address: selectedGateway?.control_host || "127.0.0.1",
-          master_ip_port: nextInitiatingMasterPort,
-          session_policy: sessionPolicyForEndpoint(
-            createDnp3Ext.ip_endpoint_type,
-            createDnp3Ext.session_policy
-          )
+          master_ip_port: nextInitiatingMasterPort
         },
         poll_interval_sec: Number(createPollIntervalSec),
         timeout_ms: Number(createTimeoutMs),
@@ -1795,6 +1854,16 @@ export function DeviceManagementPanel({
                         value={dnp3Ext}
                         onChange={(patch) => setDnp3Ext((prev) => ({ ...prev, ...patch }))}
                         hideConnectionFields
+                        dialInDurumu={dialInDurumu}
+                        gatewayVersion={gatewaySurumu}
+                        // Guncelleme arayuzu MEVCUT ekrandir (gateway duzenleme
+                        // modali); form yeni bir yol acmaz. Yetkisi olmayan
+                        // rolde baglanti hic cizilmez.
+                        onGatewayUpdate={
+                          canManageGateways && selectedDeviceGateway
+                            ? () => setEditingGatewayCode(selectedDeviceGateway.code)
+                            : undefined
+                        }
                         usedMasterPorts={devices
                           .filter(
                             (x) =>
