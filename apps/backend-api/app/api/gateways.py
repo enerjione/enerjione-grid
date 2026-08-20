@@ -1418,12 +1418,23 @@ def get_gateway_config(
         # penceresinde null yazilmis cihazi alani bos gondererek gateway'in
         # DNP3_LOCAL_ADDRESS=1 varsayilanina dusuruyor ve haberlesmeyi KESIYORDU.
         ext = device.dnp3_extended if isinstance(device.dnp3_extended, dict) else None
-        master_address = merge_dnp3_extended(ext).master_address
+        ayar = merge_dnp3_extended(ext)
+        master_address = ayar.master_address
         endpoint_type = "listening"
         if isinstance(ext, dict):
             raw_endpoint = str(ext.get("ip_endpoint_type") or "listening").strip().lower()
             if raw_endpoint in ("initiating", "listening"):
                 endpoint_type = raw_endpoint
+        # AKILLI OTURUM — yayinda normalize edilir (B5 / gateway v1.12.0).
+        #
+        # Yazma yolu `smart` + `listening` kombinasyonunu zaten reddediyor
+        # (bkz. schemas/dnp3_extended.py `validate_session_policy`). Buradaki
+        # ikinci kontrol o dogrulamadan ONCE yazilmis ya da elle duzenlenmis
+        # bir kayit icindir: gateway o kombinasyonda kendi `continuous`una
+        # duser, yani sahada kirilma olmaz — ama backend'in gonderdigi
+        # payload ile gateway'in uyguladigi davranis AYRISIR. Ayrisma
+        # `config_version` uzerinden de gorunmez oldugu icin burada kapatilir.
+        session_policy = ayar.session_policy if endpoint_type == "initiating" else "continuous"
         config_devices.append(
             GatewayConfigDevice(
                 code=device.code,
@@ -1441,6 +1452,12 @@ def get_gateway_config(
                 master_ip_port=(
                     initiating_port_map.get(device.code) if endpoint_type == "initiating" else None
                 ),
+                session_policy=session_policy,
+                # Esik cihaz seviyesinde OZEL bir deger; politikadan bagimsiz
+                # tasinir. `continuous` cihazda gateway onu okumaz, ama
+                # operator politikayi geri cevirdiginde degeri kaybetmis
+                # olmayiz.
+                smart_max_silence_sec=ayar.smart_max_silence_sec,
                 poll_interval_sec=device.poll_interval_sec,
                 timeout_ms=device.timeout_ms,
                 retry_count=device.retry_count,

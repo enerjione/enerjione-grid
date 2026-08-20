@@ -20,7 +20,8 @@ import {
   PMK_SET_MODEL,
   POLE_MASTER_KIT_MODEL,
   isKitModel,
-  mergeDnp3Extended
+  mergeDnp3Extended,
+  sessionPolicyForEndpoint
 } from "../../shared/types";
 import {
   deviceStatusUnderGateway,
@@ -786,7 +787,15 @@ export function DeviceManagementPanel({
           master_ip_port:
             dnp3Ext.ip_endpoint_type === "initiating"
               ? selectedInitiatingMasterPort
-              : dnp3Ext.master_ip_port
+              : dnp3Ext.master_ip_port,
+          // Form uc nokta tipi degisince politikayi zaten geri aliyor; bu
+          // ikinci kontrol gonderim aninda calisir. Ikisi de AYNI saf
+          // fonksiyonu kullanir, boylece "formda gorunen" ile "govdeye
+          // giren" ayrisamaz.
+          session_policy: sessionPolicyForEndpoint(
+            dnp3Ext.ip_endpoint_type,
+            dnp3Ext.session_policy
+          )
         },
         poll_interval_sec: Number(pollIntervalSec),
         timeout_ms: Number(timeoutMs),
@@ -849,7 +858,11 @@ export function DeviceManagementPanel({
         dnp3_extended: {
           ...createDnp3Ext,
           master_ip_address: selectedGateway?.control_host || "127.0.0.1",
-          master_ip_port: nextInitiatingMasterPort
+          master_ip_port: nextInitiatingMasterPort,
+          session_policy: sessionPolicyForEndpoint(
+            createDnp3Ext.ip_endpoint_type,
+            createDnp3Ext.session_policy
+          )
         },
         poll_interval_sec: Number(createPollIntervalSec),
         timeout_ms: Number(createTimeoutMs),

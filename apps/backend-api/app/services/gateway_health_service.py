@@ -214,6 +214,18 @@ _LINK_STATE_MAP = {
     "disconnected": "offline",
 }
 
+#: AKILLI UYKU BURAYA GIRMEZ — ve buraya `smart_idle: "offline"` gibi bir
+#: satir ASLA eklenmemelidir.
+#:
+#: Sozlesme (gateway v1.12.0): uyku bilgisi cihaz bazinda DEGIL, yalnizca
+#: SAYAC olarak tasinir (`devices.smart_idle` / `devices.smart_lost`,
+#: bkz. `smart_counts`). Gateway uyuyan cihazi `devices.states` haritasina
+#: hic koymaz ve `devices.lost` sayacina da katmaz.
+#:
+#: Not olarak duruyor cunku hata yonu tek: uykuyu kopma saymak, akilli
+#: moddaki sahayi her gece kirmiziya boyar ve gercek arizayi o yiginin
+#: icinde gorunmez yapar.
+
 
 def device_link_states(raw_json: str | None) -> dict[str, str]:
     """`raw_json` icinden cihaz bazinda haberlesme durumu cikarir.
@@ -248,3 +260,37 @@ def device_link_states(raw_json: str | None) -> dict[str, str]:
         if esleme is not None:
             sonuc[kod[:50]] = esleme
     return sonuc
+
+
+def smart_counts(raw_json: str | None) -> dict[str, int]:
+    """`devices.smart_idle` / `devices.smart_lost` sayaclari (gateway v1.12.0).
+
+    NEDEN KOLON ACILMADI: `gateway_health` satiri zaten ham govdeyi
+    (`raw_json`) sakliyor ve model docstring'i bunu tam da bu amac icin
+    yaziyor — "gateway surumleri farkli alanlar gonderebilir ve backend'in
+    yeni bir alan yuzunden veri kaybetmesini istemiyoruz". Sayac icin sema
+    degistirmek, migration'i olmayan bir sozlesme icin kalici bir borc
+    olurdu.
+
+    Alan gondermeyen gateway (v1.11.x) icin 0 doner — "akilli cihaz yok"
+    dogru cevaptir.
+    """
+    payload = _health_payload(raw_json)
+    devices = (payload or {}).get("devices")
+    if not isinstance(devices, dict):
+        return {"smart_idle": 0, "smart_lost": 0}
+    return {
+        "smart_idle": _as_int(devices.get("smart_idle")) or 0,
+        "smart_lost": _as_int(devices.get("smart_lost")) or 0,
+    }
+
+
+def _health_payload(raw_json: str | None) -> dict[str, Any] | None:
+    """`raw_json`i savunmaci coz. Bozuk govde cihaz durumlarini BOZMAMALI."""
+    if not raw_json:
+        return None
+    try:
+        payload = json.loads(raw_json)
+    except (TypeError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None

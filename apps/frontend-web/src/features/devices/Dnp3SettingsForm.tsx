@@ -1,7 +1,12 @@
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { Dnp3ExtendedSettings } from "../../shared/types";
+import type { Dnp3ExtendedSettings, SessionPolicy } from "../../shared/types";
+import {
+  SMART_MAX_SILENCE_MAX_SEC,
+  SMART_MAX_SILENCE_MIN_SEC,
+  sessionPolicyForEndpoint
+} from "../../shared/types";
 
 type Props = {
   value: Dnp3ExtendedSettings;
@@ -60,6 +65,19 @@ export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [], hideCo
   const set = onChange;
 
   const isInitiating = v.ip_endpoint_type === "initiating";
+  const isSmart = v.session_policy === "smart";
+
+  // Uc nokta tipi `listening`e cevrildiginde akilli oturum anlamini yitirir:
+  // uykudaki cihaza gateway BAGLANAMAZ. Secimi burada geri aliyoruz ki
+  // kullanici formda "Akilli" gorurken kaydet'e basip backend'den 422
+  // yemesin. Backend ayrica derinlemesine savunma olarak reddeder.
+  useEffect(() => {
+    const gecerli = sessionPolicyForEndpoint(v.ip_endpoint_type, v.session_policy);
+    if (gecerli !== v.session_policy) {
+      set({ session_policy: gecerli });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v.ip_endpoint_type, v.session_policy]);
 
   // Initiating moda gecildiginde veya port range disinda kalan bir deger
   // varsa otomatik olarak ilk bos port'a sabitle. Boylece cihazi kaydeden
@@ -144,6 +162,49 @@ export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [], hideCo
               />
               <small className="dnp3-help">{t("engineering.dnp3.masterAddrHelp")}</small>
             </label>
+            <label className="dnp3-field">
+              <span className="dnp3-label">
+                {t("engineering.dnp3.sessionPolicy")} <Req />
+              </span>
+              <select
+                value={v.session_policy}
+                onChange={(e) => set({ session_policy: e.target.value as SessionPolicy })}
+              >
+                <option value="continuous">{t("engineering.dnp3.sessionPolicyContinuous")}</option>
+                {/* Akilli oturum yalnizca `initiating` ile secilebilir —
+                    secenek listening modunda HIC render edilmez. */}
+                {isInitiating ? (
+                  <option value="smart">{t("engineering.dnp3.sessionPolicySmart")}</option>
+                ) : null}
+              </select>
+              <small className="dnp3-help">
+                {isSmart
+                  ? t("engineering.dnp3.sessionPolicySmartHelp")
+                  : t("engineering.dnp3.sessionPolicyContinuousHelp")}
+              </small>
+            </label>
+            {isSmart ? (
+              <label className="dnp3-field dnp3-field-with-unit">
+                <span className="dnp3-label">{t("engineering.dnp3.smartMaxSilence")}</span>
+                <span className="dnp3-input-unit">
+                  <input
+                    type="number"
+                    min={SMART_MAX_SILENCE_MIN_SEC}
+                    max={SMART_MAX_SILENCE_MAX_SEC}
+                    value={v.smart_max_silence_sec ?? ""}
+                    placeholder={t("engineering.dnp3.smartMaxSilenceAuto")}
+                    onChange={(e) =>
+                      set({
+                        smart_max_silence_sec:
+                          e.target.value.trim() === "" ? null : Number(e.target.value)
+                      })
+                    }
+                  />
+                  <span className="dnp3-unit">{t("engineering.dnp3.seconds")}</span>
+                </span>
+                <small className="dnp3-help">{t("engineering.dnp3.smartMaxSilenceHelp")}</small>
+              </label>
+            ) : null}
           </>
         ) : null}
         <BoolSelect

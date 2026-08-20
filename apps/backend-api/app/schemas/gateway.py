@@ -99,6 +99,21 @@ class GatewayConfigDevice(BaseModel):
     # Initiating mode'da gateway'in dinleyecegi port. Backend cihaz basina
     # otomatik atar (20100..20700). Listening mode'da kullanilmaz.
     master_ip_port: int | None = None
+    # ----- gateway v1.12.0: akilli oturum --------------------------------
+    #
+    # `continuous` (varsayilan) bugune kadarki davranistir: gateway periyodik
+    # tarama yapar. `smart` yalnizca `initiating` ile yayinlanir — serializer
+    # bunu ayrica normalize eder (bkz. api/gateways.py), boylece surum
+    # dogrulamasindan onceki bir kayit bile gateway'e gecersiz kombinasyon
+    # goturemez.
+    #
+    # ESKI GATEWAY'I BOZMAZ: v1.11.x cihaz sozlugunu acik alan cikarimiyla
+    # okur, tanimadigi anahtarlari hic gormez (ayni gerekce
+    # `GatewayConfigCommand.created_at` icin de gecerli).
+    session_policy: str = "continuous"
+    # Cihaz seviyesi sessizlik esigi. None = "bu cihaz icin OZEL esik yok";
+    # gateway kendi env varsayilanina duser. DEVRE DISI DEMEK DEGILDIR.
+    smart_max_silence_sec: int | None = None
     poll_interval_sec: int
     timeout_ms: int
     retry_count: int
