@@ -14,6 +14,23 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.105.0] — 2026-08-20
+
+### Eklendi
+
+- **Cihaz detayında çalışma modu.** Sol paneldeki BİLGİLER bölümünde cihazın
+  çalışma modu görünüyor: **Akıllı Mod** ya da **Boost Mod**
+  (`master.operation_mode`).
+
+  Mod yalnızca okuma **güvenilirken** gösterilir. Sebebi şu: `0` değeri iki
+  farklı anlama gelebiliyor — cihaz gerçekten Boost modda olabilir ya da
+  haberleşme kopmuştur ve gateway `comm_lost` kalitesiyle 0.0 basıyordur.
+  İkisini ayırmayan bir okuma, akıllı modda çalışan bir cihaz için ekranda
+  "Boost Mod" yazardı ve iki mod da geçerli bir durum olduğu için bu yanlış
+  fark edilmezdi. Değer güvenilir değilse satır hiç çizilmiyor.
+
+---
+
 ## [2.104.0] — 2026-08-20
 
 ### Eklendi
