@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { Search, Router, MapPin, GitBranch, Zap } from "lucide-react";
 
 import { runtimeToneClass } from "./RuntimeStateChip";
+import { RuntimeTip } from "./RuntimeTooltip";
 import { deviceRuntimeStateOf } from "../shared/deviceRuntimeState";
 import type { DeviceRuntimeState } from "../shared/deviceRuntimeState";
 import type { DeviceRow, Line, Pole, Region } from "../shared/types";
@@ -199,12 +200,11 @@ export function HeaderSearch({
       >
         {r.kind === "device" ? (
           // Sol: CALISMA-ZAMANI durum noktasi + alarm rengi (alarm baskin).
-          <span
-            className={`header-search-status ${
-              r.alarm ? "has-alarm" : runtimeToneClass(r.runtime)
-            }`}
-            title={r.alarm ? t("header.searchAlarmTag") : t(r.runtime.labelKey)}
-          />
+          r.alarm ? (
+            <span className="header-search-status has-alarm" title={t("header.searchAlarmTag")} />
+          ) : (
+            <RuntimeTip state={r.runtime} className="header-search-status" />
+          )
         ) : r.kind === "pole" ? (
           <Zap size={16} />
         ) : r.kind === "line" ? (

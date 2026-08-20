@@ -15,6 +15,7 @@
 import { useTranslation } from "react-i18next";
 
 import type { DeviceRuntimeState } from "../shared/deviceRuntimeState";
+import { useRuntimeTip } from "./RuntimeTooltip";
 
 /** Ton -> CSS sinifi. Sinifin kendisi `--rt*` degiskenlerini kurar. */
 export function runtimeToneClass(state: DeviceRuntimeState): string {
@@ -29,16 +30,33 @@ type DotProps = {
   silent?: boolean;
 };
 
-/** Kucuk durum noktasi — liste satiri ve kart basligi icin. */
+/** Kucuk durum noktasi — liste satiri ve kart basligi icin.
+ *
+ *  USTUNE GELINCE ANLAMINI SOYLER. Nokta tek basina yalnizca bir RENK;
+ *  operator icin "mavi" kendiliginden okunmaz ve `Smart Bekleme` mavi ama
+ *  SAGLIKLI oldugu icin yanlis okunmasi kolaydir. Eski `title` yalnizca adi
+ *  gosteriyordu; ipucu artik adi, kovayi (saglikli/uyari/ariza) ve bir
+ *  cumlelik anlami birlikte veriyor (bkz. `RuntimeTooltip`).
+ *
+ *  `aria-label` KALIYOR: ekran okuyucu ipucunu acmaz, noktanin kendisini
+ *  okur. `silent` yalnizca GORSEL ipucunu kapatir (satirin kendi ipucu
+ *  varsa); erisilebilir ad her durumda durur. */
 export function RuntimeStateDot({ state, className = "", silent = false }: DotProps) {
   const { t } = useTranslation();
   const label = t(state.labelKey);
+  // Nokta bir `<button>` icinde duruyor; odaklanabilir YAPILMAZ.
+  const { triggerProps, tip } = useRuntimeTip(state);
+  const dokun = silent ? {} : triggerProps;
   return (
-    <span
-      className={`runtime-dot ${runtimeToneClass(state)} ${className}`.trim()}
-      title={silent ? undefined : label}
-      aria-label={silent ? undefined : label}
-    />
+    <>
+      <span
+        {...dokun}
+        className={`runtime-dot ${runtimeToneClass(state)} ${className}`.trim()}
+        aria-label={label}
+        role="img"
+      />
+      {tip}
+    </>
   );
 }
 
@@ -59,12 +77,18 @@ export function RuntimeStateChip({
   className = ""
 }: ChipProps) {
   const { t } = useTranslation();
-  // `labelKey` -> "deviceRuntime.state.smartIdle"; ipucu ayni son eki tasir.
-  const hintKey = state.labelKey.replace(".state.", ".stateHint.");
+  // Rozet TEK BASINA duruyor (detay, harita paneli, ozet basligi):
+  // odaklanabilir olmasi klavye kullanicisina aciklamayi acar ve
+  // hicbir butonun icine girmez.
+  const { triggerProps, tip } = useRuntimeTip(state, { focusable: true });
+  // Ipucu artik isletim sisteminin `title` kutusu DEGIL: orada renk yok ve
+  // ~1 saniye gecikmeyle aciliyordu, yani "rengi acikladigi" soylenemezdi.
+  const dokun = withHint ? triggerProps : {};
   return (
+    <>
     <span
+      {...dokun}
       className={`runtime-chip ${runtimeToneClass(state)} ${className}`.trim()}
-      title={withHint ? t(hintKey) : undefined}
     >
       {withIcon ? (
         // Ikon adi sabit tablodan gelir (normalizer); fontta olmayan bir ad
@@ -75,6 +99,8 @@ export function RuntimeStateChip({
       ) : null}
       {t(state.labelKey)}
     </span>
+    {withHint ? tip : null}
+    </>
   );
 }
 

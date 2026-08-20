@@ -18,6 +18,7 @@ import L from "leaflet";
 
 import { formatRelative } from "../../shared/format";
 import { RuntimeStateChip, runtimeToneClass } from "../../components/RuntimeStateChip";
+import { RuntimeTip } from "../../components/RuntimeTooltip";
 import { deviceRuntimeStateOf } from "../../shared/deviceRuntimeState";
 import { sourceLabel, sourceTone } from "../signals/signalCatalogConstants";
 import { sinyalKalitesi } from "./modemStatus";
@@ -169,10 +170,12 @@ export function DeviceSidebar({
       {/* ---- Cihaz kimlik (kod solunda durum noktasi) ---- */}
       <section className="device-sidebar-section">
         <div className="device-sidebar-idrow">
-          <span
-            className={`device-sidebar-statusdot ${runtimeToneClass(runtime)}`}
-            title={t(runtime.labelKey)}
+          <RuntimeTip
+            state={runtime}
+            focusable
+            className="device-sidebar-statusdot"
             aria-label={t(runtime.labelKey)}
+            role="img"
           />
           <h2 className="device-sidebar-code">{device.name}</h2>
         </div>
@@ -372,9 +375,11 @@ export function DeviceSidebar({
                     disabled={!onOpenSet}
                     title={s.code}
                   >
-                    <span
-                      className={`device-set-dot ${runtimeToneClass(setDurum)}`}
-                      title={t(setDurum.labelKey)}
+                    <RuntimeTip
+                      state={setDurum}
+                      className="device-set-dot"
+                      aria-label={t(setDurum.labelKey)}
+                      role="img"
                     />
                     <span className="device-set-body">
                       <span className="device-set-name">{s.name}</span>

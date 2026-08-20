@@ -16,6 +16,7 @@ import { batteryUnitsFor, voltageToPercent as voltsToPercent } from "../../share
 import { saglikSahibi } from "../../shared/deviceKit";
 import { DialInCountdown } from "../../components/DialInCountdown";
 import { RuntimeStateChip, runtimeToneClass } from "../../components/RuntimeStateChip";
+import { RuntimeTip } from "../../components/RuntimeTooltip";
 import { deviceRuntimeStateOf } from "../../shared/deviceRuntimeState";
 import type { DeviceRuntimeStateKey, DeviceRuntimeTone } from "../../shared/deviceRuntimeState";
 import { locateDevice } from "../../shared/geoLookup";
@@ -1635,9 +1636,12 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
               {/* Kimlik — durum noktasi SOLDA (detay sidebar'i ile ayni) */}
               <div className="device-popup-v2-id">
                 <div className="device-sidebar-idrow">
-                  <span
-                    className={`device-sidebar-statusdot ${runtimeToneClass(selectedRuntime)}`}
-                    title={t(selectedRuntime.labelKey)}
+                  <RuntimeTip
+                    state={selectedRuntime}
+                    focusable
+                    className="device-sidebar-statusdot"
+                    aria-label={t(selectedRuntime.labelKey)}
+                    role="img"
                   />
                   <h2 className="device-sidebar-code">{selectedDevice.name}</h2>
                 </div>

@@ -29,6 +29,7 @@ import {
   type GatewayLivenessState
 } from "../../shared/gatewayLiveness";
 import { RuntimeStateDot, runtimeToneClass } from "../../components/RuntimeStateChip";
+import { RuntimeTip } from "../../components/RuntimeTooltip";
 import {
   deviceRuntimeStateOf,
   normalizeDeviceRuntime,
@@ -1904,7 +1905,7 @@ export function DeviceManagementPanel({
                     const gwOffline =
                       eff === "offline" && selectedDevice.communicationStatus === "online";
                     return (
-                      <span className={`device-comms-pill ${runtimeToneClass(effState)}`}>
+                      <RuntimeTip state={effState} focusable className="device-comms-pill">
                         {/* "Sorun yok" YALNIZCA saglikli kovada: `smart_idle`
                             de buraya girer (uyuyan Horstmann sagliklidir),
                             gecikmis/toparlanan/kopuk girmez. */}
@@ -1917,7 +1918,7 @@ export function DeviceManagementPanel({
                             : gwOffline
                               ? t("engineering.devicesPanel.footer.gwDisconnected")
                               : t("engineering.devicesPanel.footer.stale")}
-                      </span>
+                      </RuntimeTip>
                     );
                   })()}
                   {selectedDevice.lastUpdateAt ? (

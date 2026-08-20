@@ -145,6 +145,12 @@ import "./deviceRuntimeState.test";
 // bir paket bunu yakalayamaz — kirilan sey aradaki addir.
 import "./runtimeHealthOkumaSozlesmesi.test";
 
+// "Bu renk ne demek?" — durum cogu ekranda tek bir renkli nokta ve palette
+// sezgiye AYKIRI bir uye var: `Smart Bekleme` MAVI ama SAGLIKLI. Aciklamasiz
+// birakilirsa operator saglikli filoyu ariza sanar; ikisi de ekranda fark
+// edilmez.
+import "./runtimeIpucu.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   connectionIsDead,

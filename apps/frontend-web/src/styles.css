@@ -43605,6 +43605,127 @@ th.event-col-category {
 .runtime-tone--red    { --rt: #ef4444; --rt-soft: rgba(239, 68, 68, 0.20);   --rt-ink: #b91c1c; --rt-bg: #fee2e2; }
 .runtime-tone--slate  { --rt: #94a3b8; --rt-soft: rgba(148, 163, 184, 0.18); --rt-ink: #475569; --rt-bg: #f1f5f9; }
 
+/* --- DURUM IPUCU -----------------------------------------------------------
+
+   "Bu renk ne demek?" sorusunun cevabi. Nokta cogu ekranda TEK BASINA bir
+   renk; renk kendiliginden okunmaz ve `Smart Bekleme` MAVI ama SAGLIKLI
+   oldugu icin yanlis okunmasi kolay.
+
+   z-index 10001: modal (10000) ve toast (9999) DAHIL her seyin ustunde.
+   Rozet ve nokta modallerin icinde de gorunuyor; altta kalirsa ipucu tam da
+   ihtiyac duyuldugu yerde gorunmez olurdu.
+
+   `pointer-events: none`: kutu farenin altina girip `mouseleave`
+   tetiklemesin — yoksa ipucu acilir acilmaz kendini kapatir (titreme). */
+.runtime-tip {
+  position: fixed;
+  z-index: 10001;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  max-width: 268px;
+  min-width: 180px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  /* Solda durumun KENDI RENGI: aciklamayi rengin yanina koymak, ikisi
+     arasindaki bagi kurar. Renksiz bir kutu adi soyler ama rengi aciklamaz. */
+  border-left: 3px solid var(--rt);
+  background: #0f172a;
+  color: #e2e8f0;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.4);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  animation: runtime-tip-gir 90ms ease-out;
+}
+
+/* Ustte yer yoksa asagi acilir; ok da yon degistirir. */
+.runtime-tip--altta { transform: translate(-50%, 0); }
+
+/* Ok ucu — kutunun hangi ogeyi anlattigi belli olsun. */
+.runtime-tip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  margin-left: -5px;
+  border: 5px solid transparent;
+  top: 100%;
+  border-top-color: #0f172a;
+}
+.runtime-tip--altta::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: #0f172a;
+}
+
+.runtime-tip__bas {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+/* Rengin ta kendisi — kullanicinin ekranda gordugu nokta ile AYNI. */
+.runtime-tip__nokta {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--rt);
+  flex: 0 0 auto;
+}
+
+.runtime-tip__ad {
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+/* KOVA ROZETI — rengi anlama ceviren asil parca: mavi de yesil de
+   "Saglikli" der. Operator "mavi ariza mi?" diye dusunmesin. */
+.runtime-tip__kova {
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: var(--rt-soft);
+  color: var(--rt);
+  white-space: nowrap;
+}
+
+.runtime-tip__metin {
+  margin: 0;
+  color: #cbd5e1;
+}
+
+/* Durum gateway'in ANLIK karari degilse (bayat gozlem ya da eski gateway). */
+.runtime-tip__kaynak {
+  margin: 6px 0 0;
+  padding-top: 6px;
+  border-top: 1px solid rgba(148, 163, 184, 0.25);
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+@keyframes runtime-tip-gir {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Hareketi azalt tercihinde animasyon yok. */
+@media (prefers-reduced-motion: reduce) {
+  .runtime-tip { animation: none; }
+}
+
+/* Tetikleyici odaklanabilir oldu (klavye erisimi). Odak halkasi durumun
+   kendi renginde olsun ki hangi ogeye bakildigi belli olsun. */
+.runtime-dot:focus-visible,
+.runtime-chip:focus-visible {
+  outline: 2px solid var(--rt);
+  outline-offset: 2px;
+}
+
 /* Nokta — liste satiri, kart basligi, agac satiri. Boyut/yerlesim cagiran
    ekranin kendi sinifindan gelir (`device-status-dot`, `device-tree-dot`...);
    burasi yalnizca RENGI verir, boylece mevcut yerlesimler bozulmaz. */

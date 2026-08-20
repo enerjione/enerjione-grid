@@ -55,6 +55,7 @@ import {
 import { isKitModel } from "../../shared/types";
 import { deviceRuntimeStateOf } from "../../shared/deviceRuntimeState";
 import { runtimeToneClass } from "../../components/RuntimeStateChip";
+import { RuntimeTip } from "../../components/RuntimeTooltip";
 import type { DeviceRow, Line, LineDetail, LineSegment, Pole, Region, TopologyRole } from "../../shared/types";
 import { cihazEtiketi, cihazKodu } from "./deviceLabel";
 import { slotNoktasi, slotOrani } from "./slotProjection";
@@ -2206,10 +2207,10 @@ function SegmentContextMenu({
                         ) : null}
                         {/* Metin ARTIK HARDCODE DEGIL: alti durumun etiketi
                             i18n'den, rengi tek normalizerin tonundan gelir. */}
-                        <span className={`seg-menu-device-status ${runtimeToneClass(durum)}`}>
+                        <RuntimeTip state={durum} className="seg-menu-device-status">
                           <span className="dot" />
                           {t(durum.labelKey)}
-                        </span>
+                        </RuntimeTip>
                       </div>
                     </div>
                     <div className="seg-menu-device-actions">
@@ -2295,10 +2296,10 @@ function SegmentContextMenu({
                           {d.gatewayCode ? (
                             <span className="seg-menu-device-gw">{d.gatewayCode}</span>
                           ) : null}
-                          <span className={`seg-menu-device-status ${runtimeToneClass(durum)}`}>
+                          <RuntimeTip state={durum} className="seg-menu-device-status">
                             <span className="dot" />
                             {t(durum.labelKey)}
-                          </span>
+                          </RuntimeTip>
                         </div>
                       </div>
                       <span className="seg-menu-pickable-arrow material-symbols-outlined">
