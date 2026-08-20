@@ -1170,6 +1170,11 @@ def _update_event(
 
     Yalnizca "guncelleme istendi" yazmak denetim sorusunu cevaplamiyordu:
     hangi surumden hangisine gecildi, kim baslatti, hedefin digest'i neydi?
+
+    `i18n_key` diger tum gateway olaylariyla AYNI nedenle veriliyor: ham
+    `message` Turkce sabittir; anahtar olmadan Ingilizce arayuz ve PDF/Excel
+    export'u ekranda gorunenden BASKA bir metin yazardi (bkz.
+    `test_event_export_labels`).
     """
     record_event(
         db,
@@ -1186,6 +1191,17 @@ def _update_event(
             "to_image": durum.target_image,
             "expected_digest": durum.expected_digest,
             "is_rollback": durum.is_rollback,
+        },
+        i18n_key=event_type,
+        i18n_params={
+            "name": gateway.name,
+            "code": gateway.code,
+            # Bilinmeyen surum "?" olarak gecer — bos birakmak sablonda
+            # " → " etrafinda anlamsiz bir bosluk birakirdi. Dile bagli bir
+            # yedek metin (or. "en guncel") KULLANILMIYOR: param degeri
+            # cevrilmez, Ingilizce arayuzde Turkce kelime olarak kalirdi.
+            "from": durum.from_version or "?",
+            "to": durum.target_version or "?",
         },
     )
 
