@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { DialInApplyStatus, Dnp3ExtendedSettings, SessionPolicy } from "../../shared/types";
+import type { DialInReadbackStatus, Dnp3ExtendedSettings, SessionPolicy } from "../../shared/types";
 import {
   COMMUNICATION_GRACE_MIN_DEFAULT,
   COMMUNICATION_GRACE_MIN_MAX,
@@ -25,8 +25,8 @@ type Props = {
   /** Dial-In'in cihazda GECERLI olup olmadigi. Form bunu kendisi CEKMEZ:
    *  saf kalir, veriyi paneli ceker ve prop olarak gecer. Tanimsizsa
    *  (istek basarisiz / cihazda dosya yok) blok HIC cizilmez — eksik veriyi
-   *  "uygulandi" gibi gostermektense hic gostermemek dogru taraftir. */
-  dialInDurumu?: { appliedMin: number | null; status: DialInApplyStatus };
+   *  "eslesiyor" gibi gostermektense hic gostermemek dogru taraftir. */
+  dialInDurumu?: { readbackMin: number | null; status: DialInReadbackStatus };
   /** Gateway'in bildirdigi surum.
    *
    *  UC DURUM: `undefined` = henuz sorulmadi (uyari cizilmez), `null` =
@@ -173,18 +173,18 @@ export function Dnp3SettingsForm({
   const dialInFarkli =
     dialInDurumu !== undefined &&
     dialIn !== null &&
-    dialInDurumu.appliedMin !== null &&
-    dialIn !== dialInDurumu.appliedMin;
+    dialInDurumu.readbackMin !== null &&
+    dialIn !== dialInDurumu.readbackMin;
 
   // Anahtarlar SABIT yazili: dinamik olarak uretilen ceviri anahtarlari,
   // dil dosyasindan biri dustugunde ekrana ham anahtar dusurur ve hicbir
   // test bunu yakalayamaz.
   const dialInDurumEtiketi =
-    dialInDurumu?.status === "uygulandi"
-      ? t("engineering.dnp3.dialInStatusApplied")
-      : dialInDurumu?.status === "bekliyor"
-        ? t("engineering.dnp3.dialInStatusPending")
-        : t("engineering.dnp3.dialInStatusUnverified");
+    dialInDurumu?.status === "eslesiyor"
+      ? t("engineering.dnp3.dialInStatusMatched")
+      : dialInDurumu?.status === "farkli"
+        ? t("engineering.dnp3.dialInStatusDiffers")
+        : t("engineering.dnp3.dialInStatusNone");
 
   // Gateway yetenek kapisi. Kural backend `gateway_compatibility.py`nin
   // aynasidir (bkz. shared/gatewayCapabilities.ts); surum henuz sorulmadiysa
@@ -326,7 +326,7 @@ export function Dnp3SettingsForm({
                 className={`dnp3-status-block${dialInFarkli ? " dnp3-status-block--warn" : ""}`}
               >
                 <div className="dnp3-status-row">
-                  <span className="dnp3-status-key">{t("engineering.dnp3.dialInDesired")}</span>
+                  <span className="dnp3-status-key">{t("engineering.dnp3.dialInConfigured")}</span>
                   <span className="dnp3-status-val">
                     {dialIn === null
                       ? t("engineering.dnp3.dialInIntervalUnset")
@@ -336,9 +336,9 @@ export function Dnp3SettingsForm({
                 <div className="dnp3-status-row">
                   <span className="dnp3-status-key">{t("engineering.dnp3.dialInVerified")}</span>
                   <span className="dnp3-status-val">
-                    {dialInDurumu.appliedMin === null
+                    {dialInDurumu.readbackMin === null
                       ? DEGER_YOK
-                      : dialInEtiket(dialInDurumu.appliedMin)}
+                      : dialInEtiket(dialInDurumu.readbackMin)}
                   </span>
                 </div>
                 <div className="dnp3-status-row">

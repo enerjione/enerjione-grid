@@ -871,14 +871,13 @@ def test_v114_only_alanlar_eski_gatewaye_GONDERILMEZ(db, gateway, kurulumcu):
     assert eski["dial_in_interval_min"] is None
     assert eski["smart_listen_reconnect_max_sec"] is None
 
-    # 1.14.0'da reconnect tavani gider. Dial-In ise KANITA baglidir:
-    # cihaz kendi dosyasini yazmadan istenen deger GONDERILMEZ
-    # (bkz. `gateway_dial_in` — yanlis ana gore gecikme olcmemek icin).
+    # 1.14.0'da ikisi de gider. Dial-In OTORITESI cihaz ayarlaridir: readback
+    # BEKLENMEZ (2026-08-20 urun karari — saha readback'i guvenilir degil).
     _gateway_surumunu_ayarla(db, "1.14.0")
     yeni = next(d for d in _config_govdesi(db)["devices"] if d["code"] == "DEV-DIAL")
     assert yeni["smart_listen_reconnect_max_sec"] == 30
-    assert yeni["dial_in_interval_min"] is None, (
-        "cihazdan okuma kaniti yokken istenen Dial-In gateway'e gonderildi"
+    assert yeni["dial_in_interval_min"] == 240, (
+        "yapilandirilan Dial-In gateway'e gonderilmedi"
     )
 
 
@@ -986,11 +985,14 @@ def test_dial_in_cihaz_ayarindan_degisince_CONFIG_REVIZYONU_uretilir(
     assert parse(bytes(yeni.raw)).checksum_valid is True
 
 
-def test_dial_in_apply_BEKLERKEN_gatewaye_ESKI_deger_gider(db, gateway, kurulumcu):
-    """ASIL DOGRULUK SARTI (§4).
+def test_dial_in_gatewaye_YAPILANDIRILAN_deger_gider(db, gateway, kurulumcu):
+    """Eski readback yeni secimi EZMEZ (2026-08-20 urun karari).
 
-    Kullanici 240 istedi, cihaz hala 60 ile raporluyor. Gateway'e 240
-    gonderilirse gercekten olmus bir cihaz 4 saat SAGLIKLI gorunur.
+    Bu test onceki surumde TERSINI iddia ediyordu: readback 60 iken gateway'e
+    de 60 gitmesini bekliyordu. O tasarim readback'in guvenilir olmasina
+    dayaniyordu; sahada oyle olmadigi icin dogru yapilandirilmis cihazlarda
+    Dial-In farkindali takip HIC devreye girmiyordu. Otorite artik Cihaz
+    Ayarlari; readback yalnizca tanilama.
     """
     cihaz = _cihaz_ekle(
         db,
@@ -1015,11 +1017,12 @@ def test_dial_in_apply_BEKLERKEN_gatewaye_ESKI_deger_gider(db, gateway, kurulumc
     )
 
     yayin = next(d for d in _config_govdesi(db)["devices"] if d["code"] == "DEV-PEND")
-    assert yayin["dial_in_interval_min"] == 60, (
-        "cihaz henuz uygulamadan istenen Dial-In gateway'e gonderildi"
+    assert yayin["dial_in_interval_min"] == 240, (
+        "eski readback (60) yeni yapilandirmayi (240) ezdi"
     )
 
-    # Cihaz yeni degeri KENDI dosyasina yazinca kanit olusur.
+    # Cihaz sonradan yeni degeri kendi dosyasina yazsa da sonuc DEGISMEZ:
+    # readback zaten karara girmiyor, yalnizca tanilama.
     _config_surumu_ver(db, cihaz.id, 240, "cihazdan_cekildi")
     yayin2 = next(d for d in _config_govdesi(db)["devices"] if d["code"] == "DEV-PEND")
     assert yayin2["dial_in_interval_min"] == 240

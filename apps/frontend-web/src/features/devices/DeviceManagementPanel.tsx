@@ -7,7 +7,7 @@ import i18n from "../../shared/i18n";
 import type {
   DeviceModelOption,
   DeviceRow,
-  DialInApplyStatus,
+  DialInReadbackStatus,
   Dnp3ExtendedSettings,
   Gateway,
   GatewayAgentStatus,
@@ -589,10 +589,10 @@ export function DeviceManagementPanel({
   // olarak gecer — form saf kalir, tek isi ayar yazmaktir.
   //
   // `undefined` = SORULMADI/OGRENILEMEDI. Blok cizilmez; eksik veriyi
-  // "uygulandi" ya da "sorun yok" gibi gostermek, bu iki ozelligin kapatmak
+  // "eslesiyor" ya da "sorun yok" gibi gostermek, bu iki ozelligin kapatmak
   // icin var oldugu hata sinifinin ta kendisidir.
   const [dialInDurumu, setDialInDurumu] = useState<
-    { appliedMin: number | null; status: DialInApplyStatus } | undefined
+    { readbackMin: number | null; status: DialInReadbackStatus } | undefined
   >(undefined);
   // Gateway surumu UC DURUMLU: undefined = sorulmadi, null = soruldu ama
   // gateway bildirmedi (uyari "bilinmiyor" der), metin = bildirilen surum.
@@ -616,7 +616,7 @@ export function DeviceManagementPanel({
         // okunmus bir kanit da yok. Bu bir HATA degil, olagan bir baslangic
         // durumu; blok yine de cizilmez.
         setDialInDurumu(
-          cfg ? { appliedMin: cfg.dialInAppliedMin, status: cfg.dialInApplyStatus } : undefined
+          cfg ? { readbackMin: cfg.dialInReadbackMin, status: cfg.dialInReadbackStatus } : undefined
         );
       } catch {
         // Okunamadi — sessiz. Cihaz kaydetmeyi engellemez, yalnizca kanit

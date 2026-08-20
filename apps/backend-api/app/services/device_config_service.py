@@ -684,50 +684,49 @@ def uygulanan_dial_in(db: Session, device_id: int) -> int | None:
         return None
 
 
-def gateway_dial_in(db: Session, device_id: int, istenen: int | None) -> int | None:
-    """Gateway'e GONDERILECEK Dial-In — cihazda gecerli olan, istenen DEGIL.
+def gateway_dial_in(db: Session, device_id: int, yapilandirilan: int | None) -> int | None:
+    """Gateway'e GONDERILECEK Dial-In — CIHAZ AYARLARINDA secilen deger.
 
-    ASIL RISK BUDUR. Gateway bu degerle "rapor gecikti mi" hesabini yapar.
-    Istenen degeri erken gondermek iki yonde de yanlis olcum uretir:
+    URUN KARARI (2026-08-20, onceki karari DEGISTIRIR)
+    -------------------------------------------------
+    Otorite Device Settings'tir. Onceki tasarim gateway'e yalnizca cihazin
+    KENDI dosyasindan okunan (readback) degeri gonderiyor, kanit yoksa None
+    birakiyordu. Gerekce saglamdi ama VARSAYIMI sahada tutmadi: fiziksel
+    config readback yeterince guvenilir degil. Sonuc, dogru yapilandirilmis
+    cihazlarda Dial-In farkindali gecikme takibinin — hicbir sey bozuk
+    olmadigi halde — HIC devreye girmemesiydi.
 
-      * cihaz 60 dk'da raporluyorken gateway 240 beklerse, gercekten olmus
-        bir cihaz 4 saat boyunca SAGLIKLI gorunur;
-      * cihaz 240 dk'da raporluyorken gateway 60 beklerse, saglikli cihaz
-        surekli GECIKMIS damgasi yer ve operator alarmlara guvenmeyi birakir.
+    Artik operatorun sectigi deger dogrudan gecerlidir: readback beklenmez,
+    eksik readback yuzunden None'a DUSULMEZ ve eski readback yeni secimi
+    EZMEZ.
 
-    KURAL: yalnizca cihazin kendi dosyasindan okunan deger gonderilir. Kanit
-    yoksa None -> gateway Dial-In farkindali gecikme takibini yapmaz ve
-    kendi sessizlik esigine duser. "Bilmiyorum" durumunda ozelligi
-    KAPATMAK, yanlis ana gore alarm uretmekten guvenlidir.
-
-    `istenen` yalnizca su durumda kullanilir: cihazdan okunan deger ile
-    ISTENEN AYNI ise (yani uygulama tamamlanmis). Farkliysa okunan kazanir.
+    Readback tamamen atilmadi ama rolu degisti: yalnizca TANILAMA bilgisidir
+    (bkz. `dial_in_readback_durumu`) ve hicbir gateway kararina girmez.
     """
-    uygulanan = uygulanan_dial_in(db, device_id)
-    if uygulanan is None:
-        return None
-    if istenen is not None and istenen == uygulanan:
-        return uygulanan
-    return uygulanan
+    return yapilandirilan
 
 
-def dial_in_uygulama_durumu(
-    db: Session, device_id: int, istenen: int | None
+def dial_in_readback_durumu(
+    db: Session, device_id: int, yapilandirilan: int | None
 ) -> tuple[str, int | None]:
-    """(durum, cihazdaki_deger) — arayuzun "istenen vs cihazdaki" gosterimi.
+    """(durum, cihazdan_okunan) — YALNIZCA TANILAMA.
 
-    Durumlar mevcut altyapinin verebilecegi kadar: yeni bir durum makinesi
-    KURULMADI.
+    Bu fonksiyonun donusu hicbir gateway/saglik kararina GIRMEZ. Amaci tek:
+    operatore "cihazin kendi dosyasinda ne yaziyor" bilgisini vermek.
 
-      * `bilinmiyor` — cihaz henuz kendi dosyasini yazmadi; ne dogrulayabilir
-        ne yalanlayabiliriz. "Uygulandi" demek uydurmak olurdu.
-      * `uygulandi`  — cihazdan okunan deger istenenle AYNI.
-      * `bekliyor`   — ikisi farkli; dosya gonderildi ama cihaz henuz
-        yansitmadi (ya da uygulamadi).
+    Readback saha kosullarinda guvenilir olmadigi icin buradaki `farkli`
+    sonucu bir ARIZA IDDIASI DEGILDIR — cihaz dosyasini henuz yazmamis,
+    eski bir kopya yazmis ya da hic yazmamis olabilir. Arayuz bunu
+    "uygulanmadi" diye sunmamali; adlandirma da bu yuzden `applied` degil
+    `readback`.
+
+      * `yok`        — cihazdan gelen bir dosya hic gorulmedi.
+      * `eslesiyor`  — okunan deger yapilandirilanla ayni.
+      * `farkli`     — okunan deger farkli (bilgi amacli).
     """
-    uygulanan = uygulanan_dial_in(db, device_id)
-    if uygulanan is None:
-        return ("bilinmiyor", None)
-    if istenen is None or istenen == uygulanan:
-        return ("uygulandi", uygulanan)
-    return ("bekliyor", uygulanan)
+    okunan = uygulanan_dial_in(db, device_id)
+    if okunan is None:
+        return ("yok", None)
+    if yapilandirilan is None or okunan == yapilandirilan:
+        return ("eslesiyor", okunan)
+    return ("farkli", okunan)

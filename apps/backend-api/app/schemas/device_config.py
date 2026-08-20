@@ -72,14 +72,16 @@ class ConfigCurrentRead(BaseModel):
     # Arayuz "kaydettim = sahada gecerli" izlenimi VERMEMELI. Bu uc alan o
     # ayrimi tasir; ucu de tek kaynaktan (`device_config_service`) gelir.
     #
-    #: Operatorun sectigi deger (`dnp3_extended.dial_in_interval_min`).
-    dial_in_desired_min: int | None = None
-    #: Cihazin KENDI yazdigi dosyadan okunan deger — fiziksel gercek. Kanit
-    #: yoksa None ve arayuz "Bilinmiyor" der; "Uygulandi" DEMEZ.
-    dial_in_applied_min: int | None = None
-    #: `uygulandi` | `bekliyor` | `bilinmiyor`. Yeni bir durum makinesi
-    #: degil, mevcut kanitin dogrudan ifadesi.
-    dial_in_apply_status: str = "bilinmiyor"
+    #: OTORITE: operatorun Cihaz Ayarlari'nda sectigi deger. Gateway'in
+    #: gecikme hesabi da, cihaza yazilan `2010C6` da budur.
+    dial_in_configured_min: int | None = None
+    #: Cihazin KENDI yazdigi dosyadan okunan deger — YALNIZCA TANILAMA.
+    #: Saha kosullarinda readback guvenilir degil, bu yuzden hicbir gateway
+    #: karari buna dayanmaz. Adlandirma bilerek `applied` DEGIL.
+    dial_in_readback_min: int | None = None
+    #: `eslesiyor` | `farkli` | `yok`. `farkli` bir ARIZA IDDIASI DEGILDIR:
+    #: cihaz dosyasini henuz yazmamis ya da eski bir kopya yazmis olabilir.
+    dial_in_readback_status: str = "yok"
 
 
 class ConfigDiffRow(BaseModel):

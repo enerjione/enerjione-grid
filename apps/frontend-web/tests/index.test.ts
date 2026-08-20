@@ -126,6 +126,12 @@ import "./operationMode.test";
 // derken payload sessizce dusurulur ve kimse bir hata gormez.
 import "./dialInGatewayUyumluluk.test";
 
+// Ayni iki ozelligin DAVRANIS tarafi: surum karsilastirmasi SAYISAL olmali
+// ("1.9.0" leksikografik olarak "1.14.0"dan buyuk gorunur ve eski bir
+// gateway sessizce "yeterli" sayilir), Dial-In kaniti uc durumlu kalmali ve
+// kanit yokken hicbir metin ayarin sahada gecerli oldugunu soylememeli.
+import "./gatewayUyumlulukVeDialInDurumu.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   connectionIsDead,

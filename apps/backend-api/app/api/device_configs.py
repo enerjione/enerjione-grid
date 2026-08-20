@@ -191,22 +191,23 @@ def guncel_config(
             _TL.signal_key == "master.info_last_configuration_update",
         )
     ).scalar()
-    # Dial-In: istenen (cihaz ayarindan) ile cihazda GECERLI olan ayri ayri
-    # bildirilir — arayuz "kaydettim = sahada gecerli" izlenimi vermemeli.
+    # Dial-In: YAPILANDIRILAN (otorite) ile cihazdan OKUNAN (tanilama) ayri
+    # bildirilir. Readback saha kosullarinda guvenilir olmadigi icin hicbir
+    # gateway karari ona dayanmaz; yalnizca operatore gosterilir.
     _ayar = merge_dnp3_extended(
         cihaz.dnp3_extended if isinstance(cihaz.dnp3_extended, dict) else None
     )
-    _istenen = _ayar.dial_in_interval_min
-    _durum, _uygulanan = svc.dial_in_uygulama_durumu(db, device_id, _istenen)
+    _yapilandirilan = _ayar.dial_in_interval_min
+    _durum, _okunan = svc.dial_in_readback_durumu(db, device_id, _yapilandirilan)
 
     return ConfigCurrentRead(
         version=_version_read(surum, raw),
         filename=dosya_adi,
         rows=svc.describe(raw),
         device_last_update=(son_guncelleme or None),
-        dial_in_desired_min=_istenen,
-        dial_in_applied_min=_uygulanan,
-        dial_in_apply_status=_durum,
+        dial_in_configured_min=_yapilandirilan,
+        dial_in_readback_min=_okunan,
+        dial_in_readback_status=_durum,
     )
 
 

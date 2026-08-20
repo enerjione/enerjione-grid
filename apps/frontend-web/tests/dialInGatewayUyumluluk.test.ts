@@ -108,7 +108,7 @@ test("1.14.0 altindaki her surum EKSIK", () => {
 test("BILINMEYEN surum eksik sayilir — guvenli taraf", () => {
   // Backend de oyle yapiyor: bildirmemis bir gateway'e `auto` gondermek TUM
   // config'i reddettirebilir ve o gateway'deki BUTUN cihazlari dondurur.
-  for (const bilinmeyen of [null, "", "   ", "bilinmiyor"]) {
+  for (const bilinmeyen of [null, "", "   ", "yok"]) {
     assert.deepEqual(
       missingCapabilities("auto", "listening", bilinmeyen),
       ["smart_auto", "smart_listening"],
@@ -183,7 +183,7 @@ test("'cihazdan dogrulanan' satiri ISTENEN degeri okumaz", () => {
   assert.ok(satir, "dogrulanan satiri bulunamadi");
   assert.match(
     satir[0],
-    /dialInDurumu\.appliedMin/,
+    /dialInDurumu\.readbackMin/,
     "dogrulanan satiri cihazdan gelen degeri okumuyor"
   );
   assert.ok(
@@ -195,7 +195,7 @@ test("'cihazdan dogrulanan' satiri ISTENEN degeri okumaz", () => {
 test("dogrulanan yoksa tire basilir, sifir/bos DEGIL", () => {
   assert.match(
     FORM,
-    /dialInDurumu\.appliedMin === null\s*\?\s*DEGER_YOK/,
+    /dialInDurumu\.readbackMin === null\s*\?\s*DEGER_YOK/,
     "kanit yokken bosluk/0 basiliyor — ikisi de 'ayar yok' gibi okunur"
   );
 });
@@ -206,8 +206,8 @@ test("ayrisma yalnizca IKI TARAF DA BILINIYORKEN 'farkli' der", () => {
   const karar = /const dialInFarkli =([\s\S]*?);/.exec(FORM);
   assert.ok(karar, "ayrisma karari bulunamadi");
   assert.match(karar[1], /dialIn !== null/);
-  assert.match(karar[1], /dialInDurumu\.appliedMin !== null/);
-  assert.match(karar[1], /dialIn !== dialInDurumu\.appliedMin/);
+  assert.match(karar[1], /dialInDurumu\.readbackMin !== null/);
+  assert.match(karar[1], /dialIn !== dialInDurumu\.readbackMin/);
 });
 
 test("form KENDI veri cekmez — saf kalir", () => {
@@ -242,12 +242,12 @@ test("panel surumu ogrenemezse BILINMIYOR der, 'guncel' demez", () => {
 // -------------------------------------------------------------- 5) i18n
 
 const YENI_ANAHTARLAR = [
-  "dialInDesired",
+  "dialInConfigured",
   "dialInVerified",
   "dialInStatus",
-  "dialInStatusApplied",
-  "dialInStatusPending",
-  "dialInStatusUnverified",
+  "dialInStatusMatched",
+  "dialInStatusDiffers",
+  "dialInStatusNone",
   "dialInMismatch",
   "gatewayCompatWarn",
   "gatewayVersionUnknown",
@@ -276,21 +276,28 @@ test("uyari metni surumu ve mevcut gateway'i DEGISKENDEN alir", () => {
   }
 });
 
-test("dogrulanmamis durum, uygulanmis durumdan AYIRT EDILIR", () => {
-  // Ucu de ayri bir kanit seviyesidir; ikisi ayni metne dusseydi operator
-  // "kaydettim" ile "cihazda gecerli"yi ekranda ayirt edemezdi.
+test("readback durumlari BIRBIRINDEN ayrilir ama ARIZA iddia ETMEZ", () => {
+  // NE DEGISTI (2026-08-20 urun karari): readback artik OTORITE DEGIL,
+  // yalnizca tanilama. Bu test eskiden metinlerin "bekleniyor" demesini
+  // ZORUNLU kiliyordu; o ifade "ayar henuz gecerli degil" anlamina gelir ve
+  // artik YANLISTIR — yapilandirilan deger aninda gecerlidir.
+  //
+  // Korunan sey degismedi: uc durum ekranda ayirt edilebilmeli. Eklenen
+  // sart: hicbiri ariza/bekleme iddia etmemeli.
   for (const [ad, sozluk] of [["tr", TR], ["en", EN]] as const) {
     const d = sozluk.engineering.dnp3;
-    for (const k of ["dialInStatusPending", "dialInStatusUnverified"]) {
-      assert.notEqual(
+    const metinler = [d.dialInStatusMatched, d.dialInStatusDiffers, d.dialInStatusNone];
+    assert.equal(
+      new Set(metinler).size,
+      3,
+      `${ad}: uc readback durumu ekranda ayirt edilemiyor`
+    );
+    for (const k of ["dialInStatusDiffers", "dialInStatusNone"]) {
+      assert.doesNotMatch(
         d[k],
-        d.dialInStatusApplied,
-        `${ad}: ${k} ile uygulandi ayni metin — kanit seviyeleri ayrisamiyor`
-      );
-      assert.match(
-        d[k],
-        /(bekleniyor|waiting)/i,
-        `${ad}.${k}: dogrulanmamis durum beklendigini SOYLEMIYOR`
+        /(bekleniyor|waiting|uygulanmadi|not applied|basarisiz|failed)/i,
+        `${ad}.${k}: readback tanilamasi ARIZA/BEKLEME iddia ediyor — ` +
+          "yapilandirilan deger zaten gecerli, bu metin operatoru yaniltir"
       );
     }
   }

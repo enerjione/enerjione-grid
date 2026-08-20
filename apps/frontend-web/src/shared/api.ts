@@ -3691,7 +3691,7 @@ import type {
   ConfigRow,
   ConfigTemplate,
   ConfigVersion,
-  DialInApplyStatus
+  DialInReadbackStatus
 } from "./types";
 
 type ApiConfigRow = {
@@ -3730,28 +3730,28 @@ export async function fetchDeviceConfig(token: string, deviceId: number): Promis
   const data = (await response.json()) as {
     version: ApiConfigVersion; filename: string | null; rows: ApiConfigRow[];
     device_last_update?: string | null;
-    dial_in_desired_min?: number | null;
-    dial_in_applied_min?: number | null;
-    dial_in_apply_status?: string | null;
+    dial_in_configured_min?: number | null;
+    dial_in_readback_min?: number | null;
+    dial_in_readback_status?: string | null;
   };
   return {
     version: mapConfigVersion(data.version),
     filename: data.filename,
     rows: data.rows.map(mapConfigRow),
     deviceLastUpdate: data.device_last_update ?? null,
-    dialInDesiredMin: data.dial_in_desired_min ?? null,
-    dialInAppliedMin: data.dial_in_applied_min ?? null,
-    dialInApplyStatus: dialInApplyStatus(data.dial_in_apply_status)
+    dialInConfiguredMin: data.dial_in_configured_min ?? null,
+    dialInReadbackMin: data.dial_in_readback_min ?? null,
+    dialInReadbackStatus: dialInReadbackStatus(data.dial_in_readback_status)
   };
 }
 
-/** Bilinmeyen/eksik durum metni "bilinmiyor"a duser.
+/** Bilinmeyen/eksik durum metni "yok"a duser.
  *
- *  Backend alani duz `str` doner. Tanimadigimiz bir degeri "uygulandi"
- *  sayarsak arayuz, dogrulanmamis bir ayari sahada gecerli gibi gosterir —
- *  guvenli taraf her zaman "bilinmiyor". */
-function dialInApplyStatus(ham: string | null | undefined): DialInApplyStatus {
-  return ham === "uygulandi" || ham === "bekliyor" ? ham : "bilinmiyor";
+ *  Backend alani duz `str` doner. Tanimadigimiz bir degeri "eslesiyor"
+ *  saymak, hic okunmamis bir cihaz icin dogrulama iddiasinda bulunmak
+ *  olurdu — guvenli taraf her zaman "yok". */
+function dialInReadbackStatus(ham: string | null | undefined): DialInReadbackStatus {
+  return ham === "eslesiyor" || ham === "farkli" ? ham : "yok";
 }
 
 /** Sablonun ayar satirlari — sablon duzenleyicisi cihaz kartiyla ayni izgara. */

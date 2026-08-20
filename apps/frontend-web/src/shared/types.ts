@@ -2302,11 +2302,15 @@ export type ConfigVersion = {
 
 /** Dial-In ayarinin cihazda gecerli olup olmadigi.
  *
- *  Yeni bir durum makinesi DEGIL, eldeki kanitin dogrudan ifadesi:
- *  `uygulandi` = cihazin kendi dosyasi istenen degeri gosteriyor,
- *  `bekliyor`  = dosya baska bir deger gosteriyor (ayar henuz gitmemis),
- *  `bilinmiyor`= cihazdan okunmus bir dosya YOK, iddia edilemez. */
-export type DialInApplyStatus = "uygulandi" | "bekliyor" | "bilinmiyor";
+ *  YALNIZCA TANILAMA. Saha kosullarinda cihaz readback'i guvenilir degil,
+ *  bu yuzden hicbir gateway/saglik karari buna dayanmaz — otorite Cihaz
+ *  Ayarlari'ndaki degerdir.
+ *
+ *  `eslesiyor` = cihazin dosyasi yapilandirilan degeri gosteriyor,
+ *  `farkli`    = baska bir deger gosteriyor (ARIZA IDDIASI DEGIL: cihaz
+ *                dosyasini henuz yazmamis ya da eski kopya yazmis olabilir),
+ *  `yok`       = cihazdan okunmus bir dosya hic gorulmedi. */
+export type DialInReadbackStatus = "eslesiyor" | "farkli" | "yok";
 
 export type ConfigCurrent = {
   version: ConfigVersion;
@@ -2318,15 +2322,14 @@ export type ConfigCurrent = {
   // (master.info_last_configuration_update). Komut sonrasi degistiyse
   // guncelleme cihazda GERCEKTEN uygulanmistir.
   deviceLastUpdate: string | null;
-  // --- Dial-In: ISTENEN vs CIHAZDAN DOGRULANAN ---
-  // Arayuz "kaydettim = sahada gecerli" izlenimi VERMEMELI; bu uc alan o
-  // ayrimi tasir (backend: ConfigCurrentRead).
-  //: Operatorun sectigi deger (dnp3_extended.dial_in_interval_min).
-  dialInDesiredMin: number | null;
-  //: Cihazin KENDI yazdigi dosyadan okunan deger — fiziksel gercek.
-  //: Kanit yoksa null; arayuz o zaman "Uygulandi" DEMEZ.
-  dialInAppliedMin: number | null;
-  dialInApplyStatus: DialInApplyStatus;
+  // --- Dial-In: YAPILANDIRILAN (otorite) vs CIHAZDAN OKUNAN (tanilama) ---
+  //: OTORITE: operatorun sectigi deger. Gateway'in gecikme hesabi da,
+  //: cihaza yazilan 2010C6 da budur.
+  dialInConfiguredMin: number | null;
+  //: Cihazin kendi dosyasindan okunan deger — YALNIZCA BILGI. Readback
+  //: saha kosullarinda guvenilir olmadigi icin karara girmez.
+  dialInReadbackMin: number | null;
+  dialInReadbackStatus: DialInReadbackStatus;
 };
 
 export type ConfigDiffRow = {
