@@ -23,10 +23,16 @@
  * Karar mantigi burada YOK: durum `shared/deviceRuntimeState.ts` icindeki tek
  * normalizerden gelir, bu dosya yalnizca cizer.
  */
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { DialInCountdown } from "../../components/DialInCountdown";
-import { RuntimeSourceNote, RuntimeStateChip } from "../../components/RuntimeStateChip";
+import {
+  RuntimeSourceNote,
+  RuntimeStateChip,
+  runtimeSourceReason
+} from "../../components/RuntimeStateChip";
+import { fetchGatewayUpdate } from "../../shared/api";
 import { formatDateTime } from "../../shared/format";
 import {
   deviceRuntimeStateOf,
@@ -66,6 +72,30 @@ function Row({
 
 export function DeviceRuntimePanel({ device }: Props) {
   const { t } = useTranslation();
+  // GATEWAY SURUMU — "saglik verisi neden yok" sorusunun dogru cevabi icin.
+  //
+  // UC DURUMLU: `undefined` = sorulmadi, `null` = soruldu ama gateway
+  // bildirmedi, metin = surum. Bilinmeyeni "eski" saymak sahada yanlis
+  // cikti: 1.15.0 kurulu gateway'de eksik olan yalnizca yayinci bayragiydi.
+  const [gatewaySurumu, setGatewaySurumu] = useState<string | null | undefined>(undefined);
+  const gwKod = device.gatewayCode ?? null;
+  useEffect(() => {
+    setGatewaySurumu(undefined);
+    if (!gwKod) return;
+    let iptal = false;
+    void (async () => {
+      try {
+        const durum = await fetchGatewayUpdate(gwKod);
+        if (!iptal) setGatewaySurumu(durum.current_version);
+      } catch {
+        // Soruldu ama ogrenilemedi -> `null`: iddiada bulunmayiz.
+        if (!iptal) setGatewaySurumu(null);
+      }
+    })();
+    return () => {
+      iptal = true;
+    };
+  }, [gwKod]);
   // Tek saat: DAKIKADA bir. Bayatlik esigi ve geri sayim ayni "simdi"yi
   // okur, yoksa rozet ile satir birbirini bir dakika boyunca yalanlardi.
   const now = useMinuteTick();
@@ -108,7 +138,7 @@ export function DeviceRuntimePanel({ device }: Props) {
         <div className="device-runtime-head-main">
           <span className="device-runtime-title">{t("deviceRuntime.panel.title")}</span>
           <RuntimeStateChip state={state} />
-          <RuntimeSourceNote state={state} />
+          <RuntimeSourceNote state={state} gatewayVersion={gatewaySurumu} />
         </div>
         {/* Geri sayim BASLIKTA: operatorun ilk baktigi yer burasi ve
             "gecikmis" ile "haberlesme kaybi" ayrimi orada goruluyor. */}
@@ -218,7 +248,10 @@ export function DeviceRuntimePanel({ device }: Props) {
               />
             </ul>
           ) : (
-            <p className="device-runtime-empty" title={t("deviceRuntime.source.legacyHint")}>
+            <p
+              className="device-runtime-empty"
+              title={t(`deviceRuntime.source.${runtimeSourceReason(gatewaySurumu)}Hint`)}
+            >
               {t("deviceRuntime.panel.noRuntime")}
             </p>
           )}

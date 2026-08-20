@@ -22,6 +22,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { DEVICE_RUNTIME_KEYS, normalizeDeviceRuntime } from "../src/shared/deviceRuntimeState";
+import { runtimeSourceReason } from "../src/components/RuntimeStateChip";
 import type { DeviceRuntimeStateKey } from "../src/shared/deviceRuntimeState";
 
 const oku = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8");
@@ -93,13 +94,30 @@ test("SMART_IDLE mavi ve SAGLIKLI — ipucunun duzeltmesi gereken sezgi", () => 
   assert.equal(d.bucket, "healthy");
   // Aciklama "ariza degildir" demeli; renk sezgiye aykiri oldugu icin
   // metnin bunu ACIKCA soylemesi gerekiyor.
-  assert.match(TR.deviceRuntime.stateHint.smartIdle, /arıza değildir|sağlıklı/i);
+  assert.match(TR.deviceRuntime.stateHint.smartIdle, /arıza değil|sağlıklı/i);
   assert.match(EN.deviceRuntime.stateHint.smartIdle, /not a fault|healthy/i);
 });
 
 // ---------------------------------------------------------------------------
 // 2. Kablo: ipucu ortak bilesende, ve rengi kullanan HER ekranda
 // ---------------------------------------------------------------------------
+
+test("ipucu metinleri KISA — operator icin, muhendis icin degil", () => {
+  // Ilk hali cok uzun ve teknikti ("cihaz bazinda calisma-zamani sagligi
+  // bildirmiyor (gateway 1.15.0 gerekir)"). Operator ekranda roman okumaz;
+  // uzun metin okunmadan gecilir ve ipucu islevsizlesir.
+  const uzunlar: string[] = [];
+  for (const sozluk of [TR, EN]) {
+    for (const [k, v] of Object.entries(sozluk.deviceRuntime.stateHint)) {
+      if ((v as string).length > 70) uzunlar.push(`stateHint.${k}: ${(v as string).length}`);
+    }
+    for (const k of ["legacyHint", "staleHint"]) {
+      const v = sozluk.deviceRuntime.source[k] as string;
+      if (v.length > 70) uzunlar.push(`source.${k}: ${v.length}`);
+    }
+  }
+  assert.deepEqual(uzunlar, [], `70 karakteri asan ipucu metni: ${uzunlar.join(" | ")}`);
+});
 
 test("nokta ve rozet ipucu kancasini kullaniyor", () => {
   const chip = okuSrc("components", "RuntimeStateChip.tsx");
@@ -215,5 +233,59 @@ test("noktanin bulundugu satirlar hala tek bir buton", () => {
       /RuntimeStateDot[^/]*focusable/,
       `${yol.join("/")}: buton icindeki nokta odaklanabilir yapilmis`
     );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// "Saglik verisi yok" — SEBEP dogru soylenmeli
+// ---------------------------------------------------------------------------
+
+test("GUNCEL gateway'e 'eski' DENMEZ — sebep yayinci bayragidir", () => {
+  // SAHADA YASANDI (2026-08-20, GW-002): gateway imaji 1.15.0 idi, eksik
+  // olan yalnizca `DEVICE_HEALTH_PUBLISH_ENABLED`. Arayuz yine de "Eski
+  // gateway" diyordu ve operatoru olmayan bir yukseltmeye yonlendiriyordu;
+  // asil yapilacak is (bayragi ac) hic gorunmuyordu.
+  assert.equal(runtimeSourceReason("1.15.0"), "publisherOff");
+  assert.equal(runtimeSourceReason("1.16.2"), "publisherOff");
+});
+
+test("GERCEKTEN eski gateway'de 'eski' denir", () => {
+  assert.equal(runtimeSourceReason("1.14.0"), "legacy");
+  assert.equal(runtimeSourceReason("1.11.4"), "legacy");
+});
+
+test("surum BILINMIYORSA iddiada bulunulmaz", () => {
+  // Bildirmemis bir gateway pekala guncel olabilir; "eski" demek uydurma.
+  assert.equal(runtimeSourceReason(null), "noReport");
+  assert.equal(runtimeSourceReason(undefined), "noReport");
+  assert.equal(runtimeSourceReason(""), "noReport");
+});
+
+test("uc sebebin de iki dilde metni var", () => {
+  for (const sonEk of ["legacy", "publisherOff", "noReport"]) {
+    for (const [ad, sozluk] of [["tr", TR], ["en", EN]] as const) {
+      for (const anahtar of [sonEk, `${sonEk}Hint`]) {
+        const v = sozluk.deviceRuntime.source?.[anahtar];
+        assert.ok(typeof v === "string" && v.trim().length > 0, `${ad}: source.${anahtar} yok`);
+      }
+    }
+  }
+});
+
+test("Baglanti kendi sekmesi — Genel Bakis'in ortasinda DEGIL", () => {
+  const sayfa = okuSrc("features", "device-detail", "DeviceDetailPage.tsx");
+  assert.match(sayfa, /key: "connection"/, "connection sekmesi yok");
+  assert.match(
+    sayfa,
+    /activeTab === "connection" \? <DeviceRuntimePanel/,
+    "panel kendi sekmesinde cizilmiyor"
+  );
+  assert.doesNotMatch(
+    sayfa,
+    /activeTab === "overview" \? <DeviceRuntimePanel/,
+    "panel hala Genel Bakis'in icinde"
+  );
+  for (const sozluk of [TR, EN]) {
+    assert.ok(sozluk.deviceDetail.tabs.connection, "sekme adi eksik");
   }
 });

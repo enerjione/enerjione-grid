@@ -4235,7 +4235,8 @@
       "trends": "Trendler",
       "events": "Olaylar",
       "all": "Tümü",
-      "poleMaster": "Pole Master"
+      "poleMaster": "Pole Master",
+      "connection": "Bağlantı"
     },
     "charts": {
       "signal": "Sinyal",
@@ -4847,19 +4848,23 @@
     },
     "stateHint": {
       "online": "Cihaz gateway ile konuşuyor.",
-      "smartIdle": "Modem kapalı. Smart modun beklenen ve sağlıklı durumudur; arıza değildir.",
-      "late": "Planlanan Dial-In raporu gecikti, sessizlik eşiği henüz dolmadı. Uyarıdır, haberleşme kaybı değildir.",
-      "recovering": "Gateway bağlantıyı yeniden kurmaya çalışıyor.",
-      "commLost": "Sessizlik eşiği aşıldı; cihazdan geçerli veri gelmiyor.",
-      "listenerError": "Gateway bu cihaz için dinleyiciyi açamadı.",
-      "unknown": "Durum bilinmiyor; bu “sorun yok” anlamına gelmez."
+      "smartIdle": "Modem uykuda. Beklenen durum, arıza değil.",
+      "late": "Rapor gecikti. Uyarı — bağlantı kopmuş değil.",
+      "recovering": "Gateway yeniden bağlanmaya çalışıyor.",
+      "commLost": "Cihazdan veri gelmiyor.",
+      "listenerError": "Gateway bu cihaz için dinleyici açamadı.",
+      "unknown": "Durum bilinmiyor. “Sorun yok” demek değil."
     },
     "source": {
-      "legacy": "Eski gateway",
-      "legacyHint": "Bu gateway cihaz bazında çalışma-zamanı sağlığı bildirmiyor (gateway 1.15.0 gerekir). Durum eski telemetri davranışından geliyor.",
+      "legacy": "Gateway raporu yok",
+      "legacyHint": "Gateway 1.15 gerekiyor; durum eski yöntemle bulundu.",
       "stale": "Bayat",
-      "staleHint": "Gateway uzun süredir çalışma-zamanı raporu göndermedi; son bilinen durum karara alınmadı.",
-      "lastKnown": "Son bilinen durum"
+      "staleHint": "Gateway bir süredir rapor göndermedi.",
+      "lastKnown": "Son bilinen durum",
+      "publisherOff": "Yayın kapalı",
+      "publisherOffHint": "Gateway 1.15 kurulu ama sağlık yayını kapalı.",
+      "noReport": "Gateway raporu yok",
+      "noReportHint": "Gateway bu cihaz için henüz durum göndermedi."
     },
     "countdown": {
       "dueIn": "Sonraki Dial-In: {{minutes}} dk",

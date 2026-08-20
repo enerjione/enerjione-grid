@@ -34,6 +34,9 @@
 /** v1.14.0 ile gelen yeteneklerin ortak alt siniri. */
 export const V114_MIN = "1.14.0";
 
+/** Cihaz basina calisma-zamani sagligi yetenegi (gateway 1.15.0). */
+export const RUNTIME_HEALTH_CAPABILITY = "device_runtime_health_transport";
+
 /**
  * Yetenek -> gerektirdigi EN DUSUK gateway surumu.
  *
@@ -44,7 +47,16 @@ export const V114_MIN = "1.14.0";
  */
 const YETENEK_EN_DUSUK_SURUM: Readonly<Record<string, string>> = {
   smart_auto: V114_MIN,
-  smart_listening: V114_MIN
+  smart_listening: V114_MIN,
+  // Cihaz basina calisma-zamani sagligi (`device_health_v1`, gateway PR #33).
+  //
+  // NEDEN BURADA: bu yetenek olmadan arayuz "saglik verisi yok"un SEBEBINI
+  // bilemez ve tek acikamayla yetinirdi ("eski gateway"). Oysa 1.15.0
+  // kurulu bir gateway'de yayinci VARSAYILAN OLARAK KAPALIDIR
+  // (`DEVICE_HEALTH_PUBLISH_ENABLED=false`), yani en sik karsilasilan durum
+  // "eski surum" DEGIL "kapali bayrak"tir. Guncel bir gateway'e "eski"
+  // demek operatoru olmayan bir yukseltmeye yonlendirir.
+  device_runtime_health_transport: "1.15.0"
 };
 
 /** Gateway'in uyku karari verdigi politikalar (backend: SMART_CAPABLE_POLICIES). */

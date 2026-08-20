@@ -4238,7 +4238,8 @@
       "trends": "Trends",
       "events": "Events",
       "all": "All",
-      "poleMaster": "Pole Master"
+      "poleMaster": "Pole Master",
+      "connection": "Connection"
     },
     "charts": {
       "signal": "Signal",
@@ -4853,20 +4854,24 @@
       "unknown": "Unknown"
     },
     "stateHint": {
-      "online": "The device is talking to the gateway.",
-      "smartIdle": "Modem is off. This is the expected, healthy Smart-mode state, not a fault.",
-      "late": "The scheduled Dial-In report is late but the silence threshold has not been reached. A warning, not a communication loss.",
-      "recovering": "The gateway is re-establishing the link.",
-      "commLost": "Silence threshold exceeded; no valid data from the device.",
-      "listenerError": "The gateway could not open a listener for this device.",
-      "unknown": "State is unknown; that does not mean “nothing is wrong”."
+      "online": "Device is talking to the gateway.",
+      "smartIdle": "Modem asleep. Expected — not a fault.",
+      "late": "Report is late. Warning — not a lost link.",
+      "recovering": "Gateway is trying to reconnect.",
+      "commLost": "No data coming from the device.",
+      "listenerError": "Gateway could not open a listener for this device.",
+      "unknown": "State unknown. Not the same as “all good”."
     },
     "source": {
-      "legacy": "Legacy gateway",
-      "legacyHint": "This gateway does not report per-device runtime health (gateway 1.15.0 required). The state comes from the legacy telemetry behaviour.",
+      "legacy": "No gateway report",
+      "legacyHint": "Needs gateway 1.15; state derived the old way.",
       "stale": "Stale",
-      "staleHint": "The gateway has not sent a runtime report for a long time; the last known state was not used for the decision.",
-      "lastKnown": "Last known state"
+      "staleHint": "Gateway hasn't reported for a while.",
+      "lastKnown": "Last known state",
+      "publisherOff": "Publishing off",
+      "publisherOffHint": "Gateway 1.15 is installed but health publishing is off.",
+      "noReport": "No gateway report",
+      "noReportHint": "Gateway hasn't sent a state for this device yet."
     },
     "countdown": {
       "dueIn": "Next Dial-In: {{minutes}} min",

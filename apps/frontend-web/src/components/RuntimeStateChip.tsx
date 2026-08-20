@@ -15,6 +15,7 @@
 import { useTranslation } from "react-i18next";
 
 import type { DeviceRuntimeState } from "../shared/deviceRuntimeState";
+import { RUNTIME_HEALTH_CAPABILITY, supportsCapability } from "../shared/gatewayCapabilities";
 import { useRuntimeTip } from "./RuntimeTooltip";
 
 /** Ton -> CSS sinifi. Sinifin kendisi `--rt*` degiskenlerini kurar. */
@@ -111,7 +112,15 @@ export function RuntimeStateChip({
  * Bayat/eski gateway durumunda ekranin "bu bilgi gateway'in ANLIK karari"
  * demeye hakki yoktur; o hakki geri almak icin var.
  */
-export function RuntimeSourceNote({ state }: { state: DeviceRuntimeState }) {
+export function RuntimeSourceNote({
+  state,
+  gatewayVersion
+}: {
+  state: DeviceRuntimeState;
+  /** Gateway'in bildirdigi surum. UC DURUMLU: `undefined` = sorulmadi,
+   *  `null` = soruldu ama gateway bildirmedi, metin = surum. */
+  gatewayVersion?: string | null;
+}) {
   const { t } = useTranslation();
   if (state.stale) {
     return (
@@ -124,14 +133,38 @@ export function RuntimeSourceNote({ state }: { state: DeviceRuntimeState }) {
     );
   }
   if (state.source !== "gateway") {
+    const sonEk = runtimeSourceReason(gatewayVersion);
     return (
-      <span className="runtime-note" title={t("deviceRuntime.source.legacyHint")}>
+      <span className="runtime-note" title={t(`deviceRuntime.source.${sonEk}Hint`)}>
         <span className="material-symbols-outlined" aria-hidden="true">
           info
         </span>
-        {t("deviceRuntime.source.legacy")}
+        {t(`deviceRuntime.source.${sonEk}`)}
       </span>
     );
   }
   return null;
+}
+
+/**
+ * Saglik verisi neden yok — GATEWAY SURUMUNE gore.
+ *
+ * Eskiden tek bir cevap vardi: "Eski gateway". Sahada YANLIS cikti: gateway
+ * 1.15.0 kuruluydu, eksik olan yalnizca yayinci bayragiydi
+ * (`DEVICE_HEALTH_PUBLISH_ENABLED`, varsayilan KAPALI). Guncel bir gateway'e
+ * "eski" demek operatoru olmayan bir yukseltmeye yonlendirir; asil yapilacak
+ * is (bayragi ac) hic gorunmez.
+ *
+ * Surum BILINMIYORSA (`null`/`undefined`) iddiada bulunulmaz: notr bir
+ * "rapor yok" denir. Bildirmemis bir gateway pekala guncel olabilir —
+ * `supportsCapability` de ayni uc durumlu mantigi kullaniyor.
+ */
+export function runtimeSourceReason(
+  gatewayVersion: string | null | undefined
+): "legacy" | "publisherOff" | "noReport" {
+  if (gatewayVersion == null) return "noReport";
+  const destek = supportsCapability(RUNTIME_HEALTH_CAPABILITY, gatewayVersion);
+  if (destek === false) return "legacy";       // surum gercekten eski
+  if (destek === true) return "publisherOff";  // surum yeterli -> bayrak kapali
+  return "noReport";                            // cozulemedi
 }

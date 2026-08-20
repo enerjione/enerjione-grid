@@ -49,7 +49,15 @@ type TopologyInfo =
   | { regionName: string; lineName: string; latitude?: number; longitude?: number }
   | undefined;
 
-type TabKey = "overview" | "all" | "poleMaster" | "trends" | "events" | "commands" | "config";
+type TabKey =
+  | "overview"
+  | "connection"
+  | "all"
+  | "poleMaster"
+  | "trends"
+  | "events"
+  | "commands"
+  | "config";
 
 type Props = {
   deviceId: number;
@@ -676,6 +684,12 @@ export function DeviceDetailPage({
 
   const tabs: { key: TabKey; icon: string; show: boolean }[] = [
     { key: "overview", icon: "dashboard", show: true },
+    // BAGLANTI: kendi sekmesi. Onceden "Genel Bakis"in ORTASINA gomulu
+    // duruyordu ve olcum kartlarini asagi itiyordu; operatorun o ekranda
+    // aradigi sey once OLCUM. Oturum/teshis ayri bir soru, ayri yerde
+    // durmali. Ikon `wifi` — subset fontunda ZATEN VAR (sidebar ve harita
+    // paneli kullaniyor), yani yeni ikon eklenmedi.
+    { key: "connection", icon: "wifi", show: true },
     { key: "all", icon: "table_rows", show: true },
     // KIT SEVIYESI: yalnizca bir Pole Master Kit setinde gorunur. Kitin
     // modem/GPS/besleme olcumleri uc setin ORTAK varligidir; setin kendi
@@ -809,13 +823,6 @@ export function DeviceDetailPage({
           </div>
         </div>
 
-        {/* BAGLANTI VE OTURUM — yapilandirma / calisma zamani / teshis ayrimi.
-            Genel bakisin USTUNDE duruyor: "cihaz su an ne durumda" sorusu
-            olcum degerlerinden ONCE cevaplanmali. `smart_idle` bir cihazda
-            olcumlerin bayat olmasi ARIZA DEGIL, uykunun sonucudur; bu kart
-            olmadan operator ayni ekrandan ters sonucu cikariyordu. */}
-        {activeTab === "overview" ? <DeviceRuntimePanel device={device} /> : null}
-
         {activeTab === "overview" ? (
           <OverviewTab
             token={token ?? ""}
@@ -841,6 +848,11 @@ export function DeviceDetailPage({
             t={t}
           />
         ) : null}
+
+        {/* BAGLANTI VE OTURUM — kendi sekmesi (yapilandirma / calisma
+            zamani / teshis). Genel Bakis'in icinde dururken olcum
+            kartlarini asagi itiyordu. */}
+        {activeTab === "connection" ? <DeviceRuntimePanel device={device} /> : null}
 
         {activeTab === "all" ? (
           <DeviceAllSignalsTab
