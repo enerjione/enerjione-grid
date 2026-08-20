@@ -41,6 +41,7 @@ import { DeviceEventsTable } from "./DeviceEventsTable";
 import { DeviceReportModal, type ReportSection } from "./DeviceReportModal";
 import { DeviceSidebar } from "./DeviceSidebar";
 import { modemDurumuCoz } from "./modemStatus";
+import { operationModeOf } from "./operationMode";
 import { Sparkline } from "./Sparkline";
 
 type TopologyInfo =
@@ -471,6 +472,20 @@ export function DeviceDetailPage({
   };
   const sidebarFirmware =
     fwStr ?? (fwNum != null && Number.isFinite(fwNum) ? fmtFirmware(fwNum) : undefined);
+  /** CALISMA MODU — `master.operation_mode` (binary): 1 = Akilli, 0 = Boost.
+   *
+   *  GUVENILIRLIK KAPISI, sayfanin geri kalaniyla AYNI kural: gateway kopuk
+   *  ya da kalite bloklayici ise mod HIC gosterilmez. Iki durumun ikisi de
+   *  gecerli bir mod oldugu icin burada "veri yok" ile "Boost" ayrimi
+   *  ozellikle onemli: haberlesme koptugunda gateway `comm_lost` kalitesiyle
+   *  0.0 basiyor ve naif bir okuma bunu "Boost Mode" diye gosterirdi — yani
+   *  cihaz akilli modda calisirken ekran tam TERSINI iddia ederdi. */
+  const opModeRow = rtuValueByKey.get("master.operation_mode");
+  const sidebarOperationMode = operationModeOf(
+    opModeRow?.value,
+    opModeRow?.quality,
+    gwOnline
+  );
   /** Bu cihazda OLCUM YAPAN uniteler.
    *
    *  SN 2.0'da ucuncu unite `master`dir; Pole Master Kit setinde ucu de
@@ -695,6 +710,7 @@ export function DeviceDetailPage({
         ip={sidebarIp}
         partNo={sidebarPartNo}
         firmware={sidebarFirmware}
+        operationMode={sidebarOperationMode}
         hasAlarm={hasActiveAlarm}
         alarmError={deviceAlarmsError}
         channelSerials={channelSerials}
