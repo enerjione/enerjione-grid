@@ -32,6 +32,28 @@ if not pg_target.pg_url():
 TABAN = "0071"
 
 
+def _kod_head() -> str:
+    """Zincirin GUNCEL head'i — literal YAZILMAZ.
+
+    Eskiden "0072" sabitti ve zincire eklenen her migration bu testleri,
+    asil iddialari hala dogruyken kirmiziya cevirdi (0073 ile yasandi).
+    Iddia "su surumdeyiz" degil, "`upgrade head` zinciri sonuna kadar
+    kosuyor". Ayni duzeltme IT13'te de yapilmisti.
+
+    Tek-head sarti burada DEGIL, `test_sema_otoritesi.test_A12` icinde
+    korunuyor; `get_current_head()` catallanma varsa zaten patlar.
+    """
+    from pathlib import Path
+
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    kok = Path(__file__).resolve().parents[2]
+    cfg = Config(str(kok / "alembic.ini"))
+    cfg.set_main_option("script_location", str(kok / "alembic_migrations"))
+    return ScriptDirectory.from_config(cfg).get_current_head()
+
+
 # --------------------------------------------------------------------------
 # Yardimcilar
 # --------------------------------------------------------------------------
@@ -188,8 +210,8 @@ def test_A16_mevcut_0071_semasi_0072ye_gecer_NOOP(iki_db, monkeypatch):
         rev = c.execute(text("select version_num from alembic_version")).scalar()
     e.dispose()
 
-    assert once == sonra, "0072 mevcut kurulumda tablo EKLEDI/DUSURDU"
-    assert rev == "0072"
+    assert once == sonra, "head'e yukseltme mevcut kurulumda tablo EKLEDI/DUSURDU"
+    assert rev == _kod_head()
 
 
 # --------------------------------------------------------------------------
@@ -207,7 +229,7 @@ def test_A14_0072_tekrar_upgrade_NOOP(iki_db, monkeypatch):
 
     e = create_engine(url)
     with e.connect() as c:
-        assert c.execute(text("select version_num from alembic_version")).scalar() == "0072"
+        assert c.execute(text("select version_num from alembic_version")).scalar() == _kod_head()
     e.dispose()
 
 
