@@ -205,6 +205,8 @@ services:
       # Outstation saat senkronizasyonu (RTC drift + guc kesintisi sonrasi reset).
       DNP3_TIME_SYNC: "lan"
       GATEWAY_PUBLISH_DNP3_QUALITY: "{{PUBLISH_DNP3_QUALITY}}"
+      # Cihaz basina calisma-zamani sagligi (1.15+); gerekce modul basinda.
+      DEVICE_HEALTH_PUBLISH_ENABLED: "true"
       # Log
       LOG_LEVEL: "INFO"
       LOG_FORMAT: "json"

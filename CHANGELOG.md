@@ -14,6 +14,28 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.107.1] — 2026-08-20
+
+### Düzeltildi
+
+- **Güncel gateway'e artık "eski" denmiyor.** Sahada gateway 1.15.0 kuruluyken
+  cihaz detayında "Eski gateway" yazıyordu; eksik olan sürüm değil, sağlık
+  yayını bayrağıydı. Sebep artık gateway sürümüne göre ayrıştırılıyor:
+  sürüm eskiyse "Gateway raporu yok", yeterliyse **"Yayın kapalı"**, sürüm
+  bilinmiyorsa iddiada bulunulmuyor.
+- **Cihaz sağlık yayını artık standart.** Grid'in ürettiği gateway
+  yapılandırmasında `DEVICE_HEALTH_PUBLISH_ENABLED` hep açık geliyor. Önceden
+  hiç yazılmıyordu; gateway 1.15 kurulu olsa bile kanal sessiz kalıyor ve
+  bütün cihazlar eski telemetri davranışına düşüyordu.
+
+### Değişti
+
+- **"Bağlantı ve Oturum" kendi sekmesine taşındı.** Genel Bakış'ın ortasında
+  durup ölçüm kartlarını aşağı itiyordu.
+- Durum ipucu metinleri kısaldı ve sadeleşti.
+
+---
+
 ## [2.107.0] — 2026-08-20
 
 ### Eklendi

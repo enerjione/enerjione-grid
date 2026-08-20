@@ -68,6 +68,19 @@ _PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
 #   * GATEWAY_PUBLISH_DNP3_QUALITY: kapaliyken her okuma "good" gider;
 #     acmak saha davranisini degistirir (kotu olcumler alarm yolundan
 #     bloke olur), operator karari — gateway ayarlarindan yonetilir.
+#   * DEVICE_HEALTH_PUBLISH_ENABLED: STANDART VE HEP "true". Ayara
+#     baglanmadi. Gateway'in KENDI varsayilani kapali ve o da dogru —
+#     tanimadigi bir backend'e her turda POST atip 404 toplamamali. Ama bu
+#     dosyayi URETEN taraf Grid ve Grid 2.107.0'dan beri
+#     `POST /gateways/{code}/device-health` ucunu tasiyor; kapali birakmak
+#     var olan bir ucu kendi kurdugumuz gateway'de kullanmamak olurdu.
+#     SAHADA YASANDI (2026-08-20, GW-002): gateway 1.15.0 + Grid 2.107.0
+#     kosuyordu, `device_runtime_health` yine de BOSTU ve arayuz her cihazi
+#     eski telemetri davranisiyla gosteriyordu; eksik olan tek sey bu
+#     satirdi. Compose'a ELLE eklemek cozum degil: dosya her yapilandirma
+#     degisiminde yeniden uretiliyor, elle eklenen satir sessizce silinir
+#     ve kanal "bir sure calisip durmus" gibi gorunurdu. 1.15 oncesi
+#     gateway tanimadigi degiskeni yok sayar — zararsiz.
 #   * Env sirasi mantiksal: kimlik -> ortam -> backend -> telemetri ->
 #     saglik/polling -> DNP3 -> log. Rastgele sira gozden gecirmeyi
 #     zorlastiriyordu.
@@ -133,6 +146,8 @@ services:
       # Outstation saat senkronizasyonu (RTC drift + guc kesintisi sonrasi reset).
       DNP3_TIME_SYNC: "lan"
       GATEWAY_PUBLISH_DNP3_QUALITY: "{{PUBLISH_DNP3_QUALITY}}"
+      # Cihaz basina calisma-zamani sagligi (1.15+); gerekce modul basinda.
+      DEVICE_HEALTH_PUBLISH_ENABLED: "true"
       # Log
       LOG_LEVEL: "INFO"
       LOG_FORMAT: "json"
@@ -210,6 +225,11 @@ DNP3_EVENT_SCAN_INTERVAL_SEC=5
 DNP3_MANAGER_THREADS=0
 DNP3_TIME_SYNC=lan
 GATEWAY_PUBLISH_DNP3_QUALITY={{PUBLISH_DNP3_QUALITY}}
+
+# Cihaz basina calisma-zamani sagligi (gateway 1.15+). STANDART VE HEP ACIK;
+# gerekce compose sablonunda yazili (bu dosyayi ureten taraf Grid ve Grid o
+# ucu tasiyor). 1.15 oncesi gateway degiskeni yok sayar.
+DEVICE_HEALTH_PUBLISH_ENABLED=true
 
 # Log
 LOG_LEVEL=INFO
