@@ -871,10 +871,15 @@ def test_v114_only_alanlar_eski_gatewaye_GONDERILMEZ(db, gateway, kurulumcu):
     assert eski["dial_in_interval_min"] is None
     assert eski["smart_listen_reconnect_max_sec"] is None
 
+    # 1.14.0'da reconnect tavani gider. Dial-In ise KANITA baglidir:
+    # cihaz kendi dosyasini yazmadan istenen deger GONDERILMEZ
+    # (bkz. `gateway_dial_in` — yanlis ana gore gecikme olcmemek icin).
     _gateway_surumunu_ayarla(db, "1.14.0")
     yeni = next(d for d in _config_govdesi(db)["devices"] if d["code"] == "DEV-DIAL")
-    assert yeni["dial_in_interval_min"] == 240
     assert yeni["smart_listen_reconnect_max_sec"] == 30
+    assert yeni["dial_in_interval_min"] is None, (
+        "cihazdan okuma kaniti yokken istenen Dial-In gateway'e gonderildi"
+    )
 
 
 def test_v114_max_silence_dial_inden_TURETILIR(db, gateway, kurulumcu):
@@ -917,3 +922,127 @@ def test_v114_acik_max_silence_TURETMEYI_EZER(db, gateway, kurulumcu):
     _gateway_surumunu_ayarla(db, "1.14.0")
     yayin = next(d for d in _config_govdesi(db)["devices"] if d["code"] == "DEV-EZ")
     assert yayin["smart_max_silence_sec"] == 93600
+
+
+# ---------------------------------------------------------------------------
+# DIAL-IN SENKRONIZASYONU — cihaz ayari <-> Horstmann config
+#
+# Grid'de iki bagimsiz Dial-In kavrami YOKTUR. Cihaz ayarindan yapilan
+# degisiklik, cihazin KENDI yapilandirma dosyasinda da yeni bir revizyon
+# uretmelidir; aksi halde gateway yanlis ana gore gecikme olcer.
+# ---------------------------------------------------------------------------
+
+
+def _config_surumu_ver(db, device_id: int, dial_in: int, kaynak: str) -> None:
+    """Cihaza `2010C6` iceren bir config surumu kur."""
+    from app.services.device_config_service import create_version
+    from app.services.horstmann_config_codec import MARKER, calculate_checksum
+
+    govde = (
+        b"\r\n".join(
+            [
+                b"2010,C6,02," + dial_in.to_bytes(2, "little").hex().upper().encode(),
+                b"1202,02,00",
+            ]
+        )
+        + b"\r\n"
+    )
+    ham = govde + calculate_checksum(govde).to_bytes(2, "little") + MARKER
+    create_version(db, device_id=device_id, raw=ham, source=kaynak)
+
+
+def test_dial_in_cihaz_ayarindan_degisince_CONFIG_REVIZYONU_uretilir(
+    db, gateway, kurulumcu
+):
+    """Tek ayar, iki tuketici: gateway hesabi VE fiziksel cihaz dosyasi."""
+    from app.services.device_config_service import current_version
+    from app.services.horstmann_config_codec import parse
+
+    cihaz = _cihaz_ekle(
+        db,
+        kurulumcu,
+        code="DEV-SYNC",
+        dnp3_extended={"ip_endpoint_type": "initiating", "session_policy": "smart"},
+    )
+    _config_surumu_ver(db, cihaz.id, 60, "cihazdan_cekildi")
+    onceki = current_version(db, cihaz.id).version
+
+    devices_api.update_device(
+        device_code="DEV-SYNC",
+        payload=DeviceUpdate(
+            dnp3_extended=Dnp3ExtendedSettings(
+                ip_endpoint_type="initiating",
+                session_policy="smart",
+                dial_in_interval_min=240,
+            )
+        ),
+        current_user=kurulumcu,
+        db=db,
+    )
+
+    yeni = current_version(db, cihaz.id)
+    assert yeni.version > onceki, "Dial-In degisti ama config revizyonu uretilmedi"
+    assert parse(bytes(yeni.raw)).get("2010C6").as_int() == 240
+    assert parse(bytes(yeni.raw)).checksum_valid is True
+
+
+def test_dial_in_apply_BEKLERKEN_gatewaye_ESKI_deger_gider(db, gateway, kurulumcu):
+    """ASIL DOGRULUK SARTI (§4).
+
+    Kullanici 240 istedi, cihaz hala 60 ile raporluyor. Gateway'e 240
+    gonderilirse gercekten olmus bir cihaz 4 saat SAGLIKLI gorunur.
+    """
+    cihaz = _cihaz_ekle(
+        db,
+        kurulumcu,
+        code="DEV-PEND",
+        dnp3_extended={"ip_endpoint_type": "initiating", "session_policy": "smart"},
+    )
+    _config_surumu_ver(db, cihaz.id, 60, "cihazdan_cekildi")
+    _gateway_surumunu_ayarla(db, "1.14.0")
+
+    devices_api.update_device(
+        device_code="DEV-PEND",
+        payload=DeviceUpdate(
+            dnp3_extended=Dnp3ExtendedSettings(
+                ip_endpoint_type="initiating",
+                session_policy="smart",
+                dial_in_interval_min=240,
+            )
+        ),
+        current_user=kurulumcu,
+        db=db,
+    )
+
+    yayin = next(d for d in _config_govdesi(db)["devices"] if d["code"] == "DEV-PEND")
+    assert yayin["dial_in_interval_min"] == 60, (
+        "cihaz henuz uygulamadan istenen Dial-In gateway'e gonderildi"
+    )
+
+    # Cihaz yeni degeri KENDI dosyasina yazinca kanit olusur.
+    _config_surumu_ver(db, cihaz.id, 240, "cihazdan_cekildi")
+    yayin2 = next(d for d in _config_govdesi(db)["devices"] if d["code"] == "DEV-PEND")
+    assert yayin2["dial_in_interval_min"] == 240
+
+
+def test_dial_in_gecersiz_deger_cihaz_ayarindan_da_REDDEDILIR(db, gateway, kurulumcu):
+    """1440'in boleni olmayan deger her iki yoldan da gecemez."""
+    _cihaz_ekle(
+        db,
+        kurulumcu,
+        code="DEV-BAD",
+        dnp3_extended={"ip_endpoint_type": "initiating", "session_policy": "smart"},
+    )
+    with pytest.raises((HTTPException, ValidationError)):
+        devices_api.update_device(
+            device_code="DEV-BAD",
+            payload=DeviceUpdate(
+                dnp3_extended=Dnp3ExtendedSettings(
+                    ip_endpoint_type="initiating",
+                    session_policy="smart",
+                    dial_in_interval_min=100,
+                )
+            ),
+            current_user=kurulumcu,
+            db=db,
+        )

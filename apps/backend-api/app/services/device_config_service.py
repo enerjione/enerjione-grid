@@ -624,3 +624,110 @@ def diff(onceki: bytes, sonraki: bytes) -> list[dict]:
             }
         )
     return farklar
+
+
+# ---------------------------------------------------------------------------
+# DIAL-IN — ISTENEN vs CIHAZDA GECERLI OLAN
+#
+# Ayni urun ayarinin iki tuketicisi var:
+#   * `dnp3_extended.dial_in_interval_min` -> gateway "rapor gecikti mi" hesabi
+#   * CSV `2010C6`                          -> cihazin GERCEK raporlama sikligi
+#
+# Bu bolum ikisini birbirine baglar ve en onemli soruyu cevaplar: gateway'e
+# HANGI degeri gonderecegiz?
+# ---------------------------------------------------------------------------
+
+#: Cihazin KENDI yazdigi surumun kaynagi. Fiziksel gerceğin TEK kaniti budur:
+#: dosyayi cihaz FTP'ye kendisi koydu, yani icindeki deger cihazda GECERLI.
+_READBACK_SOURCE = "cihazdan_cekildi"
+
+
+def uygulanan_dial_in(db: Session, device_id: int) -> int | None:
+    """Cihazda GERCEKTEN gecerli olan Dial-In (dk); kanit yoksa None.
+
+    NEDEN `applied_at` YETMEZ: o alanin kendi belgelendirmesi acik —
+    "dosya cihazin okuyacagi yere kondu ve komut kuyruga alindi", cihazin
+    dosyayi GERCEKTEN okudugu an degil (bkz. api/device_configs.py
+    `cihaza_uygula`). Komut kuyrukta beklerken ya da cihaz dosyayi hic
+    okumadan `applied_at` dolar.
+
+    TEK GECERLI KANIT cihazin FTP'ye KENDI yazdigi dosyadir
+    (`source="cihazdan_cekildi"`): o baytlari cihaz uretti, yani icindeki
+    `2010C6` cihazda o an gecerli olan degerdir.
+
+    Kanit yoksa None doner ve cagiran taraf FAIL-SAFE davranir — uydurma
+    yapmaz (bkz. `gateway_dial_in`).
+    """
+    from app.schemas.dnp3_extended import DIAL_IN_CAT_INDEX
+
+    satir = db.execute(
+        select(DeviceConfigVersion)
+        .where(
+            DeviceConfigVersion.device_id == device_id,
+            DeviceConfigVersion.source == _READBACK_SOURCE,
+        )
+        .order_by(DeviceConfigVersion.version.desc())
+        .limit(1)
+    ).scalars().first()
+    if satir is None:
+        return None
+    try:
+        girdi = parse(bytes(satir.raw)).get(DIAL_IN_CAT_INDEX)
+    except ConfigParseError:
+        # Bozuk readback: "bilmiyorum" demek, yanlis bir sayi soylemekten iyi.
+        return None
+    if girdi is None:
+        return None
+    try:
+        return girdi.as_int()
+    except (ValueError, ConfigParseError):
+        return None
+
+
+def gateway_dial_in(db: Session, device_id: int, istenen: int | None) -> int | None:
+    """Gateway'e GONDERILECEK Dial-In — cihazda gecerli olan, istenen DEGIL.
+
+    ASIL RISK BUDUR. Gateway bu degerle "rapor gecikti mi" hesabini yapar.
+    Istenen degeri erken gondermek iki yonde de yanlis olcum uretir:
+
+      * cihaz 60 dk'da raporluyorken gateway 240 beklerse, gercekten olmus
+        bir cihaz 4 saat boyunca SAGLIKLI gorunur;
+      * cihaz 240 dk'da raporluyorken gateway 60 beklerse, saglikli cihaz
+        surekli GECIKMIS damgasi yer ve operator alarmlara guvenmeyi birakir.
+
+    KURAL: yalnizca cihazin kendi dosyasindan okunan deger gonderilir. Kanit
+    yoksa None -> gateway Dial-In farkindali gecikme takibini yapmaz ve
+    kendi sessizlik esigine duser. "Bilmiyorum" durumunda ozelligi
+    KAPATMAK, yanlis ana gore alarm uretmekten guvenlidir.
+
+    `istenen` yalnizca su durumda kullanilir: cihazdan okunan deger ile
+    ISTENEN AYNI ise (yani uygulama tamamlanmis). Farkliysa okunan kazanir.
+    """
+    uygulanan = uygulanan_dial_in(db, device_id)
+    if uygulanan is None:
+        return None
+    if istenen is not None and istenen == uygulanan:
+        return uygulanan
+    return uygulanan
+
+
+def dial_in_uygulama_durumu(
+    db: Session, device_id: int, istenen: int | None
+) -> tuple[str, int | None]:
+    """(durum, cihazdaki_deger) — arayuzun "istenen vs cihazdaki" gosterimi.
+
+    Durumlar mevcut altyapinin verebilecegi kadar: yeni bir durum makinesi
+    KURULMADI.
+
+      * `bilinmiyor` — cihaz henuz kendi dosyasini yazmadi; ne dogrulayabilir
+        ne yalanlayabiliriz. "Uygulandi" demek uydurmak olurdu.
+      * `uygulandi`  — cihazdan okunan deger istenenle AYNI.
+      * `bekliyor`   — ikisi farkli; dosya gonderildi ama cihaz henuz
+        yansitmadi (ya da uygulamadi).
+    """
+    uygulanan = uygulanan_dial_in(db, device_id)
+    if uygulanan is None:
+        return ("bilinmiyor", None)
+    if istenen is None or istenen == uygulanan:
+        return ("uygulandi", uygulanan)
+    return ("bekliyor", uygulanan)

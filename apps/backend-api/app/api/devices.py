@@ -440,6 +440,54 @@ def update_device(
         _dnp3_denetim_farki(dnp3_oncesi, dnp3_sonrasi) if dnp3_sonrasi is not None else {}
     )
 
+    # --- DIAL-IN: TEK AYAR, IKI TUKETICI ---
+    #
+    # Grid'de iki bagimsiz Dial-In kavrami YOKTUR. Operator bu ayari
+    # degistirdiginde hem gateway'in gecikme hesabi (`dnp3_extended`) hem
+    # CIHAZIN KENDI yapilandirmasi (`2010C6`) ayni istegin parcasi olarak
+    # degismelidir; ikisinin bagimsiz kaymasi, gateway'in yanlis ana gore
+    # gecikme olcmesi demektir.
+    #
+    # Yan etki DEGIL, islemin dogal sonucu: kullanici FIZIKSEL bir cihaz
+    # parametresini acikca degistiriyor. Yeni bir config sistemi
+    # kurulmuyor — mevcut surum/diff/FTP/denetim hatti aynen kullaniliyor.
+    #
+    # SESSIZ BASARISIZLIK YOK ama BLOKE DE ETMEZ: cihazin henuz bir config
+    # surumu yoksa (dosyasini hic gormedik) revizyon uretilemez. O durumda
+    # cihaz ayari yine de kaydedilir ve denetime "uretilemedi" yazilir —
+    # aksi halde config dosyasi olmayan bir cihazin Dial-In'i hic
+    # ayarlanamazdi.
+    dial_in_revizyonu: str | None = None
+    if dnp3_sonrasi is not None and (
+        dnp3_oncesi.dial_in_interval_min != dnp3_sonrasi.dial_in_interval_min
+    ):
+        yeni_dial_in = dnp3_sonrasi.dial_in_interval_min
+        if yeni_dial_in is not None:
+            from app.schemas.dnp3_extended import DIAL_IN_CAT_INDEX
+            from app.services import device_config_service as _cfg
+
+            try:
+                surum = _cfg.apply_changes(
+                    db,
+                    device_id=device.id,
+                    changes={DIAL_IN_CAT_INDEX: yeni_dial_in},
+                    actor=current_user.username,
+                    note=f"Dial-In araligi {yeni_dial_in} dk (cihaz ayarlarindan)",
+                )
+                dial_in_revizyonu = f"v{surum.version}"
+            except _cfg.ConfigNotFound:
+                dial_in_revizyonu = "uretilemedi: cihazin yapilandirma surumu yok"
+            except ValueError as exc:
+                # Alan kurali (1440'in boleni) — sema zaten dogruluyor, bu
+                # ikinci kapi. Bloke etmek dogru: gecersiz deger cihaza
+                # gonderilirse cihaz reddeder ve bunu Grid'e SOYLEMEZ.
+                db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+                ) from exc
+    if dial_in_revizyonu:
+        dnp3_farki = {**dnp3_farki, "horstmann_config": dial_in_revizyonu}
+
     record_event(
         db,
         category="device",

@@ -67,6 +67,20 @@ class ConfigCurrentRead(BaseModel):
     # komut sonrasi bu damga degistiyse cihaz dosyayi uygulamistir.
     device_last_update: str | None = None
 
+    # --- DIAL-IN: ISTENEN vs CIHAZDAKI ---
+    #
+    # Arayuz "kaydettim = sahada gecerli" izlenimi VERMEMELI. Bu uc alan o
+    # ayrimi tasir; ucu de tek kaynaktan (`device_config_service`) gelir.
+    #
+    #: Operatorun sectigi deger (`dnp3_extended.dial_in_interval_min`).
+    dial_in_desired_min: int | None = None
+    #: Cihazin KENDI yazdigi dosyadan okunan deger — fiziksel gercek. Kanit
+    #: yoksa None ve arayuz "Bilinmiyor" der; "Uygulandi" DEMEZ.
+    dial_in_applied_min: int | None = None
+    #: `uygulandi` | `bekliyor` | `bilinmiyor`. Yeni bir durum makinesi
+    #: degil, mevcut kanitin dogrudan ifadesi.
+    dial_in_apply_status: str = "bilinmiyor"
+
 
 class ConfigDiffRow(BaseModel):
     cat_index: str

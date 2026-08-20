@@ -413,3 +413,69 @@ def test_dial_in_disindaki_girdiler_ETKILENMEZ():
     from app.services.device_config_service import _alan_kurallarini_dogrula
 
     _alan_kurallarini_dogrula({"2010C4": 37, "210703": 100})  # patlamamali
+
+
+# ---------------------------------------------------------------------------
+# DIAL-IN: ISTENEN vs CIHAZDA GECERLI OLAN
+#
+# Gateway'e hangi degerin gidecegi bir DOGRULUK sartidir: yanlis ana gore
+# gecikme olcmek, ya gercekten olmus cihazi saglikli gosterir ya da saglikli
+# cihazi surekli gecikmis damgalar.
+# ---------------------------------------------------------------------------
+
+
+def test_dial_in_KANIT_YOKKEN_gatewaye_gonderilmez(db, cihaz) -> None:
+    """Cihaz kendi dosyasini hic yazmadiysa "bilmiyoruz" -> None."""
+    svc.create_version(db, device_id=cihaz.id, raw=_dosya(60), source="yuklendi")
+    assert svc.uygulanan_dial_in(db, cihaz.id) is None
+    assert svc.gateway_dial_in(db, cihaz.id, istenen=240) is None
+    assert svc.dial_in_uygulama_durumu(db, cihaz.id, 240) == ("bilinmiyor", None)
+
+
+def test_dial_in_ISTENEN_degil_CIHAZDAKI_gonderilir(db, cihaz) -> None:
+    """ASIL KORUNAN SEY: apply beklerken eski deger gecerlidir.
+
+    Kullanici 240 istedi, cihaz hala 60 ile raporluyor. Gateway'e 240
+    gondermek, gercekten olmus bir cihazi 4 saat boyunca saglikli
+    gosterirdi.
+    """
+    svc.create_version(db, device_id=cihaz.id, raw=_dosya(60), source="cihazdan_cekildi")
+    assert svc.uygulanan_dial_in(db, cihaz.id) == 60
+    assert svc.gateway_dial_in(db, cihaz.id, istenen=240) == 60
+    durum, cihazdaki = svc.dial_in_uygulama_durumu(db, cihaz.id, 240)
+    assert durum == "bekliyor"
+    assert cihazdaki == 60
+
+
+def test_dial_in_cihaz_YANSITINCA_uygulandi_sayilir(db, cihaz) -> None:
+    """Cihaz yeni degeri kendi dosyasina yazdi -> artik kanit var."""
+    svc.create_version(db, device_id=cihaz.id, raw=_dosya(60), source="cihazdan_cekildi")
+    svc.create_version(db, device_id=cihaz.id, raw=_dosya(240), source="cihazdan_cekildi")
+    assert svc.uygulanan_dial_in(db, cihaz.id) == 240
+    assert svc.gateway_dial_in(db, cihaz.id, istenen=240) == 240
+    assert svc.dial_in_uygulama_durumu(db, cihaz.id, 240) == ("uygulandi", 240)
+
+
+def test_dial_in_BIZIM_yazdigimiz_surum_KANIT_SAYILMAZ(db, cihaz) -> None:
+    """En ince tuzak: kendi yazdigimiz dosya kanit degildir.
+
+    `duzenlendi` kaynagi "biz boyle istedik" demektir; cihazin o dosyayi
+    okuyup uyguladigini SOYLEMEZ. Kanit saymak, istenen degeri "uygulandi"
+    diye gostermek olurdu — tam da kacinilan sey.
+    """
+    svc.create_version(db, device_id=cihaz.id, raw=_dosya(60), source="cihazdan_cekildi")
+    svc.create_version(db, device_id=cihaz.id, raw=_dosya(240), source="duzenlendi")
+    assert svc.uygulanan_dial_in(db, cihaz.id) == 60, (
+        "kendi yazdigimiz surum fiziksel kanit sayildi"
+    )
+    assert svc.gateway_dial_in(db, cihaz.id, istenen=240) == 60
+
+
+def test_dial_in_uygulama_BASARISIZ_olsa_da_yanlis_applied_yok(db, cihaz) -> None:
+    """Cihaz yeni dosyayi almadi: durum `bekliyor` kalir, `uygulandi` OLMAZ."""
+    svc.create_version(db, device_id=cihaz.id, raw=_dosya(60), source="cihazdan_cekildi")
+    svc.apply_changes(db, device_id=cihaz.id, changes={"2010C6": 240})
+    # Desired degisti ama cihaz hala 60 raporluyor.
+    durum, cihazdaki = svc.dial_in_uygulama_durumu(db, cihaz.id, 240)
+    assert durum == "bekliyor"
+    assert cihazdaki == 60

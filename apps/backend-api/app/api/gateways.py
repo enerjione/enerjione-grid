@@ -45,6 +45,7 @@ from app.schemas.gateway import (
     GatewayRead,
     GatewayUpdate,
 )
+from app.services import device_config_service
 from app.services import gateway_compatibility
 from app.services import command_delivery_service, gateway_agent_service
 from app.services import gateway_update_service
@@ -1722,8 +1723,22 @@ def get_gateway_config(
         # v1.14-ONLY ALANLAR. Eski gateway'e GONDERILMEZ: 1.14.0 bilinmeyen
         # cihaz alanlarini "ignored" sayar ama daha eski surumlerde bu garanti
         # YOKTUR ve tek bir fazladan alan tum config'i dusurebilir.
+        # DIAL-IN: ISTENEN DEGIL, CIHAZDA GECERLI OLAN GIDER.
+        #
+        # Gateway bu degerle "rapor gecikti mi" hesabini yapar. Operatorun
+        # yeni sectigi degeri cihaz onu uygulamadan once gondermek iki yonde
+        # de yanlis olcum uretir: 60 dk'da raporlayan bir cihaz icin 240
+        # beklemek, gercekten olmus cihazi 4 saat SAGLIKLI gosterir; tersi
+        # ise saglikli cihazi surekli GECIKMIS damgalar ve operator alarmlara
+        # guvenmeyi birakir.
+        #
+        # Kanit yoksa (cihaz kendi dosyasini hic yazmadiysa) None gider ve
+        # gateway Dial-In farkindali takibi yapmaz — "bilmiyorum"da ozelligi
+        # kapatmak, yanlis ana gore alarm uretmekten guvenlidir.
         dial_in_gonder = (
-            ayar.dial_in_interval_min
+            device_config_service.gateway_dial_in(
+                db, device.id, ayar.dial_in_interval_min
+            )
             if gateway_compatibility.supports("dial_in_health", gateway_surumu) is True
             else None
         )
