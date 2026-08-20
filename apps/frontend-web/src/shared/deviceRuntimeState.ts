@@ -434,18 +434,11 @@ export function runtimeBucketCounts(states: readonly DeviceRuntimeState[]): Runt
 // TESHIS ALANLARI — DURUM BELIRLEMEZLER
 // ---------------------------------------------------------------------------
 
-/**
- * Sonda (probe) sonuclari SALT TESHISTIR (sozlesme bolum 5).
- *
- * `ip_probe_status = "unreachable"` gormek NORMALDIR: ICMP saha aglarinda ve
- * APN'lerde sikca engellidir, ustelik Smart bir modem mesru olarak uykudadir.
- * Bu yuzden sondanin ekranda bir RENGI yoktur — notr gosterilir ve
- * "Teshis" basligi altinda durur. Ayri bir fonksiyon olmasinin sebebi,
- * birinin ileride sonda degerine gore renk vermeye kalkismasini zorlastirmak.
- */
-export function probeIsDiagnosticOnly(): true {
-  return true;
-}
+// Sonda (probe) alanlarinin BILEREK bir "durum" fonksiyonu YOK: sonuclari
+// salt teshistir (sozlesme bolum 5) ve ekranda RENKSIZ gosterilirler.
+// `ip_probe_status = "unreachable"` gormek NORMALDIR — ICMP saha aglarinda
+// ve APN'lerde sikca engellidir, ustelik Smart bir modem mesru olarak
+// uykudadir. Asagidaki liste yalnizca ETIKET cevirisi icindir.
 
 /** Sozlesmede belgelenmis enum degerleri — i18n anahtari uretmek icin.
  *  Listede olmayan bir deger geldiginde cagiran taraf HAM degeri gosterir;

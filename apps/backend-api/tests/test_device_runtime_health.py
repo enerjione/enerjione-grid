@@ -311,10 +311,31 @@ def test_bilinmeyen_alanlar_YOK_SAYILIR(db, gateway):
     assert not hasattr(satir, "gelecekteki_alan")
 
 
-def test_bilinmeyen_enum_degeri_KORUNUR(db, gateway):
-    """Yeni bir `connection_state`i `unknown`a cevirmek onu SESSIZCE yutardi."""
-    _post(db, _zarf(devices=[_cihaz_kaydi("SN2-001", connection_state="hibernating")]))
-    assert _satir(db, "SN2-001").connection_state == "hibernating"
+def test_bilinmeyen_connection_state_UNKNOWNA_dusurulur(db, gateway, caplog):
+    """Tanimadigimiz durum saklanmaz — ama SESSIZCE de yutulmaz.
+
+    NE DEGISTI: bu test eskiden tanimadigimiz degerin AYNEN korunmasini
+    istiyordu ("yeni bir durumu sessizce yutmayalim"). Kaygi hakliydi ama
+    cozum yanlisti, iki sebeple:
+
+    1. Alan arayuzde bir renge/etikete ceviriliyor; tanimadigimiz deger
+       hicbir kovaya girmez ve ekranda CIZILEMEZ.
+    2. Sunum kovalari kanonik duruma SIZABILIRDI. `late` KPI'da mesru bir
+       kovadir ama `connection_state` DEGILDIR (gecikme `report_late`
+       bayragidir, durum `smart_idle` KALIR). Serbest gecis, o kovanin
+       durum olarak yazilmasina kapi acardi.
+
+    Yeni davranis ikisini birden korur: `unknown` yazilir VE deger adiyla
+    loglanir, yani gercekten yeni bir gateway durumu gozden kacmaz.
+    """
+    import logging
+
+    with caplog.at_level(logging.WARNING):
+        _post(
+            db, _zarf(devices=[_cihaz_kaydi("SN2-001", connection_state="hibernating")])
+        )
+    assert _satir(db, "SN2-001").connection_state == "unknown"
+    assert "hibernating" in caplog.text, "bilinmeyen durum sessizce yutuldu"
 
 
 def test_MUKERRER_kod_ayni_partide_patlamaz(db, gateway):
@@ -785,3 +806,77 @@ def test_HTTP_ucu_204_ve_BOS_govde_doner(db, gateway):
     assert durum == 204
     assert govde == b"", "gateway govdeyi okumaz; bos donmeli"
     assert _satir(db, "SN2-001") is not None
+
+
+# ---------------------------------------------------------------------------
+# `report_late` BIR BAYRAKTIR, DURUM DEGILDIR
+#
+# Sozlesme (bolum 5) net: rapor gecikse bile `connection_state` HALA
+# `smart_idle`dir. Gecikme ayri bir bayrakta tasinir.
+#
+# NEDEN AYRI TEST: "gecikmis" kavramini kanonik duruma katmak cok cazip bir
+# kisayoldur — KPI'da tek bir alan okumak kolaylasir. Ama o an backend, bir
+# UYARIYI bir DURUMA terfi ettirmis olur: gecikme kalkinca hangi duruma
+# donulecegi bilgisi KAYBOLUR ve `smart_idle` ile `lost` arasindaki ayrim
+# bulanir. Sunum katmani istedigi kovaya koyabilir; KAYNAK degismez.
+# ---------------------------------------------------------------------------
+
+
+def test_report_late_kanonik_durumu_DEGISTIRMEZ(db, gateway):
+    """`smart_idle` + `report_late=true` -> durum HALA `smart_idle`."""
+    _post(
+        db,
+        _zarf(
+            devices=[
+                _cihaz_kaydi(
+                    "DEV-LATE",
+                    connection_state="smart_idle",
+                    report_late=True,
+                    report_overdue_sec=360.0,
+                )
+            ]
+        ),
+    )
+    satir = _satir(db, "DEV-LATE")
+    assert satir is not None
+    assert satir.connection_state == "smart_idle", (
+        "gecikme bayragi kanonik durumu ezdi — 'late' bir connection_state DEGIL"
+    )
+    assert satir.report_late is True
+    assert satir.report_overdue_sec == 360.0
+
+
+def test_late_gecerli_bir_connection_state_DEGILDIR(db, gateway):
+    """Sema `late` diye bir durumu KABUL ETMEZ.
+
+    Enum'u genisletmek, sunum katmanindaki bir kovayi wire sozlesmesine
+    sizdirmak olurdu; gateway boyle bir deger GONDERMEZ.
+    """
+    _post(db, _zarf(devices=[_cihaz_kaydi("DEV-BAD-STATE", connection_state="late")]))
+    satir = _satir(db, "DEV-BAD-STATE")
+    # Gecersiz durum ya hic yazilmaz ya da `unknown`a duser; "late" OLARAK
+    # SAKLANMAZ.
+    assert satir is None or satir.connection_state != "late"
+
+
+def test_gecikme_kalkinca_durum_bozulmadan_devam_eder(db, gateway):
+    """Bayrak inip kalkarken kanonik durum saglam kalir."""
+    _post(
+        db,
+        _zarf(
+            devices=[_cihaz_kaydi("DEV-FLAP", connection_state="smart_idle", report_late=True)],
+            sequence=1,
+        ),
+    )
+    assert _satir(db, "DEV-FLAP").connection_state == "smart_idle"
+
+    _post(
+        db,
+        _zarf(
+            devices=[_cihaz_kaydi("DEV-FLAP", connection_state="smart_idle", report_late=False)],
+            sequence=2,
+        ),
+    )
+    satir = _satir(db, "DEV-FLAP")
+    assert satir.connection_state == "smart_idle"
+    assert satir.report_late is False

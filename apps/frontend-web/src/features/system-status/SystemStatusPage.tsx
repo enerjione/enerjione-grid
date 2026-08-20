@@ -55,7 +55,7 @@ import {
 } from "../../shared/api";
 import { GatewayControlCard } from "./GatewayControlCard";
 import { useProjectSettings } from "../../components/ProjectSettingsProvider";
-import { deviceRuntimeStateOf } from "../../shared/deviceRuntimeState";
+import { deviceRuntimeStateOf, runtimeBucketCounts } from "../../shared/deviceRuntimeState";
 import { usePolling } from "../../shared/usePolling";
 import type {
   AlarmEvent,
@@ -482,14 +482,17 @@ export function SystemStatusPage({
 
   // Cihaz ozeti — sadece sayilar, tablo yok.
   const deviceStats = useMemo(() => {
-    const total = devices.length;
     // "Haberlesen" = CALISMA-ZAMANI kovasi `healthy`, yani `online` VE
     // `smart_idle`. Uyuyan bir Horstmann haberlesmiyor degildir; sadece
     // sirasini bekliyordur (sozlesme bolum 5). Eski ikili sayim onu
     // "haberlesmeyen" kovasina koyup saglikli filoyu arizali gosteriyordu.
-    const online = devices.filter((d) => deviceRuntimeStateOf(d).bucket === "healthy").length;
-    // Haberleşmeyen = geri kalan (bozulmus, arizali, bilinmeyen).
-    const offline = total - online;
+    // Kovalar BIR BOLUNTUDUR: her cihaz tek kovada sayilir.
+    const simdi = Date.now();
+    const kova = runtimeBucketCounts(devices.map((d) => deviceRuntimeStateOf(d, simdi)));
+    const total = kova.total;
+    const online = kova.healthy;
+    // Haberlesmeyen = geri kalan (bozulmus, arizali, bilinmeyen).
+    const offline = kova.degraded + kova.unhealthy + kova.unknown;
     const onlineRatio = total > 0 ? Math.round((online / total) * 100) : 0;
     return { total, online, offline, onlineRatio };
   }, [devices]);

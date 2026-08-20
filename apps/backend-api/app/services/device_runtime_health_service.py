@@ -145,9 +145,24 @@ def _wire_to_model(kayit: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
     SOZLESME DEGISIRSE DEGISECEK TEK FONKSIYON BUDUR.
 
     `device_code` yoksa/bos ise `None` doner: o KAYIT atlanir, parti degil.
-    Bilinmeyen alanlar okunmaz (ileri uyumluluk); bilinen enum'lar da
-    kumeye ZORLANMAZ — gateway yeni bir `connection_state` eklerse onu
-    `unknown`a cevirmek yeni durumu SESSIZCE yutmak olurdu.
+    Bilinmeyen ALANLAR okunmaz (ileri uyumluluk: alan eklemek geriye uyumlu).
+
+    `connection_state` ISE SOZLESME KUMESINE ZORLANIR
+    -------------------------------------------------
+    Iki sebep:
+
+    1. Bu alan arayuzde bir renge/etikete cevriliyor. Tanimadigimiz bir deger
+       saklanirsa hicbir kovaya girmez ve ekranda cizilemez.
+    2. Sunum katmaninin kovalari kanonik duruma SIZMAMALIDIR. Ornegin `late`
+       KPI'da mesru bir kovadir ama bir `connection_state` DEGILDIR: gecikme
+       `report_late` bayragiyla tasinir ve durum `smart_idle` KALIR. "late"
+       durum olarak yazilsaydi, bayrak kalkinca hangi duruma donulecegi
+       bilgisi kaybolurdu.
+
+    Tanimadigimiz deger SESSIZCE YUTULMAZ: `unknown` yazilir ve degeri
+    ADIYLA loglanir. Boylece gateway gercekten yeni bir durum eklerse bu
+    log'da gorunur ve matris bilincli olarak genisletilir — sessiz kayip da
+    olmaz, cizilemeyen deger de saklanmaz.
     """
     if not isinstance(kayit, dict):
         return None
@@ -169,8 +184,31 @@ def _wire_to_model(kayit: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
 
     alanlar["dial_in_interval_min"] = _as_int(kayit.get("dial_in_interval_min"))
     # `connection_state` NOT NULL; bildirilmemisse iddiada bulunmayiz.
-    alanlar["connection_state"] = alanlar["connection_state"] or "unknown"
+    alanlar["connection_state"] = _baglanti_durumu(alanlar["connection_state"], kod)
     return kod, alanlar
+
+
+#: Sozlesmedeki `connection_state` kumesi (bolum 4). `late` BILEREK YOK —
+#: gecikme bir bayraktir, durum degil.
+BAGLANTI_DURUMLARI: frozenset[str] = frozenset(
+    {"online", "smart_idle", "recovering", "lost", "listener_error", "unknown"}
+)
+
+
+def _baglanti_durumu(ham: str | None, device_code: str) -> str:
+    """Sozlesme kumesine zorla; tanimadigini `unknown` yap ve LOGLA."""
+    if not ham:
+        return "unknown"
+    if ham in BAGLANTI_DURUMLARI:
+        return ham
+    logger.warning(
+        "device_health bilinmeyen connection_state=%r device=%s — 'unknown' "
+        "yazildi. Gateway yeni bir durum eklediyse BAGLANTI_DURUMLARI "
+        "genisletilmeli; sunum kovasi (or. 'late') ise gateway hatasidir.",
+        ham,
+        device_code,
+    )
+    return "unknown"
 
 
 # ---------------------------------------------------------------------------
