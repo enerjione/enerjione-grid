@@ -2300,6 +2300,14 @@ export type ConfigVersion = {
   ftpWritten: boolean | null;
 };
 
+/** Dial-In ayarinin cihazda gecerli olup olmadigi.
+ *
+ *  Yeni bir durum makinesi DEGIL, eldeki kanitin dogrudan ifadesi:
+ *  `uygulandi` = cihazin kendi dosyasi istenen degeri gosteriyor,
+ *  `bekliyor`  = dosya baska bir deger gosteriyor (ayar henuz gitmemis),
+ *  `bilinmiyor`= cihazdan okunmus bir dosya YOK, iddia edilemez. */
+export type DialInApplyStatus = "uygulandi" | "bekliyor" | "bilinmiyor";
+
 export type ConfigCurrent = {
   version: ConfigVersion;
   // null = cihazin serisi hicbir kaynaktan cozulemedi; dosya adi uretilemiyor.
@@ -2310,6 +2318,15 @@ export type ConfigCurrent = {
   // (master.info_last_configuration_update). Komut sonrasi degistiyse
   // guncelleme cihazda GERCEKTEN uygulanmistir.
   deviceLastUpdate: string | null;
+  // --- Dial-In: ISTENEN vs CIHAZDAN DOGRULANAN ---
+  // Arayuz "kaydettim = sahada gecerli" izlenimi VERMEMELI; bu uc alan o
+  // ayrimi tasir (backend: ConfigCurrentRead).
+  //: Operatorun sectigi deger (dnp3_extended.dial_in_interval_min).
+  dialInDesiredMin: number | null;
+  //: Cihazin KENDI yazdigi dosyadan okunan deger — fiziksel gercek.
+  //: Kanit yoksa null; arayuz o zaman "Uygulandi" DEMEZ.
+  dialInAppliedMin: number | null;
+  dialInApplyStatus: DialInApplyStatus;
 };
 
 export type ConfigDiffRow = {

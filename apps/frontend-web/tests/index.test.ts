@@ -121,6 +121,11 @@ import "./gatewayV114OturumPolitikasi.test";
 // Ikisi de gecerli bir mod oldugu icin bu yanlis ekranda fark edilmez.
 import "./operationMode.test";
 
+// ISTENEN vs SAHADA GECERLI: Dial-In dogrulamasi ve gateway yetenek kapisi.
+// Yetenek matrisi backend'in AYNASIDIR; ayrisirsa arayuz "destekleniyor"
+// derken payload sessizce dusurulur ve kimse bir hata gormez.
+import "./dialInGatewayUyumluluk.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   connectionIsDead,

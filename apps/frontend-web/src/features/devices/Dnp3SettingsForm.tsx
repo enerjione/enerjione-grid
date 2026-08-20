@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { Dnp3ExtendedSettings, SessionPolicy } from "../../shared/types";
+import type { DialInApplyStatus, Dnp3ExtendedSettings, SessionPolicy } from "../../shared/types";
 import {
   COMMUNICATION_GRACE_MIN_DEFAULT,
   COMMUNICATION_GRACE_MIN_MAX,
@@ -13,6 +13,7 @@ import {
   derivedMaxSilenceSec,
   dialInValidValues
 } from "../../shared/types";
+import { missingCapabilities, requiredVersion } from "../../shared/gatewayCapabilities";
 
 type Props = {
   value: Dnp3ExtendedSettings;
@@ -21,10 +22,28 @@ type Props = {
    *  otomatik atama bunlari hariç tutar. */
   usedMasterPorts?: number[];
   hideConnectionFields?: boolean;
+  /** Dial-In'in cihazda GECERLI olup olmadigi. Form bunu kendisi CEKMEZ:
+   *  saf kalir, veriyi paneli ceker ve prop olarak gecer. Tanimsizsa
+   *  (istek basarisiz / cihazda dosya yok) blok HIC cizilmez — eksik veriyi
+   *  "uygulandi" gibi gostermektense hic gostermemek dogru taraftir. */
+  dialInDurumu?: { appliedMin: number | null; status: DialInApplyStatus };
+  /** Gateway'in bildirdigi surum.
+   *
+   *  UC DURUM: `undefined` = henuz sorulmadi (uyari cizilmez), `null` =
+   *  soruldu ama gateway surumunu bildirmedi (backend gibi EKSIK sayilir ve
+   *  uyari "bilinmiyor" der), metin = bildirilen surum. */
+  gatewayVersion?: string | null;
+  /** Mevcut gateway guncelleme arayuzunu acar. Verilmezse baglanti cizilmez;
+   *  form kendi basina yeni bir guncelleme yolu ACMAZ. */
+  onGatewayUpdate?: () => void;
 };
 
 const INITIATING_PORT_RANGE_START = 20100;
 const INITIATING_PORT_RANGE_END = 20700;
+
+/** Kaniti olmayan alanin gosterimi. Bos birakmak "0" ya da "yok" gibi
+ *  okunabiliyordu; tire acikca "bilmiyoruz" der. */
+const DEGER_YOK = "—";
 
 /** Cihazin kabul ettigi Dial-In degerleri — sozlesmeden TURETILIR. */
 const DIAL_IN_OPTIONS = dialInValidValues();
@@ -78,7 +97,15 @@ function BoolSelect({
   );
 }
 
-export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [], hideConnectionFields = false }: Props) {
+export function Dnp3SettingsForm({
+  value,
+  onChange,
+  usedMasterPorts = [],
+  hideConnectionFields = false,
+  dialInDurumu,
+  gatewayVersion,
+  onGatewayUpdate
+}: Props) {
   const { t } = useTranslation();
   const v = value;
   const set = onChange;
@@ -139,6 +166,34 @@ export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [], hideCo
       : v.session_policy === "smart"
         ? t("engineering.dnp3.sessionPolicySmartHelp")
         : t("engineering.dnp3.sessionPolicyContinuousHelp");
+
+  // ISTENEN ile CIHAZDAN DOGRULANAN ayrisiyor mu? Yalnizca IKI TARAF DA
+  // BILINIYORKEN "farkli" denir: dogrulanan yoksa bu bir ayrisma degil,
+  // kanit eksikligidir ve durum satiri zaten onu soyler.
+  const dialInFarkli =
+    dialInDurumu !== undefined &&
+    dialIn !== null &&
+    dialInDurumu.appliedMin !== null &&
+    dialIn !== dialInDurumu.appliedMin;
+
+  // Anahtarlar SABIT yazili: dinamik olarak uretilen ceviri anahtarlari,
+  // dil dosyasindan biri dustugunde ekrana ham anahtar dusurur ve hicbir
+  // test bunu yakalayamaz.
+  const dialInDurumEtiketi =
+    dialInDurumu?.status === "uygulandi"
+      ? t("engineering.dnp3.dialInStatusApplied")
+      : dialInDurumu?.status === "bekliyor"
+        ? t("engineering.dnp3.dialInStatusPending")
+        : t("engineering.dnp3.dialInStatusUnverified");
+
+  // Gateway yetenek kapisi. Kural backend `gateway_compatibility.py`nin
+  // aynasidir (bkz. shared/gatewayCapabilities.ts); surum henuz sorulmadiysa
+  // (`undefined`) hicbir sey iddia etmeyiz.
+  const eksikYetenekler =
+    gatewayVersion === undefined
+      ? []
+      : missingCapabilities(v.session_policy, v.ip_endpoint_type, gatewayVersion);
+  const uyumGerekliSurum = requiredVersion(eksikYetenekler);
 
   return (
     <div className="dnp3-settings-form">
@@ -224,6 +279,25 @@ export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [], hideCo
           </select>
           <small className="dnp3-help">{politikaYardim}</small>
         </label>
+        {/* UYUMLULUK UYARISI — REDDETME DEGIL. Kayit kabul edilir (mesru akis
+            "once cihazi yapilandir, sonra gateway'i guncelle"dir) ama ayarin
+            sahada gecerli oldugu SOYLENMEZ: eski gateway bu alanlari ya yok
+            sayar ya da tum config'i reddeder. */}
+        {uyumGerekliSurum !== null ? (
+          <div className="dnp3-compat-warn" role="status">
+            <span>
+              {t("engineering.dnp3.gatewayCompatWarn", {
+                version: uyumGerekliSurum,
+                current: gatewayVersion ?? t("engineering.dnp3.gatewayVersionUnknown")
+              })}
+            </span>
+            {onGatewayUpdate ? (
+              <button type="button" className="dnp3-compat-action" onClick={onGatewayUpdate}>
+                {t("engineering.dnp3.gatewayUpdateAction")}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         {oturumUykulu ? (
           <>
             <label className="dnp3-field">
@@ -243,6 +317,39 @@ export function Dnp3SettingsForm({ value, onChange, usedMasterPorts = [], hideCo
               </select>
               <small className="dnp3-help">{t("engineering.dnp3.dialInIntervalHelp")}</small>
             </label>
+            {/* ISTENEN vs CIHAZDAN DOGRULANAN. Secili deger yalnizca "istenen"
+                sutununda durur; "cihazda aktif" iddiasi CIHAZIN KENDI dosyasi
+                okunmadan yapilmaz. Veri gelmediyse (prop tanimsiz) blok hic
+                cizilmez — uydurma bir dogrulama gostermektense sessiz kal. */}
+            {dialInDurumu ? (
+              <div
+                className={`dnp3-status-block${dialInFarkli ? " dnp3-status-block--warn" : ""}`}
+              >
+                <div className="dnp3-status-row">
+                  <span className="dnp3-status-key">{t("engineering.dnp3.dialInDesired")}</span>
+                  <span className="dnp3-status-val">
+                    {dialIn === null
+                      ? t("engineering.dnp3.dialInIntervalUnset")
+                      : dialInEtiket(dialIn)}
+                  </span>
+                </div>
+                <div className="dnp3-status-row">
+                  <span className="dnp3-status-key">{t("engineering.dnp3.dialInVerified")}</span>
+                  <span className="dnp3-status-val">
+                    {dialInDurumu.appliedMin === null
+                      ? DEGER_YOK
+                      : dialInEtiket(dialInDurumu.appliedMin)}
+                  </span>
+                </div>
+                <div className="dnp3-status-row">
+                  <span className="dnp3-status-key">{t("engineering.dnp3.dialInStatus")}</span>
+                  <span className="dnp3-status-val">{dialInDurumEtiketi}</span>
+                </div>
+                {dialInFarkli ? (
+                  <p className="dnp3-status-note">{t("engineering.dnp3.dialInMismatch")}</p>
+                ) : null}
+              </div>
+            ) : null}
             <label className="dnp3-field">
               <span className="dnp3-label">{t("engineering.dnp3.communicationGrace")}</span>
               <select

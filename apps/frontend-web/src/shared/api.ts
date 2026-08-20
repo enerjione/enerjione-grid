@@ -3690,7 +3690,8 @@ import type {
   ConfigDiffRow,
   ConfigRow,
   ConfigTemplate,
-  ConfigVersion
+  ConfigVersion,
+  DialInApplyStatus
 } from "./types";
 
 type ApiConfigRow = {
@@ -3729,13 +3730,28 @@ export async function fetchDeviceConfig(token: string, deviceId: number): Promis
   const data = (await response.json()) as {
     version: ApiConfigVersion; filename: string | null; rows: ApiConfigRow[];
     device_last_update?: string | null;
+    dial_in_desired_min?: number | null;
+    dial_in_applied_min?: number | null;
+    dial_in_apply_status?: string | null;
   };
   return {
     version: mapConfigVersion(data.version),
     filename: data.filename,
     rows: data.rows.map(mapConfigRow),
-    deviceLastUpdate: data.device_last_update ?? null
+    deviceLastUpdate: data.device_last_update ?? null,
+    dialInDesiredMin: data.dial_in_desired_min ?? null,
+    dialInAppliedMin: data.dial_in_applied_min ?? null,
+    dialInApplyStatus: dialInApplyStatus(data.dial_in_apply_status)
   };
+}
+
+/** Bilinmeyen/eksik durum metni "bilinmiyor"a duser.
+ *
+ *  Backend alani duz `str` doner. Tanimadigimiz bir degeri "uygulandi"
+ *  sayarsak arayuz, dogrulanmamis bir ayari sahada gecerli gibi gosterir —
+ *  guvenli taraf her zaman "bilinmiyor". */
+function dialInApplyStatus(ham: string | null | undefined): DialInApplyStatus {
+  return ham === "uygulandi" || ham === "bekliyor" ? ham : "bilinmiyor";
 }
 
 /** Sablonun ayar satirlari — sablon duzenleyicisi cihaz kartiyla ayni izgara. */

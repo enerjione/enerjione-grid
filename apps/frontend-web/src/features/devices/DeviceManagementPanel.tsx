@@ -7,6 +7,7 @@ import i18n from "../../shared/i18n";
 import type {
   DeviceModelOption,
   DeviceRow,
+  DialInApplyStatus,
   Dnp3ExtendedSettings,
   Gateway,
   GatewayAgentStatus,
@@ -28,7 +29,9 @@ import {
   type GatewayLivenessState
 } from "../../shared/gatewayLiveness";
 import {
+  fetchDeviceConfig,
   fetchGatewayAgentStatus,
+  fetchGatewayUpdate,
   restartGatewayLocally,
   startGatewayLocally,
   stopGatewayLocally
@@ -578,6 +581,72 @@ export function DeviceManagementPanel({
       setDevicePropsTab("system");
     }
   }, [selectedDevice, devicePropsTab]);
+
+  // --- DNP3 formunun KANIT girdileri -------------------------------------
+  //
+  // Ikisi de AYAR DEGIL: "kaydedilen ayar sahada gercekten gecerli mi"
+  // sorusunun kanitidir. Bu yuzden formda degil BURADA cekilir ve prop
+  // olarak gecer — form saf kalir, tek isi ayar yazmaktir.
+  //
+  // `undefined` = SORULMADI/OGRENILEMEDI. Blok cizilmez; eksik veriyi
+  // "uygulandi" ya da "sorun yok" gibi gostermek, bu iki ozelligin kapatmak
+  // icin var oldugu hata sinifinin ta kendisidir.
+  const [dialInDurumu, setDialInDurumu] = useState<
+    { appliedMin: number | null; status: DialInApplyStatus } | undefined
+  >(undefined);
+  // Gateway surumu UC DURUMLU: undefined = sorulmadi, null = soruldu ama
+  // gateway bildirmedi (uyari "bilinmiyor" der), metin = bildirilen surum.
+  const [gatewaySurumu, setGatewaySurumu] = useState<string | null | undefined>(undefined);
+
+  // Istekler YALNIZCA form gorunurken atilir: cihaz listesinde gezinirken her
+  // tiklamada iki ek istek atmak 600 cihazlik sahada bosuna yuktur.
+  const dnp3PanelAcik = canSeeDnp3 && devicePropsTab === "comms";
+  const dnp3CihazId = dnp3PanelAcik ? (selectedDevice?.id ?? null) : null;
+  const dnp3GatewayKodu = dnp3PanelAcik ? (selectedDeviceGateway?.code ?? null) : null;
+
+  useEffect(() => {
+    setDialInDurumu(undefined);
+    if (dnp3CihazId === null) return;
+    let iptal = false;
+    void (async () => {
+      try {
+        const cfg = await fetchDeviceConfig(accessToken, dnp3CihazId);
+        if (iptal) return;
+        // 404 -> `null`: cihazin yapilandirma dosyasi hic yok, yani cihazdan
+        // okunmus bir kanit da yok. Bu bir HATA degil, olagan bir baslangic
+        // durumu; blok yine de cizilmez.
+        setDialInDurumu(
+          cfg ? { appliedMin: cfg.dialInAppliedMin, status: cfg.dialInApplyStatus } : undefined
+        );
+      } catch {
+        // Okunamadi — sessiz. Cihaz kaydetmeyi engellemez, yalnizca kanit
+        // gosterilmez.
+        if (!iptal) setDialInDurumu(undefined);
+      }
+    })();
+    return () => {
+      iptal = true;
+    };
+  }, [accessToken, dnp3CihazId]);
+
+  useEffect(() => {
+    setGatewaySurumu(undefined);
+    if (!dnp3GatewayKodu) return;
+    let iptal = false;
+    void (async () => {
+      try {
+        const durum = await fetchGatewayUpdate(dnp3GatewayKodu);
+        if (!iptal) setGatewaySurumu(durum.current_version);
+      } catch {
+        // SORULDU ama ogrenilemedi. `null` = bilinmiyor; backend de
+        // bilinmeyen surumu EKSIK sayar (guvenli taraf), arayuz de oyle.
+        if (!iptal) setGatewaySurumu(null);
+      }
+    })();
+    return () => {
+      iptal = true;
+    };
+  }, [dnp3GatewayKodu]);
 
   const applySelectedDeviceToForm = (device: DeviceRow) => {
     setName(device.name);
@@ -1785,6 +1854,16 @@ export function DeviceManagementPanel({
                         value={dnp3Ext}
                         onChange={(patch) => setDnp3Ext((prev) => ({ ...prev, ...patch }))}
                         hideConnectionFields
+                        dialInDurumu={dialInDurumu}
+                        gatewayVersion={gatewaySurumu}
+                        // Guncelleme arayuzu MEVCUT ekrandir (gateway duzenleme
+                        // modali); form yeni bir yol acmaz. Yetkisi olmayan
+                        // rolde baglanti hic cizilmez.
+                        onGatewayUpdate={
+                          canManageGateways && selectedDeviceGateway
+                            ? () => setEditingGatewayCode(selectedDeviceGateway.code)
+                            : undefined
+                        }
                         usedMasterPorts={devices
                           .filter(
                             (x) =>
