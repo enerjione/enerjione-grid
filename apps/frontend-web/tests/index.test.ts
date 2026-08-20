@@ -112,6 +112,10 @@ import "./gatewayKurulumModu.test";
 // operator anlamadigi bir hata gorurdu.
 import "./b5SmartSession.test";
 
+// Calisma modu (Akilli/Boost): `comm_lost` ile gelen 0.0 "Boost" DEGILDIR.
+// Ikisi de gecerli bir mod oldugu icin bu yanlis ekranda fark edilmez.
+import "./operationMode.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   connectionIsDead,

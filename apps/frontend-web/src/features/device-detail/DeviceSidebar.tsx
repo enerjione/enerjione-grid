@@ -51,6 +51,13 @@ type Props = {
   partNo?: string;
   /** Firmware surumu (master.firmware_version / info_fw_version). */
   firmware?: string;
+  /** Cihazin calisma modu — `master.operation_mode` binary sinyalinden.
+   *
+   *  `undefined` = BILINMIYOR (deger yok ya da kalite guvenilmez). O zaman
+   *  satir hic cizilmez: iki modun ikisi de gecerli oldugu icin, bilmedigimiz
+   *  bir durumu ikisinden biri gibi gostermek dogrudan yanlis bilgi olurdu
+   *  (bkz. DeviceDetailPage, `sidebarOperationMode`). */
+  operationMode?: "smart" | "boost";
   /** Gercek alarm listesinden: aktif (giderilmemis) alarm var mi. */
   hasAlarm?: boolean;
   /** Alarm listesi cekilemediyse dolu — kart "bilinmiyor"a gecer. */
@@ -117,6 +124,7 @@ export function DeviceSidebar({
   ip,
   partNo,
   firmware,
+  operationMode,
   hasAlarm = false,
   alarmError = "",
   channelSerials,
@@ -237,6 +245,25 @@ export function DeviceSidebar({
           {ip ? <InfoRow icon="router" label="IP" value={ip} /> : null}
           {partNo ? <InfoRow icon="qr_code_2" label={t("deviceDetail.sidebar.partNo")} value={partNo} /> : null}
           {firmware ? <InfoRow icon="memory" label={t("deviceDetail.sidebar.firmware")} value={firmware} /> : null}
+          {/* CALISMA MODU — Akilli / Boost. Deger guvenilmezse ust katman
+              `undefined` gecer ve satir hic cizilmez; "bilmiyorum"u
+              modlardan biri gibi gostermeyiz. */}
+          {operationMode ? (
+            <InfoRow
+              // IKON SABIT — moda gore DEGISMIYOR. Iki sebep:
+              //   1) `icon={kosul ? "a" : "b"}` bicimini iconSubset testi
+              //      TARAMIYOR (yalnizca `icon="ad"` literalini okur), yani
+              //      fontta olmayan bir ikon sessizce gecerdi. Ilk deneme
+              //      `auto_mode`di ve subset'te YOKTU: sahada ikon yerine
+              //      "auto_mode" yazisi cikardi (bkz. solar_power vakasi).
+              //   2) Diger BILGILER satirlarinda da satir basina tek sabit
+              //      ikon var; modu zaten renk (yesil/amber) ve metin ayiriyor.
+              icon="tune"
+              label={t("deviceDetail.sidebar.operationMode")}
+              value={t(`deviceDetail.sidebar.operationMode_${operationMode}`)}
+              tone={operationMode === "smart" ? "green" : "amber"}
+            />
+          ) : null}
 
           {/* Pil — ana sayfa batarya sembolu (% ye gore renkli) */}
           <li className="device-sidebar-info-row">
