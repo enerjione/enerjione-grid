@@ -4063,3 +4063,68 @@ export async function testFtpSettings(token: string): Promise<FtpTestResult> {
   const r = (await response.json()) as { ok: boolean; detail: string; config_files: number | null };
   return { ok: r.ok, detail: r.detail, configFiles: r.config_files };
 }
+
+import type { GatewayUpdateState } from "./types";
+
+// --- Gateway yazilim guncellemesi -----------------------------------------
+//
+// Akis: prepare (hedefi coz + digest'e sabitle) -> apply (ajana yolla) ->
+// durum sorgusu. Geri alma ayni mekanizmayi kullanir, yalnizca hedef
+// referansi farklidir.
+
+export async function fetchGatewayUpdates(): Promise<GatewayUpdateState[]> {
+  const response = await apiFetch(`${API_BASE_URL}/gateways/updates`);
+  if (!response.ok) throw new Error("Gateway guncelleme durumlari alinamadi");
+  return response.json();
+}
+
+export async function fetchGatewayUpdate(gatewayCode: string): Promise<GatewayUpdateState> {
+  const response = await apiFetch(`${API_BASE_URL}/gateways/${gatewayCode}/update`);
+  if (!response.ok) throw new Error("Gateway guncelleme durumu alinamadi");
+  return response.json();
+}
+
+export async function prepareGatewayUpdate(
+  gatewayCode: string,
+  targetImage?: string
+): Promise<GatewayUpdateState> {
+  const response = await apiFetch(`${API_BASE_URL}/gateways/${gatewayCode}/update/prepare`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target_image: targetImage ?? null })
+  });
+  if (!response.ok) throw new Error(await hataMetni(response, "Guncelleme hazirlanamadi"));
+  return response.json();
+}
+
+export async function applyGatewayUpdate(gatewayCode: string): Promise<GatewayUpdateState> {
+  const response = await apiFetch(`${API_BASE_URL}/gateways/${gatewayCode}/update/apply`, {
+    method: "POST"
+  });
+  if (!response.ok) throw new Error(await hataMetni(response, "Guncelleme baslatilamadi"));
+  return response.json();
+}
+
+export async function rollbackGatewayUpdate(gatewayCode: string): Promise<GatewayUpdateState> {
+  const response = await apiFetch(`${API_BASE_URL}/gateways/${gatewayCode}/update/rollback`, {
+    method: "POST"
+  });
+  if (!response.ok) throw new Error(await hataMetni(response, "Geri alma baslatilamadi"));
+  return response.json();
+}
+
+/** Backend `{code, message}` govdesi doner; mesaji ONE cikar.
+ *
+ *  Ham "409 Conflict" operatore hicbir sey soylemiyor; "zaten bu surumu
+ *  calistiriyor" soyluyor. */
+async function hataMetni(response: Response, varsayilan: string): Promise<string> {
+  try {
+    const govde = await response.json();
+    const detay = govde?.detail;
+    if (typeof detay === "string") return detay;
+    if (detay?.message) return detay.message;
+  } catch {
+    /* govde JSON degil — varsayilana dus */
+  }
+  return varsayilan;
+}

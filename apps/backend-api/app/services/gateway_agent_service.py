@@ -336,7 +336,13 @@ def read_logs(code: str) -> dict | None:
     }
 
 
-def request_update(code: str, actor_username: str, *, nats_url: str | None = None) -> str:
+def request_update(
+    code: str,
+    actor_username: str,
+    *,
+    nats_url: str | None = None,
+    image: str | None = None,
+) -> str:
     """Yeni imaji cekip container'i yeniden olustur.
 
     `restart`ten FARKI: restart AYNI imajla yeniden baslatir, bu once `pull`
@@ -358,7 +364,19 @@ def request_update(code: str, actor_username: str, *, nats_url: str | None = Non
     # sabitlenmis kurulumlar ilk guncellemede kendiliginden `:latest`e doner.
     from app.services.gateway_compose import DEFAULT_GATEWAY_IMAGE
 
-    params: dict[str, str] = {"image": DEFAULT_GATEWAY_IMAGE}
+    # IZLENEN REFERANSIN SAHIBI BACKEND'DIR (urun karari).
+    #
+    # `image` HER ZAMAN gonderilir; compose'daki mevcut etiketi geri kazanma
+    # yolu (`_params_from_compose`) hic devreye girmez. Cagiran bir hedef
+    # secmediyse "en guncel yayin" anlamina gelen varsayilana duseriz — bu,
+    # 2026-08-07'de sabit etikete kilitlenmis kurulumlari kurtaran davranisin
+    # ta kendisidir ve KORUNUYOR.
+    #
+    # Cagiran acikca bir referans verirse (guncelleme servisi digest'e
+    # sabitlenmis hedefi, geri alma onceki imaji gonderir) O gecerlidir.
+    # Aksi halde bir geri alma, bir sonraki guncellemede sessizce geri
+    # alinirdi: ayni sinif hata, ters yonde.
+    params: dict[str, str] = {"image": (image or "").strip() or DEFAULT_GATEWAY_IMAGE}
     if nats_url and nats_url.strip():
         params["nats_url"] = nats_url.strip()
     body["params"] = params

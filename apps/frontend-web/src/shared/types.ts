@@ -2420,3 +2420,53 @@ export type GatewayLogs = {
   stale: boolean;
   output: string;
 };
+
+/** Gateway surumu ile Grid ozelligi arasindaki uyumsuzluk.
+ *
+ *  REDDETME DEGIL UYARI: cihaz yapilandirmasi kabul edilir. Mesru akis
+ *  "once cihazi yapilandir, sonra gateway'i guncelle"dir. Ama gorunmez de
+ *  birakilmaz — arayuz "Akilli" derken sahanin surekli modda calismasi,
+ *  B5'in kapatmak icin var oldugu sessiz ayrismadir. */
+export type GatewayCompatibilityWarning = {
+  feature: string;
+  required_version: string;
+  current_version: string | null;
+  affected_devices: number;
+  message: string;
+};
+
+/** Gateway yazilim surumu + guncelleme durumu. */
+export type GatewayUpdateState = {
+  gateway_code: string;
+  current_version: string | null;
+  /** "agent" | "health" — surum nereden okundu. Uzak gateway'lerde tek
+   *  kaynak heartbeat'tir; bos "bilinmiyor" demektir, "guncel" DEGIL. */
+  current_version_source: string | null;
+  available_version: string | null;
+  /** UC DURUMLU: null = BILINMIYOR (kayit defterine ulasilamadi). */
+  update_available: boolean | null;
+  target_version: string | null;
+  target_image: string | null;
+  expected_digest: string | null;
+  tracked_image: string | null;
+  /** "stable" | "development" — gelistirme etiketi uretim hedefi DEGILDIR. */
+  channel: string | null;
+  status:
+    | "idle"
+    | "preparing"
+    | "requested"
+    | "running"
+    | "succeeded"
+    | "failed"
+    | "rolled_back";
+  from_version: string | null;
+  from_image: string | null;
+  started_by: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  error: string | null;
+  is_rollback: boolean;
+  can_rollback: boolean;
+  installed_locally: boolean;
+  compatibility: GatewayCompatibilityWarning[];
+};

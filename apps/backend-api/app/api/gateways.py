@@ -22,6 +22,10 @@ from app.data.device_models import DEFAULT_MODEL
 from app.models.user import User
 from app.repositories.device_repository import DeviceRepository
 from app.schemas.dnp3_extended import merge_dnp3_extended
+from app.schemas.gateway_update import (
+    GatewayUpdatePrepareRequest,
+    GatewayUpdateState,
+)
 from app.schemas.gateway_agent import (
     GatewayAgentStatus,
     GatewayLogsResponse,
@@ -42,6 +46,8 @@ from app.schemas.gateway import (
     GatewayUpdate,
 )
 from app.services import command_delivery_service, gateway_agent_service
+from app.services import gateway_update_service
+from app.services.gateway_update_service import GatewayUpdateError
 from app.services.event_service import record_event
 from app.services.gateway_agent_service import GatewayAgentError
 from app.services.gateway_compose import (
@@ -1074,6 +1080,17 @@ def update_gateway_locally(
     except GatewayAgentError as exc:
         raise _agent_http_error(exc) from exc
 
+    # ESKI UC DE DURUMU YAZAR — iki yazar, tek durum.
+    #
+    # Bu ucu birakip yalnizca yeni akisi kaydetmek, "Son Guncelleme"
+    # sutununu bu yoldan yapilan her guncellemede SESSIZCE bayat
+    # birakirdi: ekran eski bir surumu gosterirken saha baska bir surumde
+    # olurdu. Hedef surum burada bilinmiyor (istek "en guncel yayin"
+    # demek); `to_version` bos kalir ve arayuz onu "en guncel" diye
+    # gosterir — uydurmak yerine bilmedigimizi soyluyoruz.
+    gateway_update_service.note_legacy_update(
+        db, gateway.code, current_user.username, request_id=request_id
+    )
     record_event(
         db,
         category="gateway",
@@ -1087,6 +1104,231 @@ def update_gateway_locally(
     )
     db.commit()
     return LocalInstallResponse(request_id=request_id, code=gateway.code)
+
+
+# --------------------------------------------------------------------------
+# GATEWAY YAZILIM GUNCELLEMESI — hazirla / uygula / geri al
+#
+# IKINCI BIR OTA CERCEVESI YOK. Guncellemeyi yapan mekanizma degismedi:
+# backend -> request.json -> e1-gwd -> docker compose. Buradaki uclar
+# yalnizca HEDEFI SECER (ve digest'e sabitler), istegi baslatir, sonucu
+# izler ve denetime yazar. Ajanda yeni bir aksiyon ACILMADI; geri alma da
+# `update` aksiyonudur, tek fark gonderilen imaj referansidir.
+#
+# YETKI: yazma uclari INSTALLER'a ozel (guncelleme sahada gorunur bir
+# kesintidir). Okuma ucu engineer'a da acik: "hangi surum kosuyor" sorusu
+# teshisin ilk adimi ve kurulumcuyu beklememeli.
+#
+# SERBEST KOMUT YOK: backend ajana yalnizca dogrulanmis bir IMAJ REFERANSI
+# yazar; docker argumanlari ajanin icinde sabittir.
+# --------------------------------------------------------------------------
+_UPDATE_ERROR_STATUS: dict[str, int] = {
+    "not_installed_locally": status.HTTP_409_CONFLICT,
+    "update_in_progress": status.HTTP_409_CONFLICT,
+    "already_current": status.HTTP_409_CONFLICT,
+    "no_rollback_target": status.HTTP_409_CONFLICT,
+    "not_prepared": status.HTTP_409_CONFLICT,
+    "target_unknown": status.HTTP_409_CONFLICT,
+    "target_invalid": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    "target_not_released": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    # Kayit defterine ulasilamadi: BIZIM hatamiz degil, yukari akisin.
+    # Fail-closed davraniyoruz — hedef dogrulanmadan guncelleme baslamaz.
+    "registry_unreachable": status.HTTP_502_BAD_GATEWAY,
+}
+
+
+def _update_http_error(exc: GatewayUpdateError) -> HTTPException:
+    kod = _UPDATE_ERROR_STATUS.get(exc.code)
+    if kod is None and exc.code.startswith("agent_"):
+        # Ajan kaynakli sebepler (or. `request_pending`) kendi eslemesini
+        # kullanir: ust uste istek 409, ajan yoklugu 503.
+        ham = exc.code[len("agent_") :]
+        kod = _AGENT_ERROR_STATUS.get(ham, status.HTTP_503_SERVICE_UNAVAILABLE)
+    return HTTPException(
+        status_code=kod or status.HTTP_409_CONFLICT,
+        detail={"code": exc.code, "message": exc.message},
+    )
+
+
+def _gateway_or_404(db: Session, gateway_code: str) -> Gateway:
+    gateway = db.scalar(select(Gateway).where(Gateway.code == gateway_code))
+    if gateway is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
+    return gateway
+
+
+def _update_event(
+    db: Session,
+    gateway: Gateway,
+    durum,
+    *,
+    event_type: str,
+    severity: str = "info",
+    ozet: str,
+) -> None:
+    """Guncelleme denetim kaydi — ESKI -> YENI gorunur.
+
+    Yalnizca "guncelleme istendi" yazmak denetim sorusunu cevaplamiyordu:
+    hangi surumden hangisine gecildi, kim baslatti, hedefin digest'i neydi?
+    """
+    record_event(
+        db,
+        category="gateway",
+        event_type=event_type,
+        severity=severity,
+        actor_username=durum.started_by,
+        message=f"{gateway.name} ({gateway.code}) - {ozet}",
+        metadata={
+            "gateway_code": gateway.code,
+            "from_version": durum.from_version,
+            "to_version": durum.target_version,
+            "from_image": durum.from_image,
+            "to_image": durum.target_image,
+            "expected_digest": durum.expected_digest,
+            "is_rollback": durum.is_rollback,
+        },
+    )
+
+
+@router.get("/updates", response_model=list[GatewayUpdateState])
+def list_gateway_updates(
+    _: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    db: Session = Depends(get_db),
+):
+    """Tum gateway'lerin surum + guncelleme durumu (liste ekrani icin).
+
+    TEK ISTEK: gateway basina ayri cagri, 6 gateway'de 6 istek demekti.
+    Uyumluluk sayimi da tek sorguda yapilir.
+    """
+    sayim = gateway_update_service.smart_device_counts(db)
+    kodlar = list(db.scalars(select(Gateway.code).order_by(Gateway.code)).all())
+    sonuc = [
+        gateway_update_service.build_state(db, kod, smart_counts=sayim) for kod in kodlar
+    ]
+    db.commit()
+    return sonuc
+
+
+@router.get("/{gateway_code}/update", response_model=GatewayUpdateState)
+def get_gateway_update(
+    gateway_code: str,
+    _: User = Depends(require_roles([UserRole.ENGINEER, UserRole.INSTALLER])),
+    db: Session = Depends(get_db),
+):
+    """Bu gateway'in surum + guncelleme durumu.
+
+    Okuma aninda ajanin son sonucu duruma YANSITILIR (uzlastirma). Ayri bir
+    arka plan iscisi acmiyoruz: guncelleme saniyeler suren, operatorun
+    ekrana bakarak yaptigi bir islem ve arayuz zaten ajan durumunu
+    yokluyor - kimse bakmiyorsa uzlastirmaya da gerek yok.
+    """
+    _gateway_or_404(db, gateway_code)
+    durum = gateway_update_service.build_state(db, gateway_code)
+    db.commit()
+    return durum
+
+
+@router.post("/{gateway_code}/update/prepare", response_model=GatewayUpdateState)
+def prepare_gateway_update(
+    gateway_code: str,
+    payload: GatewayUpdatePrepareRequest | None = None,
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    """Hedef surumu coz, digest'e SABITLE ve kaydet. Sahaya dokunmaz.
+
+    Ag erisimi burada olur, guncelleme aninda degil. Operator neyin
+    kurulacagini ONAYLAMADAN once gorur ve o karar digest'e sabitlendigi
+    icin etiket bu arada baska bir imaja kaysa bile degismez.
+    """
+    gateway = _gateway_or_404(db, gateway_code)
+    try:
+        gateway_update_service.prepare(
+            db,
+            gateway_code,
+            current_user.username,
+            target_image=(payload.target_image if payload else None),
+        )
+    except GatewayUpdateError as exc:
+        db.rollback()
+        raise _update_http_error(exc) from exc
+
+    durum = gateway_update_service.build_state(db, gateway_code, reconcile_first=False)
+    _update_event(
+        db,
+        gateway,
+        durum,
+        event_type="gateway_update_requested",
+        ozet=f"guncelleme hazirlandi ({durum.from_version or '?'} -> {durum.target_version or '?'})",
+    )
+    db.commit()
+    return durum
+
+
+@router.post("/{gateway_code}/update/apply", response_model=GatewayUpdateState)
+def apply_gateway_update(
+    gateway_code: str,
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    """Hazirlanan hedefi ajana yolla.
+
+    KESINTI: gateway yeniden baslarken bagli cihazlardan telemetri gelmez.
+    Yanit ANLIK SONUC DEGIL; sonuc `GET /gateways/{code}/update` ile izlenir.
+    """
+    gateway = _gateway_or_404(db, gateway_code)
+    try:
+        gateway_update_service.apply(db, gateway_code, current_user.username)
+    except GatewayUpdateError as exc:
+        db.rollback()
+        raise _update_http_error(exc) from exc
+
+    durum = gateway_update_service.build_state(db, gateway_code, reconcile_first=False)
+    _update_event(
+        db,
+        gateway,
+        durum,
+        event_type="gateway_update_started",
+        severity="warning",
+        ozet=f"guncelleme basladi ({durum.from_version or '?'} -> {durum.target_version or '?'})",
+    )
+    db.commit()
+    return durum
+
+
+@router.post("/{gateway_code}/update/rollback", response_model=GatewayUpdateState)
+def rollback_gateway_update(
+    gateway_code: str,
+    current_user: User = Depends(require_role(UserRole.INSTALLER)),
+    db: Session = Depends(get_db),
+):
+    """Onceki surume don.
+
+    Hedef YALNIZCA bu sistemin gercekten calistirdigi imajdir
+    (`from_image`). Bilinmiyorsa 409 - sessizce "en guncel"e donmek, geri
+    alma isteyen operatore TERSINI yapmak olurdu.
+
+    Backend yeni bir yikici mekanizma uretmez: bu da normal `update`
+    aksiyonudur, yalnizca hedef referansi farklidir.
+    """
+    gateway = _gateway_or_404(db, gateway_code)
+    try:
+        gateway_update_service.rollback(db, gateway_code, current_user.username)
+    except GatewayUpdateError as exc:
+        db.rollback()
+        raise _update_http_error(exc) from exc
+
+    durum = gateway_update_service.build_state(db, gateway_code, reconcile_first=False)
+    _update_event(
+        db,
+        gateway,
+        durum,
+        event_type="gateway_rollback_started",
+        severity="warning",
+        ozet=f"geri alma basladi ({durum.from_version or '?'} -> {durum.target_version or '?'})",
+    )
+    db.commit()
+    return durum
 
 
 # --------------------------------------------------------------------------

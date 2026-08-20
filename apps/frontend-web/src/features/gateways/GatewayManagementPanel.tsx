@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 
-import type { Gateway } from "../../shared/types";
+import type { Gateway, GatewayUpdateState } from "../../shared/types";
 
 type DownloadParams = {
   backendUrl: string;
@@ -28,7 +28,42 @@ type Props = {
   onToggleActive: (gatewayCode: string, isActive: boolean) => Promise<void>;
   onDelete: (gatewayCode: string) => Promise<void>;
   onDownloadCompose: (gatewayCode: string, params: DownloadParams) => Promise<void>;
+  /** Gateway kodu -> surum/guncelleme durumu. Ayri bir istekle gelir
+   *  (`GET /gateways/updates`); henuz yuklenmemisse bos gecilir ve
+   *  sutunlar "—" gosterir. Yuklenmemis durumu "guncel" gibi gostermek,
+   *  sormadan verilmis bir iddia olurdu. */
+  updateStates?: Record<string, GatewayUpdateState>;
 };
+
+/** Guncelleme durumunun operatore gorunen karsiligi. */
+const DURUM_METNI: Record<GatewayUpdateState["status"], string> = {
+  idle: "—",
+  preparing: "Hazırlandı",
+  requested: "İstendi",
+  running: "Sürüyor",
+  succeeded: "Başarılı",
+  failed: "Başarısız",
+  rolled_back: "Geri alındı"
+};
+
+function surumHucresi(durum: GatewayUpdateState | undefined): string {
+  if (!durum) return "—";
+  if (!durum.current_version) {
+    // Kurulu degilse bunu SOYLE. "—" ile "guncel" arasindaki farki
+    // operator gormeli.
+    return durum.installed_locally ? "Bilinmiyor" : "Bu cihazda değil";
+  }
+  return durum.current_version;
+}
+
+function hedefHucresi(durum: GatewayUpdateState | undefined): string {
+  if (!durum) return "—";
+  if (durum.channel === "development") return "Geliştirme sürümü";
+  if (durum.target_version) return durum.target_version;
+  if (durum.update_available === null) return "Bilinmiyor";
+  if (durum.update_available === false) return "Güncel";
+  return durum.available_version || "—";
+}
 
 function defaultBackendUrl(): string {
   if (typeof window === "undefined") return "";
@@ -38,6 +73,7 @@ function defaultBackendUrl(): string {
 
 export function GatewayManagementPanel({
   gateways,
+  updateStates = {},
   onCreate,
   onToggleActive,
   onDelete,
@@ -177,6 +213,10 @@ export function GatewayManagementPanel({
             <th scope="col">Maks. Cihaz</th>
             <th scope="col">Batch (sn)</th>
             <th scope="col">Durum</th>
+            <th scope="col">Sürüm</th>
+            <th scope="col">Hedef</th>
+            <th scope="col">Güncelleme</th>
+            <th scope="col">Son Güncelleme</th>
             <th scope="col">Son Görülme</th>
             <th scope="col">İşlem</th>
           </tr>
@@ -197,6 +237,40 @@ export function GatewayManagementPanel({
               <td>{gateway.max_devices}</td>
               <td>{gateway.batch_interval_sec}</td>
               <td>{gateway.is_active ? "Aktif" : "Pasif"}</td>
+              <td>
+                {surumHucresi(updateStates[gateway.code])}
+                {(updateStates[gateway.code]?.compatibility.length ?? 0) > 0 ? (
+                  <span
+                    className="badge badge-warning"
+                    title={updateStates[gateway.code]?.compatibility
+                      .map((u) => u.message)
+                      .join(" | ")}
+                  >
+                    Uyumluluk
+                  </span>
+                ) : null}
+              </td>
+              <td>{hedefHucresi(updateStates[gateway.code])}</td>
+              <td>
+                {updateStates[gateway.code]
+                  ? DURUM_METNI[updateStates[gateway.code].status]
+                  : "—"}
+                {updateStates[gateway.code]?.status === "failed" ? (
+                  <span
+                    className="badge badge-danger"
+                    title={updateStates[gateway.code]?.error ?? ""}
+                  >
+                    Hata
+                  </span>
+                ) : null}
+              </td>
+              <td>
+                {updateStates[gateway.code]?.finished_at
+                  ? new Date(updateStates[gateway.code].finished_at as string).toLocaleString(
+                      undefined
+                    )
+                  : "—"}
+              </td>
               <td>{gateway.last_seen_at ? new Date(gateway.last_seen_at).toLocaleString(undefined) : "-"}</td>
               <td className="actions-cell">
                 <button

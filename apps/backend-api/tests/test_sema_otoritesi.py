@@ -159,25 +159,35 @@ def test_A12_tek_head_ve_0072():
     cfg.set_main_option("script_location", str(KOK / "alembic_migrations"))
     script = ScriptDirectory.from_config(cfg)
     heads = list(script.get_heads())
-    assert heads == ["0072"], f"tek head bekleniyordu, gelen: {heads}"
+    # TEK HEAD sarti degismez; SURUM ise zincir ilerledikce guncellenir.
+    # Sabit "0072" yerine "en yuksek revizyon" demiyoruz cunku o, iki head
+    # olustugunda da gecerdi — asil korunan sey CATALLANMAMA.
+    assert heads == ["0073"], f"tek head bekleniyordu, gelen: {heads}"
 
 
 # --------------------------------------------------------------------------
 # M6 — 0072 eksik tablo birakirsa yakalanmali
 # --------------------------------------------------------------------------
-def test_M6_0072_tum_model_tablolarini_kurar():
-    """0072, `Base.metadata`daki HER tabloyu kurmali.
+def test_M6_migrationlar_tum_model_tablolarini_kurar():
+    """`Base.metadata`daki HER tablonun bir migration'i olmali.
 
-    M6: 0072'den bir `create_table` silinirse bu test DUSER — parity testi
-    gercek PostgreSQL istiyor, bu ise saf ve her kosuda calisir.
+    M6: bir `create_table` silinirse ya da yeni bir model migration'siz
+    eklenirse bu test DUSER — parity testi gercek PostgreSQL istiyor, bu
+    ise saf ve her kosuda calisir.
+
+    NEDEN ARTIK YALNIZCA 0072'YE BAKMIYOR: 0072 temiz kurulumun TABANIDIR
+    ama zincir orada bitmiyor. Yalnizca tabana bakan bir kontrol, 0073 ile
+    gelen `gateway_updates`i "eksik" sayar ve gelistiriciyi tabani geriye
+    donuk sismeye iterdi — oysa dogru davranis yeni tabloyu YENI bir
+    migration'a koymaktir. Korunan sey degismedi: modelde olup HICBIR
+    migration'da olmayan tablo kalmasin.
     """
     import app.models  # noqa: F401
     from app.db.base import Base
 
-    yol = next(
-        p for p in (KOK / "alembic_migrations" / "versions").glob("*0072*.py")
-    )
-    kaynak = yol.read_text(encoding="utf-8")
-    kurulan = set(re.findall(r"op\.create_table\(\s*'([a-z_]+)'", kaynak))
+    kurulan: set[str] = set()
+    for yol in (KOK / "alembic_migrations" / "versions").glob("*.py"):
+        kaynak = yol.read_text(encoding="utf-8")
+        kurulan |= set(re.findall(r"op\.create_table\(\s*['\"]([a-z_]+)", kaynak))
     eksik = sorted(set(Base.metadata.tables) - kurulan)
-    assert not eksik, f"0072 su tablolari KURMUYOR: {eksik}"
+    assert not eksik, f"su tablolari HICBIR migration kurmuyor: {eksik}"
