@@ -14,6 +14,57 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.104.0] — 2026-08-20
+
+### Eklendi
+
+- **Gateway yazılım güncelleme yönetimi.** Gateway'in hangi sürümde olduğu,
+  yeni sürüm bulunup bulunmadığı ve son güncellemenin neyden neye gittiği
+  artık gateway kartında görünüyor. Güncelleme hedefi kayıt defterinde
+  çözülüp **manifest digest'ine sabitleniyor**: onaylanan imaj ile kurulan
+  imajın ayrışması mümkün değil. **Geri alma** yalnızca bu sistemin
+  gerçekten çalıştırdığı önceki imaja gider — hedef bilinmiyorsa işlem
+  reddedilir, sessizce "en güncel"e düşmez. Güncelleme/geri alma yetkisi
+  `installer` rolüne özel; her adım olay kaydına yazılıyor.
+
+- **Gateway sürüm ↔ özellik uyumluluk uyarısı.** Bir gateway, üzerindeki
+  cihazların kullandığı özelliği desteklemeyecek kadar eskiyse operatöre
+  söyleniyor (ilk kural: akıllı oturum, gateway 1.12.0+). Uyarı yapılandırmayı
+  **reddetmez** — meşru akış "önce cihazı ayarla, sonra gateway'i güncelle";
+  ama sessiz de kalmaz.
+
+- **Akıllı oturum (smart session).** Cihaz başına oturum politikası ve
+  sessizlik eşiği; gateway v1.12.0 sözleşmesi.
+
+- **Disk Guardian sertleştirmesi ve depolama görünürlüğü.** RabbitMQ'nun disk
+  eşiği artık ürün farkında: varsayılan 50 MB, 456 GB'lik saha diskinde ancak
+  %99,99 dolulukta alarm üretiyordu — yani koruma olarak ölüydü.
+
+### Düzeltildi
+
+- **Historian yedeğe giriyordu.** Dışlama artık katalogdan türetiliyor;
+  yedek boyutu ham telemetri yüzünden şişmiyor.
+
+- **Kimlik değişiminde oturumlar iptal ediliyor.** Parola değişince eski
+  oturumlar geçerli kalmıyordu.
+
+- **Outbound yeniden denemeleri JetStream ACK yolundan çıkarıldı** — yavaş
+  bir SCADA hedefi telemetri ACK'ini geciktiremiyor.
+
+- **Alarm sayacı** geçmiş sorgusunda gün sınırında yanlış sonuç veriyordu.
+
+- **`gateway_updates` şeması iki kurulum yolunda aynı.** Model ile migration
+  0073 arasında `server_default` ayrışması vardı: temiz kurulum (`create_all`)
+  DB seviyesinde varsayılansız, yükseltme (Alembic) varsayılanlı şema
+  üretiyordu.
+
+- **RabbitMQ disk yapılandırması .deb paketine giriyor.** `docker-compose.yml`
+  `infra/rabbitmq/rabbitmq.conf`'u bind mount ediyor ama dosya pakete
+  kopyalanmıyordu; saha cihazında mount kaynağı bulunmayacak ve disk eşiği
+  koruması **sessizce** devre dışı kalacaktı.
+
+---
+
 ## [2.103.0] — 2026-08-18
 
 ### Değişti

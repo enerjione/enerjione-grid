@@ -57,6 +57,14 @@ mkdir -p "$APP/infra"
 cp -r infra/scripts   "$APP/infra/"
 cp -r infra/systemd   "$APP/infra/"
 cp -r infra/nats      "$APP/infra/"
+# rabbitmq/: docker-compose.yml bu dizini BIND MOUNT ediyor
+# (rabbitmq.conf -> conf.d/20-e1-disk.conf). Pakete girmezse mount
+# kaynagi saha cihazinda YOKTUR; Docker eksik yolu dizin olarak yaratir
+# ve RabbitMQ'nun urun farkindali disk esigi devreye girmez — Disk
+# Guardian korumasi sessizce olur. Repo checkout'unda dosya var oldugu
+# icin CI'nin "compose config" adimi bunu goremez; kilidi
+# tests/test_deb_bind_mount_kaynaklari.py tutuyor.
+cp -r infra/rabbitmq  "$APP/infra/"
 [ -d infra/appliance ]  && cp -r infra/appliance  "$APP/infra/"
 [ -d infra/host-nginx ] && cp -r infra/host-nginx "$APP/infra/"
 
