@@ -461,8 +461,24 @@ def sagligi_uygula(
             ).all()
         }
 
+    # DURUM DEGISIMLERI — olay kaydina YALNIZCA gercek gecisler yazilir.
+    #
+    # Parti basina yazmak 2 yillik FIFO olay kaydini gurultuyle doldururdu
+    # (300sn'de bir snapshot x 600 cihaz). Gecis ise cihaz basina gunde
+    # birkac kez olur: `smart_idle`a girmek ve uyanmak operatorun gecmise
+    # donup bakmak istedigi gercek olaylardir.
+    gecisler: list[tuple[str, str, str]] = []  # (kod, onceki, yeni)
+
     for kod, alanlar in cozulen:
         satir = mevcut.get(kod)
+        # ILK GOZLEM OLAY URETMEZ. Uretseydi ilk tam snapshot butun filo
+        # icin ayni anda 600 satir yazardi — hicbiri bir DEGISIMI
+        # anlatmadigi halde.
+        if satir is not None:
+            onceki_durum = satir.connection_state
+            yeni_durum = alanlar.get("connection_state")
+            if onceki_durum and yeni_durum and onceki_durum != yeni_durum:
+                gecisler.append((kod, onceki_durum, yeni_durum))
         if satir is None:
             satir = DeviceRuntimeHealth(device_code=kod)
             db.add(satir)
@@ -489,6 +505,8 @@ def sagligi_uygula(
             satir.snapshot_batch_index = zarf.snapshot_batch_index
         satir.updated_at = an
 
+    _gecisleri_yaz(db, gecisler, an)
+
     # Uzlastirma silmesi, bu partinin yazdiklarini gormeli.
     db.flush()
     silinen = _uzlastir(db, zarf)
@@ -499,4 +517,48 @@ def sagligi_uygula(
         "applied": len(cozulen),
         "skipped": atlanan,
         "reconciled": silinen,
+        "transitions": len(gecisler),
     }
+
+
+#: Olay kaydinda "dikkat gerektiren" sayilan durumlar. `smart_idle` BILEREK
+#: YOK: uyku SAGLIKLIDIR ve uyari seviyesinde yazilirsa olay listesinde her
+#: gece filo boyu sahte alarm gibi gorunur.
+_UYARI_DURUMLARI = frozenset({"lost", "listener_error"})
+
+
+def _gecisleri_yaz(
+    db: Session, gecisler: list[tuple[str, str, str]], an: datetime
+) -> None:
+    """Baglanti durumu gecislerini olay kaydina yaz.
+
+    `i18n_key` KULLANILIR, hazir metin DEGIL: olay listesi kullanicinin
+    dilinde gosteriliyor. Backend'de Turkce cumle uretmek, ayni metni iki
+    yerde tutmak ve Ingilizce arayuzde Turkce satir birakmak olurdu.
+    `message` yalnizca geriye uyumluluk icin yazilir.
+
+    ANAHTAR HEDEF DURUMA GORE (`device_runtime_smart_idle` gibi), tek bir
+    genel anahtar + `{{to}}` parametresi DEGIL. Genel anahtar olsaydi
+    ekranda ham enum gorunurdu ("... smart_idle oldu"); cevirinin icine
+    baska bir ceviri gomme numaralarina gerek kalmadan her gecis kendi
+    dogal cumlesini alir ("SN2_0 Smart Beklemeye gecti").
+    """
+    if not gecisler:
+        return
+    # Ice aktarim DONGUSEL BAGIMLILIGI onlemek icin burada: `event_service`
+    # cagri zincirinde modul seviyesinde bu servise donebiliyor.
+    from app.services.event_service import record_event
+
+    for kod, onceki, yeni in gecisler:
+        record_event(
+            db,
+            category="device",
+            event_type="device_runtime_state_changed",
+            message=f"{kod}: {onceki} -> {yeni}",
+            severity="warning" if yeni in _UYARI_DURUMLARI else "info",
+            device_code=kod,
+            i18n_key=f"device_runtime_{yeni}",
+            i18n_params={"device": kod, "from": onceki, "to": yeni},
+            metadata={"from": onceki, "to": yeni},
+            occurred_at=an,
+        )

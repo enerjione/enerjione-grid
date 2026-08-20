@@ -837,7 +837,13 @@
       "notification_whatsapp_web_test_failed": "WhatsApp Web test failed: {{error}}",
       "notification_whatsapp_web_logout": "WhatsApp Web session closed",
       "topology_imported": "Topology imported: {{regions}} regions, {{lines}} lines, {{poles}} poles",
-      "fault_cause_set": "Fault cause recorded: fault {{fault_id}} → {{cause}}"
+      "fault_cause_set": "Fault cause recorded: fault {{fault_id}} → {{cause}}",
+      "device_runtime_online": "{{device}} woke up and is talking to the gateway",
+      "device_runtime_smart_idle": "{{device}} entered Smart Idle (modem asleep)",
+      "device_runtime_recovering": "{{device}} is being reconnected",
+      "device_runtime_lost": "{{device}} communication lost",
+      "device_runtime_listener_error": "Gateway could not open a listener for {{device}}",
+      "device_runtime_unknown": "{{device}} state is unknown"
     },
     "category": {
       "auth": "Login & session",
@@ -4877,7 +4883,11 @@
       "dueIn": "Next Dial-In: {{minutes}} min",
       "overdue": "Dial-In overdue by {{minutes}} min",
       "lost": "Expected Dial-In missed",
-      "lostHint": "Communication lost"
+      "lostHint": "Communication lost",
+      "label": "Next Dial-In",
+      "labelOverdue": "Dial-In overdue",
+      "minutes": "{{minutes}} min",
+      "lostShort": "Missed"
     },
     "panel": {
       "title": "Connection and Session",

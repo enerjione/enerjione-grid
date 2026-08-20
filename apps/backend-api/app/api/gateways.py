@@ -2527,10 +2527,14 @@ def report_device_runtime_health(
     baslik butcesine sigmaz; buyutulup bir proxy baslik limitine takilirsa
     400 doner ve KOMUTLAR DURUR. Toplu baslik oldugu gibi kalir.
 
-    NEDEN `record_event` YOK: bu kanal denetim gecmisi degil, "cihaz SU AN
-    ne durumda" gozlemidir ve varsayilan 300 saniyede bir tam snapshot +
-    her degisimde delta akar. Parti basina olay yazmak, 2 yillik FIFO olay
-    kaydini saglik gurultusuyle doldurup gercek denetim izini budatirdi.
+    OLAY KAYDI YALNIZCA DURUM DEGISIMINDE: bu kanal "cihaz SU AN ne
+    durumda" gozlemidir ve varsayilan 300 saniyede bir tam snapshot + her
+    degisimde delta akar. PARTI BASINA olay yazmak 2 yillik FIFO olay
+    kaydini saglik gurultusuyle doldurup gercek denetim izini budatirdi —
+    o yuzden yazilmiyor. Ama `smart_idle`a girmek ve uyanmak operatorun
+    gecmise donup bakmak istedigi gercek olaylar; bunlar cihaz basina
+    gunde birkac kez olur ve `connection_state` GERCEKTEN degistiginde
+    (`device_runtime_health_service`) tek satir yazilir.
 
     Yanit govdesi OKUNMAZ (sozlesme bolum 2): 2xx yeterlidir, bos doneriz.
     Bayat parti (eski `(boot_id, sequence)`) HATA DEGILDIR — yok sayilir ve

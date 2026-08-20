@@ -14,6 +14,36 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.107.2] — 2026-08-20
+
+### Düzeltildi
+
+- **Durum LED'i geri geldi.** Cihaz detay başlığındaki ve harita popup'ındaki
+  renkli nokta görünmez olmuştu: rengi eskiden `is-online/is-offline`
+  sınıflarından alıyordu, çalışma-zamanı durumuna geçerken o sınıfların yeri
+  değişti ama yeni renk kuralı bu iki noktaya yazılmamıştı. Artık durumun
+  tonunda yanıyor. Kit setlerinin noktaları da aynı sebeple sönüktü.
+
+### Eklendi
+
+- **Smart Bekleme ve uyanma artık olay kaydında.** Cihazın bağlantı durumu
+  gerçekten değiştiğinde tek satır yazılır (`SN2_0 Smart Beklemeye geçti`,
+  `SN2_0 uyandı ve gateway ile konuşuyor`). Her raporda değil **sadece
+  değişimde**: aksi halde 300 saniyede bir gelen anlık görüntü olay kaydını
+  doldururdu. İlk gözlem ve `report_late` bayrağının inip kalkması olay
+  üretmez. Metinler iki dilde.
+
+### Değişti
+
+- **Canlı Değerler'de çıkış noktaları gizlendi.** `Binary Output` ve
+  `Analog Output` DNP3'ün komut tarafı — operatörün cihaza yazdığı nokta,
+  ölçüm değil; değerleri de boş görünüyordu. 1700+ satırlık listede aranan
+  ölçümü gömüyorlardı. Komutlar yerinde duruyor (cihaz detayı → Komutlar).
+- **Sonraki Dial-In satırı düzeldi.** Etiket solda, değer sağda ("57 dk");
+  önceden tek parça metin dar etiket sütununa düşüp üç satıra bölünüyordu.
+
+---
+
 ## [2.107.1] — 2026-08-20
 
 ### Düzeltildi

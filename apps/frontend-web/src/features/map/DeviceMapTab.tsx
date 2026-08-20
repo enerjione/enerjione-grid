@@ -1687,15 +1687,17 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                       className="runtime-chip--sm"
                     />
                   </li>
-                  {/* Sonraki Dial-In geri sayimi — DAKIKA. Epoch yoksa
-                      (`null` = hic olmadi) bilesen hicbir sey dondurmez ve
-                      satir CSS ile (`:empty`) gizlenir. */}
-                  <li className="device-sidebar-info-row device-sidebar-info-row--countdown">
-                    <DialInCountdown
-                      runtime={(selectedHealth ?? selectedDevice).runtimeHealth}
-                      state={selectedRuntime}
-                    />
-                  </li>
+                  {/* Sonraki Dial-In geri sayimi — DAKIKA. Satirin TAMAMINI
+                      bilesen ciziyor (`variant="row"`): epoch yoksa
+                      (`null` = hic olmadi) satir HIC olusmaz. Onceden burada
+                      bos bir `<li>` aciliyor ve icindeki tek parca metin
+                      ("Sonraki Dial-In: 57 dk") dar etiket sutununa dusup uc
+                      satira boluniyordu. */}
+                  <DialInCountdown
+                    runtime={(selectedHealth ?? selectedDevice).runtimeHealth}
+                    state={selectedRuntime}
+                    variant="row"
+                  />
                   <li className="device-sidebar-info-row">
                     <span className="material-symbols-outlined">schedule</span>
                     <span className="device-sidebar-info-label">{t("deviceDetail.sidebar.lastCommShort")}</span>

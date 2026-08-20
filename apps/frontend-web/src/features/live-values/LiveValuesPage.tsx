@@ -50,9 +50,16 @@ const DATA_TYPES: SignalDataType[] = [
   "analog",
   "binary",
   "counter",
-  "string",
-  "analog_output"
+  "string"
 ];
+
+//: DNP3'un KOMUT tarafi — bu sayfada GOSTERILMEZ.
+//
+// `binary_output` zaten sekme listesinde yoktu ama satirlar filtrelenmiyordu:
+// "Tumu" sekmesi onlari yine de basiyordu. `analog_output` ise sekmede de
+// duruyordu. Ikisi de operatorun cihaza YAZDIGI nokta; "cihaz su an ne
+// olcuyor" sorusunun cevabi degiller ve aranan olcumu gurultuye gomuyorlar.
+const CIKIS_TIPLERI: ReadonlySet<string> = new Set(["binary_output", "analog_output"]);
 
 
 
@@ -286,10 +293,27 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
     );
   };
 
+  // CIKISLAR LISTEDE GORUNMEZ.
+  //
+  // `binary_output` ve `analog_output` DNP3'un KOMUT tarafidir: operatorun
+  // cihaza YAZDIGI kanal, cihazin bildirdigi bir olcum degil. Bu sayfanin
+  // sorusu "cihaz su an ne olcuyor" ve komut noktalari o listede yalnizca
+  // gurultu yapiyor — 600 cihazlik bir kurulumda aranan olcumu bulmak
+  // zorlasiyor. Komutlar zaten cihaz detayindaki Komutlar sekmesinde.
+  //
+  // Filtre TEK YERDE: sayaclar, dropdown secenekleri, tablo ve toplam sayi
+  // hep bu listeden besleniyor. Yalnizca tabloyu filtrelemek, sayacin
+  // tablodan FAZLA sayi gostermesi demekti ("142 kayit" yazip 130 satir
+  // cizmek) — kullanici eksik veri sanirdi.
+  const gorunurDegerler = useMemo(
+    () => values.filter((row) => !CIKIS_TIPLERI.has(signalOf(row)?.data_type as string)),
+    [values, signals, devices]
+  );
+
   const countsByType = useMemo(() => {
     const map = new Map<SignalDataType, number>();
     DATA_TYPES.forEach((t) => map.set(t, 0));
-    for (const row of values) {
+    for (const row of gorunurDegerler) {
       const type = signalOf(row)?.data_type;
       if (type) map.set(type, (map.get(type) ?? 0) + 1);
     }
@@ -299,7 +323,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
   // Filtre dropdown'ları için mevcut canlı değerlerden çıkarılan benzersiz listeler
   const deviceOptions = useMemo(() => {
     const seen = new Map<string, string>(); // code -> name
-    for (const row of values) {
+    for (const row of gorunurDegerler) {
       if (row.device_code && !seen.has(row.device_code)) {
         seen.set(row.device_code, row.device_name || row.device_code);
       }
@@ -307,11 +331,11 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
     return Array.from(seen, ([code, name]) => ({ code, name })).sort((a, b) =>
       a.name.localeCompare(b.name, localeTag)
     );
-  }, [values, localeTag]);
+  }, [gorunurDegerler, localeTag]);
 
   const sourceOptions = useMemo(() => {
     const set = new Set<string>();
-    for (const row of values) {
+    for (const row of gorunurDegerler) {
       if (row.source) set.add(row.source);
     }
     // Tutarlı sıra: master, sat01, sat02, sonra diğerleri
@@ -324,11 +348,11 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
     });
     Array.from(set).sort().forEach((s) => ordered.push(s));
     return ordered;
-  }, [values]);
+  }, [gorunurDegerler]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return values.filter((row) => {
+    return gorunurDegerler.filter((row) => {
       const sig = signalOf(row);
       if (activeTab !== "all") {
         if (!sig || sig.data_type !== activeTab) return false;
@@ -355,7 +379,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
       );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [values, signals, devices, activeTab, search, deviceFilter, sourceFilter, qualityFilter]);
+  }, [gorunurDegerler, signals, devices, activeTab, search, deviceFilter, sourceFilter, qualityFilter]);
 
   // Filtre/tab/sayfa boyutu degisince ilk sayfaya don
   useEffect(() => {
@@ -382,7 +406,7 @@ export function LiveValuesPage({ values, signals, devices, gateways, loading, er
     return filtered.slice(start, start + pageSize);
   }, [filtered, page, pageSize]);
 
-  const totalCount = values.length;
+  const totalCount = gorunurDegerler.length;
 
   return (
     <section className="tab-panel live-values-page">

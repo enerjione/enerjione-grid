@@ -43785,6 +43785,35 @@ th.event-col-category {
 
 /* Geri sayim satiri kendini gizler: epoch `null` ise ("hic olmadi") bilesen
    HICBIR SEY dondurmez ve bos bir satir kalmamali. */
+/* --- DURUM LED'I -----------------------------------------------------------
+
+   Bu iki nokta RENGINI kendi tasimiyordu: eskiden `.is-online` / `.is-offline`
+   sinifindan aliyorlardi. Calisma-zamani durumuna gecerken o sinifların yerini
+   `runtime-tone--*` aldi, ama o siniflar YALNIZCA `--rt` degiskenlerini kurar;
+   `background`i uygulayan `.runtime-dot` sinifi ise bu ogelerde YOK.
+
+   Sonuc: 12px ve 8px'lik SEFFAF daireler — yani LED ekrandan kayboldu. Cihaz
+   detay basliginda ve harita popup'inda operatorun ilk baktigi gosterge tam
+   olarak buydu.
+
+   `[class*="runtime-tone--"]`: yalnizca bir ton tasiyorsa boyanir. Tonsuz
+   kalan bir kullanim varsa eski `.is-online` kurallari calismaya devam eder. */
+.device-sidebar-statusdot[class*="runtime-tone--"] {
+  background: var(--rt);
+  box-shadow: 0 0 0 4px var(--rt-soft);
+}
+.device-set-dot[class*="runtime-tone--"] {
+  background: var(--rt);
+  box-shadow: 0 0 0 3px var(--rt-soft);
+}
+
+/* Dial-In degeri: satirin SAG sutununda, durumun tonunda. Etiket solda
+   ("Sonraki Dial-In"), deger sagda ("57 dk") — tek parca metin dar etiket
+   sutununa dusup uc satira boluniyordu. */
+.runtime-countdown-value { font-variant-numeric: tabular-nums; }
+.runtime-countdown-value--overdue { color: #c2410c; }
+.runtime-countdown-value--lost { color: #b91c1c; }
+
 .device-sidebar-info-row--countdown:empty { display: none; }
 
 /* --- Detay: "Baglanti ve Oturum" karti ---------------------------------- */

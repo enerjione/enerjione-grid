@@ -22,9 +22,23 @@ type Props = {
   runtime?: DeviceRuntimeHealthRecord | null;
   state: DeviceRuntimeState;
   className?: string;
+  /** `inline` (varsayilan): tek rozet — panel basligi gibi serbest yerlerde.
+   *
+   *  `row`: kenar cubugu/popup bilgi listesinin KENDI satirini cizer
+   *  (ikon | etiket | deger). Neden bilesen satirin tamamini uretiyor:
+   *  geri sayim yokken (`next_expected_report_epoch = null`) satirin HIC
+   *  olmamasi gerekiyor. Cagiran tarafta `<li>` acip icini bu bilesene
+   *  birakmak BOS bir satir birakiyordu; `:empty` ile gizlemek de etiket
+   *  eklenince calismaz hale gelirdi. */
+  variant?: "inline" | "row";
 };
 
-export function DialInCountdown({ runtime, state, className = "" }: Props) {
+export function DialInCountdown({
+  runtime,
+  state,
+  className = "",
+  variant = "inline"
+}: Props) {
   const { t } = useTranslation();
   // Hook KOSULSUZ cagrilir: erken return'den sonra hook kalmasi React'i
   // render sirasinda firlatir (bkz. tests/hookSirasi.test.ts).
@@ -33,31 +47,52 @@ export function DialInCountdown({ runtime, state, className = "" }: Props) {
 
   if (geri.kind === "none") return null;
 
-  if (geri.kind === "lost") {
+  const kayip = geri.kind === "lost";
+  const gecikmis = geri.kind === "overdue";
+  const ikon = kayip ? "sensors_off" : gecikmis ? "hourglass_top" : "schedule";
+  const ipucu = kayip ? t("deviceRuntime.countdown.lostHint") : undefined;
+
+  // SATIR BICIMINDE etiket ve deger AYRILIR. Tek parca metin
+  // ("Sonraki Dial-In: 57 dk") bilgi listesinin dar etiket sutununa
+  // dusuyor ve uc satira bolunuyordu.
+  if (variant === "row") {
+    const deger = kayip
+      ? t("deviceRuntime.countdown.lostShort")
+      : t("deviceRuntime.countdown.minutes", { minutes: geri.minutes });
     return (
-      <span
-        className={`runtime-countdown runtime-countdown--lost ${className}`.trim()}
-        title={t("deviceRuntime.countdown.lostHint")}
-      >
+      <li className="device-sidebar-info-row" title={ipucu}>
         <span className="material-symbols-outlined" aria-hidden="true">
-          sensors_off
+          {ikon}
         </span>
-        {t("deviceRuntime.countdown.lost")}
-      </span>
+        <span className="device-sidebar-info-label">
+          {gecikmis ? t("deviceRuntime.countdown.labelOverdue") : t("deviceRuntime.countdown.label")}
+        </span>
+        <span
+          className={`device-sidebar-info-value runtime-countdown-value${
+            kayip ? " runtime-countdown-value--lost" : gecikmis ? " runtime-countdown-value--overdue" : ""
+          }`}
+        >
+          {deger}
+        </span>
+      </li>
     );
   }
 
-  const gecikmis = geri.kind === "overdue";
   return (
     <span
-      className={`runtime-countdown ${gecikmis ? "runtime-countdown--overdue" : ""} ${className}`.trim()}
+      className={`runtime-countdown ${kayip ? "runtime-countdown--lost" : ""} ${
+        gecikmis ? "runtime-countdown--overdue" : ""
+      } ${className}`.replace(/\s+/g, " ").trim()}
+      title={ipucu}
     >
       <span className="material-symbols-outlined" aria-hidden="true">
-        {gecikmis ? "hourglass_top" : "schedule"}
+        {ikon}
       </span>
-      {gecikmis
-        ? t("deviceRuntime.countdown.overdue", { minutes: geri.minutes })
-        : t("deviceRuntime.countdown.dueIn", { minutes: geri.minutes })}
+      {kayip
+        ? t("deviceRuntime.countdown.lost")
+        : gecikmis
+          ? t("deviceRuntime.countdown.overdue", { minutes: geri.minutes })
+          : t("deviceRuntime.countdown.dueIn", { minutes: geri.minutes })}
     </span>
   );
 }

@@ -151,6 +151,10 @@ import "./runtimeHealthOkumaSozlesmesi.test";
 // edilmez.
 import "./runtimeIpucu.test";
 
+// Canli Degerler'de DNP3 KOMUT noktalari (binary/analog output) listeyi
+// gomuyordu: degeri olmayan yuzlerce satir, aranan olcumu bulunamaz yapiyor.
+import "./canliDegerlerCikis.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   connectionIsDead,

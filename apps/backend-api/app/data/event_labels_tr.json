@@ -170,7 +170,13 @@
     "notification_whatsapp_web_test_failed": "WhatsApp Web test başarısız: {{error}}",
     "notification_whatsapp_web_logout": "WhatsApp Web oturumu kapatıldı",
     "topology_imported": "Topoloji içe aktarıldı: {{regions}} bölge, {{lines}} hat, {{poles}} direk",
-    "fault_cause_set": "Arıza sebebi girildi: arıza {{fault_id}} → {{cause}}"
+    "fault_cause_set": "Arıza sebebi girildi: arıza {{fault_id}} → {{cause}}",
+    "device_runtime_online": "{{device}} uyandı ve gateway ile konuşuyor",
+    "device_runtime_smart_idle": "{{device}} Smart Beklemeye geçti (modem uykuda)",
+    "device_runtime_recovering": "{{device}} için yeniden bağlanma deneniyor",
+    "device_runtime_lost": "{{device}} haberleşme kaybı",
+    "device_runtime_listener_error": "{{device}} için gateway dinleyici açamadı",
+    "device_runtime_unknown": "{{device}} durumu bilinmiyor"
   },
   "severity": {
     "info": "Bilgi",

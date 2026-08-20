@@ -901,3 +901,106 @@ def test_gecikme_kalkinca_durum_bozulmadan_devam_eder(db, gateway):
     satir = _satir(db, "DEV-FLAP")
     assert satir.connection_state == "smart_idle"
     assert satir.report_late is False
+
+
+# ---------------------------------------------------------------------------
+# OLAY KAYDI — yalnizca GERCEK durum degisimi
+#
+# Operator gecmise donup "bu cihaz ne zaman uyudu, ne zaman uyandi" diye
+# bakabilmeli. Ama bu kanal 300 saniyede bir TAM SNAPSHOT gonderiyor: parti
+# basina olay yazmak 2 yillik FIFO olay kaydini gurultuyle doldurur ve gercek
+# denetim izini budar. Ikisinin arasindaki tek dogru cizgi GECIS.
+# ---------------------------------------------------------------------------
+
+
+def _olaylar(db):
+    from app.models.system_event import SystemEvent
+
+    return list(db.scalars(select(SystemEvent).order_by(SystemEvent.id)).all())
+
+
+def test_ILK_gozlem_olay_URETMEZ(db, gateway):
+    """Ilk tam snapshot butun filo icin olay yagdirmamali.
+
+    Uretseydi 600 cihazlik bir kurulumda ilk baglantida 600 satir yazilir ve
+    hicbiri bir DEGISIMI anlatmazdi.
+    """
+    _post(db, _zarf(devices=[_cihaz_kaydi("SN2-001", connection_state="online")]))
+    assert _olaylar(db) == []
+
+
+def test_AYNI_durum_tekrar_gelince_olay_YAZILMAZ(db, gateway):
+    """Snapshot her 300sn'de bir ayni durumu tasiyor — gurultu olmamali."""
+    for sira in (1, 2, 3):
+        _post(
+            db,
+            _zarf(
+                devices=[_cihaz_kaydi("SN2-001", connection_state="smart_idle")],
+                sequence=sira,
+            ),
+        )
+    assert _olaylar(db) == []
+
+
+def test_UYKUYA_GECIS_olay_yazar(db, gateway):
+    _post(db, _zarf(devices=[_cihaz_kaydi("SN2-001", connection_state="online")], sequence=1))
+    _post(db, _zarf(devices=[_cihaz_kaydi("SN2-001", connection_state="smart_idle")], sequence=2))
+
+    olaylar = _olaylar(db)
+    assert len(olaylar) == 1
+    o = olaylar[0]
+    assert o.device_code == "SN2-001"
+    assert o.event_type == "device_runtime_state_changed"
+    # UYKU SAGLIKLIDIR: uyari seviyesinde yazilirsa olay listesinde her gece
+    # filo boyu sahte alarm gibi gorunur.
+    assert o.severity == "info"
+    assert '"key": "device_runtime_smart_idle"' in o.metadata_json.replace("'", '"')
+
+
+def test_UYANMA_olay_yazar(db, gateway):
+    _post(db, _zarf(devices=[_cihaz_kaydi("SN2-001", connection_state="smart_idle")], sequence=1))
+    _post(db, _zarf(devices=[_cihaz_kaydi("SN2-001", connection_state="online")], sequence=2))
+
+    olaylar = _olaylar(db)
+    assert len(olaylar) == 1
+    assert olaylar[0].severity == "info"
+    assert "device_runtime_online" in olaylar[0].metadata_json
+
+
+def test_KAYIP_uyari_seviyesinde(db, gateway):
+    _post(db, _zarf(devices=[_cihaz_kaydi("SN2-001", connection_state="online")], sequence=1))
+    _post(db, _zarf(devices=[_cihaz_kaydi("SN2-001", connection_state="lost")], sequence=2))
+
+    olaylar = _olaylar(db)
+    assert len(olaylar) == 1
+    assert olaylar[0].severity == "warning"
+
+
+def test_olay_i18n_anahtari_ve_parametreleri_tasir(db, gateway):
+    """Metin backend'de URETILMEZ — olay listesi kullanicinin dilinde."""
+    _post(db, _zarf(devices=[_cihaz_kaydi("SN2-001", connection_state="online")], sequence=1))
+    _post(db, _zarf(devices=[_cihaz_kaydi("SN2-001", connection_state="recovering")], sequence=2))
+
+    ham = _olaylar(db)[0].metadata_json
+    assert "device_runtime_recovering" in ham
+    assert "SN2-001" in ham
+    # Gecisin NEREDEN geldigi de saklanir: teshiste "online'dan mi lost'tan mi
+    # toparlaniyor" ayrimi onemli.
+    assert "online" in ham
+
+
+def test_report_late_TEK_BASINA_olay_uretmez(db, gateway):
+    """Bayrak degisimi DURUM degisimi degildir.
+
+    `report_late` gun icinde inip kalkabilir; olay yazmak gunluk sahte
+    "durum degisti" satirlari uretirdi.
+    """
+    _post(
+        db,
+        _zarf(devices=[_cihaz_kaydi("SN2-001", connection_state="smart_idle", report_late=False)], sequence=1),
+    )
+    _post(
+        db,
+        _zarf(devices=[_cihaz_kaydi("SN2-001", connection_state="smart_idle", report_late=True)], sequence=2),
+    )
+    assert _olaylar(db) == []
