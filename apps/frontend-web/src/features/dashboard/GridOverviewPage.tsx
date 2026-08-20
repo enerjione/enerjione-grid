@@ -9,6 +9,8 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { RuntimeStateDot } from "../../components/RuntimeStateChip";
+import { deviceRuntimeStateOf } from "../../shared/deviceRuntimeState";
 import type { AlarmEvent, DeviceRow } from "../../shared/types";
 import type { GridSnapshot } from "../../shared/api";
 
@@ -244,7 +246,10 @@ export function GridOverviewPage({
         for (const seg of l.segments) {
           for (const item of seg.devices) {
             total++;
-            if (item.device.communicationStatus === "online") onlineCount++;
+            // KPI TEK NORMALIZERDEN: `smart_idle` SAGLIKLIDIR ve
+            // "cevrimici degil" sayilirsa uyuyan filo ozet seridinde
+            // eksik gorunur.
+            if (deviceRuntimeStateOf(item.device).bucket === "healthy") onlineCount++;
             if ((deviceFaults.get(item.device.id)?.length ?? 0) > 0) alarmCount++;
           }
         }
@@ -432,7 +437,7 @@ export function GridOverviewPage({
                                       <tbody>
                                         {seg.devices.map(({ device }) => {
                                           const faults = deviceFaults.get(device.id) ?? [];
-                                          const isOnline = device.communicationStatus === "online";
+                                          const runtime = deviceRuntimeStateOf(device);
                                           const isAlarmed = faults.length > 0;
                                           const isSelected = selectedDeviceId === device.id;
                                           return (
@@ -444,22 +449,17 @@ export function GridOverviewPage({
                                               onClick={() => onSelectDevice?.(device.id)}
                                             >
                                               <td className="grid-overview-status">
-                                                <span
-                                                  className={`grid-overview-status-dot ${
-                                                    isAlarmed
-                                                      ? "is-alarm"
-                                                      : isOnline
-                                                        ? "is-online"
-                                                        : "is-offline"
-                                                  }`}
-                                                  title={
-                                                    isAlarmed
-                                                      ? t("dashboard.overview.tooltipFault")
-                                                      : isOnline
-                                                        ? t("dashboard.overview.tooltipOnline")
-                                                        : t("dashboard.overview.tooltipOffline")
-                                                  }
-                                                />
+                                                {isAlarmed ? (
+                                                  <span
+                                                    className="grid-overview-status-dot is-alarm"
+                                                    title={t("dashboard.overview.tooltipFault")}
+                                                  />
+                                                ) : (
+                                                  <RuntimeStateDot
+                                                    state={runtime}
+                                                    className="grid-overview-status-dot"
+                                                  />
+                                                )}
                                               </td>
                                               <td>
                                                 <div className="grid-overview-device">

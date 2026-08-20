@@ -209,6 +209,10 @@ import type {
   UserRole
 } from "../shared/types";
 import { isKitModel } from "../shared/types";
+// Cihaz durumunun TEK yorumlayicisi. Ham `communicationStatus` ile sayim/
+// suzme yapilmaz: `smart_idle` SAGLIKLIDIR ve ikili karara sokuldugunda
+// uyuyan filo ariza kovasina duser.
+import { deviceRuntimeStateOf, runtimeCounts } from "../shared/deviceRuntimeState";
 import { anaSayfadaGorunur } from "../features/dashboard/dashboardVisibility";
 
 // PageMode / EngineeringPage tipleri tabModel'den geliyor (tek kaynak). Sekme
@@ -2569,8 +2573,24 @@ export function App() {
         return false;
       }
 
-      if (dashboardStatusFilter === "online" && d.communicationStatus !== "online") return false;
-      if (dashboardStatusFilter === "offline" && d.communicationStatus === "online") return false;
+      // SUZGEC DE TEK NORMALIZERDEN. Ham `communicationStatus` ile
+      // suzuldugunde uyuyan (`smart_idle`) her cihaz "Cevrimdisi" listesine
+      // dusuyor ve operator saglikli filoyu ariza listesinde goruyordu.
+      if (dashboardStatusFilter !== "all" && dashboardStatusFilter !== "alarm") {
+        const key = deviceRuntimeStateOf(d).key;
+        if (dashboardStatusFilter === "online" && key !== "ONLINE") return false;
+        if (dashboardStatusFilter === "smartIdle" && key !== "SMART_IDLE") return false;
+        if (dashboardStatusFilter === "late" && key !== "LATE") return false;
+        // "Cevrimdisi" = kalan her sey (toparlanan, kopmus, dinleyici
+        // hatasi, bilinmeyen). Bolunmenin son parcasi; hicbir cihaz
+        // rozetlerin disinda kalmaz.
+        if (
+          dashboardStatusFilter === "offline" &&
+          (key === "ONLINE" || key === "SMART_IDLE" || key === "LATE")
+        ) {
+          return false;
+        }
+      }
       if (dashboardStatusFilter === "alarm" && !d.alarmActive) return false;
       if (dashboardAreaDeviceIds && !dashboardAreaDeviceIds.has(d.id)) return false;
       if (dashboardLocationFilter !== "all") {
@@ -2613,12 +2633,27 @@ export function App() {
     gridSnapshot
   ]);
 
-  // Filtre çubuğu için ham sayım rozetleri (filtre uygulanmamış toplam).
+  // Filtre cubugu icin ham sayim rozetleri (filtre uygulanmamis toplam).
+  //
+  // HER CIHAZ TEK KEZ SAYILIR. `runtimeCounts` durum ANAHTARINA gore sayar ve
+  // `LATE` anahtari `SMART_IDLE`in YERINE gecer; yani gecikmis bir Smart cihaz
+  // "Gecikmis" kovasindadir ve "Smart Bekleme"de AYRICA yer almaz. Alt
+  // toplamlarin toplami `total`i verir (bkz. tests/deviceRuntimeState.test.ts).
   const dashboardCounts = useMemo(() => {
-    const total = devices.length;
-    const online = devices.filter((d) => d.communicationStatus === "online").length;
+    const now = Date.now();
+    const sayim = runtimeCounts(devices.map((d) => deviceRuntimeStateOf(d, now)));
     const alarm = devices.filter((d) => d.alarmActive).length;
-    return { total, online, offline: total - online, alarm };
+    return {
+      total: sayim.total,
+      online: sayim.ONLINE,
+      smartIdle: sayim.SMART_IDLE,
+      late: sayim.LATE,
+      // Kalanlar tek rozette: toparlanan + kopmus + dinleyici hatasi +
+      // bilinmeyen. Eski kurulumda (runtime yok) SMART_IDLE ve LATE sifirdir,
+      // yani `online + offline === total` — onceki davranisin aynisi.
+      offline: sayim.RECOVERING + sayim.COMM_LOST + sayim.LISTENER_ERROR + sayim.UNKNOWN,
+      alarm
+    };
   }, [devices]);
 
   // Anasayfa: OTOMATIK cihaz secimi YAPILMAZ — ilk acilista hicbir cihaz

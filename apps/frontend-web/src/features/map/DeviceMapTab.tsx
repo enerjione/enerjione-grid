@@ -14,6 +14,10 @@ import { MapLayerSwitchFix } from "../../components/MapLayerSwitchFix";
 import { useDeviceModelSettings } from "../../components/DeviceModelSettingsProvider";
 import { batteryUnitsFor, voltageToPercent as voltsToPercent } from "../../shared/battery";
 import { saglikSahibi } from "../../shared/deviceKit";
+import { DialInCountdown } from "../../components/DialInCountdown";
+import { RuntimeStateChip, runtimeToneClass } from "../../components/RuntimeStateChip";
+import { deviceRuntimeStateOf } from "../../shared/deviceRuntimeState";
+import type { DeviceRuntimeStateKey, DeviceRuntimeTone } from "../../shared/deviceRuntimeState";
 import { locateDevice } from "../../shared/geoLookup";
 import { planDeviceFocus } from "./deviceFocus";
 import type { FocusPoint } from "./deviceFocus";
@@ -253,31 +257,45 @@ function AutoFitOnLoad({
   return null;
 }
 
-// Icon CACHE: ayni (status, alarmActive) icin AYNI L.divIcon instance'ini
+/** CALISMA-ZAMANI tonu -> marker rengi.
+ *
+ *  `blue` YALNIZCA `smart_idle` icindir ve bu rengin varlik sebebi haritadir:
+ *  gri bir marker operator icin "olu/pasif cihaz" demektir, oysa uyuyan bir
+ *  Horstmann SAGLIKLIDIR. Renkler `shared/deviceRuntimeState.ts` icindeki ton
+ *  tablosunun haritadaki karsiligi; ton orada degisirse burasi da degisir. */
+const TON_RENK: Readonly<Record<DeviceRuntimeTone, string>> = {
+  green: "#10b981",
+  blue: "#3b82f6",
+  orange: "#f97316",
+  amber: "#f59e0b",
+  red: "#ef4444",
+  slate: "#94a3b8"
+};
+
+// Icon CACHE: ayni (durum, alarmActive) icin AYNI L.divIcon instance'ini
 // dondur. Aksi takdirde polling her 5sn'de yeni icon yarattigindan, marker
 // DOM'u re-render olur ve CSS alarm-pulse animasyonu surekli %0'dan
 // baslayarak titrer (kullanici sikayeti).
 const _markerIconCache = new Map<string, L.DivIcon>();
 function markerIcon(
-  status: DeviceRow["communicationStatus"],
+  runtimeKey: DeviceRuntimeStateKey,
+  tone: DeviceRuntimeTone,
   alarmActive: boolean,
   /** Bagli oldugu hat gizlendi — marker grilesir (kaldirilmaz). */
   dimmed = false
 ) {
-  const key = `${status}|${alarmActive ? 1 : 0}|${dimmed ? 1 : 0}`;
+  const key = `${runtimeKey}|${alarmActive ? 1 : 0}|${dimmed ? 1 : 0}`;
   const cached = _markerIconCache.get(key);
   if (cached) return cached;
-  const color = alarmActive ? "#dc2626" : status === "online" ? "#10b981" : "#94a3b8";
-  const cls = alarmActive
-    ? "is-alarm"
-    : status === "online"
-      ? "is-online"
-      : "is-offline";
-  // Haberlesme kopuk (offline/unknown): marker'in sag-ust kosesine "sinyal
-  // yok" rozeti. Sadece gri renk yetmiyordu — operator gri marker'i "pasif
-  // cihaz" sanabiliyor; bu rozet acikca "veri gelmiyor" diyor. Alarm rozeti
-  // ile cakismaz: alarm kirmizi govde, bu ayri kose isareti.
-  const commLost = status !== "online";
+  const color = alarmActive ? "#dc2626" : TON_RENK[tone];
+  const cls = alarmActive ? "is-alarm" : `is-runtime-${tone}`;
+  // "Sinyal yok" rozeti YALNIZCA GERCEK haberlesme kaybinda cizilir
+  // (`lost` / `listener_error` / bilinmiyor). ESKIDEN "online degil"
+  // demekti ve uyuyan her Smart cihaz uzerinde ustu cizili sinyal
+  // simgesiyle duruyordu — filo saglikliyken harita ariza haritasi gibi
+  // gorunuyordu. `smart_idle` ve `recovering` bu rozeti ALMAZ.
+  const commLost = runtimeKey === "COMM_LOST" || runtimeKey === "LISTENER_ERROR" ||
+    runtimeKey === "UNKNOWN";
   const commBadge = commLost
     ? `
       <span class="device-marker-comm" aria-hidden="true">
@@ -506,6 +524,14 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
   const selectedHealth = useMemo(
     () => (selectedDevice ? saglikSahibi(selectedDevice, devices) : undefined),
     [selectedDevice, devices]
+  );
+
+  /** Secili cihazin CALISMA-ZAMANI durumu — tek normalizerden, tek kez.
+   *  Saglik sahibi (sette kit) uzerinden okunur: setin kendi DNP3 oturumu
+   *  yoktur ve durumu kitin oturumudur. */
+  const selectedRuntime = useMemo(
+    () => deviceRuntimeStateOf(selectedHealth ?? selectedDevice ?? { communicationStatus: null }),
+    [selectedHealth, selectedDevice]
   );
 
   /** Secili cihazin batarya yuzdesi; null = cihaz henuz bildirmedi.
@@ -1457,11 +1483,14 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
             if (!gecerliKonum(position[0], position[1])) return null;
             const isAlarmed = alarmActiveDeviceIds.has(device.id);
             const dimmed = dimmedDeviceIds.has(device.id);
+            // TEK NORMALIZER — marker rengi/rozeti buradan. Ikon onbellegi
+            // anahtari durum ANAHTARIDIR, ham `communication_status` degil.
+            const runtime = deviceRuntimeStateOf(device);
             return (
               <Marker
                 key={device.id}
                 position={position}
-                icon={markerIcon(device.communicationStatus, isAlarmed, dimmed)}
+                icon={markerIcon(runtime.key, runtime.tone, isAlarmed, dimmed)}
                 eventHandlers={{
                   click: () => onSelectDevice(device.id)
                 }}
@@ -1607,8 +1636,8 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
               <div className="device-popup-v2-id">
                 <div className="device-sidebar-idrow">
                   <span
-                    className={`device-sidebar-statusdot ${selectedDevice.communicationStatus === "online" ? "is-online" : "is-offline"}`}
-                    title={selectedDevice.communicationStatus === "online" ? t("dashboard.popup.online") : t("dashboard.popup.offline")}
+                    className={`device-sidebar-statusdot ${runtimeToneClass(selectedRuntime)}`}
+                    title={t(selectedRuntime.labelKey)}
                   />
                   <h2 className="device-sidebar-code">{selectedDevice.name}</h2>
                 </div>
@@ -1646,10 +1675,22 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
                   <li className="device-sidebar-info-row">
                     <span className="material-symbols-outlined">wifi</span>
                     <span className="device-sidebar-info-label">{t("deviceDetail.sidebar.deviceStatus")}</span>
-                    <span className={`device-sidebar-info-value tone-${(selectedHealth ?? selectedDevice).communicationStatus === "online" ? "green" : "slate"}`}>
-                      <span className={`device-sidebar-info-dot dot-${(selectedHealth ?? selectedDevice).communicationStatus === "online" ? "green" : "slate"}`} aria-hidden="true" />
-                      {(selectedHealth ?? selectedDevice).communicationStatus === "online" ? t("dashboard.popup.online") : t("dashboard.popup.offline")}
-                    </span>
+                    {/* Alti durum, tek normalizer. Ikili "Cevrimici/Cevrimdisi"
+                        `smart_idle` cihazi gri gosteriyordu. */}
+                    <RuntimeStateChip
+                      state={selectedRuntime}
+                      withIcon={false}
+                      className="runtime-chip--sm"
+                    />
+                  </li>
+                  {/* Sonraki Dial-In geri sayimi — DAKIKA. Epoch yoksa
+                      (`null` = hic olmadi) bilesen hicbir sey dondurmez ve
+                      satir CSS ile (`:empty`) gizlenir. */}
+                  <li className="device-sidebar-info-row device-sidebar-info-row--countdown">
+                    <DialInCountdown
+                      runtime={(selectedHealth ?? selectedDevice).runtimeHealth}
+                      state={selectedRuntime}
+                    />
                   </li>
                   <li className="device-sidebar-info-row">
                     <span className="material-symbols-outlined">schedule</span>

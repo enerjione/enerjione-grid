@@ -38,6 +38,7 @@ from app.models.device_command import DeviceCommand
 from app.models.device_config import DeviceConfigTemplate, DeviceConfigVersion
 from app.models.device_model_settings import DeviceModelSettings
 from app.models.device_purge_job import DevicePurgeJob
+from app.models.device_runtime_health import DeviceRuntimeHealth
 from app.models.fault import FaultComment, FaultEvent
 from app.models.ftp_settings import FtpSettings
 from app.models.gateway import Gateway
@@ -85,6 +86,7 @@ __all__ = [
     "DeviceConfigVersion",
     "DeviceModelSettings",
     "DevicePurgeJob",
+    "DeviceRuntimeHealth",
     "FaultComment",
     "FaultEvent",
     "FtpSettings",

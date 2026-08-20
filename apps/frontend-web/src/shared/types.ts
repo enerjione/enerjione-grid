@@ -1,4 +1,10 @@
-﻿export type CommunicationStatus = "online" | "offline" | "unknown";
+﻿/** Cihaz calisma-zamani sagligi (`device_health_v1`) — sozlesme tipleri ve
+ *  TEK normalizer `shared/deviceRuntimeState.ts` icindedir; sozlesme PR #33
+ *  ile degisirse degisecek tek yer orasidir. Buraya KOPYALANMAZ. */
+import type { DeviceRuntimeHealthRecord } from "./deviceRuntimeState";
+export type { DeviceRuntimeHealthRecord };
+
+export type CommunicationStatus = "online" | "offline" | "unknown";
 
 export type IpEndpointType = "initiating" | "listening";
 
@@ -211,6 +217,15 @@ export type DeviceRow = {
   retryCount?: number;
   signalProfile?: string;
   communicationStatus: CommunicationStatus;
+  /** Gateway'in bildirdigi CALISMA-ZAMANI sagligi (`device_health_v1`).
+   *
+   *  `undefined`/`null` = gateway 1.15.0 oncesi ya da bu cihaz icin henuz
+   *  rapor gelmedi; o zaman EKRAN ESKI DAVRANISA DUSER (`communicationStatus`).
+   *  Uydurma bir `smart_idle`/`recovering` URETILMEZ.
+   *
+   *  Bu alani okuyan hicbir bilesen ham alanlara BAKMAZ: karar tek
+   *  normalizerdedir (`shared/deviceRuntimeState.ts`). */
+  runtimeHealth?: DeviceRuntimeHealthRecord | null;
   /** null = cihaz henuz batarya bildirmedi. "Dolu" ile karistirilmamali:
    *  varsayilan 100 yuzunden hic veri gondermemis cihaz dolu gorunuyordu. */
   batteryPercent: number | null;
@@ -321,6 +336,9 @@ export type ApiDevice = {
   longitude: number;
   battery_percent: number;
   communication_status: CommunicationStatus;
+  /** `device_health_v1` satiri — backend cihaz yanitina eklendiginde dolar.
+   *  Yoksa arayuz eski davranista kalir (bkz. DeviceRow.runtimeHealth). */
+  runtime_health?: DeviceRuntimeHealthRecord | null;
   alarm_active: boolean;
   last_update_at?: string | null;
   iec104_common_address?: number | null;

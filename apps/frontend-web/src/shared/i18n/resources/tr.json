@@ -4834,5 +4834,112 @@
     "preview": "Önizleme",
     "chartSettings": "Grafik ayarları",
     "settingsSaved": "Ayarlar bu tarayıcıda saklanır."
+  },
+  "deviceRuntime": {
+    "state": {
+      "online": "Çevrimiçi",
+      "smartIdle": "Smart Bekleme",
+      "late": "Smart Bekleme · Gecikmiş",
+      "recovering": "Toparlanıyor",
+      "commLost": "Haberleşme Kaybı",
+      "listenerError": "Dinleyici Hatası",
+      "unknown": "Bilinmiyor"
+    },
+    "stateHint": {
+      "online": "Cihaz gateway ile konuşuyor.",
+      "smartIdle": "Modem kapalı. Smart modun beklenen ve sağlıklı durumudur; arıza değildir.",
+      "late": "Planlanan Dial-In raporu gecikti, sessizlik eşiği henüz dolmadı. Uyarıdır, haberleşme kaybı değildir.",
+      "recovering": "Gateway bağlantıyı yeniden kurmaya çalışıyor.",
+      "commLost": "Sessizlik eşiği aşıldı; cihazdan geçerli veri gelmiyor.",
+      "listenerError": "Gateway bu cihaz için dinleyiciyi açamadı.",
+      "unknown": "Durum bilinmiyor; bu “sorun yok” anlamına gelmez."
+    },
+    "source": {
+      "legacy": "Eski gateway",
+      "legacyHint": "Bu gateway cihaz bazında çalışma-zamanı sağlığı bildirmiyor (gateway 1.15.0 gerekir). Durum eski telemetri davranışından geliyor.",
+      "stale": "Bayat",
+      "staleHint": "Gateway uzun süredir çalışma-zamanı raporu göndermedi; son bilinen durum karara alınmadı.",
+      "lastKnown": "Son bilinen durum"
+    },
+    "countdown": {
+      "dueIn": "Sonraki Dial-In: {{minutes}} dk",
+      "overdue": "Dial-In gecikmesi: {{minutes}} dk",
+      "lost": "Beklenen Dial-In aşıldı",
+      "lostHint": "Haberleşme kaybı"
+    },
+    "panel": {
+      "title": "Bağlantı ve Oturum",
+      "configTitle": "Yapılandırma",
+      "configHint": "Operatörün girdiği ayarlar. Sahadaki anlık durumu göstermez.",
+      "runtimeTitle": "Çalışma Zamanı",
+      "runtimeHint": "Gateway'in bildirdiği anlık gözlem. Bağlantı kararının tek kaynağı budur.",
+      "diagnosticsTitle": "Teşhis",
+      "diagnosticsHint": "Sonda sonuçları durum belirlemez. “Yanıt yok” görmek normaldir: ICMP saha ağlarında sıkça engellidir ve Smart bir modem meşru olarak uykudadır.",
+      "endpoint": "Uç Nokta",
+      "sessionPolicyConfigured": "Oturum Politikası (yapılandırılan)",
+      "sessionPolicyEffective": "Oturum Politikası (etkin)",
+      "dialIn": "Dial-In Aralığı",
+      "grace": "Haberleşme Toleransı",
+      "reconnect": "Yeniden Bağlanma Tavanı",
+      "state": "Durum",
+      "connected": "TCP Bağlantısı",
+      "reachable": "Komut Gönderilebilir",
+      "operationMode": "Çalışma Modu",
+      "lastValidContact": "Son Geçerli Haberleşme",
+      "lastFrame": "Son Çerçeve",
+      "nextDialIn": "Sonraki Dial-In",
+      "overdue": "Gecikme",
+      "ipProbe": "IP Sondası",
+      "tcpProbe": "TCP Sondası",
+      "lastProbe": "Son Sonda",
+      "reportLate": "Rapor gecikmiş",
+      "reportLateHint": "Uyarı bayrağıdır, durum değil: bağlantı durumu değişmez.",
+      "policyMismatch": "Yapılandırılan politika ile sahada etkin olan farklı.",
+      "noRuntime": "Çalışma-zamanı verisi yok",
+      "minutes": "{{count}} dk",
+      "seconds": "{{count}} sn",
+      "never": "Hiç",
+      "yes": "Evet",
+      "no": "Hayır"
+    },
+    "sessionPolicy": {
+      "continuous": "Sürekli",
+      "smart": "Smart",
+      "auto": "Otomatik",
+      "unknown": "Henüz çözülmedi"
+    },
+    "operationMode": {
+      "smart": "Akıllı Mod",
+      "boost": "Boost Mod",
+      "unknown": "Bilinmiyor"
+    },
+    "ipProbe": {
+      "reachable": "Yanıt veriyor",
+      "unreachable": "Yanıt yok",
+      "unsupported": "Desteklenmiyor",
+      "unknown": "Bilinmiyor"
+    },
+    "tcpProbe": {
+      "open": "Açık",
+      "connecting": "Bağlanıyor",
+      "unknown": "Bilinmiyor"
+    },
+    "ipEndpoint": {
+      "listening": "Dinleyen",
+      "initiating": "Başlatan"
+    },
+    "kpi": {
+      "title": "Cihaz Durumu",
+      "online": "Çevrimiçi",
+      "smartIdle": "Smart Bekleme",
+      "late": "Gecikmiş",
+      "recovering": "Toparlanıyor",
+      "commLost": "Haberleşme Kaybı",
+      "listenerError": "Dinleyici Hatası",
+      "unknown": "Bilinmiyor",
+      "healthy": "Sağlıklı",
+      "degraded": "Bozulmuş",
+      "unhealthy": "Arızalı"
+    }
   }
 }

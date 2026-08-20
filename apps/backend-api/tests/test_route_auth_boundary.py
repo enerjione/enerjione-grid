@@ -84,6 +84,14 @@ ACIK_UCLAR: dict[str, str] = {
     "POST /api/v1/gateways/{gateway_code}/command-delivery-acks": (
         "gateway token'i ile dogrulanir"
     ),
+    # Cihaz basina calisma-zamani sagligi (`device_health_v1`, gateway PR #33).
+    # `command-results` ile AYNI `X-Gateway-Token` dogrulamasindan gecer;
+    # komut duzlemi sirrini (`X-Gateway-Command-Token`) BILEREK ISTEMEZ —
+    # saglik telemetrisi komut yetkisi gerektirmez ve o sirri buraya yaymak
+    # F5A'da ayrilan iki duzlemi yeniden birlestirirdi.
+    "POST /api/v1/gateways/{gateway_code}/device-health": (
+        "gateway token'i ile dogrulanir"
+    ),
     "POST /api/v1/telemetry/gateway/{gateway_code}": "gateway token'i ile dogrulanir",
 }
 

@@ -132,6 +132,13 @@ import "./dialInGatewayUyumluluk.test";
 // kanit yokken hicbir metin ayarin sahada gecerli oldugunu soylememeli.
 import "./gatewayUyumlulukVeDialInDurumu.test";
 
+// Cihaz calisma-zamani sagligi (`device_health_v1`): `smart_idle` SAGLIKLIDIR
+// ve `report_late` bir DURUM DEGIL bayraktir. Ikisini de "kopuk" kovasina
+// atan naif bir okuma, uyuyan Horstmann filosunu ariza gibi gosterir ve
+// gercek arizayi o gurultunun icinde kaybeder — ustelik iki durum da gecerli
+// oldugu icin ekranda fark edilmez.
+import "./deviceRuntimeState.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   connectionIsDead,
