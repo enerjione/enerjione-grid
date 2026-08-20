@@ -19,7 +19,7 @@ isledigini ve DOGRU sayilari bozmadigini korur.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 
 import pytest
 from sqlalchemy import create_engine, select
@@ -55,6 +55,28 @@ def cihaz(db):
     return d
 
 
+def _gun_ortasi(gun_once: int) -> datetime:
+    """`gun_once` gun oncesinin UTC OGLE VAKTI.
+
+    NEDEN SAAT SABITLENIYOR: bu dosyadaki birkac test, ayni gune ait
+    OLMASI GEREKEN birden fazla olay kuruyor (+5 dk, +3 saat gibi) ve
+    sonucun TEK bir gunluk sayaca yazilmasini bekliyor. Baslangic ani
+    `datetime.now(UTC)`den alinirsa test, kosuldugu SAATE bagli olur:
+    UTC 21:00'den sonra kosuldugunda "+3 saat" ertesi gune tasar, sayac
+    ikiye bolunur ve test kirilir. Nitekim CI'da 22:38 UTC'de tam boyle
+    kirildi; ayni test gunun erken saatinde YESIL geciyordu.
+
+    Ogle vakti her iki yonde de 12 saat pay birakir; testin kurdugu en
+    genis aralik (+3 saat) bunun cok altinda. Gun yine GECMISTE kalir —
+    onarimin retention penceresi davranisi degismez.
+    """
+    return datetime.combine(
+        (datetime.now(timezone.utc) - timedelta(days=gun_once)).date(),
+        time(hour=12),
+        tzinfo=timezone.utc,
+    )
+
+
 def _olay(db, cihaz_kodu: str, ne_zaman: datetime, tip: str = "alarm_triggered") -> None:
     db.add(
         SystemEvent(
@@ -78,7 +100,7 @@ def _sayac(db) -> dict:
 
 def test_GECMIS_olay_kaydindan_sayaca_islenir(db, cihaz):
     """Asil regresyon: sayacin hic gormedigi gun artik dolu."""
-    gecmis = datetime.now(timezone.utc) - timedelta(days=200)
+    gecmis = _gun_ortasi(200)
     _olay(db, cihaz.code, gecmis)
     _olay(db, cihaz.code, gecmis + timedelta(minutes=5))
     _olay(db, cihaz.code, gecmis + timedelta(hours=3))
@@ -93,7 +115,7 @@ def test_GECMIS_olay_kaydindan_sayaca_islenir(db, cihaz):
 def test_HABERLESME_alarmi_da_sayilir(db, cihaz):
     """Iki alarm yolu iki ayri olay tipi yaziyor; biri atlanirsa o yolun
     gecmisi sessizce eksik kalir."""
-    gun = datetime.now(timezone.utc) - timedelta(days=10)
+    gun = _gun_ortasi(10)
     _olay(db, cihaz.code, gun, tip="alarm_triggered")
     _olay(db, cihaz.code, gun + timedelta(minutes=1), tip="alarm_created")
 
@@ -118,7 +140,7 @@ def test_SAYAC_daha_BUYUKSE_bozulmaz(db, cihaz):
 def test_TEKRAR_calistirmak_sayiyi_DEGISTIRMEZ(db, cihaz):
     """Onarim hem migration'da hem bakim dongusunde kosuyor; idempotent
     olmasaydi her tur sayilari sisirirdi."""
-    gun = datetime.now(timezone.utc) - timedelta(days=3)
+    gun = _gun_ortasi(3)
     _olay(db, cihaz.code, gun)
     _olay(db, cihaz.code, gun + timedelta(minutes=2))
 
