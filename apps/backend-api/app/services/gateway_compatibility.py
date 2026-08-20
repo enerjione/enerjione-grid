@@ -56,6 +56,16 @@ FEATURE_MIN_VERSION: dict[str, str] = {
     "dial_in_health": "1.14.0",
     # Listening kanal yeniden baglanma tavani.
     "smart_listen_reconnect": "1.14.0",
+    # Cihaz basina calisma-zamani sagliginin AYRI BIR UCA POST edilmesi
+    # (`POST /gateways/{code}/device-health`, sema `device_health_v1`).
+    #
+    # `smart_session` ile ORTAK KULLANILMAZ ve onun uzerine de kurulmaz:
+    # 1.14.0 gateway'inde Smart Listening CALISIR ama bu tasiyici YOKTUR.
+    # Ayni satiri paylassalardi, 1.14.0'daki calisan bir Smart kurulumu bu
+    # uc yuzunden "uyumsuz" gorunur; ya da tersine, tasiyicisi olmayan bir
+    # gateway "saglik gonderiyor" sanilirdi. Yetenek ADIYLA anahtarlanir
+    # (bkz. modul basligi) — surumle degil.
+    "device_runtime_health_transport": "1.15.0",
 }
 
 
@@ -217,7 +227,27 @@ _V114_SAPMA_GEREKCESI = (
     "artifact'i vendor edildiginde kapanir."
 )
 
+#: `device_runtime_health_transport` KENDI gerekcesini tasir — v1.14.0
+#: metnini paylasmaz. Sebep farkli: v1.14.0 YAYINLANDI (yalnizca release
+#: artifact'i uretilmedi), bu yetenek ise HENUZ BIRLESMEMIS BIR PR'da.
+_PR33_SAPMA_GEREKCESI = (
+    "Cihaz basina saglik tasiyicisi gateway PR #33'te (commit bd502c49) "
+    "tanimli ve HENUZ ACIK; gateway 1.15.0 YAYINLANMADI. Grid ucu once "
+    "hazir olmali (sozlesme bolum 9: 'once backend ucu yayina alin, sonra "
+    "gateway'lerde bayragi acin'), bu yuzden yetenek matrise sozlesme "
+    "vendor edilmeden giriyor. Vendor edilen sozlesme hala v1.11.4. SAHA "
+    "KIRILMAZ: gateway tarafinda kanal varsayilan olarak KAPALI "
+    "(`DEVICE_HEALTH_PUBLISH_ENABLED=false`) ve tasiyicisi olmayan bir "
+    "gateway bu uca hic istek atmaz — Grid de karsiliginda hicbir cihaz "
+    "yapilandirmasini degistirmez, yalnizca gozlem tablosu bos kalir. "
+    "Sozlesme PR birlesene kadar DEGISEBILIR; wire<->model eslemesi bu "
+    "yuzden tek adaptorde toplandi "
+    "(`app/services/device_runtime_health_service.py`). Sapma, gateway "
+    "1.15.0 release artifact'i vendor edildiginde kapanir."
+)
+
 KNOWN_VERSION_DRIFT: dict[str, str] = {
+    "device_runtime_health_transport": _PR33_SAPMA_GEREKCESI,
     "smart_auto": _V114_SAPMA_GEREKCESI,
     "smart_listening": _V114_SAPMA_GEREKCESI,
     "dial_in_health": _V114_SAPMA_GEREKCESI,

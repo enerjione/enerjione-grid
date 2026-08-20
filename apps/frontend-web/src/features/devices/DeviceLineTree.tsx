@@ -33,6 +33,8 @@ import {
   WifiOff,
 } from "lucide-react";
 
+import { RuntimeStateDot } from "../../components/RuntimeStateChip";
+import { deviceRuntimeStateOf } from "../../shared/deviceRuntimeState";
 import type { GridSnapshot } from "../../shared/api";
 import type { DeviceRow } from "../../shared/types";
 import type { DeviceAlarmState } from "./DeviceRowButton";
@@ -98,14 +100,17 @@ function DeviceTreeRow({
   batteryPercent: number | null;
   dimmed: boolean;
 }) {
-  const isOnline = device.communicationStatus === "online";
+  // Tek normalizer. `smart_idle` SAGLIKLIDIR: agac satirinda soluk
+  // gostermek, uyuyan bir filoyu "kopuk" gibi taratirdi.
+  const runtime = deviceRuntimeStateOf(device);
+  const saglikli = runtime.bucket === "healthy";
   return (
     <button
       type="button"
       className={[
         "device-tree-row",
         selected ? "selected" : "",
-        isOnline ? "is-online" : "is-offline",
+        saglikli ? "is-online" : "is-offline",
         alarmState ? `has-alarm has-alarm--${alarmState}` : "",
         dimmed ? "is-dimmed" : ""
       ]
@@ -114,7 +119,7 @@ function DeviceTreeRow({
       onClick={() => onSelect(device.id)}
       title={`${device.name} (${device.code}) · ${locationLabel}`}
     >
-      <span className={`device-tree-dot ${isOnline ? "online" : "offline"}`} />
+      <RuntimeStateDot state={runtime} className="device-tree-dot" />
       {/* Seri no satirda YAZMAZ — dar sidebar'da gurultu yapiyordu; tam
           kunye (ad, kod, konum) tooltip'te. */}
       <span className="device-tree-row-name">{device.name}</span>
@@ -243,10 +248,16 @@ export function DeviceLineTree({
             code: line.code,
             timeline,
             deviceCount: allDevices.length,
-            onlineCount: allDevices.filter((d) => d.communicationStatus === "online").length,
+            // SAYAC DA NORMALIZERDEN. Ham `communicationStatus` ile sayilsaydi
+            // uyuyan (`smart_idle`) her cihaz "kopuk" kovasina duser ve hat
+            // basligi saglikli bir hatti kirmizi gosterirdi.
+            onlineCount: allDevices.filter((d) => deviceRuntimeStateOf(d).bucket === "healthy")
+              .length,
             alarmCount: allDevices.filter((d) => alarmStateOf(d.id) !== null).length,
             faultCount: allDevices.filter((d) => faultDeviceIds.has(d.id)).length,
-            commLostCount: allDevices.filter((d) => d.communicationStatus !== "online").length
+            commLostCount: allDevices.filter(
+              (d) => deviceRuntimeStateOf(d).bucket === "unhealthy"
+            ).length
           });
         }
         if (treeLines.length === 0) continue;

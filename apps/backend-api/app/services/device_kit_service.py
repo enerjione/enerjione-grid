@@ -58,6 +58,7 @@ from app.data.device_models import (
 )
 from app.models.alarm import AlarmEvent
 from app.models.device import Device
+from app.services import device_runtime_health_service
 
 log = logging.getLogger(__name__)
 
@@ -399,11 +400,19 @@ def sync_subunits(db: Session, parent: Device, set_count: int) -> dict[str, list
 
 
 def annotate(db: Session, devices: list[Device]) -> list[Device]:
-    """`parent_device_code`, `satellite_set_count` ve `alarm_active` doldurur.
+    """`parent_device_code`, `satellite_set_count`, `alarm_active` ve
+    `runtime_health` doldurur.
 
     Hicbiri gercek anlamda KOLON DEGIL, turetilmis alandir. Iliski
     (relationship) ile cozmek cazip ama 600+ cihazli listede satir basina bir
     sorgu demekti; burada TOPLAM birkac sorgu ile hallediliyor.
+
+    `DeviceRead` doduren HER uc buradan gecer (liste, olusturma, guncelleme,
+    `/public` liste ve detay); zenginlestirmenin tek yeri burasi oldugu icin
+    liste ile detay YAPISAL OLARAK ayrisamaz. TEK ISTISNA
+    `/internal/devices`: o uc ham ORM satirlarini doner ve zenginlestirme
+    ISTEMEZ (tuketicisi iec104-outbound'un point registry'si; ne canli
+    alarma ne calisma-zamani sagligina bakar).
     """
     if not devices:
         return devices
@@ -475,9 +484,35 @@ def annotate(db: Session, devices: list[Device]) -> list[Device]:
         ).all()
     )
 
+    # CALISMA-ZAMANI SAGLIGI (`device_health_v1`) — AYRI TABLO, TEK SORGU.
+    #
+    # Cihaz sorgusuna JOIN EDILMEZ: o kume kapsam filtresinden gecmis
+    # haldedir ve bir join onu cogaltabilir ya da dusurebilirdi (sayfalama,
+    # toplam sayi ve yetki sinirini bozardi). Ayri select yalnizca ELIMIZDEKI
+    # kodlari sorar; kapsam disi bir cihazin sagligi HIC OKUNMAZ.
+    #
+    # Kit kodlari da sorulur: sanal setin kendi satiri YOKTUR (gateway
+    # config'inde yalnizca fiziksel outstation vardir) ve durumu kitten
+    # devralir — tipki hemen yukaridaki `communication_status` gibi.
+    saglik = device_runtime_health_service.saglik_haritasi(
+        db, {d.code for d in devices} | set(kodlar.values())
+    )
+
     for d in devices:
         d.alarm_active = d.id in alarmli
         d.parent_device_code = kodlar.get(d.parent_device_id) if d.parent_device_id else None
+        # SETIN KENDI OTURUMU YOK — saglik da kitten devralinir.
+        #
+        # Devralmasaydi ayni donanim ayni ekranda IKI RENK gosterirdi: uyuyan
+        # bir Smart kit gateway'e gore `smart_idle` (mavi, saglikli), setleri
+        # ise saglik satiri olmadigi icin eski davranisa duser ve telemetri
+        # sustugu icin KIRMIZI (`offline`) gorunurdu. Bu kanal tam da o
+        # yanlisi onlemek icin var.
+        d.runtime_health = saglik.get(d.code)
+        if d.parent_device_id is not None:
+            kit_saglik = saglik.get(kodlar.get(d.parent_device_id))
+            if kit_saglik is not None:
+                d.runtime_health = kit_saglik
         if d.parent_device_id in kit_durumu:
             durum, son_guncelleme = kit_durumu[d.parent_device_id]
             d.communication_status = durum

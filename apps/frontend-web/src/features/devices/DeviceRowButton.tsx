@@ -10,6 +10,8 @@
  */
 import { useTranslation } from "react-i18next";
 
+import { RuntimeStateDot } from "../../components/RuntimeStateChip";
+import { deviceRuntimeStateOf } from "../../shared/deviceRuntimeState";
 import type { DeviceRow } from "../../shared/types";
 
 export type DeviceAlarmState = "open" | "ack" | null;
@@ -44,7 +46,11 @@ export function DeviceRowButton({
   unassigned = false
 }: Props) {
   const { t } = useTranslation();
-  const isOnline = device.communicationStatus === "online";
+  // CALISMA-ZAMANI durumu — ikili online/offline DEGIL. Kartin cercevesi
+  // yalnizca "saglikli mi" sorusunu tasir; `smart_idle` (uyuyan Horstmann)
+  // SAGLIKLIDIR ve kart soluk/kirmizi gosterilmez.
+  const runtime = deviceRuntimeStateOf(device);
+  const saglikli = runtime.bucket === "healthy";
   const hasAlarm = alarmState !== null;
 
   return (
@@ -52,7 +58,7 @@ export function DeviceRowButton({
       className={[
         "device-row",
         selected ? "selected" : "",
-        isOnline ? "device-row--online" : "device-row--offline",
+        saglikli ? "device-row--online" : "device-row--offline",
         hasAlarm ? "device-row--alarm" : "",
         unassigned ? "device-row--unassigned" : ""
       ]
@@ -82,10 +88,7 @@ export function DeviceRowButton({
 
       {/* Üst satır: durum noktası + cihaz adı */}
       <div className="device-row-top">
-        <span
-          className={`device-status-dot ${isOnline ? "online" : "offline"}`}
-          title={isOnline ? t("dashboard.sidebar.online") : t("dashboard.sidebar.offline")}
-        />
+        <RuntimeStateDot state={runtime} className="device-status-dot" />
         <div className="device-row-name">
           <strong>{device.name}</strong>
           <span className="device-row-code">{device.code}</span>

@@ -132,6 +132,25 @@ import "./dialInGatewayUyumluluk.test";
 // kanit yokken hicbir metin ayarin sahada gecerli oldugunu soylememeli.
 import "./gatewayUyumlulukVeDialInDurumu.test";
 
+// Cihaz calisma-zamani sagligi (`device_health_v1`): `smart_idle` SAGLIKLIDIR
+// ve `report_late` bir DURUM DEGIL bayraktir. Ikisini de "kopuk" kovasina
+// atan naif bir okuma, uyuyan Horstmann filosunu ariza gibi gosterir ve
+// gercek arizayi o gurultunun icinde kaybeder — ustelik iki durum da gecerli
+// oldugu icin ekranda fark edilmez.
+import "./deviceRuntimeState.test";
+
+// Okuma ucu <-> arayuz AD ESLESMESI. Ozellik tam olarak buradan kirilmisti:
+// alim calisiyor, tablo doluyor, arayuz `item.runtime_health` okuyor ama
+// backend cihaz yanitina o alani KOYMUYORDU. Iki tarafi ayri ayri test eden
+// bir paket bunu yakalayamaz — kirilan sey aradaki addir.
+import "./runtimeHealthOkumaSozlesmesi.test";
+
+// "Bu renk ne demek?" — durum cogu ekranda tek bir renkli nokta ve palette
+// sezgiye AYKIRI bir uye var: `Smart Bekleme` MAVI ama SAGLIKLI. Aciklamasiz
+// birakilirsa operator saglikli filoyu ariza sanar; ikisi de ekranda fark
+// edilmez.
+import "./runtimeIpucu.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   connectionIsDead,

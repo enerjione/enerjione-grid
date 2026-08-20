@@ -48,6 +48,7 @@ from app.schemas.gateway import (
 from app.services import device_config_service
 from app.services import gateway_compatibility
 from app.services import command_delivery_service, gateway_agent_service
+from app.services import device_runtime_health_service
 from app.services import gateway_update_service
 from app.services.gateway_update_service import GatewayUpdateError
 from app.services.event_service import record_event
@@ -2489,3 +2490,83 @@ def report_command_results(
         updated += 1
     db.commit()
     return {"updated": updated}
+
+
+@router.post("/{gateway_code}/device-health", status_code=status.HTTP_204_NO_CONTENT)
+def report_device_runtime_health(
+    gateway_code: str,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    x_gateway_token: str | None = Header(default=None, alias="X-Gateway-Token"),
+    x_gateway_code: str | None = Header(default=None, alias="X-Gateway-Code"),
+    x_gateway_instance_id: str | None = Header(
+        default=None, alias="X-Gateway-Instance-Id"
+    ),
+    x_request_id: str | None = Header(default=None, alias="X-Request-Id"),
+):
+    """Gateway'in bildirdigi CIHAZ BASINA calisma-zamani sagligi.
+
+    Sema: `device_health_v1`. Sozlesme (PR #33, HENUZ ACIK) vendor kopyasi:
+    `docs/gateway-contract/device-health-api-pr33.md`. Tum ayristirma ve
+    esleme `device_runtime_health_service` icinde — sozlesme degisirse
+    burasi degil orasi degisir.
+
+    Auth: MEVCUT KANONIK GATEWAY KIMLIGI — `X-Gateway-Token`. Yeni bir auth
+    sistemi YOK. `X-Gateway-Code` gonderilirse yoldaki kod ile AYNI olmali
+    (defans derinligi: yanlis yapilandirilmis istemci/proxy erken yakalanir).
+    `X-Gateway-Instance-Id` / `X-Request-Id` korelasyon icin kabul edilir.
+
+    `X-Gateway-Command-Token` BILEREK ISTENMEZ. Saglik telemetrisi komut
+    yetkisi gerektirmez; o sirri bu uca da yaymak F5A'da AYRILAN iki duzlemi
+    (kimlik duzlemi / komut duzlemi) yeniden birlestirirdi. Bu uc komut
+    duzlemine ait hicbir sey okumaz ve yazmaz.
+
+    NEDEN AYRI UC — `X-E1-Gateway-Health` basligina EKLENMEDI:
+    o baslik `/pending` isteklerine biner ve `/pending` FIZIKSEL KESICI
+    KOMUTLARININ tasiyicisidir. 200+ cihazin cihaz-bazli durumu ~2 KB'lik
+    baslik butcesine sigmaz; buyutulup bir proxy baslik limitine takilirsa
+    400 doner ve KOMUTLAR DURUR. Toplu baslik oldugu gibi kalir.
+
+    NEDEN `record_event` YOK: bu kanal denetim gecmisi degil, "cihaz SU AN
+    ne durumda" gozlemidir ve varsayilan 300 saniyede bir tam snapshot +
+    her degisimde delta akar. Parti basina olay yazmak, 2 yillik FIFO olay
+    kaydini saglik gurultusuyle doldurup gercek denetim izini budatirdi.
+
+    Yanit govdesi OKUNMAZ (sozlesme bolum 2): 2xx yeterlidir, bos doneriz.
+    Bayat parti (eski `(boot_id, sequence)`) HATA DEGILDIR — yok sayilir ve
+    yine 204 doner; 4xx donmek gateway'i sonsuz yeniden denemeye sokardi.
+    """
+    if x_gateway_code is not None and x_gateway_code.strip() != gateway_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Gateway-Code does not match route gateway_code",
+        )
+    _ = x_request_id  # korelasyon; govdeye yazilmaz
+
+    from app.services.ingest_service import validate_gateway_token
+
+    # `allow_inactive` YOK (varsayilan strict): devre disi birakilmis bir
+    # gateway'in gozlemi kaydedilmemeli — operator onu bilerek kapatti.
+    # `/config` bu ucta ozel: orada 200 + `is_active=False` donuluyor ki
+    # gateway kendi poll'unu askiya alsin.
+    gateway = validate_gateway_token(db, gateway_code, x_gateway_token)
+
+    ozet = device_runtime_health_service.sagligi_uygula(
+        db,
+        gateway_code=gateway.code,
+        payload={
+            **payload,
+            # Instance kimligi govdede de var; baslik yalnizca govde onu
+            # tasimiyorsa devreye girer. SIRALAMAYA GIRMEZ (kalici kimlik,
+            # restart'ta degismez) — yalnizca teshis icin saklanir.
+            "gateway_instance_id": payload.get("gateway_instance_id")
+            or x_gateway_instance_id,
+        },
+    )
+    logger.info(
+        "event=device_health_alindi gateway_code=%s applied=%s skipped=%s "
+        "reconciled=%s stale=%s",
+        gateway.code, ozet["applied"], ozet["skipped"], ozet["reconciled"],
+        ozet["stale"],
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

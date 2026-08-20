@@ -401,6 +401,12 @@ export async function fetchDevices(token: string, gatewayCode?: string): Promise
     retryCount: item.retry_count,
     signalProfile: item.signal_profile,
     communicationStatus: item.communication_status,
+    // Gateway'in CALISMA-ZAMANI gozlemi (`device_health_v1`). Backend bu
+    // alani vermiyorsa (gateway 1.15.0 oncesi ya da uc henuz yayinda degil)
+    // `null` kalir ve ekran eski davranisa duser — burada varsayilan bir
+    // durum UYDURULMAZ. Yorumlama tek normalizerde:
+    // `shared/deviceRuntimeState.ts`.
+    runtimeHealth: item.runtime_health ?? null,
     batteryPercent: item.battery_percent,
     alarmActive: item.alarm_active,
     lastUpdateAt: item.last_update_at ?? undefined,

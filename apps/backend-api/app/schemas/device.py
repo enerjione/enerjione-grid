@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -98,6 +98,91 @@ class DeviceUpdate(BaseModel):
     satellite_set_count: int | None = Field(default=None, ge=1, le=3)
 
 
+class DeviceRuntimeHealthRead(BaseModel):
+    """Gateway'in bildirdigi CALISMA-ZAMANI sagligi — OKUMA projeksiyonu.
+
+    Sozlesme: `device_health_v1` (Gateway PR #33). Vendor kopyasi:
+    `docs/gateway-contract/device-health-api-pr33.md`.
+
+    Kaynak `device_runtime_health` SATIRIDIR, wire govdesi degil: alim
+    tarafindaki tek adaptor (`device_runtime_health_service._wire_to_model`)
+    zaten wire'i modele cevirmis ve `connection_state`i sozlesme kumesine
+    ZORLAMISTIR. Bu sema o kolonlari OLDUGU GIBI yayar; ikinci bir yorumlama
+    katmani DEGILDIR. Ikinci bir normalizasyon eklenirse iki otorite olur ve
+    hangisinin kazandigi kimsenin bakmadigi bir yerde belirlenir.
+
+    `boot_id` / `sequence` / `snapshot_id` / `snapshot_batch_index` /
+    `gateway_instance_id` BILEREK DISARIDA: bunlar bayat-yazma ve uzlastirma
+    defteridir, cihazin durumu degil. `gateway_instance_id` ayrica gateway'in
+    kalici ic kimligidir ve `/public` ucundan disari sizmamali.
+
+    Sema ile model arasindaki kayma testle kilitli
+    (`tests/test_device_runtime_health_okuma.py`): modele yeni bir sozlesme
+    kolonu eklenip burasi unutulursa test kirilir — alan sessizce saklanip
+    hic gorunmemis olmaz.
+    """
+
+    #: Satirin birincil anahtari; `devices.code` ile ayni deger.
+    device_code: str
+    #: Gozlemi bildiren gateway.
+    gateway_code: str
+
+    # ---- sozlesme bolum 4 --------------------------------------------------
+    #: online | smart_idle | recovering | lost | listener_error | unknown
+    #: BAGLANTI KARARININ TEK KAYNAGI. `late` BURADA OLAMAZ — gecikme
+    #: `report_late` bayragiyla tasinir (bkz. alim tarafi).
+    connection_state: str
+    connected: bool
+    #: Uyuyan (Smart) cihazda `False` — SAGLIKLI, ariza degil.
+    reachable: bool
+
+    configured_session_policy: str | None = None
+    effective_session_policy: str | None = None
+    operation_mode: str | None = None
+
+    dial_in_interval_min: int | None = None
+    #: Unix epoch (saniye, UTC). `None` = HIC OLMADI. 0'A CEVRILMEZ: sifir
+    #: 1970 demektir ve panelde gecerli bir tarih gibi gorunur.
+    next_expected_report_epoch: float | None = None
+    report_overdue_sec: float | None = None
+    #: UYARI BAYRAGI — DURUM DEGIL.
+    report_late: bool
+
+    last_valid_contact_epoch: float | None = None
+    last_frame_epoch: float | None = None
+
+    #: SALT TESHIS. `unreachable` NORMALDIR (ICMP saha aglarinda engelli).
+    ip_probe_status: str | None = None
+    tcp_probe_status: str | None = None
+    last_probe_epoch: float | None = None
+
+    ip_endpoint_type: str | None = None
+
+    #: BACKEND saati — "ne zaman haber aldik". TAZELIK KARARI YALNIZCA
+    #: BUNDAN VERILIR; arayuz bu damgaya bakip gozlemi bayat ilan eder
+    #: (`shared/deviceRuntimeState.ts`, RUNTIME_STALE_AFTER_MS).
+    updated_at: datetime
+
+    @field_validator("updated_at")
+    @classmethod
+    def _utc_farkindaligini_zorla(cls, v: datetime) -> datetime:
+        """Naive damgayi UTC kabul et — SESSIZ SAAT KAYMASI KORUMASI.
+
+        Kolon `DateTime(timezone=True)` ve yazan taraf her zaman UTC-aware
+        yaziyor; ama bazi surucler (SQLite) offset'i DUSURUR ve deger naive
+        geri gelir. Naive bir damga ISO-8601'e offset'siz serialize olur;
+        tarayici onu YEREL saat sanar. UTC+3'te bu, taze bir gozlemi 3 saat
+        eski gostermek demekti: her cihaz surekli "bayat" sayilir ve arayuz
+        kalici olarak eski davranisa duserdi — yani kanal calisirken
+        gorunmez olurdu.
+        """
+        if v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v.astimezone(timezone.utc)
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class DeviceRead(DeviceScalarBase):
     id: int
     #: NULL = cihaz henuz batarya bildirmedi. Arayuz bunu "—" gosterir;
@@ -119,6 +204,21 @@ class DeviceRead(DeviceScalarBase):
     parent_device_code: str | None = None
     #: Kite bagli set sayisi (yalnizca kit satirlarinda dolu).
     satellite_set_count: int | None = None
+
+    # --- CALISMA-ZAMANI SAGLIGI (salt okunur, `device_health_v1`) ---
+    #: Gateway'in bu cihaz icin bildirdigi ANLIK gozlem.
+    #:
+    #: `None` = gateway 1.15.0 ONCESI ya da bu cihaz icin henuz rapor
+    #: gelmedi. O zaman arayuz ESKI davranisa duser (`communication_status`);
+    #: burada uydurma bir `smart_idle`/`recovering` URETILMEZ — o durumlarin
+    #: varligini ancak gateway bilebilir.
+    #:
+    #: Kolon DEGIL, turetilmis alandir: ayri bir tabloda yasar ve okuma
+    #: tarafinda TEK toplu sorguyla baglanir (`device_kit_service.annotate`
+    #: -> `device_runtime_health_service.saglik_haritasi`). Varsayilanin
+    #: `None` olmasi zorunlu: `annotate`dan gecmeyen uclar (or.
+    #: `/internal/devices`) bu alani hic tasimaz ve sema patlamamali.
+    runtime_health: DeviceRuntimeHealthRead | None = None
 
     @field_validator("dnp3_extended", mode="before")
     @classmethod

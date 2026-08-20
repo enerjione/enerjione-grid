@@ -28,6 +28,13 @@ import {
   gatewayLiveness,
   type GatewayLivenessState
 } from "../../shared/gatewayLiveness";
+import { RuntimeStateDot, runtimeToneClass } from "../../components/RuntimeStateChip";
+import { RuntimeTip } from "../../components/RuntimeTooltip";
+import {
+  deviceRuntimeStateOf,
+  normalizeDeviceRuntime,
+  type DeviceRuntimeState
+} from "../../shared/deviceRuntimeState";
 import {
   fetchDeviceConfig,
   fetchGatewayAgentStatus,
@@ -83,13 +90,28 @@ function setKisaAd(ad: string): string {
   return i >= 0 ? ad.slice(i + 3) : ad;
 }
 
-function deviceCommDotClass(
-  status: DeviceRow["communicationStatus"]
-): "online" | "offline" | "unknown" {
-  if (status === "online") return "online";
-  // "unknown" ARTIK "offline"a katlanmiyor: gateway durdurulmusken cihazin
-  // durumunu bilmiyoruz, ariza rengi gostermek yanlis bilgi olur.
-  return status === "unknown" ? "unknown" : "offline";
+/**
+ * Cihazin ekranda gosterilecek CALISMA-ZAMANI durumu.
+ *
+ * IKI OTORITE, BELLI BIR SIRAYLA:
+ *
+ *  1. Gateway cihaz bazinda saglik bildiriyorsa (`device_health_v1`, taze)
+ *     KARAR ONUNDUR. Gateway konusuyorsa container'i da ayakta demektir;
+ *     ustune container durumundan bir "aslinda bilmiyoruz" eklemek, elde
+ *     GERCEK gozlem varken onu bulaniklastirmak olurdu.
+ *  2. Bildirmiyorsa (eski gateway ya da bayat kayit) eski davranis: gateway
+ *     durdurulmussa cihaz "bilinmiyor"dur, "ariza" degil
+ *     (bkz. shared/gatewayLiveness.ts).
+ */
+function effectiveRuntimeState(
+  device: DeviceRow,
+  gatewayStates: Map<string, GatewayLivenessState>
+): DeviceRuntimeState {
+  const runtime = deviceRuntimeStateOf(device);
+  if (runtime.source === "gateway") return runtime;
+  return normalizeDeviceRuntime({
+    legacyStatus: effectiveCommStatus(device, gatewayStates)
+  });
 }
 
 const DEVICE_MODEL_IMAGES: Record<string, string> = {
@@ -715,7 +737,7 @@ export function DeviceManagementPanel({
    *  kendi DNP3 oturumu yoktur, durum noktasi ve IP kitten kopyalanmis
    *  bilgidir. Gostermek, setin oyle bir ayari varmis izlenimi verirdi. */
   const renderDeviceItem = (device: DeviceRow, altCihaz: boolean, setSayisi = 0) => {
-    const effStatus = effectiveCommStatus(device, gatewayStates);
+    const effState = effectiveRuntimeState(device, gatewayStates);
     const secili = selectedDeviceCode === device.code;
     const kapali = collapsedKits.has(device.code);
     const acKapa = (e: React.MouseEvent | React.KeyboardEvent) => {
@@ -781,19 +803,13 @@ export function DeviceManagementPanel({
                 {kapali ? "chevron_right" : "expand_more"}
               </span>
             ) : null}
-            <span className={`device-status-dot ${deviceCommDotClass(effStatus)}`} />
+            <RuntimeStateDot state={effState} className="device-status-dot" />
             {/* Ana cihazin adi hemen ustte duruyor; sette onu tekrar etmek
                 ("a / Set 1") satiri gereksiz uzatiyordu. Yalnizca set adi. */}
             <strong>{device.name}</strong>
           </div>
           {(
-            <span className="device-status-sr-only">
-              {effStatus === "online"
-                ? t("engineering.devicesPanel.commOnline")
-                : effStatus === "unknown"
-                  ? t("engineering.devicesPanel.commUnknown")
-                  : t("engineering.devicesPanel.commOffline")}
-            </span>
+            <span className="device-status-sr-only">{t(effState.labelKey)}</span>
           )}
         </div>
         <div className="device-meta-row">
@@ -1882,15 +1898,19 @@ export function DeviceManagementPanel({
                 <div className="device-comms-footer-subtle">
                   {(() => {
                     const eff = effectiveCommStatus(selectedDevice, gatewayStates);
+                    const effState = effectiveRuntimeState(selectedDevice, gatewayStates);
                     const gwState = selectedDevice.gatewayCode
                       ? gatewayStates.get(selectedDevice.gatewayCode)
                       : undefined;
                     const gwOffline =
                       eff === "offline" && selectedDevice.communicationStatus === "online";
                     return (
-                      <span className={`device-comms-pill device-comms-pill--${deviceCommDotClass(eff)}`}>
-                        {eff === "online"
-                          ? t("engineering.devicesPanel.footer.ok")
+                      <RuntimeTip state={effState} focusable className="device-comms-pill">
+                        {/* "Sorun yok" YALNIZCA saglikli kovada: `smart_idle`
+                            de buraya girer (uyuyan Horstmann sagliklidir),
+                            gecikmis/toparlanan/kopuk girmez. */}
+                        {effState.bucket === "healthy"
+                          ? t(effState.labelKey)
                           : gwState === "stopped"
                             ? /* Sebep BILINIYOR: gateway durduruldu. "Veri eski"
                                  demek operatoru olmayan bir arizaya yonlendirirdi. */
@@ -1898,7 +1918,7 @@ export function DeviceManagementPanel({
                             : gwOffline
                               ? t("engineering.devicesPanel.footer.gwDisconnected")
                               : t("engineering.devicesPanel.footer.stale")}
-                      </span>
+                      </RuntimeTip>
                     );
                   })()}
                   {selectedDevice.lastUpdateAt ? (

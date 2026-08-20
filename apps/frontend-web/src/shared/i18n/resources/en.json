@@ -4841,5 +4841,112 @@
     "preview": "Preview",
     "chartSettings": "Chart settings",
     "settingsSaved": "Settings are stored in this browser."
+  },
+  "deviceRuntime": {
+    "state": {
+      "online": "Online",
+      "smartIdle": "Smart Idle",
+      "late": "Smart Idle · Late",
+      "recovering": "Recovering",
+      "commLost": "Communication Lost",
+      "listenerError": "Listener Error",
+      "unknown": "Unknown"
+    },
+    "stateHint": {
+      "online": "The device is talking to the gateway.",
+      "smartIdle": "Modem is off. This is the expected, healthy Smart-mode state, not a fault.",
+      "late": "The scheduled Dial-In report is late but the silence threshold has not been reached. A warning, not a communication loss.",
+      "recovering": "The gateway is re-establishing the link.",
+      "commLost": "Silence threshold exceeded; no valid data from the device.",
+      "listenerError": "The gateway could not open a listener for this device.",
+      "unknown": "State is unknown; that does not mean “nothing is wrong”."
+    },
+    "source": {
+      "legacy": "Legacy gateway",
+      "legacyHint": "This gateway does not report per-device runtime health (gateway 1.15.0 required). The state comes from the legacy telemetry behaviour.",
+      "stale": "Stale",
+      "staleHint": "The gateway has not sent a runtime report for a long time; the last known state was not used for the decision.",
+      "lastKnown": "Last known state"
+    },
+    "countdown": {
+      "dueIn": "Next Dial-In: {{minutes}} min",
+      "overdue": "Dial-In overdue by {{minutes}} min",
+      "lost": "Expected Dial-In missed",
+      "lostHint": "Communication lost"
+    },
+    "panel": {
+      "title": "Connection and Session",
+      "configTitle": "Configuration",
+      "configHint": "Settings entered by the operator. Does not show the live field state.",
+      "runtimeTitle": "Runtime",
+      "runtimeHint": "The gateway's live observation. This is the only source of the connection decision.",
+      "diagnosticsTitle": "Diagnostics",
+      "diagnosticsHint": "Probe results do not determine state. Seeing “no response” is normal: ICMP is often blocked on field networks and a Smart modem is legitimately asleep.",
+      "endpoint": "Endpoint",
+      "sessionPolicyConfigured": "Session Policy (configured)",
+      "sessionPolicyEffective": "Session Policy (effective)",
+      "dialIn": "Dial-In Interval",
+      "grace": "Communication Grace",
+      "reconnect": "Reconnect Ceiling",
+      "state": "State",
+      "connected": "TCP Link",
+      "reachable": "Commandable",
+      "operationMode": "Operation Mode",
+      "lastValidContact": "Last Valid Contact",
+      "lastFrame": "Last Frame",
+      "nextDialIn": "Next Dial-In",
+      "overdue": "Overdue",
+      "ipProbe": "IP Probe",
+      "tcpProbe": "TCP Probe",
+      "lastProbe": "Last Probe",
+      "reportLate": "Report late",
+      "reportLateHint": "A warning flag, not a state: the connection state does not change.",
+      "policyMismatch": "The configured policy differs from the one effective in the field.",
+      "noRuntime": "No runtime data",
+      "minutes": "{{count}} min",
+      "seconds": "{{count}} s",
+      "never": "Never",
+      "yes": "Yes",
+      "no": "No"
+    },
+    "sessionPolicy": {
+      "continuous": "Continuous",
+      "smart": "Smart",
+      "auto": "Auto",
+      "unknown": "Not resolved yet"
+    },
+    "operationMode": {
+      "smart": "Smart Mode",
+      "boost": "Boost Mode",
+      "unknown": "Unknown"
+    },
+    "ipProbe": {
+      "reachable": "Responding",
+      "unreachable": "No response",
+      "unsupported": "Unsupported",
+      "unknown": "Unknown"
+    },
+    "tcpProbe": {
+      "open": "Open",
+      "connecting": "Connecting",
+      "unknown": "Unknown"
+    },
+    "ipEndpoint": {
+      "listening": "Listening",
+      "initiating": "Initiating"
+    },
+    "kpi": {
+      "title": "Device State",
+      "online": "Online",
+      "smartIdle": "Smart Idle",
+      "late": "Late",
+      "recovering": "Recovering",
+      "commLost": "Comm Lost",
+      "listenerError": "Listener Error",
+      "unknown": "Unknown",
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "unhealthy": "Faulty"
+    }
   }
 }

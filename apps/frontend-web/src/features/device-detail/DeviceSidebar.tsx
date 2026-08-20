@@ -1,9 +1,13 @@
 /**
  * DeviceSidebar — cihaz detay sol sabit panel.
  *
- * Cihaz kimlik (kod solunda online/offline nokta) + birlesik BILGILER (bolge/
- * hat/IP/pil) + mini harita (topoloji konumu) + kanal secimi.
+ * Cihaz kimlik (kod solunda CALISMA-ZAMANI durum noktasi) + birlesik BILGILER
+ * (bolge/hat/IP/pil) + mini harita (topoloji konumu) + kanal secimi.
  * activeSource sidebar'dan kontrol edilir.
+ *
+ * Durum noktasi ARTIK IKILI DEGIL: renk/etiket `shared/deviceRuntimeState.ts`
+ * icindeki tek normalizerden gelir. Ikili "online/offline" karari uyuyan bir
+ * Horstmann'i (`smart_idle`) ariza rengine boyuyordu.
  */
 
 import { useTranslation } from "react-i18next";
@@ -13,6 +17,9 @@ import { MAP_LAYERS } from "../../shared/mapTiles";
 import L from "leaflet";
 
 import { formatRelative } from "../../shared/format";
+import { RuntimeStateChip, runtimeToneClass } from "../../components/RuntimeStateChip";
+import { RuntimeTip } from "../../components/RuntimeTooltip";
+import { deviceRuntimeStateOf } from "../../shared/deviceRuntimeState";
 import { sourceLabel, sourceTone } from "../signals/signalCatalogConstants";
 import { sinyalKalitesi } from "./modemStatus";
 import type { DeviceRow, SignalSource } from "../../shared/types";
@@ -140,7 +147,13 @@ export function DeviceSidebar({
   const { t } = useTranslation();
   // Haberlesme/pil/sinyal SAHIBI cihaz: sette kit, sade cihazda kendisi.
   const health = parentDevice ?? device;
-  const online = health.communicationStatus === "online";
+  // CALISMA-ZAMANI DURUMU tek normalizerden gelir. Eskiden burada
+  // `communicationStatus === "online"` ikili karari vardi; `smart_idle`
+  // (uyuyan, SAGLIKLI Horstmann) o karara "online degil" diye giriyor ve
+  // panelin en ustundeki nokta gri/kirmizi yaniyordu. Zamanlayici YOK:
+  // sayfa zaten polling ile tazeleniyor, geri sayim ise dakikalik saatiyle
+  // `DeviceRuntimePanel` icinde.
+  const runtime = deviceRuntimeStateOf(health);
   const quality = sinyalKalitesi(rssi);
   // Konum: cihazin kendi lat/lon'u yoksa topoloji (hat/segment) konumu.
   const validSelf =
@@ -157,10 +170,12 @@ export function DeviceSidebar({
       {/* ---- Cihaz kimlik (kod solunda durum noktasi) ---- */}
       <section className="device-sidebar-section">
         <div className="device-sidebar-idrow">
-          <span
-            className={`device-sidebar-statusdot ${online ? "is-online" : "is-offline"}`}
-            title={online ? t("deviceDetail.online") : t("deviceDetail.offline")}
-            aria-label={online ? t("deviceDetail.online") : t("deviceDetail.offline")}
+          <RuntimeTip
+            state={runtime}
+            focusable
+            className="device-sidebar-statusdot"
+            aria-label={t(runtime.labelKey)}
+            role="img"
           />
           <h2 className="device-sidebar-code">{device.name}</h2>
         </div>
@@ -225,12 +240,18 @@ export function DeviceSidebar({
               value={parentDevice.name}
             />
           ) : null}
-          <InfoRow
-            icon="wifi"
-            label={t("deviceDetail.sidebar.deviceStatus")}
-            value={online ? t("deviceDetail.online") : t("deviceDetail.offline")}
-            tone={online ? "green" : "slate"}
-          />
+          {/* DURUM SATIRI — ikili "Cevrimici/Cevrimdisi" DEGIL. Alti durumun
+              hepsi kendi rengiyle gorunur; ozellikle `smart_idle` MAVI ve
+              SAGLIKLI, `report_late` ise ayri bir turuncu ("Gecikmis")
+              kovadir. Rozet ortak bilesenden gelir ki liste/harita/detay
+              ayni cihaza farkli renk vermesin. */}
+          <li className="device-sidebar-info-row">
+            <span className="material-symbols-outlined">wifi</span>
+            <span className="device-sidebar-info-label">
+              {t("deviceDetail.sidebar.deviceStatus")}
+            </span>
+            <RuntimeStateChip state={runtime} withIcon={false} className="runtime-chip--sm" />
+          </li>
           <InfoRow
             icon="schedule"
             label={t("deviceDetail.sidebar.lastCommShort")}
@@ -341,7 +362,10 @@ export function DeviceSidebar({
           <ul className="device-sidebar-sets device-sidebar-sets">
             {sets.map((s) => {
               const batt = setBattery?.[s.id];
-              const cevrimici = s.communicationStatus === "online";
+              // Setin durumu da tek normalizerden. Kit `smart_idle` iken
+              // setleri gri gostermek, uyuyan saglikli bir kiti ariza gibi
+              // okuturdu.
+              const setDurum = deviceRuntimeStateOf(s);
               return (
                 <li key={s.id}>
                   <button
@@ -351,9 +375,11 @@ export function DeviceSidebar({
                     disabled={!onOpenSet}
                     title={s.code}
                   >
-                    <span
-                      className={`device-set-dot ${cevrimici ? "is-online" : "is-offline"}`}
-                      aria-hidden="true"
+                    <RuntimeTip
+                      state={setDurum}
+                      className="device-set-dot"
+                      aria-label={t(setDurum.labelKey)}
+                      role="img"
                     />
                     <span className="device-set-body">
                       <span className="device-set-name">{s.name}</span>

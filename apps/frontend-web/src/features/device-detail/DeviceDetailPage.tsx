@@ -39,6 +39,7 @@ import { DeviceChartsPanel } from "./DeviceChartsPanel";
 import { DeviceConfigPanel } from "./DeviceConfigPanel";
 import { DeviceEventsTable } from "./DeviceEventsTable";
 import { DeviceReportModal, type ReportSection } from "./DeviceReportModal";
+import { DeviceRuntimePanel } from "./DeviceRuntimePanel";
 import { DeviceSidebar } from "./DeviceSidebar";
 import { modemDurumuCoz } from "./modemStatus";
 import { operationModeOf } from "./operationMode";
@@ -807,6 +808,13 @@ export function DeviceDetailPage({
             ) : null}
           </div>
         </div>
+
+        {/* BAGLANTI VE OTURUM — yapilandirma / calisma zamani / teshis ayrimi.
+            Genel bakisin USTUNDE duruyor: "cihaz su an ne durumda" sorusu
+            olcum degerlerinden ONCE cevaplanmali. `smart_idle` bir cihazda
+            olcumlerin bayat olmasi ARIZA DEGIL, uykunun sonucudur; bu kart
+            olmadan operator ayni ekrandan ters sonucu cikariyordu. */}
+        {activeTab === "overview" ? <DeviceRuntimePanel device={device} /> : null}
 
         {activeTab === "overview" ? (
           <OverviewTab

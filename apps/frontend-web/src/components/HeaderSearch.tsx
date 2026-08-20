@@ -11,7 +11,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Search, Router, MapPin, GitBranch, Zap } from "lucide-react";
 
-import type { CommunicationStatus, DeviceRow, Line, Pole, Region } from "../shared/types";
+import { runtimeToneClass } from "./RuntimeStateChip";
+import { RuntimeTip } from "./RuntimeTooltip";
+import { deviceRuntimeStateOf } from "../shared/deviceRuntimeState";
+import type { DeviceRuntimeState } from "../shared/deviceRuntimeState";
+import type { DeviceRow, Line, Pole, Region } from "../shared/types";
 
 /** Kisayol etiketi PLATFORMA gore: mac'te ⌘K, diger her yerde Ctrl+K.
  *  Sabit "⌘K" Windows kullanicisina calismayan bir tus gosteriyordu.
@@ -47,7 +51,7 @@ const MAX_PER_GROUP = 6;
 // Duz "sonuc" listesi — klavye gezinmesi tek index uzerinden yurusun diye
 // cihaz + direk + hat + bolge tek diziye serilir (grup basliklari render'da).
 type Result =
-  | { kind: "device"; id: number; name: string; code: string; region: string; comm: CommunicationStatus; alarm: boolean }
+  | { kind: "device"; id: number; name: string; code: string; region: string; runtime: DeviceRuntimeState; alarm: boolean }
   | { kind: "pole"; id: number; name: string; meta: string; pole: Pole }
   | { kind: "line"; id: number; name: string; code: string }
   | { kind: "region"; id: number; name: string };
@@ -111,7 +115,9 @@ export function HeaderSearch({
         name: d.name,
         code: d.code,
         region: deviceTopology.get(d.id)?.regionName ?? "",
-        comm: d.communicationStatus,
+        // Tek normalizer: arama sonucundaki nokta da alti durumu tasir.
+        // Ikili online/offline uyuyan (`smart_idle`) cihazi gri gosteriyordu.
+        runtime: deviceRuntimeStateOf(d),
         alarm: d.alarmActive,
       }));
     const ln: Result[] = lines
@@ -193,11 +199,12 @@ export function HeaderSearch({
         onClick={() => choose(r)}
       >
         {r.kind === "device" ? (
-          // Sol: haberlesme durumu noktasi (online/offline/unknown) + alarm rengi
-          <span
-            className={`header-search-status status-${r.comm}${r.alarm ? " has-alarm" : ""}`}
-            title={r.alarm ? t("header.searchAlarmTag") : t(`common.${r.comm}`)}
-          />
+          // Sol: CALISMA-ZAMANI durum noktasi + alarm rengi (alarm baskin).
+          r.alarm ? (
+            <span className="header-search-status has-alarm" title={t("header.searchAlarmTag")} />
+          ) : (
+            <RuntimeTip state={r.runtime} className="header-search-status" />
+          )
         ) : r.kind === "pole" ? (
           <Zap size={16} />
         ) : r.kind === "line" ? (

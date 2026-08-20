@@ -3,7 +3,9 @@ import { sourceLabel as ortakKaynakEtiketi } from "../signals/signalCatalogConst
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
+import { RuntimeStateChip } from "../../components/RuntimeStateChip";
 import { TablePagination } from "../../components/TablePagination";
+import { deviceRuntimeStateOf } from "../../shared/deviceRuntimeState";
 import { usePolling } from "../../shared/usePolling";
 import type {
   DeviceRow,
@@ -246,13 +248,12 @@ export function DeviceSummaryPage({
         <div className="device-summary-title">
           <h2>{selectedDevice.name}</h2>
           <span className="device-summary-code">{selectedDevice.code}</span>
-          <span
-            className={`device-summary-status ${gwOnline && selectedDevice.communicationStatus === "online" ? "online" : "offline"}`}
-          >
-            {gwOnline && selectedDevice.communicationStatus === "online"
-              ? t("common.online")
-              : t("common.offline")}
-          </span>
+          {/* CALISMA-ZAMANI durumu (alti durum) — ikili online/offline DEGIL.
+              `gwOnline` kapisi KALDIRILDI: gateway'in kendi tazeligi bu
+              cihazin durumunu belirlemez, gateway'in BILDIRDIGI durum
+              belirler. Gateway sussa bile ekran uydurma yapmaz; kayit
+              bayatlayinca normalizer kendisi "Bayat"a duser. */}
+          <RuntimeStateChip state={deviceRuntimeStateOf(selectedDevice)} withIcon={false} />
         </div>
         <div className="device-summary-kpis">
           <div className="device-summary-kpi">

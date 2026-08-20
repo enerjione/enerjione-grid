@@ -53,6 +53,9 @@ import {
   updateSegment
 } from "../../shared/api";
 import { isKitModel } from "../../shared/types";
+import { deviceRuntimeStateOf } from "../../shared/deviceRuntimeState";
+import { runtimeToneClass } from "../../components/RuntimeStateChip";
+import { RuntimeTip } from "../../components/RuntimeTooltip";
 import type { DeviceRow, Line, LineDetail, LineSegment, Pole, Region, TopologyRole } from "../../shared/types";
 import { cihazEtiketi, cihazKodu } from "./deviceLabel";
 import { slotNoktasi, slotOrani } from "./slotProjection";
@@ -2181,10 +2184,13 @@ function SegmentContextMenu({
               {segsWithDevice.map((seg, idx) => {
                 const d = devices.find((x) => x.id === seg.device_id);
                 if (!d) return null;
-                const online = d.communicationStatus === "online";
+                // Tek normalizer: uyuyan (`smart_idle`) cihaz SAGLIKLIDIR
+                // ve topoloji menusunde soluk gosterilmemeli.
+                const durum = deviceRuntimeStateOf(d);
+                const saglikli = durum.bucket === "healthy";
                 return (
                   <li key={seg.id} className="seg-menu-device-item">
-                    <div className={`seg-menu-device-icon ${online ? "is-online" : "is-offline"}`}>
+                    <div className={`seg-menu-device-icon ${saglikli ? "is-online" : "is-offline"}`}>
                       <span className="material-symbols-outlined">offline_bolt</span>
                     </div>
                     <div className="seg-menu-device-main">
@@ -2199,10 +2205,12 @@ function SegmentContextMenu({
                         {d.gatewayCode ? (
                           <span className="seg-menu-device-gw">{d.gatewayCode}</span>
                         ) : null}
-                        <span className={`seg-menu-device-status ${online ? "is-online" : "is-offline"}`}>
+                        {/* Metin ARTIK HARDCODE DEGIL: alti durumun etiketi
+                            i18n'den, rengi tek normalizerin tonundan gelir. */}
+                        <RuntimeTip state={durum} className="seg-menu-device-status">
                           <span className="dot" />
-                          {online ? "çevrimiçi" : "çevrimdışı"}
-                        </span>
+                          {t(durum.labelKey)}
+                        </RuntimeTip>
                       </div>
                     </div>
                     <div className="seg-menu-device-actions">
@@ -2269,7 +2277,8 @@ function SegmentContextMenu({
               </li>
             ) : (
               filteredAvailable.map((d) => {
-                const online = d.communicationStatus === "online";
+                const durum = deviceRuntimeStateOf(d);
+                const saglikli = durum.bucket === "healthy";
                 return (
                   <li key={d.id}>
                     <button
@@ -2277,7 +2286,7 @@ function SegmentContextMenu({
                       className="seg-menu-pickable-item"
                       onClick={() => onAttach(d.id)}
                     >
-                      <div className={`seg-menu-device-icon ${online ? "is-online" : "is-offline"}`}>
+                      <div className={`seg-menu-device-icon ${saglikli ? "is-online" : "is-offline"}`}>
                         <span className="material-symbols-outlined">offline_bolt</span>
                       </div>
                       <div className="seg-menu-device-main">
@@ -2287,10 +2296,10 @@ function SegmentContextMenu({
                           {d.gatewayCode ? (
                             <span className="seg-menu-device-gw">{d.gatewayCode}</span>
                           ) : null}
-                          <span className={`seg-menu-device-status ${online ? "is-online" : "is-offline"}`}>
+                          <RuntimeTip state={durum} className="seg-menu-device-status">
                             <span className="dot" />
-                            {online ? "çevrimiçi" : "çevrimdışı"}
-                          </span>
+                            {t(durum.labelKey)}
+                          </RuntimeTip>
                         </div>
                       </div>
                       <span className="seg-menu-pickable-arrow material-symbols-outlined">

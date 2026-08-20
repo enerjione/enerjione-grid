@@ -2,7 +2,20 @@ import { useTranslation } from "react-i18next";
 
 import type { Line, Region, ResponsibilityAreaRow } from "../../shared/types";
 
-export type StatusFilter = "all" | "online" | "offline" | "alarm";
+/**
+ * Durum suzgeci — CALISMA-ZAMANI kovalarina gore.
+ *
+ * `smartIdle` ve `late` gateway 1.15.0 ile gelen `device_health_v1`
+ * kanalindan dogar. Eski kurulumda ikisinin de sayisi 0'dir ve rozetleri
+ * cizilmez; o zaman `online` + `offline` yine TOPLAMI verir, yani eski
+ * davranis aynen korunur.
+ *
+ * Dortlu kume BIR BOLUNTUDUR: her cihaz tam olarak bir rozete duser
+ * (bkz. App.tsx `dashboardCounts`). Cift sayim yapisal olarak imkansiz —
+ * gecikmis bir Smart cihaz "Gecikmis"tedir ve "Smart Bekleme"de AYRICA
+ * gorunmez.
+ */
+export type StatusFilter = "all" | "online" | "smartIdle" | "late" | "offline" | "alarm";
 
 type Props = {
   /** Arama metni (cihaz adı / kodu). Tablo + harita aynı stringi kullanır. */
@@ -23,7 +36,15 @@ type Props = {
   /** Sayım rozetleri için pre-computed değerler (filtreden geçmemiş ham toplam). */
   counts: {
     total: number;
+    /** Gateway ile konusan cihazlar (`ONLINE`). */
     online: number;
+    /** Modemi kapali, SAGLIKLI uyuyan cihazlar (`SMART_IDLE`). */
+    smartIdle: number;
+    /** Rapor gecikmis ama haberlesme kaybi DEGIL (`LATE`). */
+    late: number;
+    /** Kalanlar: toparlanan, kopmus, dinleyici hatasi, bilinmeyen.
+     *  `RECOVERING` burada cunku cihaz o an cevrimici DEGILDIR; "Gecikmis"
+     *  kovasina koymak, farkli bir sorunu gecikme gibi gosterirdi. */
     offline: number;
     alarm: number;
   };
@@ -106,6 +127,30 @@ export function DashboardFilterBar({
         >
           {t("dashboard.filter.online")} <span className="map-filter-chip-count">{counts.online}</span>
         </button>
+        {/* SMART BEKLEME — MAVI, saglikli. Eski gateway'de (sayi 0) hic
+            cizilmez ki mevcut kurulumlarda bos bir rozet gurultu yapmasin. */}
+        {counts.smartIdle > 0 || counts.late > 0 ? (
+          <button
+            type="button"
+            className={`map-filter-chip map-filter-chip--smartidle ${statusFilter === "smartIdle" ? "active" : ""}`}
+            onClick={() => onStatusFilterChange("smartIdle")}
+            title={t("deviceRuntime.stateHint.smartIdle")}
+          >
+            {t("deviceRuntime.kpi.smartIdle")}{" "}
+            <span className="map-filter-chip-count">{counts.smartIdle}</span>
+          </button>
+        ) : null}
+        {counts.smartIdle > 0 || counts.late > 0 ? (
+          <button
+            type="button"
+            className={`map-filter-chip map-filter-chip--late ${statusFilter === "late" ? "active" : ""}`}
+            onClick={() => onStatusFilterChange("late")}
+            title={t("deviceRuntime.stateHint.late")}
+          >
+            {t("deviceRuntime.kpi.late")}{" "}
+            <span className="map-filter-chip-count">{counts.late}</span>
+          </button>
+        ) : null}
         <button
           type="button"
           className={`map-filter-chip map-filter-chip--offline ${statusFilter === "offline" ? "active" : ""}`}
