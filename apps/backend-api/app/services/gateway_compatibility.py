@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.schemas.dnp3_extended import SMART_CAPABLE_POLICIES
 from app.services.version_service import parse_version
 
 #: Ozellik -> gerektirdigi EN DUSUK gateway surumu.
@@ -39,8 +40,67 @@ from app.services.version_service import parse_version
 #: gateway'ler bu alanlari YOK SAYAR — yani saha kirilmaz, yalnizca
 #: arayuzdeki "Akilli" iddiasi karsiliksiz kalir.
 FEATURE_MIN_VERSION: dict[str, str] = {
+    # Akilli oturum kavraminin KENDISI (initiating uctaki Smart). 1.12.0'da
+    # calisiyordu ve minimumu ILERI KAYMAZ (bkz. modul basligi).
     "smart_session": "1.12.0",
+    # `session_policy=auto` DEGERI. 1.13.0 ve oncesi bu degeri TANIMAZ ve
+    # sozlesme geregi tanimsiz deger TUM config'i reddeder
+    # (`session_policy_invalid_behavior: reject_config`) — yani eski bir
+    # gateway'e `auto` gondermek yalnizca o cihazi degil O GATEWAY'DEKI TUM
+    # CIHAZLARI dondurur.
+    "smart_auto": "1.14.0",
+    # `smart`/`auto` + `listening` kombinasyonu. 1.13.0 bunu reject_config ile
+    # reddediyordu; 1.14.0 uc tipi kisitini KALDIRDI.
+    "smart_listening": "1.14.0",
+    # Dial-In farkindali gecikme takibi (`dial_in_interval_min`).
+    "dial_in_health": "1.14.0",
+    # Listening kanal yeniden baglanma tavani.
+    "smart_listen_reconnect": "1.14.0",
 }
+
+
+def gerekli_yetenekler(session_policy: str, ip_endpoint_type: str) -> tuple[str, ...]:
+    """Bu kombinasyonun gateway'den istedigi YENI yetenekler.
+
+    TEK KAYNAK: hem "render edilebilir mi" karari hem operatore gosterilen
+    uyari buradan turer. Iki yerde ayri kural yazmak, arayuz "destekleniyor"
+    derken payload'in sessizce dusurulmesine yol acardi.
+
+    `smart_session` BILEREK LISTEDE YOK: o yetenek 1.12.0'dan beri var ve
+    `initiating` + `smart` bugune kadar HICBIR surum kapisindan gecmeden
+    render ediliyordu. Simdi kapiya sokmak, surumunu bildirmemis (cok yaygin)
+    her gateway'de SAHADA CALISAN Smart kurulumlarini sessizce `continuous`a
+    dusururdu. Kapi yalnizca v1.14.0 ile GELEN yetenekler icindir;
+    `smart_session` icin uyari yolu ayrica duruyor (`smart_session_warning`)
+    ve o yol UYARIR, payload'i degistirmez.
+    """
+    politika = (session_policy or "continuous").strip().lower()
+    uc = (ip_endpoint_type or "listening").strip().lower()
+    if politika not in SMART_CAPABLE_POLICIES:
+        return ()
+    gerekli: list[str] = []
+    if politika == "auto":
+        gerekli.append("smart_auto")
+    if uc == "listening":
+        gerekli.append("smart_listening")
+    return tuple(gerekli)
+
+
+def eksik_yetenekler(
+    session_policy: str, ip_endpoint_type: str, gateway_version: str | None
+) -> tuple[str, ...]:
+    """Gateway'in KARSILAYAMADIGI yetenekler. Bos demet = oldugu gibi render.
+
+    BILINMEYEN SURUM (None) EKSIK SAYILIR — bilincli. Surumunu bildirmemis
+    bir gateway'e `auto` gondermek TUM config'i reddettirebilir; "bilmiyorum"
+    durumunda guvenli taraf ozelligi GONDERMEMEK ve operatore acikca
+    soylemektir. Ters yon tek bir cihaz ayari yuzunden butun sahayi susturur.
+    """
+    return tuple(
+        ozellik
+        for ozellik in gerekli_yetenekler(session_policy, ip_endpoint_type)
+        if supports(ozellik, gateway_version) is not True
+    )
 
 
 @dataclass(frozen=True)
@@ -141,7 +201,27 @@ def smart_session_warning(
 #: Bilinen ve KABUL EDILMIS sapmalar: ozellik -> gerekce.
 #: Buraya bir satir eklemek bilincli bir karardir; silmek, sapmanin
 #: kapandigini (vendor guncellendigini) soyler.
+#: v1.14.0 YETENEKLERININ ORTAK GEREKCESI.
+#:
+#: Dordu de ayni sebeple sapiyor, o yuzden metin tek yerde tutulur: dort ayri
+#: kopya zamanla ayrisir ve hangisinin guncel oldugu belirsizlesir.
+_V114_SAPMA_GEREKCESI = (
+    "Gateway v1.14.0 uc tipi kisitini kaldirdi ve `auto` politikasi + Dial-In "
+    "farkindali gecikme takibini getirdi; Grid bu yetenekleri destekliyor. "
+    "Vendor edilen sozlesme ise hala v1.11.4 — cunku v1.14.0 icin GitHub "
+    "Release ve release ARTIFACT'i henuz uretilmedi ve Grid, tag'deki repo "
+    "dosyasini canonical artifact gibi vendor ETMEZ (provenance karari, "
+    "2026-08-20). SAHA KIRILMAZ: bu yetenekleri desteklemeyen gateway'e ilgili "
+    "payload GONDERILMEZ (bkz. `eksik_yetenekler`), guvenli tarafa `continuous` "
+    "dusurulur ve operatore uyari gosterilir. Sapma, v1.14.0 release "
+    "artifact'i vendor edildiginde kapanir."
+)
+
 KNOWN_VERSION_DRIFT: dict[str, str] = {
+    "smart_auto": _V114_SAPMA_GEREKCESI,
+    "smart_listening": _V114_SAPMA_GEREKCESI,
+    "dial_in_health": _V114_SAPMA_GEREKCESI,
+    "smart_listen_reconnect": _V114_SAPMA_GEREKCESI,
     "smart_session": (
         "B5 (2026-08-20) gateway 1.12.0'in Smart Mode sozlesmesini uyguladi; "
         "Grid o tarihte hala v1.11.4 sozlesmesini vendor ediyordu. Saha "

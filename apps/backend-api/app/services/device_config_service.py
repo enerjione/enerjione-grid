@@ -420,6 +420,43 @@ def apply_template_changes(
     return sablon
 
 
+def _alan_kurallarini_dogrula(changes: dict[str, int]) -> None:
+    """Cihazin KENDI kabul kurallari — codec'in goremedigi kisitlar.
+
+    Su an tek kural Dial-In Interval (`2010C6`): Horstmann bu degerin 1440'in
+    boleni olmasini ister (katalog `desc`). 100 dk 2 bayta pekala siger, yani
+    codec gecirir; cihaz ise reddeder ve bunu Grid'e SOYLEMEZ. Sonuc:
+    ekranda 100 yazar, sahada eski deger calisir — sessiz ayrisma.
+
+    Yeni bir alan kurali cikarsa buraya eklenir; boylece hem tekil duzenleme
+    hem toplu sablon uygulama ayni kapidan gecer.
+    """
+    from app.schemas.dnp3_extended import (
+        DIAL_IN_CAT_INDEX,
+        DIAL_IN_DAY_MINUTES,
+        DIAL_IN_INTERVAL_MAX,
+        DIAL_IN_INTERVAL_MIN,
+        dial_in_gecerli_degerler,
+    )
+
+    ham = changes.get(DIAL_IN_CAT_INDEX)
+    if ham is None:
+        return
+    deger = int(ham)
+    if not (DIAL_IN_INTERVAL_MIN <= deger <= DIAL_IN_INTERVAL_MAX):
+        raise ValueError(
+            f"Dial-In araligi {deger} dk gecersiz: "
+            f"{DIAL_IN_INTERVAL_MIN}-{DIAL_IN_INTERVAL_MAX} dk arasinda olmalidir."
+        )
+    if DIAL_IN_DAY_MINUTES % deger != 0:
+        gecerli = ", ".join(str(d) for d in dial_in_gecerli_degerler())
+        raise ValueError(
+            f"Dial-In araligi {deger} dk gecersiz: deger 1440'in (24 saat) "
+            f"boleni olmalidir, yoksa cihaz yapilandirmayi kabul etmez. "
+            f"Gecerli degerler: {gecerli}."
+        )
+
+
 def apply_changes(
     db: Session,
     *,
@@ -433,10 +470,20 @@ def apply_changes(
     `changes`: CatIndex -> yeni sayisal deger (orn. {"2010C6": 720}).
     Uzunluk asimi ve olmayan girdi codec tarafindan reddedilir; buradan
     sessizce gecmez.
+
+    ALAN OZEL KURALLAR (codec'in bilmedigi)
+    ---------------------------------------
+    Codec yalnizca "deger bu kac bayta siger mi" diye bakar. Bazi girdilerin
+    CIHAZIN KENDISINDEN gelen ek kurallari var ve onlar buradan gecerse
+    dosya yazilir, cihaza gonderilir, cihaz REDDEDER ve operator ayarin
+    uygulandigini sanir. `_alan_kurallarini_dogrula` o sessiz basarisizligi
+    kapatir.
     """
     guncel = current_version(db, device_id)
     if guncel is None:
         raise ConfigNotFound(f"cihaz {device_id} icin yapilandirma surumu yok")
+
+    _alan_kurallarini_dogrula(changes)
 
     doc = parse(bytes(guncel.raw))
     for cat_index, deger in changes.items():

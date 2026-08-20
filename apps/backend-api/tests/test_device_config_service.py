@@ -264,9 +264,16 @@ def test_duzenleme_sonrasi_checksum_GECERLI(db, cihaz) -> None:
 
 
 def test_sigmayan_deger_SURUM_YARATMADAN_reddedilir(db, cihaz) -> None:
+    """Codec'in UZUNLUK kontrolu — alan kuralindan BAGIMSIZ olarak calismali.
+
+    Girdi bilerek `320001` (4 baytlik voltaj): `2010C6` artik alan ozel bir
+    kuraldan (1440'in boleni) gectigi icin oradaki tasma hic codec'e
+    ulasmiyordu ve bu test aslinda ARTIK BASKA BIR SEYI olcuyordu. Kural
+    eklemek, codec kontrolunu olcusuz birakmamali.
+    """
     svc.create_version(db, device_id=cihaz.id, raw=_dosya(), source="yuklendi")
     with pytest.raises(ConfigParseError):
-        svc.apply_changes(db, device_id=cihaz.id, changes={"2010C6": 70000})
+        svc.apply_changes(db, device_id=cihaz.id, changes={"320001": 2**33})
 
 
 def test_surum_yokken_duzenleme_ACIK_hata(db, cihaz) -> None:
@@ -362,3 +369,47 @@ def test_gomulu_katalog_GERCEK_dosyanin_alanlarini_kapsiyor() -> None:
     ]
     eksik = [ci for ci in gercek_alanlar if ci not in katalog]
     assert not eksik, f"katalogda olmayan gercek alanlar: {eksik}"
+
+
+# ---------------------------------------------------------------------------
+# Dial-In (2010C6) — CIHAZIN KENDI kabul kurali
+#
+# Codec yalnizca "2 bayta siger mi" diye bakar; Horstmann ayrica degerin
+# 1440'in boleni olmasini ister. Bu kural olmadan 100 dk kaydedilir, dosya
+# cihaza gonderilir, cihaz REDDEDER ve operator ayarin uygulandigini sanir.
+# ---------------------------------------------------------------------------
+
+
+def test_dial_in_1440un_boleni_olmayan_deger_REDDEDILIR():
+    from app.services.device_config_service import _alan_kurallarini_dogrula
+
+    for gecersiz in (100, 70, 500, 1000):
+        with pytest.raises(ValueError, match="boleni"):
+            _alan_kurallarini_dogrula({"2010C6": gecersiz})
+
+
+def test_dial_in_arali_disi_deger_REDDEDILIR():
+    from app.services.device_config_service import _alan_kurallarini_dogrula
+
+    for gecersiz in (30, 59, 1441, 2880):
+        with pytest.raises(ValueError):
+            _alan_kurallarini_dogrula({"2010C6": gecersiz})
+
+
+def test_dial_in_gecerli_degerler_KABUL_edilir():
+    from app.schemas.dnp3_extended import dial_in_gecerli_degerler
+    from app.services.device_config_service import _alan_kurallarini_dogrula
+
+    for gecerli in dial_in_gecerli_degerler():
+        _alan_kurallarini_dogrula({"2010C6": gecerli})  # patlamamali
+
+    # Urunun sundugu hazir secenekler gercekten gecerli mi?
+    for sunulan in (60, 120, 240, 360, 720, 1440):
+        _alan_kurallarini_dogrula({"2010C6": sunulan})
+
+
+def test_dial_in_disindaki_girdiler_ETKILENMEZ():
+    """Kural YALNIZCA 2010C6 icin; diger girdiler codec'e birakilir."""
+    from app.services.device_config_service import _alan_kurallarini_dogrula
+
+    _alan_kurallarini_dogrula({"2010C4": 37, "210703": 100})  # patlamamali

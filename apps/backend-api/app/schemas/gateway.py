@@ -102,10 +102,12 @@ class GatewayConfigDevice(BaseModel):
     # ----- gateway v1.12.0: akilli oturum --------------------------------
     #
     # `continuous` (varsayilan) bugune kadarki davranistir: gateway periyodik
-    # tarama yapar. `smart` yalnizca `initiating` ile yayinlanir — serializer
-    # bunu ayrica normalize eder (bkz. api/gateways.py), boylece surum
-    # dogrulamasindan onceki bir kayit bile gateway'e gecersiz kombinasyon
-    # goturemez.
+    # tarama yapar. `smart`/`auto` ALTI KOMBINASYONDA da gecerlidir
+    # (v1.14.0 uc tipi kisitini kaldirdi) ama YAYINA yetenek kapisindan
+    # gecerek girer: gateway surumu desteklemiyorsa serializer guvenli tarafa
+    # `continuous` dusurur (bkz. api/gateways.py). Boylece eski bir gateway
+    # tanimadigi bir deger yuzunden TUM config'i reddedip ilgisiz cihazlari
+    # dondurmez.
     #
     # ESKI GATEWAY'I BOZMAZ: v1.11.x cihaz sozlugunu acik alan cikarimiyla
     # okur, tanimadigi anahtarlari hic gormez (ayni gerekce
@@ -114,6 +116,18 @@ class GatewayConfigDevice(BaseModel):
     # Cihaz seviyesi sessizlik esigi. None = "bu cihaz icin OZEL esik yok";
     # gateway kendi env varsayilanina duser. DEVRE DISI DEMEK DEGILDIR.
     smart_max_silence_sec: int | None = None
+    # ----- gateway v1.14.0 -----------------------------------------------
+    # Ikisi de YALNIZCA destekleyen gateway'e gonderilir (serializer'da
+    # yetenek kapisi). 1.14.0 bilinmeyen cihaz alanlarini yok sayar, ama daha
+    # eski surumlerde bu garanti YOKTUR.
+    #
+    # Zamanlanmis rapor araligi (dk). `smart_max_silence_sec`in YERINE
+    # GECMEZ, yaninda calisir: rapor gecikince `report_late` bayragi kalkar,
+    # haberlesme kaybi SAYILMAZ.
+    dial_in_interval_min: int | None = None
+    # Listening kanalda yeniden baglanma TAVANI (sn). Ping/probe araligi
+    # DEGILDIR. None = kutuphane varsayilani.
+    smart_listen_reconnect_max_sec: int | None = None
     poll_interval_sec: int
     timeout_ms: int
     retry_count: int

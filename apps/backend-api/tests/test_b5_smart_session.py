@@ -140,6 +140,14 @@ def _saglik(**devices) -> str:
     return json.dumps({"devices": devices})
 
 
+def _diskteki(db, code: str) -> Device:
+    """Koda gore cihaz kaydi — DISKE YAZILANI okumak icin.
+
+    (`_cihaz` adi bu dosyada `GatewayConfigDevice` uretmek icin kullaniliyor.)
+    """
+    return db.query(Device).filter(Device.code == code).one()
+
+
 def _config_govdesi(db) -> dict:
     """Gateway'in GERCEKTEN aldigi govde."""
     yanit = gateways_api.get_gateway_config(
@@ -292,23 +300,33 @@ def test_B5_03_serializer_gecersiz_kaydi_continuous_yayinlar(db, gateway, kurulu
     )
 
 
-def test_B5_03_smart_listening_reddedilir(db, gateway, kurulumcu):
-    """Uykudaki cihaza gateway BAGLANAMAZ; kombinasyon uretildigi yerde durur."""
-    with pytest.raises(HTTPException) as exc:
-        _cihaz_ekle(
-            db,
-            kurulumcu,
-            code="DEV-KOTU",
-            dnp3_extended={
-                "ip_endpoint_type": "listening",
-                "session_policy": "smart",
-            },
-        )
-    assert exc.value.status_code == 422
-    assert "initiating" in str(exc.value.detail)
+def test_B5_03_smart_listening_ARTIK_KABUL_EDILIR(db, gateway, kurulumcu):
+    """v1.14.0: uc tipi ile mod ORTOGONAL — kombinasyon artik gecerli.
+
+    Bu test eskiden TERSINI iddia ediyordu (422). Iddia silinmedi, YENI
+    urun sozlesmesine cevrildi: v1.13.0 `smart` + `listening` kombinasyonunu
+    reddediyordu ve bu kisit iki BAGIMSIZ kavrami birbirine karistiriyordu —
+    sabit IP'li bir Horstmann'i Smart modda calistirmak imkansizdi.
+
+    ISTENEN yapilandirmanin kabulu, o kombinasyonun her gateway'e OLDUGU
+    GIBI render edildigi anlamina GELMEZ; surum kapisi ayri testte
+    (`test_v114_eski_gatewayde_...`).
+    """
+    cihaz = _cihaz_ekle(
+        db,
+        kurulumcu,
+        code="DEV-LISTEN-SMART",
+        dnp3_extended={
+            "ip_endpoint_type": "listening",
+            "session_policy": "smart",
+        },
+    )
+    kayit = db.get(Device, cihaz.id).dnp3_extended
+    assert kayit["session_policy"] == "smart", "istenen politika diske yazilmadi"
+    assert kayit["ip_endpoint_type"] == "listening"
 
 
-def test_B5_04_kismi_PATCH_initiating_listeninge_cevrilemez(db, gateway, kurulumcu):
+def test_B5_04_kismi_PATCH_politikayi_SILMEZ(db, gateway, kurulumcu):
     """ASIL TUZAK: govde yalnizca `ip_endpoint_type` tasir.
 
     Model uzerinde dogrulama yapan bir tasarim bunu KACIRIRDI — gelen
@@ -321,16 +339,24 @@ def test_B5_04_kismi_PATCH_initiating_listeninge_cevrilemez(db, gateway, kurulum
         code="DEV-SMART",
         dnp3_extended={"ip_endpoint_type": "initiating", "session_policy": "smart"},
     )
-    with pytest.raises(HTTPException) as exc:
-        devices_api.update_device(
-            device_code="DEV-SMART",
-            payload=DeviceUpdate(
-                dnp3_extended=Dnp3ExtendedSettings(ip_endpoint_type="listening")
-            ),
-            current_user=kurulumcu,
-            db=db,
-        )
-    assert exc.value.status_code == 422
+    devices_api.update_device(
+        device_code="DEV-SMART",
+        payload=DeviceUpdate(
+            dnp3_extended=Dnp3ExtendedSettings(ip_endpoint_type="listening")
+        ),
+        current_user=kurulumcu,
+        db=db,
+    )
+    # ASIL KORUNAN SEY DEGISMEDI: kismi PATCH politikayi SILMEZ. Eskiden bu
+    # kombinasyon yasakti ve test 422 bekliyordu; artik gecerli, ama
+    # `smart` degerinin uc tipi degisince sessizce `continuous`a
+    # DUSURULMEDIGI hala dogrulanmali (§26: "endpoint degisince Smart/Auto
+    # silinmez").
+    kayit = _diskteki(db, "DEV-SMART").dnp3_extended
+    assert kayit["ip_endpoint_type"] == "listening"
+    assert kayit["session_policy"] == "smart", (
+        "uc tipi degisince politika sessizce dusuruldu"
+    )
 
 
 def test_B5_04_ayni_istekte_continuousa_donen_PATCH_KABUL_edilir(db, gateway, kurulumcu):
@@ -445,10 +471,21 @@ def test_bool_tamsayi_olarak_kabul_EDILMEZ():
         Dnp3ExtendedSettings(smart_max_silence_sec=True)
 
 
+def test_auto_politikasi_KABUL_edilir():
+    """`auto` v1.14.0 sozlesmesinde GECERLI bir deger."""
+    assert Dnp3ExtendedSettings(session_policy="auto").session_policy == "auto"
+
+
 def test_gecersiz_politika_degeri_reddedilir():
-    """`auto` gibi bir ucuncu deger sozlesmede YOK."""
-    with pytest.raises(ValidationError):
-        Dnp3ExtendedSettings(session_policy="auto")
+    """Uc gecerli degerin DISINDA kalan hala reddedilir.
+
+    Kapi genisledi diye kalkmadi: gateway sozlesmesi tanimsiz bir degeri
+    gordugunde TUM config'i reddediyor, yani buradan kacan bir yazim hatasi
+    o gateway'deki her cihazi dondururdu.
+    """
+    for gecersiz in ("Smart", "otomatik", "auto ", "", "aggressive"):
+        with pytest.raises(ValidationError):
+            Dnp3ExtendedSettings(session_policy=gecersiz)
 
 
 # ---------------------------------------------------------------------------
@@ -706,3 +743,177 @@ def test_denetim_kaydi_eski_yeni_gosterir(db, gateway, kurulumcu):
     fark = (json.loads(olay.metadata_json or "{}")).get("dnp3_changes") or {}
     assert fark["session_policy"] == {"old": "continuous", "new": "smart"}
     assert fark["smart_max_silence_sec"] == {"old": None, "new": 93600}
+
+
+# ---------------------------------------------------------------------------
+# v1.14 — ESKI GATEWAY GUVENLIGI
+#
+# ISTENEN yapilandirma ile o gateway'e FIILEN RENDER EDILEN yapilandirma ayni
+# sey degildir. Sozlesme geregi gateway tanimadigi bir `session_policy`
+# degerini gordugunde TUM config'i reddeder
+# (`session_policy_invalid_behavior: reject_config`) — yani tek bir cihaz
+# ayari, o gateway'deki ILGISIZ CIHAZLARI da dondurur. Kapi burada olculur.
+# ---------------------------------------------------------------------------
+
+
+def _gateway_surumunu_ayarla(db, surum: str | None) -> None:
+    """Gateway'in heartbeat'te bildirdigi surumu kur."""
+    from app.models.gateway_health import GatewayHealth
+
+    from datetime import datetime, timezone
+
+    kayit = db.get(GatewayHealth, GW)
+    if kayit is None:
+        # `reported_at` NOT NULL — heartbeat kaydi her zaman bir ana aittir.
+        kayit = GatewayHealth(
+            gateway_code=GW,
+            status="online",
+            reported_at=datetime.now(timezone.utc),
+        )
+        db.add(kayit)
+    kayit.gateway_version = surum
+    db.flush()
+
+
+@pytest.mark.parametrize(
+    "surum,beklenen",
+    [
+        ("1.14.0", "auto"),  # destekliyor -> oldugu gibi gider
+        ("1.15.0", "auto"),  # daha yeni -> yine gider
+        ("1.13.0", "continuous"),  # `auto` degerini TANIMAZ -> dusurulur
+        ("1.12.0", "continuous"),
+        (None, "continuous"),  # surum bilinmiyor -> guvenli taraf
+    ],
+)
+def test_v114_auto_politikasi_surum_kapisindan_gecer(
+    db, gateway, kurulumcu, surum, beklenen
+):
+    """`auto` YALNIZCA 1.14.0+ gateway'e render edilir."""
+    _cihaz_ekle(
+        db,
+        kurulumcu,
+        code="DEV-AUTO",
+        dnp3_extended={"ip_endpoint_type": "initiating", "session_policy": "auto"},
+    )
+    _gateway_surumunu_ayarla(db, surum)
+
+    yayin = next(d for d in _config_govdesi(db)["devices"] if d["code"] == "DEV-AUTO")
+    assert yayin["session_policy"] == beklenen
+
+    # DISKTEKI ISTEK ASLA DEGISMEZ — dusurme yalnizca YAYINDA olur.
+    assert _diskteki(db, "DEV-AUTO").dnp3_extended["session_policy"] == "auto", (
+        "surum kapisi diskteki istenen ayari ezdi"
+    )
+
+
+@pytest.mark.parametrize(
+    "surum,beklenen",
+    [("1.14.0", "smart"), ("1.13.0", "continuous"), (None, "continuous")],
+)
+def test_v114_listening_smart_surum_kapisindan_gecer(
+    db, gateway, kurulumcu, surum, beklenen
+):
+    """`listening` + `smart` 1.14.0 oncesinde render EDILMEZ."""
+    _cihaz_ekle(
+        db,
+        kurulumcu,
+        code="DEV-LS",
+        dnp3_extended={"ip_endpoint_type": "listening", "session_policy": "smart"},
+    )
+    _gateway_surumunu_ayarla(db, surum)
+    yayin = next(d for d in _config_govdesi(db)["devices"] if d["code"] == "DEV-LS")
+    assert yayin["session_policy"] == beklenen
+
+
+def test_v114_initiating_smart_ESKI_GATEWAYDE_DE_render_edilir(db, gateway, kurulumcu):
+    """REGRESYON KAPISI: 1.12.0'dan beri calisan kombinasyon kapiya GIRMEZ.
+
+    `smart_session` yetenegi 1.12.0'da geldi ve `initiating` + `smart` bugune
+    kadar hicbir surum kapisindan gecmeden render ediliyordu. Yeni kapiyi bu
+    kombinasyona da uygulamak, surumunu bildirmemis (cok yaygin) her
+    gateway'de SAHADA CALISAN Smart kurulumlarini sessizce `continuous`a
+    dusururdu — yeni ozellik eklerken mevcut davranisi bozmak.
+    """
+    _cihaz_ekle(
+        db,
+        kurulumcu,
+        code="DEV-IS",
+        dnp3_extended={"ip_endpoint_type": "initiating", "session_policy": "smart"},
+    )
+    for surum in (None, "1.12.0", "1.13.0", "1.14.0"):
+        _gateway_surumunu_ayarla(db, surum)
+        yayin = next(d for d in _config_govdesi(db)["devices"] if d["code"] == "DEV-IS")
+        assert yayin["session_policy"] == "smart", (
+            f"gateway {surum} icin calisan Smart kurulumu dusuruldu"
+        )
+
+
+def test_v114_only_alanlar_eski_gatewaye_GONDERILMEZ(db, gateway, kurulumcu):
+    """Dial-In ve reconnect tavani 1.14.0 oncesine hic girmez.
+
+    1.14.0 bilinmeyen cihaz alanlarini yok sayar; daha ESKI surumlerde bu
+    garanti yoktur ve tek bir fazladan alan tum config'i dusurebilir.
+    """
+    _cihaz_ekle(
+        db,
+        kurulumcu,
+        code="DEV-DIAL",
+        dnp3_extended={
+            "ip_endpoint_type": "initiating",
+            "session_policy": "smart",
+            "dial_in_interval_min": 240,
+            "smart_listen_reconnect_max_sec": 30,
+        },
+    )
+
+    _gateway_surumunu_ayarla(db, "1.13.0")
+    eski = next(d for d in _config_govdesi(db)["devices"] if d["code"] == "DEV-DIAL")
+    assert eski["dial_in_interval_min"] is None
+    assert eski["smart_listen_reconnect_max_sec"] is None
+
+    _gateway_surumunu_ayarla(db, "1.14.0")
+    yeni = next(d for d in _config_govdesi(db)["devices"] if d["code"] == "DEV-DIAL")
+    assert yeni["dial_in_interval_min"] == 240
+    assert yeni["smart_listen_reconnect_max_sec"] == 30
+
+
+def test_v114_max_silence_dial_inden_TURETILIR(db, gateway, kurulumcu):
+    """(Dial-In + tolerans) * 60 — yuzde formulu YOK."""
+    _cihaz_ekle(
+        db,
+        kurulumcu,
+        code="DEV-TUR",
+        dnp3_extended={
+            "ip_endpoint_type": "initiating",
+            "session_policy": "smart",
+            "dial_in_interval_min": 60,
+            "communication_grace_min": 15,
+        },
+    )
+    _gateway_surumunu_ayarla(db, "1.14.0")
+    yayin = next(d for d in _config_govdesi(db)["devices"] if d["code"] == "DEV-TUR")
+    assert yayin["smart_max_silence_sec"] == 4500  # (60+15)*60
+
+
+def test_v114_acik_max_silence_TURETMEYI_EZER(db, gateway, kurulumcu):
+    """ESKI CIHAZ KORUMASI: elle yazilmis esik kazanir.
+
+    Eski kayitlarda `smart_max_silence_sec` Dial-In olmadan doldurulmustur;
+    turetmenin onu ezmesi, calisan bir sahanin esigini sessizce degistirmek
+    olurdu.
+    """
+    _cihaz_ekle(
+        db,
+        kurulumcu,
+        code="DEV-EZ",
+        dnp3_extended={
+            "ip_endpoint_type": "initiating",
+            "session_policy": "smart",
+            "dial_in_interval_min": 60,
+            "communication_grace_min": 15,
+            "smart_max_silence_sec": 93600,
+        },
+    )
+    _gateway_surumunu_ayarla(db, "1.14.0")
+    yayin = next(d for d in _config_govdesi(db)["devices"] if d["code"] == "DEV-EZ")
+    assert yayin["smart_max_silence_sec"] == 93600
