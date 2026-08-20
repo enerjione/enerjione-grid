@@ -788,7 +788,7 @@ def _asgi_post(yol: str, govde: dict, basliklar: dict[str, str]) -> tuple[int, b
     return durum, govde_baytlari
 
 
-def test_HTTP_ucu_204_ve_BOS_govde_doner(db, gateway):
+def test_HTTP_ucu_204_ve_BOS_govde_doner(db, gateway, lisans_kilidi_kapali):
     from app.core.config import settings
     from app.db.session import get_db
     from app.main import app
@@ -806,6 +806,27 @@ def test_HTTP_ucu_204_ve_BOS_govde_doner(db, gateway):
     assert durum == 204
     assert govde == b"", "gateway govdeyi okumaz; bos donmeli"
     assert _satir(db, "SN2-001") is not None
+
+
+def test_device_health_ucu_lisans_kilidi_KAPSAMINDA():
+    """Lisanssiz kurulumda bu uc de KAPALI olmali — beyaz listeye GIRMEZ.
+
+    Yukaridaki ASGI testi kilidi bilerek acar (yoksa 403'e carpar ve yerelde
+    gecip CI'da duserdi). O fixture, kapinin kendisini test disi birakmis
+    OLMAMALI: `/gateways/*` beyaz listeye eklenirse lisanssiz bir kurulum
+    saglik yazmaya devam eder — urun isi yapmayi birakmasi gerekirken.
+
+    Kurtarma uclari (`/auth`, `/license`, `/network`, `/remote-access`)
+    bilerek disaridadir; saglik telemetrisi kurtarma kolu DEGILDIR.
+    """
+    from app.core.config import settings
+    from app.core.license_gate import _is_allowed
+
+    yol = f"{settings.api_prefix}/gateways/{KOD}/device-health"
+    assert not _is_allowed(yol, "POST"), (
+        "device-health lisans beyaz listesine girmis — lisanssiz kurulum "
+        "urun isi yapmaya devam eder"
+    )
 
 
 # ---------------------------------------------------------------------------

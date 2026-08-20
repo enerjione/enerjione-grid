@@ -892,13 +892,18 @@ def _asgi(method: str, yol: str, govde: dict | None, basliklar: dict[str, str]):
     return durum, baytlar
 
 
-def test_UCTAN_UCA_post_saglik_sonra_get_devices(db, gateway):
+def test_UCTAN_UCA_post_saglik_sonra_get_devices(db, gateway, lisans_kilidi_kapali):
     """Gateway POST'undan arayuzun okudugu JSON'a kadar TEK akis.
 
     Dogrudan DB yazimi YOK: veri gercek `/gateways/{kod}/device-health`
     ucundan girer ve gercek `GET /devices` ucundan cikar. Aradaki her halka
     (auth, sema dogrulama, adaptor, upsert, okuma haritasi, pydantic
     serialize) gercekten kosar.
+
+    `lisans_kilidi_kapali`: uygulama ham ASGI ile suruldugu icin
+    `LicenseGateMiddleware` de devrede. Lisanssiz kurulumda `/gateways/*`
+    403 doner (bilincli) ve kilit durumu ORTAMDAN gelir — fixture olmasa bu
+    test gelistirici makinesinde gecer, CI'da duserdi.
     """
     from app.main import app
 
