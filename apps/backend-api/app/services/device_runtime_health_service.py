@@ -40,6 +40,7 @@ gelen degere ZORLANMAZ — PR acik, yeni durum/alan eklenebilir.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -266,6 +267,49 @@ def zarfi_coz(payload: Any, *, gateway_code: str) -> Zarf:
         snapshot_batch_count=_as_int(payload.get("snapshot_batch_count")) if snapshot else None,
         devices=cihazlar,
     )
+
+
+# ---------------------------------------------------------------------------
+# OKUMA TARAFI — cihaz yanitina baglama
+# ---------------------------------------------------------------------------
+
+
+def saglik_haritasi(
+    db: Session, kodlar: Iterable[str]
+) -> dict[str, DeviceRuntimeHealth]:
+    """Verilen cihaz kodlari icin saglik satirlari — `code -> satir`.
+
+    TEK SORGU, CIHAZ BASINA DEGIL. Okuma yolu (`GET /devices`) 600+ cihaz
+    donuyor; satir basina `db.get(...)` 600 gidis-donus demekti. Ayni gerekce
+    alim tarafindaki toplu okumada da yazili.
+
+    JOIN DEGIL, AYRI SELECT — bilincli ve GUVENLIK gerekcesi var:
+
+    * Cihaz sorgusuna bir JOIN eklemek, sonuc kumesini ETKILEYEBILIR
+      (`device_runtime_health`te birden fazla eslesme olsa satir cogalir,
+      yanlis join turu olsa satir duserdi). O kume kapsam filtresinin
+      (`scope_service`) ciktisi; genisletmesi de daraltmasi da yetki hatasi
+      olurdu. Ayri select cihaz kumesine DOKUNAMAZ: sayfalama, toplam sayi,
+      filtre, arama ve siralama neyse o kalir.
+    * Kapsam disi bir cihazin sagligi hic OKUNMAZ, cunku sorgu yalnizca
+      cagiranin ELINDEKI kodlari sorar. Sagliga AYRI bir yetki yolu
+      acilmamistir; otorite cihaz kapsamidir.
+
+    Cihaz basina EN FAZLA BIR satir olabilir: `device_code` bu tablonun
+    BIRINCIL ANAHTARIDIR (bkz. `models/device_runtime_health.py`). Sozluk
+    kurmak bu yuzden veri kaybetmez.
+    """
+    kod_kumesi = {k for k in kodlar if k}
+    if not kod_kumesi:
+        return {}
+    return {
+        satir.device_code: satir
+        for satir in db.scalars(
+            select(DeviceRuntimeHealth).where(
+                DeviceRuntimeHealth.device_code.in_(kod_kumesi)
+            )
+        ).all()
+    }
 
 
 # ---------------------------------------------------------------------------

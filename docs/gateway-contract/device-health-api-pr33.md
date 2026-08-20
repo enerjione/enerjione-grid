@@ -2,9 +2,12 @@
 
      PR      : #33 (feat/g-device-health-1.15.0)
      Commit  : bd502c49b3fe9b1e4665adb9fe2e1de2fd8d7a5c
-     Son kontrol: PR HEAD add5f4d2 (2026-08-20) — BELGE BIREBIR AYNI.
-                  Gateway durum-makinesi degisti, WIRE SOZLESMESI DEGISMEDI;
-                  bu yuzden Grid tarafinda degisiklik GEREKMEDI.
+     Son kontrol: PR HEAD 91bc0d04 (2026-08-20) — BELGE BIREBIR AYNI.
+                  Onceki kontroller: add5f4d2, bd502c49. Uc HEAD'de de wire
+                  sozlesmesi ve `docker/gateway-deployment-contract.json`
+                  BAYT BAYT AYNI; gateway tarafinda degisen sey durum
+                  makinesi/yayinci, KABLO DEGIL. Bu yuzden Grid tarafinda
+                  degisiklik GEREKMEDI.
      Yol     : docs/GRID_DEVICE_HEALTH_API.md
      Alindi  : 2026-08-20
 

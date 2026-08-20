@@ -139,6 +139,12 @@ import "./gatewayUyumlulukVeDialInDurumu.test";
 // oldugu icin ekranda fark edilmez.
 import "./deviceRuntimeState.test";
 
+// Okuma ucu <-> arayuz AD ESLESMESI. Ozellik tam olarak buradan kirilmisti:
+// alim calisiyor, tablo doluyor, arayuz `item.runtime_health` okuyor ama
+// backend cihaz yanitina o alani KOYMUYORDU. Iki tarafi ayri ayri test eden
+// bir paket bunu yakalayamaz — kirilan sey aradaki addir.
+import "./runtimeHealthOkumaSozlesmesi.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   connectionIsDead,
