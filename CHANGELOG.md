@@ -14,6 +14,42 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.106.0] — 2026-08-20
+
+### Eklendi
+
+- **Gateway v1.14 akıllı oturum yapılandırması.** Oturum politikası artık
+  **Sürekli / Akıllı / Otomatik**. Uç tipi (Listening/Initiating) ile mod
+  birbirinden **bağımsız**: altı kombinasyonun hepsi geçerli. Önceki sürümde
+  `Akıllı + Listening` reddediliyordu; bu kısıt iki ayrı kavramı birbirine
+  karıştırıyordu ve sabit IP'li bir Horstmann'ı Akıllı modda çalıştırmayı
+  imkânsız kılıyordu.
+
+- **Dial-In Aralığı ve Haberleşme Toleransı cihaz ayarlarından
+  yapılandırılabiliyor.** Dial-In değiştirildiğinde aynı değer hem gateway'in
+  gecikme hesabına hem **cihazın kendi yapılandırma dosyasına** (`2010C6`)
+  gider; mevcut sürüm/fark/FTP/denetim hattı kullanılır. Haberleşme kaybı
+  eşiği `(Dial-In + tolerans)` olarak hesaplanır ve salt-okunur gösterilir.
+
+- **Gateway sürüm uyumluluk uyarısı.** Eski bir gateway v1.14'e özgü bir ayarı
+  desteklemiyorsa operatöre söylenir ve o ayar gateway'e **gönderilmez** —
+  gateway tanımadığı bir değeri gördüğünde yapılandırmanın tamamını
+  reddettiği için, tek bir cihaz ayarı o gateway'deki bütün cihazları
+  durdurabilirdi.
+
+### Düzeltildi
+
+- **Oturum politikası seçimi hiçbir ekrandan görünmüyordu.** Alan, cihaz
+  düzenleme ekranında kapalı olan bir bloğun içindeydi; B5 ile gelen Akıllı
+  Oturum ayarı yayınlanmış ama erişilemez durumdaydı.
+
+- **Dial-In aralığında geçersiz değer kabul ediliyordu.** Horstmann bu değerin
+  1440'ın böleni olmasını ister (örn. 100 dk geçersiz). Yapılandırma dosyası
+  düzenleme yolunda hiçbir aralık/bölen kontrolü yoktu; cihaz böyle bir
+  değeri sessizce reddeder ve ekranda ayar uygulanmış görünürdü.
+
+---
+
 ## [2.105.0] — 2026-08-20
 
 ### Eklendi
