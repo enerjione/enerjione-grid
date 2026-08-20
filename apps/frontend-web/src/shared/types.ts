@@ -2,17 +2,21 @@
 
 export type IpEndpointType = "initiating" | "listening";
 
-/** Gateway v1.12.0 oturum politikasi.
+/** Gateway v1.14.0 oturum politikasi.
  *
  *  `continuous` — gateway periyodik DNP3 taramasi yapar (bugune kadarki
  *  davranis). `smart` — cihaz raporunu gonderip baglantiyi kapattiginda bu
- *  NORMAL UYKU sayilir; gateway aktif yoklamaya girmez.
+ *  NORMAL UYKU sayilir; gateway aktif yoklamaya girmez. `auto` — gateway
+ *  cihazin GERCEK Operation Mode sinyaline bakarak ikisi arasinda gecer.
  *
- *  `smart` YALNIZCA `initiating` ile gecerlidir: uykudaki cihaza gateway
- *  baglanamaz, baglantiyi cihaz kurar. Backend de bu kombinasyonu 422 ile
- *  reddeder — arayuz onu hic uretmemeli (bkz. `sessionPolicyForEndpoint`).
+ *  UC TIPI ILE MOD ORTOGONALDIR (v1.14.0 sozlesmesi). Once `smart` yalnizca
+ *  `initiating` ile gecerli sayiliyordu ve backend digerini 422 ile
+ *  reddediyordu; o kisit KALKTI, alti kombinasyonun tamami desteklenir. Bu
+ *  yuzden secimi bastiran `sessionPolicyForEndpoint` kapisi da kaldirildi:
+ *  yerinde birakilsaydi sabit IP'li (listening) bir Horstmann'i Smart modda
+ *  calistirmak Grid uzerinden IMKANSIZ kalirdi.
  */
-export type SessionPolicy = "continuous" | "smart";
+export type SessionPolicy = "continuous" | "smart" | "auto";
 
 /** Cihaz seviyesi sessizlik esigi araligi (gateway v1.12.0 sozlesmesi).
  *
@@ -22,18 +26,63 @@ export type SessionPolicy = "continuous" | "smart";
 export const SMART_MAX_SILENCE_MIN_SEC = 60;
 export const SMART_MAX_SILENCE_MAX_SEC = 2592000;
 
-/** Uc nokta tipine gore GECERLI oturum politikasi.
+/** Dial-In araligi (dk) sinirlari — backend `schemas/dnp3_extended.py`
+ *  ile AYNI olmali. */
+export const DIAL_IN_INTERVAL_MIN_MIN = 60;
+export const DIAL_IN_INTERVAL_MIN_MAX = 1440;
+const DIAL_IN_DAY_MINUTES = 1440;
+
+/** 1440'in boleni olan ve araliga giren TUM Dial-In degerleri.
  *
- *  Operator uc nokta tipini `listening` yaptiginda akilli oturum anlamini
- *  yitirir ve `continuous`a doner. Bu kural saf tutuldu ki hem form hem
- *  kaydetme yolu AYNI karari versin: formda gorunen ile govdeye giren
- *  ayrisirsa, backend'in 422'si kullaniciya sebepsiz gorunurdu.
+ *  SABIT LISTE YAZILMAZ. Araligi dogrulamak tek basina yetmez: 100 dk
+ *  araliktadir ama 1440'in boleni DEGILDIR ve Horstmann boyle bir degeri
+ *  kabul etmez — Grid kaydeder, operator ayarin uygulandigini SANIR. Backend
+ *  ayni kumeyi ayni sarttan turetiyor; iki taraf elle bakilan listelerle
+ *  ayrisirsa fark ancak 422 aninda gorulur.
  */
-export function sessionPolicyForEndpoint(
-  endpoint: IpEndpointType,
-  policy: SessionPolicy
-): SessionPolicy {
-  return endpoint === "initiating" ? policy : "continuous";
+export function dialInValidValues(): number[] {
+  const degerler: number[] = [];
+  for (let dk = DIAL_IN_INTERVAL_MIN_MIN; dk <= DIAL_IN_INTERVAL_MIN_MAX; dk += 1) {
+    if (DIAL_IN_DAY_MINUTES % dk === 0) degerler.push(dk);
+  }
+  return degerler;
+}
+
+/** Haberlesme toleransi (dk): zamanlanmis rapor geciktiginde haberlesme
+ *  kaybi saymadan once beklenecek EK sure. Oran degil SABIT paydir — "Dial-In
+ *  x 1.5" gibi bir carpan, 24 saatlik araligi 36 saatlik alarm esigine
+ *  cevirir ve olu cihaz ancak ertesi gun ogleden sonra fark edilir. */
+export const COMMUNICATION_GRACE_MIN_MIN = 5;
+export const COMMUNICATION_GRACE_MIN_MAX = 30;
+export const COMMUNICATION_GRACE_MIN_DEFAULT = 15;
+
+/** Listening kanalda yeniden baglanma TAVANI (sn).
+ *
+ *  PING/PROBE araligi DEGILDIR: ustel geri cekilmenin tepe degeridir, taban
+ *  1 sn'de kalir. Eski `smart_listen_probe_interval_sec` adi bu yuzden
+ *  kullanilmaz. */
+export const SMART_LISTEN_RECONNECT_MIN_SEC = 5;
+export const SMART_LISTEN_RECONNECT_MAX_SEC = 600;
+
+/** Dial-In + tolerans'tan TURETILEN sessizlik esigi (saniye).
+ *
+ *  Kanonik iliski (gateway v1.14.0):
+ *
+ *      smart_max_silence_sec = (dial_in_interval_min + communication_grace_min) * 60
+ *
+ *  Ornek: 60 dk Dial-In + 15 dk tolerans -> 4500 sn (75 dk).
+ *
+ *  Dial-In yoksa `null` doner; turetilecek bir sey yoktur. Tolerans yoksa
+ *  urun varsayilani (15 dk) kullanilir — backend de ayni varsayilani uygular
+ *  ve diske YAZMAZ.
+ */
+export function derivedMaxSilenceSec(
+  dialInIntervalMin: number | null,
+  communicationGraceMin: number | null
+): number | null {
+  if (dialInIntervalMin === null) return null;
+  const tolerans = communicationGraceMin ?? COMMUNICATION_GRACE_MIN_DEFAULT;
+  return (dialInIntervalMin + tolerans) * 60;
 }
 
 export type Dnp3ExtendedSettings = {
@@ -54,12 +103,23 @@ export type Dnp3ExtendedSettings = {
   validate_source_address: boolean;
   session_timeout_listening_sec: number;
   socket_listening_timeout_sec: number;
-  /** Oturum politikasi — gateway v1.12.0. Yalnizca `initiating` ile
-   *  `smart` olabilir. */
+  /** Oturum politikasi — gateway v1.14.0. Uc nokta tipinden BAGIMSIZ. */
   session_policy: SessionPolicy;
   /** Cihaz seviyesi sessizlik esigi (sn). `null` = bu cihaz icin OZEL esik
-   *  yok; gateway kendi genel ayarini kullanir. DEVRE DISI DEMEK DEGILDIR. */
+   *  yok; gateway kendi genel ayarini kullanir. DEVRE DISI DEMEK DEGILDIR.
+   *  Acikca yazilmis deger, Dial-In'den turetileni EZER (backend cozum
+   *  sirasi) — eski kayitlarin davranisi sessizce degismesin diye. */
   smart_max_silence_sec: number | null;
+  /** Zamanlanmis rapor araligi (dk). Sessizlik esiginin YERINE degil
+   *  YANINDA calisir: rapor gecikti ama esik dolmadiysa cihaz gecikmis
+   *  sayilir, haberlesme kaybi SAYILMAZ. 1440'in boleni olmali. */
+  dial_in_interval_min: number | null;
+  /** Rapor gecikmesine taninan ek sure (dk). `null` = urun varsayilani
+   *  (15 dk) gecerlidir; diske sabitlenmez. */
+  communication_grace_min: number | null;
+  /** Listening kanalda yeniden baglanma tavani (sn). `null` = kutuphane
+   *  varsayilani. Yoklama araligi DEGILDIR. */
+  smart_listen_reconnect_max_sec: number | null;
 };
 
 /** Backend ile aynı varsayılanlar (merge edilmemiş cevaplar için) */
@@ -77,7 +137,14 @@ export const DEFAULT_DNP3_EXTENDED: Dnp3ExtendedSettings = {
   session_timeout_listening_sec: 60,
   socket_listening_timeout_sec: 600,
   session_policy: "continuous",
-  smart_max_silence_sec: null
+  // v1.14 alanlari BILEREK null: forma bir varsayilan koymak, cihaz kaydini
+  // acip kaydeden operator eliyle o degeri DISKE sabitler ve dokunulmamis
+  // cihazlarin davranisini sessizce degistirirdi (backend exclude_unset ile
+  // calisiyor; 2026-08-07'de master_address tam boyle bozuldu).
+  smart_max_silence_sec: null,
+  dial_in_interval_min: null,
+  communication_grace_min: null,
+  smart_listen_reconnect_max_sec: null
 };
 
 /** Kayitli ayarlari varsayilanlarla tamamlar.

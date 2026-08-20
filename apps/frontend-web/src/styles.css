@@ -3666,6 +3666,10 @@ body {
   color: #0f172a;
 }
 
+.dnp3-settings-title--advanced {
+  margin-top: 14px;
+}
+
 .dnp3-settings-hint {
   margin: 0 0 10px !important;
   font-size: 12px !important;
