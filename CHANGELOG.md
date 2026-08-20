@@ -14,6 +14,43 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.107.0] — 2026-08-20
+
+### Eklendi
+
+- **Cihaz bazında çalışma-zamanı sağlığı (Gateway 1.15).** Gateway artık her
+  cihazın oturum durumunu ayrı bir uçtan bildiriyor; Grid bunu telemetriden
+  **ayrı** tutuyor. Cihaz listesinde, hat ağacında, haritada, cihaz detayında
+  ve özet ekranında görünür.
+- **`Smart Bekleme` ayrı bir durum ve SAĞLIKLI sayılıyor.** Horstmann Smart
+  modda modemini bilerek kapatır. Eskiden bu "haberleşme yok" ile aynı kovaya
+  düşüyordu; uyuyan filo arızalı görünüyor, gerçek arıza o gürültünün içinde
+  kayboluyordu. Artık kendi rengi (mavi) ve kendi kovası var.
+- **Gecikmiş rapor ayrı bir uyarı.** `Smart Bekleme · Gecikmiş` (turuncu),
+  haberleşme kaybı **değil**: planlanan Dial-In raporu gecikti ama sessizlik
+  eşiği dolmadı. Cihaz iki kovada birden sayılmaz.
+- **Dial-In geri sayımı.** Bir sonraki raporun ne zaman beklendiği dakika
+  düzeyinde gösteriliyor; değer gateway'den geliyor, tahmin edilmiyor.
+- **Durum rengi üstüne gelince kendini açıklıyor.** Rengin kendisi, durumun
+  adı, hangi kovaya girdiği (Sağlıklı / Bozulmuş / Arızalı) ve bir cümlelik
+  anlamı aynı kutuda. Renk tek başına okunmaz — özellikle mavi, çünkü mavi
+  "uyuyor ve sağlıklı" demek.
+
+### Değişti
+
+- Cihaz durumu artık gateway'in **anlık** kararından geliyor; telemetri
+  zaman damgasından türetilen eski davranış yalnızca gateway 1.15 öncesi
+  kurulumlarda geçerli. Eski gateway'de hiçbir şey değişmez.
+
+### Not
+
+- Gateway tarafında yayıncı **varsayılan olarak kapalıdır**
+  (`DEVICE_HEALTH_PUBLISH_ENABLED=false`). Bu sürüm tek başına hiçbir sahanın
+  davranışını değiştirmez; kanal, Gateway 1.15 kurulup bayrak açıldığında
+  devreye girer.
+
+---
+
 ## [2.106.0] — 2026-08-20
 
 ### Eklendi
