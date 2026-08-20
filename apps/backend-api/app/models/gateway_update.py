@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String, Text
+from sqlalchemy import Boolean, DateTime, String, Text, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -54,7 +54,16 @@ class GatewayUpdate(Base):
     #: (`pull`/`up`) `status.json` icinde bildiriyor ve arayuz onu canli
     #: gosteriyor. Buradaki durum "backend ne istedi ve sonuc ne oldu"
     #: sorusunu cevaplar; ajanin asamalarini KOPYALAMAZ.
-    status: Mapped[str] = mapped_column(String(20), default="idle", index=True)
+    #:
+    #: `server_default` 0073 ile AYNI olmak ZORUNDA. Kolon NOT NULL ve iki
+    #: ayri kurulum yolu var: temiz kurulum `create_all`, yukseltme Alembic.
+    #: Yalnizca Python tarafinda `default` birakmak, create_all yolundaki
+    #: DB'de DB SEVIYESINDE VARSAYILAN OLMAMASI demekti — ORM disindan gelen
+    #: bir INSERT (restore, elle SQL) o kurulumda patlar, digerinde
+    #: calisirdi. Bu ayrismayi A15 sema paritesi yakalar.
+    status: Mapped[str] = mapped_column(
+        String(20), default="idle", server_default="idle", index=True
+    )
 
     #: Guncelleme oncesi calisan surum ve TAM imaj referansi.
     #: `from_image` GERI ALMANIN TEK KAYNAGIDIR: yalnizca bu sistemin
@@ -90,4 +99,7 @@ class GatewayUpdate(Base):
 
     #: Bu islem bir geri alma miydi? Denetimde ve arayuzde ayri gosterilir:
     #: "1.13.0 -> 1.12.0" bir yukseltme degil, bilincli bir geri donustur.
-    is_rollback: Mapped[bool] = mapped_column(Boolean, default=False)
+    #: `server_default` gerekcesi `status` ile ayni (bkz. yukarisi).
+    is_rollback: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false()
+    )
