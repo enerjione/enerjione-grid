@@ -25,14 +25,106 @@ import {
 
 import {
   fetchGatewayAgentStatus,
+  fetchGatewayUpdate,
+  rollbackGatewayUpdate,
   updateGatewayLocally,
   fetchGatewayToken,
   installGatewayLocally,
   removeGatewayLocally
 } from "../../shared/api";
-import type { Gateway, GatewayAgentStatus, LocalGateway } from "../../shared/types";
+import type {
+  Gateway,
+  GatewayAgentStatus,
+  GatewayUpdateState,
+  LocalGateway
+} from "../../shared/types";
 import { CopyButton, generateToken } from "./gatewayShared";
 import { useModalDialog } from "../../shared/useModalDialog";
+
+/** Guncelleme gecmisi + geri alma.
+ *
+ *  NEDEN AYRI BIR BILESEN: yukaridaki surum rozeti "su an ne var, yenisi var
+ *  mi" sorusunu cevapliyor. Burasi DENETIM sorusunu cevapliyor: neyden neye
+ *  gecildi, kim baslatti, sonuc ne oldu. Ikisini tek kutuya sikistirmak,
+ *  guncelleme sirasindaki dar ekranda ikisini de okunmaz yapiyordu.
+ *
+ *  GERI ALMA yalnizca onceki imaj BILINIYORSA cikar (`can_rollback`).
+ *  Bilinmeyen bir hedefe "geri al" demek, sessizce en guncele gitmek
+ *  olurdu — yani tam tersi. */
+function GuncellemeDetayi({
+  durum,
+  onRollback,
+  mesgul
+}: {
+  durum: GatewayUpdateState | null;
+  onRollback: () => void;
+  mesgul: boolean;
+}) {
+  if (!durum) return null;
+
+  const satirlar: Array<[string, string]> = [];
+  if (durum.from_version || durum.target_version) {
+    satirlar.push([
+      "Sürüm",
+      `${durum.from_version || "?"} → ${durum.target_version || "en güncel"}`
+    ]);
+  }
+  if (durum.expected_digest) {
+    // Digest'in TAMAMI baslikta; ekranda kisa hali. Operator neyin
+    // kuruldugunu dogrulayabilmeli ama satir da okunabilir kalmali.
+    satirlar.push(["Sağlama", durum.expected_digest.slice(0, 19) + "…"]);
+  }
+  if (durum.started_by) satirlar.push(["Başlatan", durum.started_by]);
+  if (durum.started_at) {
+    satirlar.push(["Başlangıç", new Date(durum.started_at).toLocaleString(undefined)]);
+  }
+  if (durum.finished_at) {
+    satirlar.push(["Bitiş", new Date(durum.finished_at).toLocaleString(undefined)]);
+  }
+
+  return (
+    <div className="gw-update-detail">
+      {durum.compatibility.map((u) => (
+        <p key={u.feature} className="gw-uyari" role="alert">
+          <AlertTriangle size={14} strokeWidth={2.2} /> {u.message}
+        </p>
+      ))}
+
+      {satirlar.length ? (
+        <dl className="gw-update-meta" title={durum.expected_digest || undefined}>
+          {satirlar.map(([etiket, deger]) => (
+            <div key={etiket}>
+              <dt>{etiket}</dt>
+              <dd>{deger}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+
+      {durum.status === "failed" && durum.error ? (
+        <p className="gw-uyari is-fail">{durum.error}</p>
+      ) : null}
+
+      {durum.can_rollback ? (
+        <button
+          type="button"
+          className="secondary-btn gw-rollback-btn"
+          onClick={onRollback}
+          disabled={mesgul}
+          title={
+            durum.from_image
+              ? `Önceki sürüme dön: ${durum.from_image}`
+              : undefined
+          }
+        >
+          {durum.is_rollback && durum.status === "rolled_back"
+            ? "Geri alındı"
+            : "Önceki sürüme dön"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
 
 type Props = {
   accessToken: string;
@@ -81,6 +173,43 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
   const [agent, setAgent] = useState<GatewayAgentStatus | null>(null);
   const [localBusy, setLocalBusy] = useState(false);
   const [islem, setIslem] = useState<IslemDurumu | null>(null);
+  // Guncelleme DENETIM durumu (neyden neye, kim, sonuc). Ajan durumundan
+  // ayri bir istekle gelir; basarisiz olursa null kalir ve blok hic
+  // cizilmez — eksik veriyi "sorun yok" gibi gostermek yerine susuyoruz.
+  const [guncelleme, setGuncelleme] = useState<GatewayUpdateState | null>(null);
+
+  useEffect(() => {
+    let iptal = false;
+    void (async () => {
+      try {
+        const durum = await fetchGatewayUpdate(gateway.code);
+        if (!iptal) setGuncelleme(durum);
+      } catch {
+        /* durum okunamadi — blok cizilmez */
+      }
+    })();
+    return () => {
+      iptal = true;
+    };
+    // `islem` degisince tazele: guncelleme bitince detay da guncellensin.
+  }, [gateway.code, islem?.asama]);
+
+  async function handleRollback() {
+    setLocalBusy(true);
+    try {
+      const sonuc = await rollbackGatewayUpdate(gateway.code);
+      setGuncelleme(sonuc);
+      setIslem({ asama: "uygulaniyor" });
+    } catch (err) {
+      setIslem({
+        asama: "bitti",
+        basarili: false,
+        mesaj: err instanceof Error ? err.message : "Geri alma baslatilamadi"
+      });
+    } finally {
+      setLocalBusy(false);
+    }
+  }
   // Modal kapandiktan sonra yoklama SURMEMELI: aksi halde sokulmus bilesene
   // yazilir ve 5 dakika boyunca bosuna istek atilir.
   const canli = useRef(true);
@@ -461,6 +590,14 @@ export function GatewayEditModal({ accessToken, gateway, onSave, onClose }: Prop
                     : t("engineering.gateways.editForm.updateAnyway")}
                 </button>
               </div>
+              {/* DENETIM DETAYI + GERI ALMA. Yukaridaki rozet "ne var, yenisi
+                  var mi" der; burasi "neyden neye gecildi, kim yapti, sonuc
+                  ne oldu" der. */}
+              <GuncellemeDetayi
+                durum={guncelleme}
+                onRollback={() => void handleRollback()}
+                mesgul={localBusy || busy}
+              />
               {/* ILERLEME — butona basildigi andan bitene kadar gorunur.
                   Sessiz kalmak en kotu secenekti: operator basip basmadigini
                   bilemiyordu ve tekrar basiyordu (ikinci istek reddediliyor). */}
