@@ -49,9 +49,12 @@ RUNTIME_URETILEN = {
     # account.json bir DIZIN" temizligi). Icerigi musterinin FCM sirri.
     "./fcm-service-account.json",
     # Kuruluma ozel TLS materyali; `infra/nats/certs/` gitignore'da.
-    # Render edilmis NATS conf'u da build-deb.sh paketten siliyor (ayni
-    # gerekce: her kurulum kendi sirlariyla kendi dosyasini uretir).
     "./infra/nats/certs",
+    # Render edilmis NATS conf'u: `infra/nats` pakete KOPYALANIR ama bu dosya
+    # hemen ardindan SILINIR — build-deb.sh'taki `rm -f` satiri, "icinde o
+    # kurulumun bcrypt hash'leri var" gerekcesiyle. Her kurulum kendi
+    # sifreleriyle kendi conf'unu uretir.
+    "./infra/nats/nats-server.conf",
 }
 
 
@@ -83,11 +86,14 @@ def test_compose_bind_mount_kaynaklari_pakete_giriyor():
         if kaynak in RUNTIME_URETILEN:
             continue
 
-        # Yol repo'da var mi? Yoksa compose zaten bozuktur — ayri bir arizadir
-        # ama burada da soylemek dogru, cunku sonuc AYNI: mount kaynagi yok.
-        if not (KOK / kaynak.removeprefix("./")).exists():
-            eksik.append(f"{kaynak} (repo'da da YOK)")
-            continue
+        # CALISMA DIZINININ VARLIGINA BAKMIYORUZ — bilincli.
+        #
+        # Ilk hali `(KOK / yol).exists()` diyordu ve testi MAKINEYE BAGIMLI
+        # yapiyordu: gelistirici makinesinde render edilmis
+        # `infra/nats/nats-server.conf` duruyor, temiz CI checkout'unda
+        # durmuyor. Sonuc, yerelde yesil / CI'da kirmizi bir testti (tam da
+        # kapatmaya calistigimiz sinif). Tek anlamli soru sudur: build-deb.sh
+        # bu yolu pakete KOPYALIYOR MU?
 
         # build-deb.sh yolun KENDISINI ya da onu kapsayan bir dizini
         # kopyaliyor mu? `cp -r infra/rabbitmq` , `./infra/rabbitmq/x.conf`i
