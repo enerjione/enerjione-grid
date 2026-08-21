@@ -1984,7 +1984,12 @@
       "on": "Açık",
       "off": "Kapalı",
       "minutes": "dk",
-      "seconds": "s"
+      "seconds": "s",
+      "sectionConnection": "Bağlantı",
+      "sectionSession": "Oturum ve uyku",
+      "sectionReporting": "Raporlama",
+      "sectionAddressing": "Adresleme ve doğrulama",
+      "sectionTimeouts": "Zaman aşımları"
     },
     "navGroups": {
       "aria": "Mühendislik menüsü",

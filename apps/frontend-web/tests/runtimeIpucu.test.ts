@@ -167,10 +167,20 @@ test("ipucu kutusu portal ile ciziliyor (kirpilma yapisal olarak imkansiz)", () 
 });
 
 test("ipucu klavye ile de acilir ve Escape ile kapanir", () => {
-  const tip = okuSrc("components", "RuntimeTooltip.tsx");
-  assert.match(tip, /onFocus/, "yalnizca fare ile aciliyor");
-  assert.match(tip, /onBlur/);
-  assert.match(tip, /Escape/, "klavye kullanicisi kutuda sikisir");
+  // Olcum/kapanma davranisi `tipKonum.ts`de: ayni ilkeli alan-yardimi
+  // ipucusu (`FieldHelp`) da kullaniyor, ikinci kopya yok. Bu yuzden kural
+  // bilesende degil ILKELDE aranir.
+  const cekirdek = okuSrc("components", "tipKonum.ts");
+  assert.match(cekirdek, /onFocus/, "yalnizca fare ile aciliyor");
+  assert.match(cekirdek, /onBlur/);
+  assert.match(cekirdek, /Escape/, "klavye kullanicisi kutuda sikisir");
+  // ...ve durum ipucu gercekten o ilkeli kullaniyor olmali; kendi kopyasina
+  // donerse buradaki guvence sessizce bosa duser.
+  assert.match(
+    okuSrc("components", "RuntimeTooltip.tsx"),
+    /useIpucuKonum/,
+    "durum ipucu ortak ilkeli birakmis"
+  );
 });
 
 test("ipucu kutusu rengin KENDISINI tasiyor", () => {

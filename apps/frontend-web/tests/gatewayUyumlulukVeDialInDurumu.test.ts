@@ -72,9 +72,13 @@ function kesit(metin: string, bas: string, son: string): string {
 }
 
 /** Formdaki Dial-In durum blogu (istenen / dogrulanan / durum satirlari).
- *  Blok bir sonraki ayar alaninda (tolerans) biter. */
+ *
+ *  SINIR KOMSU ALANA GORE DEGIL KENDI KAPANISINA GORE alinir. Onceden blok
+ *  "bir sonraki ayar alaninda (tolerans) biter" varsayiliyordu; blok formda
+ *  asagi tasininca komsu degisti ve uc test, DAVRANIS bozulmadigi halde
+ *  dilim bulunamadigi icin coktu. Kendi kapanisi tasinmaya dayaniklidir. */
 const dialInBloku = (): string =>
-  kesit(FORM, "{dialInDurumu ? (", "engineering.dnp3.communicationGrace");
+  kesit(FORM, "{dialInDurumu ? (", "\n            ) : null}");
 
 // ===========================================================================
 // 1) YETENEK KAPISI -- hangi kombinasyon hangi surumde uyari uretir

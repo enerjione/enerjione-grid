@@ -14,6 +14,7 @@ import {
   dialInValidValues
 } from "../../shared/types";
 import { missingCapabilities, requiredVersion } from "../../shared/gatewayCapabilities";
+import { FieldHelp } from "../../components/FieldHelp";
 
 type Props = {
   value: Dnp3ExtendedSettings;
@@ -68,6 +69,50 @@ function pickFreeInitiatingPort(used: number[]): number {
 
 function Req() {
   return <span className="field-req" aria-hidden="true">*</span>;
+}
+
+/** Alan etiketi: ad + (zorunluysa) yildiz + (varsa) yardim isareti.
+ *
+ *  Aciklama artik alanin ALTINDA kalici bir paragraf DEGIL; etiketin
+ *  yanindaki isarete girer ve ustune gelince acilir. Yedi alanda birden
+ *  kalici paragraf, formu bir ayar ekrani olmaktan cikarip metin blogu
+ *  yapiyordu: goz once paragraflari tariyor, alanlari sonra buluyordu. */
+function Etiket({
+  ad,
+  zorunlu = false,
+  yardim
+}: {
+  ad: string;
+  zorunlu?: boolean;
+  yardim?: string | null;
+}) {
+  return (
+    <span className="dnp3-label">
+      {ad}
+      {zorunlu ? (
+        <>
+          {" "}
+          <Req />
+        </>
+      ) : null}
+      <FieldHelp metin={yardim} label={ad} />
+    </span>
+  );
+}
+
+/** Ayar grubu.
+ *
+ *  Onceden 15+ alan TEK duz izgarada duruyordu: baglanti, oturum, raporlama
+ *  ve zaman asimlari birbirine karisiyor, bir ayari bulmak icin butun listeyi
+ *  okumak gerekiyordu. Basliklar hangi ayarin neyle ilgili oldugunu ekrana
+ *  bakar bakmaz soyler. */
+function Bolum({ baslik, children }: { baslik: string; children: React.ReactNode }) {
+  return (
+    <section className="dnp3-bolum">
+      <h6 className="dnp3-bolum-baslik">{baslik}</h6>
+      <div className="dnp3-settings-grid">{children}</div>
+    </section>
+  );
 }
 
 function BoolSelect({
@@ -198,75 +243,80 @@ export function Dnp3SettingsForm({
   return (
     <div className="dnp3-settings-form">
       <h5 className="dnp3-settings-title">{t("engineering.dnp3.title")}</h5>
-      <div className="dnp3-settings-grid">
-        {!hideConnectionFields ? (
-          <>
-            <label className="dnp3-field">
-              <span className="dnp3-label">
-                {t("engineering.dnp3.endpointType")} <Req />
-              </span>
-              <select
-                value={v.ip_endpoint_type}
-                onChange={(e) => set({ ip_endpoint_type: e.target.value as "listening" | "initiating" })}
-              >
-                <option value="listening">{t("engineering.dnp3.modeListening")}</option>
-                <option value="initiating">{t("engineering.dnp3.modeInitiating")}</option>
-              </select>
-            </label>
-            <label className="dnp3-field">
-              <span className="dnp3-label">
-                {t("engineering.dnp3.masterIp")} <Req />
-              </span>
-              <input
-                value={v.master_ip_address}
-                onChange={(e) => set({ master_ip_address: e.target.value })}
-                placeholder={isInitiating ? t("engineering.dnp3.masterIpInitPlaceholder") : t("engineering.dnp3.masterIpPlaceholder")}
-              />
-            </label>
-            <label className="dnp3-field">
-              <span className="dnp3-label">
-                {t("engineering.dnp3.masterPort")} {isInitiating ? null : <Req />}
-              </span>
-              <input
-                type="number"
-                min={1}
-                max={65535}
-                value={v.master_ip_port}
-                onChange={(e) => set({ master_ip_port: Number(e.target.value) || 1 })}
-                disabled={isInitiating}
-                title={isInitiating ? t("engineering.dnp3.masterPortInitTooltip") : undefined}
-              />
-            </label>
-            <label className="dnp3-field">
-              <span className="dnp3-label">
-                {t("engineering.dnp3.masterAddr")} <Req />
-              </span>
-              <input
-                type="number"
-                min={0}
-                max={65535}
-                value={v.master_address ?? ""}
-                placeholder={t("engineering.dnp3.masterAddrAuto")}
-                title={t("engineering.dnp3.masterAddrHelp")}
-                onChange={(e) =>
-                  set({
-                    master_address:
-                      e.target.value.trim() === "" ? null : Number(e.target.value)
-                  })
-                }
-              />
-              <small className="dnp3-help">{t("engineering.dnp3.masterAddrHelp")}</small>
-            </label>
-          </>
-        ) : null}
-        {/* Oturum politikasi bir BAGLANTI alani DEGILDIR: `hideConnectionFields`
-            ile birlikte gizlendigi surece cihaz duzenleme panelinde hicbir
-            yerden ulasilamiyordu — panel kendi IP/port alanlarini ciziyor ve
-            bu blogu da kapatiyordu. */}
+
+      {!hideConnectionFields ? (
+        <Bolum baslik={t("engineering.dnp3.sectionConnection")}>
+          <label className="dnp3-field">
+            <Etiket ad={t("engineering.dnp3.endpointType")} zorunlu />
+            <select
+              value={v.ip_endpoint_type}
+              onChange={(e) =>
+                set({ ip_endpoint_type: e.target.value as "listening" | "initiating" })
+              }
+            >
+              <option value="listening">{t("engineering.dnp3.modeListening")}</option>
+              <option value="initiating">{t("engineering.dnp3.modeInitiating")}</option>
+            </select>
+          </label>
+          <label className="dnp3-field">
+            <Etiket ad={t("engineering.dnp3.masterIp")} zorunlu />
+            <input
+              value={v.master_ip_address}
+              onChange={(e) => set({ master_ip_address: e.target.value })}
+              placeholder={
+                isInitiating
+                  ? t("engineering.dnp3.masterIpInitPlaceholder")
+                  : t("engineering.dnp3.masterIpPlaceholder")
+              }
+            />
+          </label>
+          <label className="dnp3-field">
+            <Etiket
+              ad={t("engineering.dnp3.masterPort")}
+              zorunlu={!isInitiating}
+              yardim={isInitiating ? t("engineering.dnp3.masterPortInitTooltip") : null}
+            />
+            <input
+              type="number"
+              min={1}
+              max={65535}
+              value={v.master_ip_port}
+              onChange={(e) => set({ master_ip_port: Number(e.target.value) || 1 })}
+              disabled={isInitiating}
+            />
+          </label>
+          <label className="dnp3-field">
+            {/* Aciklama ONCEDEN IKI KEZ basiliyordu: hem `title` ozniteligi
+                hem altta `<small>`. Ayni metin iki yerde duruyordu ve
+                `title` onu ~1 sn gecikmeyle, kirpik gosteriyordu. */}
+            <Etiket
+              ad={t("engineering.dnp3.masterAddr")}
+              zorunlu
+              yardim={t("engineering.dnp3.masterAddrHelp")}
+            />
+            <input
+              type="number"
+              min={0}
+              max={65535}
+              value={v.master_address ?? ""}
+              placeholder={t("engineering.dnp3.masterAddrAuto")}
+              onChange={(e) =>
+                set({
+                  master_address: e.target.value.trim() === "" ? null : Number(e.target.value)
+                })
+              }
+            />
+          </label>
+        </Bolum>
+      ) : null}
+
+      {/* Oturum politikasi bir BAGLANTI alani DEGILDIR: `hideConnectionFields`
+          ile birlikte gizlendigi surece cihaz duzenleme panelinde hicbir
+          yerden ulasilamiyordu — panel kendi IP/port alanlarini ciziyor ve bu
+          blogu da kapatiyordu. */}
+      <Bolum baslik={t("engineering.dnp3.sectionSession")}>
         <label className="dnp3-field">
-          <span className="dnp3-label">
-            {t("engineering.dnp3.sessionPolicy")} <Req />
-          </span>
+          <Etiket ad={t("engineering.dnp3.sessionPolicy")} zorunlu yardim={politikaYardim} />
           <select
             value={v.session_policy}
             onChange={(e) => set({ session_policy: e.target.value as SessionPolicy })}
@@ -277,12 +327,14 @@ export function Dnp3SettingsForm({
             <option value="smart">{t("engineering.dnp3.sessionPolicySmart")}</option>
             <option value="auto">{t("engineering.dnp3.sessionPolicyAuto")}</option>
           </select>
-          <small className="dnp3-help">{politikaYardim}</small>
         </label>
         {/* UYUMLULUK UYARISI — REDDETME DEGIL. Kayit kabul edilir (mesru akis
-            "once cihazi yapilandir, sonra gateway'i guncelle"dir) ama ayarin
+            "once cihazi yapilandir, sonra gateway guncelle"dir) ama ayarin
             sahada gecerli oldugu SOYLENMEZ: eski gateway bu alanlari ya yok
-            sayar ya da tum config'i reddeder. */}
+            sayar ya da tum config dosyasini reddeder.
+
+            IPUCUNA TASINMAZ: bu bir aciklama degil UYARIDIR; kullanicinin
+            aramasi degil GORMESI gerekir. */}
         {uyumGerekliSurum !== null ? (
           <div className="dnp3-compat-warn" role="status">
             <span>
@@ -301,7 +353,10 @@ export function Dnp3SettingsForm({
         {oturumUykulu ? (
           <>
             <label className="dnp3-field">
-              <span className="dnp3-label">{t("engineering.dnp3.dialInInterval")}</span>
+              <Etiket
+                ad={t("engineering.dnp3.dialInInterval")}
+                yardim={t("engineering.dnp3.dialInIntervalHelp")}
+              />
               <select
                 value={dialIn === null ? "" : String(dialIn)}
                 onChange={(e) =>
@@ -315,16 +370,79 @@ export function Dnp3SettingsForm({
                   </option>
                 ))}
               </select>
-              <small className="dnp3-help">{t("engineering.dnp3.dialInIntervalHelp")}</small>
             </label>
+            <label className="dnp3-field">
+              <Etiket
+                ad={t("engineering.dnp3.communicationGrace")}
+                yardim={t("engineering.dnp3.communicationGraceHelp")}
+              />
+              <select
+                value={v.communication_grace_min === null ? "" : String(v.communication_grace_min)}
+                onChange={(e) =>
+                  set({
+                    communication_grace_min: e.target.value === "" ? null : Number(e.target.value)
+                  })
+                }
+              >
+                <option value="">
+                  {t("engineering.dnp3.communicationGraceDefault", {
+                    minutes: COMMUNICATION_GRACE_MIN_DEFAULT
+                  })}
+                </option>
+                {GRACE_OPTIONS.map((dk) => (
+                  <option key={dk} value={dk}>
+                    {`${dk} ${t("engineering.dnp3.minutes")}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {esikSn !== null ? (
+              <label className="dnp3-field">
+                <Etiket
+                  ad={t("engineering.dnp3.commLossThreshold")}
+                  yardim={t("engineering.dnp3.commLossThresholdHelp")}
+                />
+                {/* Hesaplanan deger, elle girilmez. Girdiler eksikken HIC
+                    gosterilmez ki uydurma bir esik okunmasin. */}
+                <input value={`${esikSn / 60} ${t("engineering.dnp3.minutes")}`} disabled readOnly />
+              </label>
+            ) : (
+              // Dial-In yokken eski (v1.13 ve oncesi) kayitlarin ham esigi hala
+              // duzenlenebilir kalir; Dial-In secilir secilmez bu alan yerini
+              // turetilmis esige birakir.
+              <label className="dnp3-field dnp3-field-with-unit">
+                <Etiket
+                  ad={t("engineering.dnp3.smartMaxSilence")}
+                  yardim={t("engineering.dnp3.smartMaxSilenceHelp")}
+                />
+                <span className="dnp3-input-unit">
+                  <input
+                    type="number"
+                    min={SMART_MAX_SILENCE_MIN_SEC}
+                    max={SMART_MAX_SILENCE_MAX_SEC}
+                    value={v.smart_max_silence_sec ?? ""}
+                    placeholder={t("engineering.dnp3.smartMaxSilenceAuto")}
+                    onChange={(e) =>
+                      set({
+                        smart_max_silence_sec:
+                          e.target.value.trim() === "" ? null : Number(e.target.value)
+                      })
+                    }
+                  />
+                  <span className="dnp3-unit">{t("engineering.dnp3.seconds")}</span>
+                </span>
+              </label>
+            )}
             {/* ISTENEN vs CIHAZDAN DOGRULANAN. Secili deger yalnizca "istenen"
                 sutununda durur; "cihazda aktif" iddiasi CIHAZIN KENDI dosyasi
                 okunmadan yapilmaz. Veri gelmediyse (prop tanimsiz) blok hic
-                cizilmez — uydurma bir dogrulama gostermektense sessiz kal. */}
+                cizilmez — uydurma bir dogrulama gostermektense sessiz kal.
+
+                AYARLARIN ALTINA ALINDI: once ne SECTIGINI, sonra cihazda ne
+                OLDUGUNU okur. Onceden Dial-In ile tolerans ARASINDA duruyor ve
+                birbirine bagli iki ayari ortadan ikiye boluyordu. */}
             {dialInDurumu ? (
-              <div
-                className={`dnp3-status-block${dialInFarkli ? " dnp3-status-block--warn" : ""}`}
-              >
+              <div className={`dnp3-status-block${dialInFarkli ? " dnp3-status-block--warn" : ""}`}>
                 <div className="dnp3-status-row">
                   <span className="dnp3-status-key">{t("engineering.dnp3.dialInConfigured")}</span>
                   <span className="dnp3-status-val">
@@ -350,69 +468,11 @@ export function Dnp3SettingsForm({
                 ) : null}
               </div>
             ) : null}
-            <label className="dnp3-field">
-              <span className="dnp3-label">{t("engineering.dnp3.communicationGrace")}</span>
-              <select
-                value={v.communication_grace_min === null ? "" : String(v.communication_grace_min)}
-                onChange={(e) =>
-                  set({
-                    communication_grace_min:
-                      e.target.value === "" ? null : Number(e.target.value)
-                  })
-                }
-              >
-                <option value="">
-                  {t("engineering.dnp3.communicationGraceDefault", {
-                    minutes: COMMUNICATION_GRACE_MIN_DEFAULT
-                  })}
-                </option>
-                {GRACE_OPTIONS.map((dk) => (
-                  <option key={dk} value={dk}>
-                    {`${dk} ${t("engineering.dnp3.minutes")}`}
-                  </option>
-                ))}
-              </select>
-              <small className="dnp3-help">{t("engineering.dnp3.communicationGraceHelp")}</small>
-            </label>
-            {esikSn !== null ? (
-              <label className="dnp3-field">
-                <span className="dnp3-label">{t("engineering.dnp3.commLossThreshold")}</span>
-                {/* Hesaplanan deger, elle girilmez. Girdiler eksikken HIC
-                    gosterilmez ki uydurma bir esik okunmasin. */}
-                <input
-                  value={`${esikSn / 60} ${t("engineering.dnp3.minutes")}`}
-                  disabled
-                  readOnly
-                />
-                <small className="dnp3-help">{t("engineering.dnp3.commLossThresholdHelp")}</small>
-              </label>
-            ) : (
-              // Dial-In yokken eski (v1.13 ve oncesi) kayitlarin ham esigi hala
-              // duzenlenebilir kalir; Dial-In secilir secilmez bu alan yerini
-              // turetilmis esige birakir.
-              <label className="dnp3-field dnp3-field-with-unit">
-                <span className="dnp3-label">{t("engineering.dnp3.smartMaxSilence")}</span>
-                <span className="dnp3-input-unit">
-                  <input
-                    type="number"
-                    min={SMART_MAX_SILENCE_MIN_SEC}
-                    max={SMART_MAX_SILENCE_MAX_SEC}
-                    value={v.smart_max_silence_sec ?? ""}
-                    placeholder={t("engineering.dnp3.smartMaxSilenceAuto")}
-                    onChange={(e) =>
-                      set({
-                        smart_max_silence_sec:
-                          e.target.value.trim() === "" ? null : Number(e.target.value)
-                      })
-                    }
-                  />
-                  <span className="dnp3-unit">{t("engineering.dnp3.seconds")}</span>
-                </span>
-                <small className="dnp3-help">{t("engineering.dnp3.smartMaxSilenceHelp")}</small>
-              </label>
-            )}
           </>
         ) : null}
+      </Bolum>
+
+      <Bolum baslik={t("engineering.dnp3.sectionReporting")}>
         <BoolSelect
           id="dnp3-unsol"
           label={t("engineering.dnp3.unsolicited")}
@@ -426,9 +486,7 @@ export function Dnp3SettingsForm({
           onChange={(b) => set({ unsolicited_on_startup: b })}
         />
         <label className="dnp3-field">
-          <span className="dnp3-label">
-            {t("engineering.dnp3.unsolicitedClassMask")} <Req />
-          </span>
+          <Etiket ad={t("engineering.dnp3.unsolicitedClassMask")} zorunlu />
           <input
             type="number"
             min={0}
@@ -438,7 +496,7 @@ export function Dnp3SettingsForm({
           />
         </label>
         <label className="dnp3-field dnp3-field-with-unit">
-          <span className="dnp3-label">{t("engineering.dnp3.linkStatus")}</span>
+          <Etiket ad={t("engineering.dnp3.linkStatus")} />
           <span className="dnp3-input-unit">
             <input
               type="number"
@@ -449,6 +507,9 @@ export function Dnp3SettingsForm({
             <span className="dnp3-unit">{t("engineering.dnp3.minutes")}</span>
           </span>
         </label>
+      </Bolum>
+
+      <Bolum baslik={t("engineering.dnp3.sectionAddressing")}>
         <BoolSelect
           id="dnp3-self-addr"
           label={t("engineering.dnp3.selfAddress")}
@@ -461,8 +522,11 @@ export function Dnp3SettingsForm({
           value={v.validate_source_address}
           onChange={(b) => set({ validate_source_address: b })}
         />
+      </Bolum>
+
+      <Bolum baslik={t("engineering.dnp3.sectionTimeouts")}>
         <label className="dnp3-field dnp3-field-with-unit">
-          <span className="dnp3-label">{t("engineering.dnp3.sessionTimeout")}</span>
+          <Etiket ad={t("engineering.dnp3.sessionTimeout")} />
           <span className="dnp3-input-unit">
             <input
               type="number"
@@ -475,7 +539,7 @@ export function Dnp3SettingsForm({
           </span>
         </label>
         <label className="dnp3-field dnp3-field-with-unit">
-          <span className="dnp3-label">{t("engineering.dnp3.socketTimeout")}</span>
+          <Etiket ad={t("engineering.dnp3.socketTimeout")} />
           <span className="dnp3-input-unit">
             <input
               type="number"
@@ -487,13 +551,14 @@ export function Dnp3SettingsForm({
             <span className="dnp3-unit">{t("engineering.dnp3.seconds")}</span>
           </span>
         </label>
-      </div>
-      <h5 className="dnp3-settings-title dnp3-settings-title--advanced">
-        {t("engineering.dnp3.advanced")}
-      </h5>
-      <div className="dnp3-settings-grid">
+      </Bolum>
+
+      <Bolum baslik={t("engineering.dnp3.advanced")}>
         <label className="dnp3-field dnp3-field-with-unit">
-          <span className="dnp3-label">{t("engineering.dnp3.smartListenReconnectMax")}</span>
+          <Etiket
+            ad={t("engineering.dnp3.smartListenReconnectMax")}
+            yardim={t("engineering.dnp3.smartListenReconnectMaxHelp")}
+          />
           <span className="dnp3-input-unit">
             <input
               type="number"
@@ -510,9 +575,8 @@ export function Dnp3SettingsForm({
             />
             <span className="dnp3-unit">{t("engineering.dnp3.seconds")}</span>
           </span>
-          <small className="dnp3-help">{t("engineering.dnp3.smartListenReconnectMaxHelp")}</small>
         </label>
-      </div>
+      </Bolum>
     </div>
   );
 }

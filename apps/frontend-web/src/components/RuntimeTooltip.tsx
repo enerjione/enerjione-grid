@@ -33,20 +33,12 @@
  * panellerinin icinde kalirsa KIRPILIR. `body`ye cizip `position: fixed`
  * ile konumlamak, kirpilmayi yapisal olarak imkansiz kilar.
  */
-import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
 import type { DeviceRuntimeState } from "../shared/deviceRuntimeState";
 import { runtimeToneClass } from "./RuntimeStateChip";
-
-/** Kutunun tetikleyiciye uzakligi (px). */
-const BOSLUK = 10;
-
-/** Ustte bu kadar yer yoksa kutu ASAGI acilir. */
-const UST_ESIK = 150;
-
-type Konum = { x: number; y: number; altta: boolean };
+import { useIpucuKonum, type IpucuKonum } from "./tipKonum";
 
 /**
  * Durum ipucu kancasi.
@@ -59,66 +51,8 @@ export function useRuntimeTip(
   { focusable = false }: { focusable?: boolean } = {}
 ) {
   const { t } = useTranslation();
-  const ref = useRef<HTMLElement | null>(null);
-  const [konum, setKonum] = useState<Konum | null>(null);
-  const tipId = useId();
-
-  const kapat = useCallback(() => setKonum(null), []);
-
-  const ac = useCallback(() => {
-    const el = ref.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    // Ustte yer yoksa asagi ac: aksi halde kutu ekranin disina tasar ve
-    // kullanici hicbir sey gormez.
-    const altta = r.top < UST_ESIK;
-    setKonum({
-      x: r.left + r.width / 2,
-      y: altta ? r.bottom + BOSLUK : r.top - BOSLUK,
-      altta
-    });
-  }, []);
-
-  // ACIKKEN SAYFA KAYARSA KUTU KAPANIR. Konum `fixed` oldugu icin kayma
-  // sirasinda tetikleyiciden AYRILIR; yanlis yerde duran bir aciklama,
-  // hic olmamasindan daha kotudur (baska bir cihazi anlatiyor sanilir).
-  // `Escape` de kapatir — klavye kullanicisi kutuda sikismasin.
-  useEffect(() => {
-    if (!konum) return;
-    const kaydir = () => kapat();
-    const tus = (e: KeyboardEvent) => {
-      if (e.key === "Escape") kapat();
-    };
-    window.addEventListener("scroll", kaydir, true);
-    window.addEventListener("resize", kaydir);
-    window.addEventListener("keydown", tus);
-    return () => {
-      window.removeEventListener("scroll", kaydir, true);
-      window.removeEventListener("resize", kaydir);
-      window.removeEventListener("keydown", tus);
-    };
-  }, [konum, kapat]);
-
-  // ODAKLANABILIRLIK VARSAYILAN OLARAK KAPALI — bilincli.
-  //
-  // Durum noktasi cogu ekranda BIR `<button>` ICINDE duruyor (cihaz satiri,
-  // hat agaci satiri). Butonun icine odaklanabilir bir oge koymak hem
-  // gecersiz HTML'dir hem de klavye gezintisini bozar; ustelik 600 cihazlik
-  // bir listede 600 FAZLADAN durak yaratirdi — sekme ile gezen kullanici
-  // icin arayuzu kullanilmaz hale getirir.
-  //
-  // Kayip degil: durum adi ekran okuyucuya `aria-label` ile zaten
-  // veriliyor. Ipucu ANLAMI ekler, adi degil — yani ek bilgidir.
-  // Tek basina duran ogeler (rozet) `focusable` ile acikca acilir.
-  const triggerProps = {
-    ref: ref as React.Ref<never>,
-    onMouseEnter: ac,
-    onMouseLeave: kapat,
-    ...(focusable
-      ? { onFocus: ac, onBlur: kapat, tabIndex: 0 }
-      : null),
-    "aria-describedby": konum ? tipId : undefined
-  };
+  // Olcum/portal/kapanma davranisi `tipKonum`da; burada yalnizca ICERIK var.
+  const { konum, tipId, triggerProps } = useIpucuKonum({ focusable });
 
   const tip = konum
     ? createPortal(
@@ -138,7 +72,7 @@ function RuntimeTipKutusu({
 }: {
   id: string;
   state: DeviceRuntimeState;
-  konum: Konum;
+  konum: IpucuKonum;
   t: (k: string) => string;
 }) {
   const ad = t(state.labelKey);

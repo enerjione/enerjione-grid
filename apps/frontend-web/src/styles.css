@@ -3666,13 +3666,32 @@ body {
   color: #0f172a;
 }
 
-.dnp3-settings-title--advanced {
-  margin-top: 14px;
-}
-
 .dnp3-settings-hint {
   margin: 0 0 10px !important;
   font-size: 12px !important;
+}
+
+/* --- AYAR GRUPLARI --------------------------------------------------------
+
+   Onceden 15+ alan TEK duz izgarada duruyordu; baglanti, oturum, raporlama
+   ve zaman asimlari birbirine karisiyordu. Basliklar hangi ayarin neyle
+   ilgili oldugunu ekrana bakar bakmaz soyler.
+
+   Baslik INCE bir ayirici cizgi tasir, kutu DEGIL: her grubu cerceveye almak
+   formu ic ice kutulardan olusan bir yigina cevirirdi. */
+.dnp3-bolum + .dnp3-bolum {
+  margin-top: 16px;
+}
+
+.dnp3-bolum-baslik {
+  margin: 0 0 9px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
 }
 
 .dnp3-settings-grid {
@@ -3696,10 +3715,15 @@ body {
 }
 
 .dnp3-label {
-  display: block;
+  /* `block` degil `flex`: yardim isareti etiketin YANINDA, satir ici
+     durmali. `block` iken 14px daire, uzun etiketlerde alt satira dusuyordu. */
+  display: flex;
+  align-items: center;
   font-weight: 600;
   font-size: 12px;
   color: #334155;
+  /* Uzun etiket + isaret dar sutunda tasmasin. */
+  min-width: 0;
 }
 
 .dnp3-field input,
@@ -44147,4 +44171,83 @@ input[aria-invalid="true"]:focus {
 .header-search-status[class*="runtime-tone--"] {
   background: var(--rt);
   box-shadow: 0 0 0 2px var(--rt-soft);
+}
+/* --- ALAN YARDIMI ---------------------------------------------------------
+
+   Haberlesme ayarlari formunda her alanin ALTINDA kalici bir aciklama
+   paragrafi duruyordu. Yedi tane olunca form bir ayar ekrani degil bir metin
+   blogu oluyordu. Aciklama silinmedi; etiketin yanindaki bu kucuk isarete
+   tasindi ve ISTEK UZERINE acilir. */
+.field-help {
+  /* Gercek bir `<button>`: dokunmatikte hover yok, sahada tablet var.
+     Tarayicinin dugme varsayilanlari (dolgu, kenarlik, sistem yazi tipi)
+     sifirlanir; gorunum tamamen buradan gelir. */
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 5px;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+  /* Etiket metnine gore dikey ortala: aksi halde 14px daire buyuk harfin
+     tepesine yapisik duruyor. */
+  vertical-align: middle;
+  flex: 0 0 auto;
+  user-select: none;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.field-help:hover,
+.field-help:focus-visible {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #fff;
+  outline: none;
+}
+
+/* Kutu `runtime-tip` ile AYNI gorsel dilde: kullanici iki ayri ipucu
+   turu ogrenmek zorunda kalmasin. z-index de ayni katmanda (modal ustu). */
+.field-help-tip {
+  position: fixed;
+  z-index: 10001;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  max-width: 300px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #e2e8f0;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.4);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.55;
+  text-align: left;
+  white-space: normal;
+  animation: runtime-tip-gir 90ms ease-out;
+}
+.field-help-tip--altta { transform: translate(-50%, 0); }
+.field-help-tip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  margin-left: -5px;
+  border: 5px solid transparent;
+  top: 100%;
+  border-top-color: #0f172a;
+}
+.field-help-tip--altta::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: #0f172a;
 }

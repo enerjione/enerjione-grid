@@ -1987,7 +1987,12 @@
       "on": "On",
       "off": "Off",
       "minutes": "min",
-      "seconds": "s"
+      "seconds": "s",
+      "sectionConnection": "Connection",
+      "sectionSession": "Session & sleep",
+      "sectionReporting": "Reporting",
+      "sectionAddressing": "Addressing & validation",
+      "sectionTimeouts": "Timeouts"
     },
     "navGroups": {
       "aria": "Engineering menu",

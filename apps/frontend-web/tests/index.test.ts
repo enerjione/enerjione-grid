@@ -172,6 +172,10 @@ import "./komutYetkisi.test";
 // kullaniyordu ve renkler durum sozlesmesiyle cakisiyordu.
 import "./filtreSeridi.test";
 
+// Haberlesme ayarlari formu: 15+ alan tek duz izgarada, yedi aciklama
+// paragrafi kalici olarak ekrandaydi.
+import "./haberlesmeFormuDuzeni.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   connectionIsDead,
