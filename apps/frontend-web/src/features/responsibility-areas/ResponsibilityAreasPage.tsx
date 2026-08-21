@@ -420,8 +420,11 @@ export function ResponsibilityAreasPage({
           {!detail && !detailLoading ? (
             <div className="responsibility-empty-detail">
               <span className="material-symbols-outlined responsibility-empty-icon">folder_open</span>
+              {/* ACIKLAMA KALDIRILDI. "Soldan bir ekip secin ya da yeni bir
+                  alan olusturun..." metni, tam da soldaki listenin ve "Yeni"
+                  butonunun yanibasinda duruyordu: ekranin kendisi zaten ne
+                  yapilacagini gosteriyor. Baslik yeterli. */}
               <h3>{t("engineering.responsibilityAreas.selectHint")}</h3>
-              <p className="helper-text">{t("engineering.responsibilityAreas.selectHintBody")}</p>
             </div>
           ) : null}
           {detail ? (

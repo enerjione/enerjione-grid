@@ -76,15 +76,33 @@ test("her aciklama YARDIM ISARETINE tasindi -- hicbiri kaybolmadi", () => {
   }
 });
 
-test("oturum politikasi aciklamasi da ipucunda", () => {
-  // Uc politikanin metni `politikaYardim`da hesaplaniyor; secime gore degisir.
-  assert.match(FORM, /yardim=\{politikaYardim\}/, "politika aciklamasi baglanmamis");
-  for (const k of [
-    "sessionPolicyAutoHelp",
-    "sessionPolicySmartHelp",
-    "sessionPolicyContinuousHelp"
-  ]) {
-    assert.ok(FORM.includes(`engineering.dnp3.${k}`), `${k} dusmus`);
+test("oturum politikasi aciklamalari SATIR ICI — ipucunda DEGIL", () => {
+  // Bu ayarin SAHA SONUCU var: `smart` secilen cihaz modemini kapatir.
+  // Aciklamayi ipucuna gizlemek, operatorun sonucu GORMEDEN secmesi
+  // demekti; her secenek artik kendi cumlesini yaninda tasiyor.
+  assert.match(
+    FORM,
+    /sessionPolicy\$\{pol\.suffix\}Help/,
+    "politika aciklamalari kartlarda gorunmuyor"
+  );
+  assert.ok(!FORM.includes("politikaYardim"), "olu ipucu degiskeni duruyor");
+  // Anahtar SABLONLU uretiliyor (`sessionPolicy${suffix}Help`), o yuzden
+  // formda literal olarak gecmez. Uc ek de secenek listesinde olmali...
+  for (const ek of ["Continuous", "Smart", "Auto"]) {
+    assert.ok(FORM.includes(`suffix: "${ek}"`), `${ek} secenegi dusmus`);
+  }
+  // ...ve karsiligi IKI DILDE de bulunmali.
+  for (const [ad, sozluk] of [
+    ["tr", (TR as any).engineering.dnp3],
+    ["en", (EN as any).engineering.dnp3]
+  ] as const) {
+    for (const ek of ["Continuous", "Smart", "Auto"]) {
+      const metin = sozluk[`sessionPolicy${ek}Help`];
+      assert.ok(
+        typeof metin === "string" && metin.length > 15,
+        `${ad}: sessionPolicy${ek}Help metni yok`
+      );
+    }
   }
 });
 

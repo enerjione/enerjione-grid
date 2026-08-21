@@ -111,7 +111,10 @@ test("sinirlar backend sozlesmesiyle ayni", () => {
 test("uc secenek de kosulsuz render edilir", () => {
   for (const deger of ["continuous", "smart", "auto"]) {
     assert.ok(
-      FORM.includes(`<option value="${deger}">`),
+      // Acilir liste SECIM KARTLARINA cevrildi: bu ayarin saha sonucu var
+      // (`smart` cihazi uyutur) ve secenek adlari tek basina yetmiyordu.
+      // Kilitlenen sey MARKUP degil, uc secenegin de KOSULSUZ sunulmasi.
+      FORM.includes(`key: "${deger}"`),
       `${deger} secenegi yok — operator o modu hic secemez`
     );
   }

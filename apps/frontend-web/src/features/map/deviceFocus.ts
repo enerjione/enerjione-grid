@@ -1,17 +1,21 @@
 /**
  * Ana haritada CIHAZ secilince kamera nereye gitsin — saf karar (Leaflet'siz).
  *
- * YASANAN SORUN
- * -------------
- * Cihaz secildiginde `map.flyTo(target, 13)` cagriliyordu: SABIT zoom 13.
- * Kullanici direk seviyesinde (zoom 16-17) calisirken bir cihaza tikladiginda
- * harita UZAKLASIYORDU. Yani "cihazi goster" eylemi, kullanicinin kurdugu
- * yakinligi bozup onu tekrar yakinlastirmaya zorluyordu.
+ * KARAR: CIHAZA YAKINLAS
+ * ----------------------
+ * Soldaki listeden bir cihaz secildiginde harita O CIHAZA yakinlasir.
  *
- * DOGRU DAVRANIS: cihazin bagli oldugu HAT ekrana sigsin. Operatorun
- * cihaza tiklarken sordugu soru "bu cihaz hattin neresinde" — cevabi hattin
- * tamami gorunurken verilir. Sabit bir zoom bu soruyu ne kucuk ne buyuk
- * hatta dogru cevaplar.
+ * Onceki surum hattin TAMAMINI ekrana sigdiriyordu; gerekcesi "operatorun
+ * sordugu soru 'bu cihaz hattin neresinde'" idi. Sahada bunun tersi cikti:
+ * uzun bir hatta sigdirma, secilen cihazi haritanin bir kosesinde nokta
+ * boyutunda birakiyor ve "hangisini sectim" sorusunu cevapsiz birakiyordu.
+ * Hattin butunu zaten hicbir sey secili degilken gorunuyor.
+ *
+ * ESKI TUZAK TEKRARLANMIYOR. Ilk surumde `flyTo(hedef, 13)` vardi: SABIT
+ * zoom. Kullanici direk seviyesinde (16-17) calisirken bir cihaza
+ * tikladiginda harita UZAKLASIYORDU — "cihazi goster" eylemi kullanicinin
+ * kurdugu yakinligi bozuyordu. Bu yuzden hedef yakinlik ASLA MEVCUDUN
+ * ALTINA DUSMEZ: `max(mevcutZoom, DEVICE_ZOOM)`.
  *
  * Karar Leaflet cagrilarindan AYRILDI: birkac ince kosul tasiyor (bozuk
  * koordinat, hatti bilinmeyen cihaz, tek noktali hat) ve React bileseni
@@ -22,19 +26,34 @@ export type FocusPoint = { latitude: number; longitude: number };
 
 export type DeviceFocusPlan =
   | { kind: "skip" }
-  /** Hat bilinmiyor ya da tek nokta: cihaza sabit yakinlikla git. */
-  | { kind: "point"; key: string; latitude: number; longitude: number; zoom: number }
-  /** Hattin tamamini kapsayan kutuya sigdir. */
-  | { kind: "bounds"; key: string; points: FocusPoint[] };
+  /** Cihaza yakinlas. `zoom` mevcut yakinligin ALTINA dusmez. */
+  | { kind: "point"; key: string; latitude: number; longitude: number; zoom: number };
 
 /**
- * Hatti bilinmeyen (ya da tek noktali) cihazda kullanilan yakinlik.
+ * Cihaza odaklanirken hedeflenen yakinlik.
  *
- * 15, eski 13'ten DAHA YAKIN: 13 sokak duzeninin bile zor secildigi bir
- * olcekti ve "cihazi goster" isteginin cevabi olamazdi. Yalnizca sigdirilacak
- * bir hat YOKSA devreye girer.
+ * 17 = direk/bina seviyesi: secilen cihaz ve komsulari ayirt edilir. 15
+ * mahalle olcegiydi ve iki komsu direk hala ayni noktada gorunuyordu.
+ *
+ * TAVAN DEGIL TABAN: kullanici daha yakindaysa oldugu yerde kalir
+ * (bkz. `hedefZoom`).
  */
-export const SINGLE_DEVICE_ZOOM = 15;
+export const DEVICE_ZOOM = 17;
+
+/** Geriye donuk ad — eski cagiranlar kirilmasin. */
+export const SINGLE_DEVICE_ZOOM = DEVICE_ZOOM;
+
+/**
+ * Uygulanacak yakinlik: hedef ile MEVCUT yakinligin BUYUGU.
+ *
+ * "Cihazi goster" eylemi hicbir kosulda UZAKLASTIRMAMALI — ilk surumde
+ * tam olarak bu yasandi ve kullanici her secimde yeniden yakinlasmak
+ * zorunda kaliyordu.
+ */
+export function hedefZoom(mevcut: number | null | undefined): number {
+  if (mevcut == null || !Number.isFinite(mevcut)) return DEVICE_ZOOM;
+  return Math.max(mevcut, DEVICE_ZOOM);
+}
 
 function gecerli(p: FocusPoint): boolean {
   // Tek bir NaN, Leaflet'in bounds hesabini sessizce gecersiz kilar ve
@@ -45,12 +64,12 @@ function gecerli(p: FocusPoint): boolean {
 export function planDeviceFocus(input: {
   /** Secili cihaz — yoksa odaklanma yok. */
   device: { id: number; latitude: number; longitude: number } | null | undefined;
-  /** Cihazin bagli oldugu hattin TUM noktalari (direkler + hattaki cihazlar). */
-  linePoints: readonly FocusPoint[];
   /** En son uygulanan planin anahtari (yoksa bos string). */
   lastKey: string;
+  /** Haritanin SU ANKI yakinligi; hedef bunun altina dusmez. */
+  currentZoom?: number | null;
 }): DeviceFocusPlan {
-  const { device, linePoints, lastKey } = input;
+  const { device, lastKey, currentZoom } = input;
   if (!device) return { kind: "skip" };
   if (!gecerli(device)) return { kind: "skip" };
 
@@ -60,25 +79,14 @@ export function planDeviceFocus(input: {
   // yaptigi kaydirmayi imkansiz kilardi.
   if (key === lastKey) return { kind: "skip" };
 
-  const valid = linePoints.filter(gecerli);
-
-  // Hat bilinmiyor ya da tek noktadan ibaret: sigdirilacak bir sey yok,
-  // cihaza makul bir yakinlikla git.
-  if (valid.length < 2) {
-    return {
-      kind: "point",
-      key,
-      latitude: device.latitude,
-      longitude: device.longitude,
-      zoom: SINGLE_DEVICE_ZOOM
-    };
-  }
-
-  // Secili cihaz hattin nokta listesinde olmayabilir (koordinati topolojiden
-  // ayrilmis olabilir); kutuya EKLENIR ki secilen sey mutlaka gorunsun.
+  // HAT NOKTALARI ARTIK KULLANILMIYOR. Hatti sigdirmak, secilen cihazi
+  // uzun bir hatta nokta boyutunda birakiyordu; hattin butunu zaten
+  // hicbir sey secili degilken gorunuyor.
   return {
-    kind: "bounds",
+    kind: "point",
     key,
-    points: [...valid, { latitude: device.latitude, longitude: device.longitude }]
+    latitude: device.latitude,
+    longitude: device.longitude,
+    zoom: hedefZoom(currentZoom)
   };
 }

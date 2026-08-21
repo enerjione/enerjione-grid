@@ -23185,9 +23185,14 @@ th.event-col-category {
   /* Genislik SINIRI: sinir yokken 1900px'lik bir ekranda iki sutun ~940px
      oluyor ve "Ad Soyad" alani 900px genisliginde bir kutu olarak
      ciziliyordu. Form alanlari icerdikleri metne gore olculur; bu genislik
-     hem cirkin hem okumasi zor. Ortalanmis 1180px form icin fazlasiyla
-     yeterli. */
-  max-width: 1180px;
+     hem cirkin hem okumasi zor.
+
+     TAVAN 1180 -> 1500: uc kart (kimlik / sifre / bildirimler) GENIS
+     EKRANDA YAN YANA sigsin diye. 1180'de bildirim karti alta dusuyor,
+     sayfa uzuyor ve yatay ekranda kaydirma gerekiyordu; ust uste binen
+     kartlar da yine oradan geliyordu. Uc sutunda tek alan ~460px kalir —
+     form icin hala rahat, 900px'lik cirkin kutulardan uzak. */
+  max-width: 1500px;
   width: 100%;
   margin-inline: auto;
 }
@@ -23199,6 +23204,22 @@ th.event-col-category {
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 14px;
   align-items: start;
+}
+
+/* GENIS EKRANDA UC SUTUN — bildirimler de yan yana.
+   `--wide` (tam satir) yalnizca dar ekranda anlamli; 1400px ustunde
+   bildirim karti kendi sutununda durur ve sayfa YATAYA sigar. */
+@media (min-width: 1400px) {
+  .profile-page-columns {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .profile-card--wide {
+    grid-column: auto;
+  }
+  /* Uc sutunda bildirim kanallari alt alta daha okunakli. */
+  .profile-notif-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .profile-card {
@@ -27646,19 +27667,23 @@ th.event-col-category {
   padding-bottom: 14px;
   border-bottom: 1px solid #e5e7eb;
 }
+/* Token olusturuldu modali — GRADIENT VE INDIGO YOK.
+   Indigo bu urunde hicbir duruma karsilik gelmiyor; ana sayfa suzgecinde
+   ve hat agacinda da ayni sebeple kaldirildi. Anahtar rozeti notr slate:
+   dikkati modalin ASIL icerigine (bir kez gosterilen token) birakir. */
 .api-key-created-head-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
   display: grid;
   place-items: center;
-  color: #fff;
-  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25);
+  color: #475569;
   flex-shrink: 0;
 }
 .api-key-created-head-icon .material-symbols-outlined {
-  font-size: 24px;
+  font-size: 21px;
 }
 .api-key-created-head-text {
   flex: 1;
@@ -27679,8 +27704,8 @@ th.event-col-category {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-  border: 1px solid #fbbf24;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
   border-radius: 10px;
   padding: 11px 14px;
   color: #78350f;
@@ -27709,7 +27734,9 @@ th.event-col-category {
   display: flex;
   gap: 10px;
   align-items: center;
-  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  /* Koyu zemin BILINCLI: token bir SIRDIR ve sayfadaki her seyden ayri
+     durmali. Gradient degil duz ton — kod bloklariyla ayni dil. */
+  background: #0f172a;
   padding: 10px 10px 10px 14px;
   border-radius: 10px;
   margin-bottom: 22px;
@@ -27728,7 +27755,8 @@ th.event-col-category {
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  background: #6366f1;
+  /* Indigo -> slate: bu urunde indigo hicbir duruma karsilik gelmiyor. */
+  background: #475569;
   color: #fff;
   border: none;
   border-radius: 8px;
@@ -27739,7 +27767,7 @@ th.event-col-category {
   transition: background 0.15s, transform 0.1s;
 }
 .api-key-token-copy:hover {
-  background: #4f46e5;
+  background: #334155;
 }
 .api-key-token-copy:active {
   transform: scale(0.97);
@@ -27766,7 +27794,7 @@ th.event-col-category {
 }
 .api-key-created-examples-head .material-symbols-outlined {
   font-size: 18px;
-  color: #6366f1;
+  color: #64748b;
 }
 
 .api-key-created-actions {
@@ -27811,7 +27839,9 @@ th.event-col-category {
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   padding: 14px 16px 12px;
-  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  /* Duz ton: gradient kapsam kartlarinin kendi secim durumunu bulanik
+     gosteriyordu. */
+  background: #f8fafc;
 }
 .scope-fieldset--cards legend {
   font-weight: 700;
@@ -27843,14 +27873,18 @@ th.event-col-category {
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
-.scope-card:hover {
-  border-color: #a5b4fc;
-  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.1);
+/* SECIM: DOLGU + KENARLIK, gradient ve renkli golge YOK.
+   Ayni kural ana sayfa suzgecinde ve hat agacinda da uygulandi. INDIGO
+   (#6366f1 / #4f46e5 / #a5b4fc) buradan da kaldirildi: hicbir duruma
+   karsilik gelmiyordu, yalnizca "secili" demenin sussu bir yoluydu.
+   Secili durum artik SLATE ile anlatilir — notr ama belirgin. */
+.scope-card:hover:not(.is-selected) {
+  border-color: #cbd5e1;
+  background: #f8fafc;
 }
 .scope-card.is-selected {
-  border-color: #6366f1;
-  background: linear-gradient(135deg, #eef2ff 0%, #faf5ff 100%);
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
+  border-color: #475569;
+  background: #f1f5f9;
 }
 .scope-card input[type="checkbox"] {
   /* Native checkbox gizli — kart kendisi tıklanır. */
@@ -27861,12 +27895,12 @@ th.event-col-category {
   pointer-events: none;
 }
 .scope-card-check .material-symbols-outlined {
-  font-size: 22px;
+  font-size: 19px;
   color: #cbd5e1;
   transition: color 0.15s;
 }
 .scope-card.is-selected .scope-card-check .material-symbols-outlined {
-  color: #4f46e5;
+  color: #0f172a;
 }
 .scope-card-icon {
   display: grid;
@@ -27879,14 +27913,14 @@ th.event-col-category {
 }
 .scope-card.is-selected .scope-card-icon {
   background: #fff;
-  border: 1px solid #c7d2fe;
+  border: 1px solid #cbd5e1;
 }
 .scope-card-icon .material-symbols-outlined {
   font-size: 18px;
   color: #475569;
 }
 .scope-card.is-selected .scope-card-icon .material-symbols-outlined {
-  color: #4f46e5;
+  color: #334155;
 }
 .scope-card-text {
   display: flex;
@@ -27902,7 +27936,7 @@ th.event-col-category {
   padding: 0;
 }
 .scope-card.is-selected .scope-card-text code {
-  color: #4338ca;
+  color: #0f172a;
 }
 .scope-card-text small {
   font-size: 11px;
@@ -27916,7 +27950,7 @@ th.event-col-category {
   gap: 8px;
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px dashed #e2e8f0;
+  border-top: 1px solid #e2e8f0;
   flex-wrap: wrap;
 }
 .scope-card-bulk-btn {
@@ -27943,7 +27977,7 @@ th.event-col-category {
 .scope-card-bulk-count {
   margin-left: auto;
   font-size: 11px;
-  color: #4f46e5;
+  color: #475569;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -28163,7 +28197,8 @@ th.event-col-category {
   margin: 12px 0 6px;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
-  background: linear-gradient(180deg, #fafbfd, #ffffff);
+  /* Duz ton: gradient kartin acik/kapali durumunu bulaniklastiriyordu. */
+  background: #fafbfd;
   overflow: hidden;
 }
 .webhook-hint-card.is-open {
@@ -44646,4 +44681,85 @@ input[aria-invalid="true"]:focus {
 @media (max-width: 1200px) {
   .device-cmd-cols { grid-template-columns: 1fr; }
   .device-cmd-col-log .device-cmd-history-box { max-height: 360px; }
+}
+
+/* --- OTURUM POLITIKASI: SECIM KARTLARI ------------------------------------
+
+   Bu ayarin SAHA SONUCU var: `smart` secilen bir cihaz modemini KAPATIR ve
+   saatlerce sessiz kalir. Duz bir `<select>`te uc secenek yalnizca AD olarak
+   gorunuyordu ("Surekli / Akilli / Otomatik"); ne yaptiklari ipucunun
+   arkasindaydi, yani operator sonucu GORMEDEN seciyordu.
+
+   Secim DOLGU + KENARLIK ile anlatilir (gradient ve indigo YOK) — ana sayfa
+   suzgeci, hat agaci ve API kapsam kartlariyla ayni dil. */
+.dnp3-field--full {
+  grid-column: 1 / -1;
+}
+
+.dnp3-policy-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.dnp3-policy-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition: border-color 0.12s, background 0.12s;
+}
+.dnp3-policy-card:hover:not(.is-selected) {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+.dnp3-policy-card.is-selected {
+  border-color: #475569;
+  background: #f1f5f9;
+}
+.dnp3-policy-card:focus-visible {
+  outline: 2px solid #0f172a;
+  outline-offset: 1px;
+}
+
+.dnp3-policy-card-icon {
+  font-size: 18px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+  flex: 0 0 auto;
+}
+.dnp3-policy-card.is-selected .dnp3-policy-card-icon {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+}
+
+.dnp3-policy-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.dnp3-policy-card-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+/* SONUC CUMLESI — asil eklenen bilgi. Kirpilmaz: iki satira sarar. */
+.dnp3-policy-card-desc {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #64748b;
 }

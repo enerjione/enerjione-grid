@@ -39,6 +39,16 @@ type Props = {
   onGatewayUpdate?: () => void;
 };
 
+/** Oturum politikasi secenekleri — ad ve aciklama i18n'den turetilir.
+ *
+ *  Ikonlar subset fontunda ZATEN VAR (`bolt`, `power_settings_new`,
+ *  `schedule`); yeni ikon eklemek `tests/iconSubset.test.ts`i kirardi. */
+const POLITIKALAR: { key: SessionPolicy; suffix: string; icon: string }[] = [
+  { key: "continuous", suffix: "Continuous", icon: "bolt" },
+  { key: "smart", suffix: "Smart", icon: "power_settings_new" },
+  { key: "auto", suffix: "Auto", icon: "schedule" }
+];
+
 const INITIATING_PORT_RANGE_START = 20100;
 const INITIATING_PORT_RANGE_END = 20700;
 
@@ -205,13 +215,6 @@ export function Dnp3SettingsForm({
     set({ dial_in_interval_min: dk, smart_max_silence_sec: null });
   };
 
-  const politikaYardim =
-    v.session_policy === "auto"
-      ? t("engineering.dnp3.sessionPolicyAutoHelp")
-      : v.session_policy === "smart"
-        ? t("engineering.dnp3.sessionPolicySmartHelp")
-        : t("engineering.dnp3.sessionPolicyContinuousHelp");
-
   // ISTENEN ile CIHAZDAN DOGRULANAN ayrisiyor mu? Yalnizca IKI TARAF DA
   // BILINIYORKEN "farkli" denir: dogrulanan yoksa bu bir ayrisma degil,
   // kanit eksikligidir ve durum satiri zaten onu soyler.
@@ -315,19 +318,46 @@ export function Dnp3SettingsForm({
           yerden ulasilamiyordu — panel kendi IP/port alanlarini ciziyor ve bu
           blogu da kapatiyordu. */}
       <Bolum baslik={t("engineering.dnp3.sectionSession")}>
-        <label className="dnp3-field">
-          <Etiket ad={t("engineering.dnp3.sessionPolicy")} zorunlu yardim={politikaYardim} />
-          <select
-            value={v.session_policy}
-            onChange={(e) => set({ session_policy: e.target.value as SessionPolicy })}
-          >
-            {/* Uc tipi ile mod v1.14.0'dan beri ORTOGONAL: listening bir cihaz
-                da Smart calisabilir, secenek kisitlanmaz. */}
-            <option value="continuous">{t("engineering.dnp3.sessionPolicyContinuous")}</option>
-            <option value="smart">{t("engineering.dnp3.sessionPolicySmart")}</option>
-            <option value="auto">{t("engineering.dnp3.sessionPolicyAuto")}</option>
-          </select>
-        </label>
+        {/* OTURUM POLITIKASI — ACILIR LISTE DEGIL, SECIM KARTLARI.
+            Bu ayarin SAHA SONUCU var: `smart` secilen bir cihaz modemini
+            KAPATIR ve saatlerce sessiz kalir. Duz bir `<select>`te uc secenek
+            yalnizca AD olarak gorunuyordu ("Surekli / Akilli / Otomatik") ve
+            ne yaptiklari ipucunun arkasindaydi — yani operator sonucu
+            gormeden seciyordu. Her secenek artik tek cumlelik sonucunu
+            YANINDA tasiyor.
+
+            Uc tipi ile mod v1.14.0'dan beri ORTOGONAL: listening bir cihaz
+            da Smart calisabilir, secenek kisitlanmaz. */}
+        <div className="dnp3-field dnp3-field--full">
+          <Etiket ad={t("engineering.dnp3.sessionPolicy")} zorunlu />
+          <div className="dnp3-policy-cards" role="radiogroup">
+            {POLITIKALAR.map((pol) => {
+              const secili = v.session_policy === pol.key;
+              return (
+                <button
+                  key={pol.key}
+                  type="button"
+                  role="radio"
+                  aria-checked={secili}
+                  className={`dnp3-policy-card${secili ? " is-selected" : ""}`}
+                  onClick={() => set({ session_policy: pol.key })}
+                >
+                  <span className="dnp3-policy-card-icon material-symbols-outlined">
+                    {pol.icon}
+                  </span>
+                  <span className="dnp3-policy-card-body">
+                    <span className="dnp3-policy-card-name">
+                      {t(`engineering.dnp3.sessionPolicy${pol.suffix}`)}
+                    </span>
+                    <span className="dnp3-policy-card-desc">
+                      {t(`engineering.dnp3.sessionPolicy${pol.suffix}Help`)}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
         {/* UYUMLULUK UYARISI — REDDETME DEGIL. Kayit kabul edilir (mesru akis
             "once cihazi yapilandir, sonra gateway guncelle"dir) ama ayarin
             sahada gecerli oldugu SOYLENMEZ: eski gateway bu alanlari ya yok

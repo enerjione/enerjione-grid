@@ -178,20 +178,27 @@ test("form politikaya SABIT bir deger atamaz", () => {
   const atamalar = [...FORM.matchAll(/session_policy:\s*([^\n,}]+)/g)].map((m) => m[1].trim());
   assert.ok(atamalar.length > 0, "formda politika atamasi bulunamadi — desen kaydi");
   for (const atama of atamalar) {
+    // Iki mesru yazma yolu da KULLANICI SECIMIDIR:
+    //   eski: e.target.value as SessionPolicy   (acilir liste)
+    //   yeni: pol.key                            (tiklanan secim karti)
+    // Sabit bir literal ("smart" gibi) YASAK: form kullanicinin secimini
+    // ezmemeli.
     assert.match(
       atama,
-      /e\.target\.value as SessionPolicy/,
+      /e\.target\.value as SessionPolicy|pol\.key/,
       `politikaya kullanici secimi disinda bir deger yaziliyor: ${atama}`
     );
   }
 });
 
 test("uc secenek de KOSULSUZ render edilir", () => {
-  const blok = /\{t\("engineering\.dnp3\.sessionPolicy"\)\}[\s\S]*?<\/select>/.exec(FORM);
-  assert.ok(blok, "oturum politikasi alani bulunamadi");
+  // Acilir liste SECIM KARTLARINA cevrildi; kilitlenen sey MARKUP degil,
+  // uc secenegin de KOSULSUZ sunulmasi.
+  const blok = /const POLITIKALAR[\s\S]*?\];/.exec(FORM);
+  assert.ok(blok, "oturum politikasi secenek listesi bulunamadi");
   for (const deger of POLITIKALAR) {
     assert.ok(
-      blok[0].includes(`<option value="${deger}">`),
+      blok[0].includes(`key: "${deger}"`),
       `${deger} secenegi yok — operator o modu hic secemez`
     );
   }

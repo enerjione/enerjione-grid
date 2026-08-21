@@ -142,13 +142,10 @@ function MapRefBridge({ onReady }: { onReady: (map: L.Map) => void }) {
  */
 function FlyToSelected({
   selectedDevice,
-  override,
-  linePoints
+  override
 }: {
   selectedDevice?: DeviceRow;
   override?: [number, number];
-  /** Secili cihazin hattindaki tum noktalar (direkler). */
-  linePoints: FocusPoint[];
 }) {
   const map = useMap();
   const lastKeyRef = useRef<string>("");
@@ -167,23 +164,15 @@ function FlyToSelected({
     const [lat, lng] = override ?? [selectedDevice.latitude, selectedDevice.longitude];
     const plan = planDeviceFocus({
       device: { id: selectedDevice.id, latitude: lat, longitude: lng },
-      linePoints,
-      lastKey: lastKeyRef.current
+      lastKey: lastKeyRef.current,
+      // Mevcut yakinlik plana GIRDI olarak verilir: "cihazi goster" eylemi
+      // hicbir kosulda UZAKLASTIRMAMALI (bkz. `deviceFocus` modul basligi).
+      currentZoom: map.getZoom()
     });
     if (plan.kind === "skip") return;
     lastKeyRef.current = plan.key;
-    if (plan.kind === "point") {
-      map.flyTo([plan.latitude, plan.longitude], plan.zoom, { duration: 0.8 });
-      return;
-    }
-    map.flyToBounds(
-      L.latLngBounds(plan.points.map((pt) => L.latLng(pt.latitude, pt.longitude))),
-      // Kenar payi: hat tam kenara yapismasin, secili cihazin balonu da
-      // ekranda kalsin. maxZoom: kisa bir hatta asiri yakinlasip sokak
-      // detayina gomulmeyi onler.
-      { padding: [60, 60], maxZoom: 16, duration: 0.8 }
-    );
-  }, [map, selectedDevice, override, linePoints]);
+    map.flyTo([plan.latitude, plan.longitude], plan.zoom, { duration: 0.8 });
+  }, [map, selectedDevice, override]);
 
   return null;
 }
@@ -406,24 +395,6 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
   );
 
   // Anasayfa ilk acilista, harita Turkiye merkezinde 5x zoom yerine tum
-  /** Secili cihazin bagli oldugu hattin TUM direkleri.
-   *
-   *  Cihaz -> hat baglantisi `line_segments` uzerinden kurulur (cihaz bir
-   *  segmentin uzerinde oturur). Cihaz hicbir segmente bagli degilse liste
-   *  bos doner ve odaklama tek noktaya duser (bkz. planDeviceFocus).
-   *
-   *  BRANSMAN NOTU: kol AYRI bir hattir. Kol uzerindeki bir cihaza
-   *  tiklandiginda o KOL sigdirilir, ana hat degil — operatorun baktigi
-   *  sey koldur. */
-  const selectedLinePoints = useMemo<FocusPoint[]>(() => {
-    if (!selectedDevice || !gridSnapshot) return [];
-    const segment = gridSnapshot.segments?.find((sg) => sg.device_id === selectedDevice.id);
-    if (!segment) return [];
-    return (gridSnapshot.poles ?? [])
-      .filter((pl) => pl.line_id === segment.line_id)
-      .map((pl) => ({ latitude: pl.latitude, longitude: pl.longitude }));
-  }, [selectedDevice, gridSnapshot]);
-
   // sebeke direklerinin/cihazlarinin sigdigi bounds'a yakinlasarak acilsin.
   // Topoloji direkleri varsa onu kullan; yoksa cihaz konumlarina dus.
   const autoFitPoints = useMemo<Array<[number, number]>>(() => {
@@ -1353,7 +1324,6 @@ export function DeviceMapTab({ devices, selectedDevice, onSelectDevice, liveValu
           <FlyToSelected
             selectedDevice={selectedDevice}
             override={selectedDevice ? deviceLocationOverride.get(selectedDevice.id) : undefined}
-            linePoints={selectedLinePoints}
           />
           <MapInvalidator deps={[devices.length]} />
           <MapLayerSwitchFix />
