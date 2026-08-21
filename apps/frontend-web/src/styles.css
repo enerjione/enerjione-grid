@@ -37350,6 +37350,27 @@ th.event-col-category {
    iki satira boluniyor ve kart bastan asagi hizasiz bir liste gibi
    gorunuyordu. Modalin geri kalani (form satirlari, `gw-islem`) hizali
    oldugu icin fark daha da batiyordu. */
+/* Gecersiz form alani — hata alanin YANINDA gorunur.
+   Eskiden kural yalnizca backend'deydi ve operator "Olustur"a basip geri
+   donen hata balonunu okumak zorunda kaliyordu. */
+input.is-invalid,
+input[aria-invalid="true"] {
+  border-color: #ef4444;
+  background: #fef2f2;
+}
+input.is-invalid:focus,
+input[aria-invalid="true"]:focus {
+  outline: 2px solid rgba(239, 68, 68, 0.35);
+  outline-offset: 1px;
+}
+.field-error {
+  display: block;
+  margin-top: 3px;
+  color: #b91c1c;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .gw-update-detail {
   display: flex;
   flex-direction: column;

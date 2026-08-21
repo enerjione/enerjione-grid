@@ -2441,7 +2441,6 @@ function RegionModal({
       <form className="settings-modal" onSubmit={submit}>
         <h3>{initial ? t("engineering.grid.regionEditTitle") : t("engineering.grid.newRegion")}</h3>
         <label>{t("engineering.grid.name")} <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus /></label>
-        <label>{t("engineering.grid.description")} <input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
         <div className="settings-actions">
           <button type="button" onClick={onClose} disabled={busy}>{t("engineering.grid.cancel")}</button>
           <button type="submit" className="primary-btn" disabled={busy}>{busy ? "..." : t("engineering.grid.save")}</button>
@@ -2504,7 +2503,6 @@ function LineModal({
       <form className="settings-modal" onSubmit={submit}>
         <h3>{initial ? t("engineering.grid.lineEditTitle") : t("engineering.grid.newLine")}</h3>
         <label>{t("engineering.grid.name")} <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus /></label>
-        <label>{t("engineering.grid.description")} <input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
 
         <fieldset className="line-branch-fieldset">
           <legend>

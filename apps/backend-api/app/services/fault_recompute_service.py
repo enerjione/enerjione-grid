@@ -73,8 +73,10 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.alarm import AlarmEvent
 from app.models.device import Device
+from app.models.enums import CommunicationStatus
 from app.models.fault import FaultEvent
 from app.models.grid_topology import Line, LineSegment, Pole, Region
+from app.services import device_runtime_health_service
 from app.services.line_distance_service import (
     LineDistanceIndex,
     build_line_distance_index,
@@ -207,6 +209,79 @@ class _FaultZone:
         if lo > hi:
             lo, hi = hi, lo
         return (lo, hi, hi - lo)
+
+
+def sessiz_cihaz_idleri(
+    db: Session, devices_by_id: dict[int, Device]
+) -> set[int]:
+    """HABERLESMESI OLMAYAN cihazlar — bolge hesabinda YOK sayilirlar.
+
+    NEDEN
+    -----
+    Bolge hesabi cihazlari IKIYE ayiriyordu: alarmi olan RED, digerleri
+    GREEN. Ucuncu bir hal yok: susan bir cihaz sessizce "arizayi GORMEDI"
+    sayiliyordu. Oysa o cihaz ariza akimini gormemis DEGIL — BILMIYORUZ.
+
+    Sonucu somut: RED blogun hemen ardindaki sessiz cihaz `first_green`
+    olarak secilir, bolge onun slot'unda BITER ve ekip GERCEK arizanin
+    berisindeki bir aciklikta arama yapar. Yani "bilmiyorum", "burada ariza
+    yok" diye okunup ekibi yanlis direge gonderiyordu.
+
+    Dogru davranis: o cihazi TOPOLOJIDE YOKMUS gibi ele almak. Blok, fikri
+    olan bir sonraki cihaza kadar uzar; bolge GENISLER. Genis bolge daha uzun
+    arama demektir ama YANLIS YER degildir — emniyet yonu budur.
+
+    SMART BEKLEME HARIC — EN ONEMLI AYRIM
+    -------------------------------------
+    Horstmann Smart modda modemini BILEREK kapatir; `smart_idle` SAGLIKLI bir
+    durumdur ve telemetri de o sirada susar. Uyuyan cihazi "haberlesmesi yok"
+    sayip elemek, Smart bir filoda topolojiyi neredeyse BOSALTIRDI: her bolge
+    hattin tamamina yayilir, ariza konumu anlamini yitirirdi.
+
+    ESKI GATEWAY'DE TAHMIN EDILMEZ
+    ------------------------------
+    Gateway 1.15 oncesinde calisma-zamani durumu YOK; elimizde yalnizca
+    telemetriden turetilen `communication_status` var ve orada uyuyan cihaz
+    da `OFFLINE` gorunur. Ikisini ayirt edemedigimiz bu durumda cihaz
+    ELENMEZ: uykuyu kayipla karistirip topolojiyi bozmaktansa mevcut
+    davranista kalmak yeglenir. Ayirt edebildigimiz an (runtime saglik ya da
+    Smart olmayan bir cihazin OFFLINE'i) eleme devreye girer.
+    """
+    if not devices_by_id:
+        return set()
+
+    # Calisma-zamani sagligi OTORITEDIR (gateway'in ANLIK karari).
+    saglik = device_runtime_health_service.saglik_haritasi(
+        db, {d.code for d in devices_by_id.values() if d.code}
+    )
+
+    sessiz: set[int] = set()
+    for dev in devices_by_id.values():
+        satir = saglik.get(dev.code or "")
+        durum = (getattr(satir, "connection_state", None) or "").strip() if satir else ""
+
+        if durum:
+            # `smart_idle` SAGLIKLI uyku; `recovering` toparlaniyor ve son
+            # bilgisi hala anlamli. Yalnizca gercekten kopmus olanlar elenir.
+            if durum in ("lost", "listener_error"):
+                sessiz.add(dev.id)
+            continue
+
+        # --- Runtime saglik YOK: eski davranisa duselim ---
+        if dev.communication_status != CommunicationStatus.OFFLINE:
+            continue
+        # OFFLINE ama cihaz Smart/auto ise bu UYKU da olabilir — ayirt
+        # edemiyoruz, TAHMIN ETMEYIZ.
+        politika = ""
+        try:
+            politika = str((dev.dnp3_extended or {}).get("session_policy") or "").lower()
+        except Exception:  # noqa: BLE001
+            politika = ""
+        if politika in ("smart", "auto"):
+            continue
+        sessiz.add(dev.id)
+
+    return sessiz
 
 
 def _compute_line_zones(
@@ -595,6 +670,22 @@ def recompute_faults(db: Session) -> None:
         for idx, seg in enumerate(segs):
             devices_per_line.setdefault(line_id, []).append((sira, idx, seg.id, seg))
     # Hat icindeki cihaz listesini siralayalim (slot fromSeq, sonra slot ici idx)
+    # SESSIZ CIHAZLAR TOPOLOJIDEN CIKARILIR (bkz. `sessiz_cihaz_idleri`).
+    # "Bilmiyorum"u "burada ariza yok" diye okumak, RED blogu erken bitirip
+    # ekibi gercek arizanin berisindeki bir acikliga gonderiyordu.
+    # ALARMI OLAN CIHAZ ELENMEZ — haberlesmesi kopmus olsa bile.
+    #
+    # Eleme "fikri OLMAYANI" cikarmak icindir. Bir cihaz ariza alarmi actiysa
+    # ariza akimini GORMUSTUR; o bilgi gecerlidir ve cihaz sonradan sussa da
+    # gecerli kalir. Onu da elemek GERCEK ARIZAYI SILERDI — nitekim ilk
+    # uygulamada oyle oldu ve test yakaladi.
+    sessizler = sessiz_cihaz_idleri(db, devices_by_id) - active_alarm_device_ids
+    if sessizler:
+        for line_id, arr in devices_per_line.items():
+            devices_per_line[line_id] = [
+                kayit for kayit in arr if kayit[3].device_id not in sessizler
+            ]
+
     for arr in devices_per_line.values():
         arr.sort(key=lambda t: (t[0], t[1], t[2]))
 

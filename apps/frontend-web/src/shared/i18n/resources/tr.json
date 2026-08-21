@@ -2580,7 +2580,8 @@
         "setCountReduceConfirm": "{{count}} set silinecek: {{codes}}\n\nBu setlerin telemetrisi, alarmları, arıza geçmişi ve hat yerleşimi de silinir. Bu işlem geri alınamaz. Devam edilsin mi?",
         "unitNo": "{{no}}. ünite",
         "satelliteNo": "Satellite {{no}}",
-        "satellitePhaseTitle": "Uydu ve faz eşlemesi"
+        "satellitePhaseTitle": "Uydu ve faz eşlemesi",
+        "ipInvalid": "Geçerli bir IPv4 adresi girin. Örnek: 192.168.1.50"
       },
       "footer": {
         "ok": "OK",

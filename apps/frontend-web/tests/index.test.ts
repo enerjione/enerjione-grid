@@ -155,6 +155,10 @@ import "./runtimeIpucu.test";
 // gomuyordu: degeri olmayan yuzlerce satir, aranan olcumu bulunamaz yapiyor.
 import "./canliDegerlerCikis.test";
 
+// Cihaz IP'si: "aa" yazip kaydetmek mumkundu. Hata gunler sonra "haberlesme
+// yok" kiliginda ortaya cikiyor, yani yazim hatasi ARIZA gibi teshis ediliyordu.
+import "./ipDogrulama.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   connectionIsDead,

@@ -2583,7 +2583,8 @@
         "setCountReduceConfirm": "{{count}} set(s) will be deleted: {{codes}}\n\nTheir telemetry, alarms, fault history and line placement will be deleted too. This cannot be undone. Continue?",
         "unitNo": "Unit {{no}}",
         "satelliteNo": "Satellite {{no}}",
-        "satellitePhaseTitle": "Satellite and phase mapping"
+        "satellitePhaseTitle": "Satellite and phase mapping",
+        "ipInvalid": "Enter a valid IPv4 address. Example: 192.168.1.50"
       },
       "footer": {
         "ok": "OK",

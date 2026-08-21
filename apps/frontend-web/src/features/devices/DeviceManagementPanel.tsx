@@ -46,6 +46,7 @@ import {
 import { Dnp3SettingsForm } from "./Dnp3SettingsForm";
 import { GatewayCreateModal } from "../gateways/GatewayCreateModal";
 import { GatewayEditModal } from "../gateways/GatewayEditModal";
+import { ipv4Dolu, ipv4Gecerli } from "../../shared/ipAddress";
 
 /** Host ajani durumunun tazelenme araligi. Gateway listesi zaten ~12 sn'de
  *  bir cekiliyor; container durumu daha yavas degisir. */
@@ -1806,7 +1807,14 @@ export function DeviceManagementPanel({
                               value={ipAddress}
                               onChange={(event) => setIpAddress(event.target.value)}
                               required
+                              aria-invalid={!ipv4Gecerli(ipAddress)}
+                              className={ipv4Gecerli(ipAddress) ? undefined : "is-invalid"}
                             />
+                            {ipv4Gecerli(ipAddress) ? null : (
+                              <small className="field-error">
+                                {t("engineering.devicesPanel.form.ipInvalid")}
+                              </small>
+                            )}
                           </label>
                           {canSeeDnp3 ? (
                             <>
@@ -1927,7 +1935,15 @@ export function DeviceManagementPanel({
                   {selectedGateway ? <span className="device-comms-meta"> · {selectedGateway.name}</span> : null}
                 </div>
                 <div className="device-form-actions">
-                  <button type="button" className="primary-btn" onClick={() => void handleSaveDevice()}>
+                  {/* Ayni kapi DUZENLEMEDE de: gecerli bir cihazin IP'si
+                      sonradan bozuk bir metinle degistirilemez. */}
+                  <button
+                    type="button"
+                    className="primary-btn"
+                    onClick={() => void handleSaveDevice()}
+                    disabled={!ipv4Dolu(ipAddress)}
+                    title={ipv4Dolu(ipAddress) ? undefined : t("engineering.devicesPanel.form.ipInvalid")}
+                  >
                     {t("engineering.devicesPanel.save")}
                   </button>
                   <button type="button" className="danger-btn" onClick={() => void handleDeleteDevice()}>
@@ -2184,7 +2200,17 @@ export function DeviceManagementPanel({
                       onChange={(event) => setCreateIpAddress(event.target.value)}
                       placeholder="192.168.1.50"
                       required
+                      aria-invalid={!ipv4Gecerli(createIpAddress)}
+                      className={ipv4Gecerli(createIpAddress) ? undefined : "is-invalid"}
                     />
+                    {/* Hata alanin YANINDA, gonderdikten SONRA degil: kural
+                        yalnizca backend'deyken operator "Olustur"a basip geri
+                        donen balonu okumak zorunda kaliyordu. */}
+                    {ipv4Gecerli(createIpAddress) ? null : (
+                      <small className="field-error">
+                        {t("engineering.devicesPanel.form.ipInvalid")}
+                      </small>
+                    )}
                   </label>
                   {canSeeDnp3 ? (
                     <>
@@ -2219,7 +2245,15 @@ export function DeviceManagementPanel({
               <button type="button" className="secondary-btn" onClick={() => setShowCreateModal(false)}>
                 {t("engineering.devicesPanel.form.cancel")}
               </button>
-              <button type="submit" className="primary-btn">
+              {/* GECERSIZ IP ILE OLUSTURULAMAZ. `required` yalnizca "bos
+                  olmasin" der; "aa" gibi bir metni gecirirdi ve hata ancak
+                  backend'den donerdi. */}
+              <button
+                type="submit"
+                className="primary-btn"
+                disabled={!ipv4Dolu(createIpAddress)}
+                title={ipv4Dolu(createIpAddress) ? undefined : t("engineering.devicesPanel.form.ipInvalid")}
+              >
                 {t("engineering.devicesPanel.form.create")}
               </button>
             </div>

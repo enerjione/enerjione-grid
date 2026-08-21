@@ -454,3 +454,154 @@ def test_ariza_acan_alarm_listesi_gercekten_filtreliyor():
     assert basliklar == ["Test alarmi"], (
         f"haberlesme alarmi elenmedi: {basliklar}"
     )
+
+
+# ---------------------------------------------------------------------------
+# SESSIZ CIHAZ BOLGE HESABINDA "YOK" SAYILIR
+#
+# Bolge hesabi cihazlari IKIYE ayiriyordu: alarmi olan RED, digerleri GREEN.
+# Ucuncu hal yoktu ve susan cihaz sessizce "arizayi GORMEDI" sayiliyordu.
+# Oysa o cihaz ariza akimini gormemis DEGIL — BILMIYORUZ.
+#
+# Sonuc somut: RED blogun ardindaki sessiz cihaz `first_green` secilir, bolge
+# onun slot'unda BITER ve ekip GERCEK arizanin berisinde arama yapar.
+#
+# SMART BEKLEME HARIC: uyuyan Horstmann sagliklidir ve telemetrisi de susar;
+# onu elemek Smart bir filoda topolojiyi bosaltirdi.
+# ---------------------------------------------------------------------------
+
+from app.models.device_runtime_health import DeviceRuntimeHealth  # noqa: E402
+from app.models.enums import CommunicationStatus  # noqa: E402
+from app.services.fault_recompute_service import sessiz_cihaz_idleri  # noqa: E402
+
+
+@pytest.fixture()
+def saha3(db):
+    """Tek hat, 4 direk, UC cihaz: D1 | D2 | D3."""
+    r = Region(name="M", code="M3")
+    db.add(r)
+    db.flush()
+    hat = Line(name="HAT3", code="H3", region_id=r.id)
+    db.add(hat)
+    db.flush()
+    direkler = []
+    for i in range(1, 5):
+        p = Pole(line_id=hat.id, sequence_no=i, latitude=39.0 + i * 0.01, longitude=35.0)
+        db.add(p)
+        direkler.append(p)
+    db.flush()
+    cihazlar = []
+    for i in range(3):
+        d = Device(
+            code=f"S{i + 1}", name=f"S{i + 1}", ip_address=f"10.1.0.{i + 1}",
+            latitude=39.0, longitude=35.0,
+            communication_status=CommunicationStatus.ONLINE,
+        )
+        db.add(d)
+        db.flush()
+        db.add(
+            LineSegment(
+                line_id=hat.id, from_pole_id=direkler[i].id,
+                to_pole_id=direkler[i + 1].id, device_id=d.id, device_position_t=0.5,
+            )
+        )
+        cihazlar.append(d)
+    db.flush()
+    return {"hat": hat, "cihazlar": cihazlar}
+
+
+def _saglik(db, dev: Device, durum: str) -> None:
+    db.add(
+        DeviceRuntimeHealth(
+            device_code=dev.code, gateway_code="GW-1", connection_state=durum,
+            connected=False, reachable=False, report_late=False,
+            boot_id=1, sequence=1, updated_at=datetime.now(timezone.utc),
+        )
+    )
+    db.flush()
+
+
+def test_SESSIZ_cihaz_bolgeyi_erken_BITIRMEZ(db, saha3):
+    """S1 arizayi gordu, S2 SUSUYOR, S3 temiz -> bolge S3'e kadar uzamali."""
+    S1, S2, S3 = saha3["cihazlar"]
+    _alarm(db, S1, produces_fault=True, kind="rule", baslik="Asiri akim")
+    _saglik(db, S2, "lost")          # gercekten kopmus
+    _saglik(db, S3, "online")
+    recompute_faults(db)
+
+    arizalar = list(db.scalars(select(FaultEvent)).all())
+    assert len(arizalar) == 1
+    f = arizalar[0]
+    assert f.last_red_device_id == S1.id
+    # S2 topolojide YOK sayildigi icin ilk "gormeyen" S3'tur.
+    assert f.first_green_device_id == S3.id, (
+        "sessiz cihaz first_green secildi — ekip arizanin berisine gonderilir"
+    )
+
+
+def test_SMART_BEKLEMEDEKI_cihaz_ELENMEZ(db, saha3):
+    """Uyuyan Horstmann SAGLIKLIDIR; elemek topolojiyi bosaltirdi."""
+    S1, S2, S3 = saha3["cihazlar"]
+    _alarm(db, S1, produces_fault=True, kind="rule", baslik="Asiri akim")
+    _saglik(db, S2, "smart_idle")
+    _saglik(db, S3, "online")
+    recompute_faults(db)
+
+    f = list(db.scalars(select(FaultEvent)).all())[0]
+    assert f.first_green_device_id == S2.id, (
+        "uyuyan cihaz elendi — Smart filoda her bolge hattin tamamina yayilir"
+    )
+
+
+def test_eleme_YALNIZCA_kopmus_durumlari_kapsar(db, saha3):
+    """`recovering` toparlaniyor; son bilgisi hala anlamli, elenmez."""
+    S1, S2, S3 = saha3["cihazlar"]
+    for durum, elenmeli in (("lost", True), ("listener_error", True),
+                            ("recovering", False), ("online", False),
+                            ("smart_idle", False), ("unknown", False)):
+        db.query(DeviceRuntimeHealth).delete()
+        db.flush()
+        _saglik(db, S2, durum)
+        sessiz = sessiz_cihaz_idleri(db, {d.id: d for d in (S1, S2, S3)})
+        assert (S2.id in sessiz) is elenmeli, f"{durum}: beklenen elenmeli={elenmeli}"
+
+
+def test_ESKI_gateway_SMART_cihazda_TAHMIN_ETMEZ(db, saha3):
+    """Runtime saglik yokken uyku ile kayip AYIRT EDILEMEZ.
+
+    Gateway 1.15 oncesinde uyuyan cihaz da `OFFLINE` gorunur. Smart/auto
+    yapilandirilmis bir cihazi bu bilgiyle elemek, uykuyu kayipla
+    karistirmak olurdu.
+    """
+    S1, S2, S3 = saha3["cihazlar"]
+    S2.communication_status = CommunicationStatus.OFFLINE
+    S2.dnp3_extended = {"session_policy": "smart"}
+    db.flush()
+    sessiz = sessiz_cihaz_idleri(db, {d.id: d for d in (S1, S2, S3)})
+    assert S2.id not in sessiz, "Smart cihaz eski gateway'de tahminle elendi"
+
+
+def test_ESKI_gateway_SUREKLI_modda_OFFLINE_elenir(db, saha3):
+    """Surekli modda OFFLINE uyku OLAMAZ — o cihaz gercekten susuyor."""
+    S1, S2, S3 = saha3["cihazlar"]
+    S2.communication_status = CommunicationStatus.OFFLINE
+    S2.dnp3_extended = {"session_policy": "continuous"}
+    db.flush()
+    sessiz = sessiz_cihaz_idleri(db, {d.id: d for d in (S1, S2, S3)})
+    assert S2.id in sessiz
+
+
+def test_sessiz_cihaz_KENDISI_ariza_ACMAZ(db, saha3):
+    """Elenen cihaz alarmi olsa bile bolge uretmemeli mi? HAYIR — alarmi
+    varsa RED'dir ve bilgi vardir; eleme YALNIZCA fikri OLMAYANLARI kapsar.
+
+    Bu ayrim onemli: haberlesmesi kopmus ama daha once ariza alarmi acmis
+    bir cihazin bilgisi GECERLIDIR; onu da elemek gercek arizayi silerdi.
+    """
+    S1, S2, S3 = saha3["cihazlar"]
+    _alarm(db, S2, produces_fault=True, kind="rule", baslik="Asiri akim")
+    _saglik(db, S2, "lost")
+    recompute_faults(db)
+    arizalar = list(db.scalars(select(FaultEvent)).all())
+    assert len(arizalar) == 1, "alarmi olan cihaz elendi — gercek ariza kayboldu"
+    assert arizalar[0].last_red_device_id == S2.id
