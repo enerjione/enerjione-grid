@@ -14,6 +14,72 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.109.0] — 2026-08-21
+
+> **Gateway 1.15.1 gerektirir** (saat/oturum alanları için). 1.15.0 ve
+> öncesiyle çalışmaya devam eder; o gateway'lerde yeni alanlar boş kalır ve
+> yapılandırma gönderimi eski uyumluluk yoluna düşer.
+
+### Eklendi
+
+- **Uyuyan cihaza yapılandırma gönderimi artık gerçekten çalışıyor.** Smart
+  modda modemini kapatan bir Horstmann'a yapılandırma göndermek sessizce
+  başarısız oluyordu: dosya FTP'ye yazılıyor, komut kuyruğa giriyor ve
+  **120 saniye sonra ölüyordu** — cihaz ise 24 saate kadar uyuyabiliyor.
+  Ertesi gün uyandığında kimse ona "yeni dosyanı oku" demiyordu. Artık kalıcı
+  olan komut değil **niyet**: cihaz doğal olarak uyandığında backend o an yeni
+  ve taze bir komut üretiyor. Komutun 120 saniyelik güvenlik sınırına
+  dokunulmadı, uzaktan uyandırma yok.
+- **Yapılandırmanın hangi aşamada olduğu görünür oldu.** Dosya hazırlandı →
+  cihazın bağlanması bekleniyor → uygulama komutu sırada → cihaza iletildi →
+  yapılandırma doğrulandı. Her aşama ayrı gösteriliyor ve hiçbiri kanıtsız
+  başarı iddia etmiyor.
+- **Cihaz saati teşhisi.** Sahada bir Horstmann'ın RTC'si 2066 yılına kaymıştı
+  ve bu Grid'de hiç görünmüyordu: cihaz çevrimiçi, ölçüm gönderiyor, komut
+  kabul ediyor — ama ürettiği her olay damgası 40 yıl ileri. Bağlantı sekmesinde
+  artık cihaz saati, gateway ile farkı ve cihazın saat isteyip istemediği
+  görünüyor. **Bağlantı durumunu etkilemez**: saati bozuk bir cihaz arızalı
+  gösterilmez.
+
+### Değişti
+
+- **Horstmann gateway'leri artık `DNP3_TIME_SYNC=nonlan` ile kuruluyor.**
+  Ölçüldü: `lan` seçiliyken gateway, cihazın profilinde **ilan etmediği** bir
+  nesneyi yazıyordu; cihaz saat istese bile senkronizasyon başarısız oluyor ve
+  saat yanlış kalıyordu. Mevcut gateway'ler de bir sonraki yapılandırma
+  üretiminde bu değere geçer. Değer gateway kaydında açık ve
+  değiştirilebilir; geçersiz bir değer kabul edilmez.
+- **"Yapılandırma uygulandı" damgası artık yalnızca cihaz kanıtıyla yazılıyor.**
+  Önceden komut kuyruğa girer girmez doluyordu — uyuyan cihazda bu düpedüz
+  yanlıştı. Şimdi ya cihazın FTP'ye kendi yazdığı dosya bizim gönderdiğimizle
+  eşleşecek, ya da cihazın bildirdiği güncelleme damgası değişecek.
+- **"Bağlantı" ve "Komutlar" sekmeleri birleşti.** "Cihaz şu an konuşuyor mu"
+  ile "ona ne yollayabilirim" aynı anın soruları; komut gönderip sonucunu
+  görmek için sekme değiştirmek gerekiyordu. Komut yetkisi davranışı aynı:
+  komutlar herkese görünür, yetkisi olmayana kilitli.
+- **Komut butonları yeniden tasarlandı.** İkon rengi her komutta aynıydı, göz
+  listeyi tararken hiçbir şey ayırt edemiyordu. Kilitli buton yalnızca
+  soluyordu ve nedeni sadece fare ipucundaydı — kapalı butonda o ipucu hiç
+  açılmıyor. Artık görünür kilit işareti var.
+- **"Tümü" sekmesinin görsel dili sadeleştirildi.** Tek ekranda 44 farklı renk,
+  14 gradyan ve 7 metin boyutu vardı; aynı kartta dört farklı etiket/değer
+  düzeni bulunuyordu. Arıza satırları ve rozetler **büyütüldü**, kart
+  uzamadan.
+
+### Düzeltildi
+
+- **Sıfır arıza artık kırmızı kutuda gösterilmiyor.** İyi haber, kart dibinde
+  iki alarm kutusu olarak duruyordu; renk artık kaptan değil değerden geliyor.
+- **IP adresi hata mesajı alanı zıplatmıyor.** Mesaj alanın altında ayrı bir
+  satır olarak belirip kaybolduğu için, her tuşa basışta alan ve yanındaki
+  port/DNP3 adresi alanları yer değiştiriyordu. Mesaj etiket satırına alındı.
+- **Master kimlik rozeti ile akım ölçümü rozeti aynı renkti**; "bu ünite
+  Master" ile "bu değer akım" ayırt edilemiyordu.
+- **Küçük etiketlerin kontrastı** erişilebilirlik eşiğinin altındaydı.
+
+
+---
+
 ## [2.108.0] — 2026-08-21
 
 ### Değişti
