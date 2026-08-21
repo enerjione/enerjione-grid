@@ -208,6 +208,35 @@ class DeviceRuntimeHealthRead(BaseModel):
 
     ip_endpoint_type: str | None = None
 
+    # ----- Gateway 1.15.1: CIHAZ RTC SAGLIGI + OTURUM KANITI --------------
+    #
+    # HEPSI OPSIYONEL. 1.15.0 gateway'i bu alanlari gondermez ve `None`
+    # kalirlar; arayuz o durumda hicbir sey IDDIA ETMEZ.
+
+    #: `unknown` | `ok` | `invalid` | `need_time`.
+    #:
+    #: SALT TESHIS — `connection_state`i ETKILEMEZ. Saati bozuk bir cihaz
+    #: `online` olabilir, olcum gonderir ve komut kabul eder. Etkilenen tek
+    #: sey CIHAZIN KENDI OLAY DAMGASINA duyulan guvendir. `invalid` gorup
+    #: cihazi kopuk saymak saglikli filoyu arizali gosterir.
+    device_clock_status: str | None = None
+
+    #: `cihaz_saati - gateway_saati` (saniye, ISARETLI).
+    #: Pozitif = cihaz ileri, negatif = geri. `0.0` GECERLI bir degerdir.
+    device_clock_offset_sec: float | None = None
+
+    #: Cihazin KENDI bildirdigi son zaman damgasi (unix epoch).
+    last_device_time_epoch: float | None = None
+
+    #: IIN1.4 (NEED_TIME). UC DURUMLU: `True` = saat istiyor, `False` =
+    #: istemiyor, `None` = HIC IIN gorulmedi. `False`a cevrilmemeli —
+    #: saati yanlis AMA saat istemeyen cihaz kendiliginden DUZELMEZ.
+    need_time_iin: bool | None = None
+
+    #: Acik DNP3 oturumunun basladigi an (unix epoch).
+    #: OTURUM KAPALIYKEN `None` — uyuyan cihazda NORMALDIR, hata degil.
+    session_started_epoch: float | None = None
+
     #: BACKEND saati — "ne zaman haber aldik". TAZELIK KARARI YALNIZCA
     #: BUNDAN VERILIR; arayuz bu damgaya bakip gozlemi bayat ilan eder
     #: (`shared/deviceRuntimeState.ts`, RUNTIME_STALE_AFTER_MS).

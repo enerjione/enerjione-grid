@@ -70,15 +70,34 @@ _CIHAZ_ALANLARI_METIN = (
     "ip_probe_status",
     "tcp_probe_status",
     "ip_endpoint_type",
+    # 1.15.1 — SALT TESHIS. `connection_state`i ETKILEMEZ.
+    "device_clock_status",
 )
 _CIHAZ_ALANLARI_BOOL = ("connected", "reachable", "report_late")
+
+#: UC DURUMLU bool (1.15.1). `None` = "BILMIYORUZ" ve `False` ile AYNI SEY
+#: DEGILDIR: `need_time_iin=False` "cihaz saat istemiyor" demektir, `None`
+#: ise "hic IIN gorulmedi" (or. 1.15.0 gateway). Ayrim onemli — saati yanlis
+#: olup saat ISTEMEYEN cihaz kendiliginden DUZELMEZ.
+_CIHAZ_ALANLARI_BOOL_NULLABLE = ("need_time_iin",)
+
+#: EPOCH alanlari. `null` = "HIC OLMADI"; gateway 0 GONDERMEZ ve biz de 0'a
+#: cevirmeyiz (panelde 1970 tarihleri cikmasin diye).
 _CIHAZ_ALANLARI_FLOAT = (
     "next_expected_report_epoch",
     "report_overdue_sec",
     "last_valid_contact_epoch",
     "last_frame_epoch",
     "last_probe_epoch",
+    # 1.15.1
+    "last_device_time_epoch",
+    "session_started_epoch",
 )
+
+#: EPOCH OLMAYAN float (1.15.1). Ayri liste, cunku yukaridaki "0 gelmez"
+#: gerekcesi burada GECERLI DEGIL: `device_clock_offset_sec = 0.0` tam
+#: senkron demektir ve tamamen mesrudur.
+_CIHAZ_ALANLARI_FLOAT_OLCU = ("device_clock_offset_sec",)
 
 
 @dataclass(frozen=True)
@@ -178,9 +197,17 @@ def _wire_to_model(kayit: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
         # NOT NULL kolonlar: eksik/bozuk gelirse False. "Bilinmiyor" ile
         # "hayir" arasindaki fark burada ONEMSIZ — uc alan da bayrak.
         alanlar[ad] = bool(_as_bool(kayit.get(ad)))
+    for ad in _CIHAZ_ALANLARI_BOOL_NULLABLE:
+        # `bool()` ILE SARMALANMAZ: `None` korunur. Sarmalamak "bilmiyoruz"u
+        # "hayir" yapar ve 1.15.0 gateway'lerin tum filosu "saat istemiyor"
+        # gibi gorunurdu.
+        alanlar[ad] = _as_bool(kayit.get(ad))
     for ad in _CIHAZ_ALANLARI_FLOAT:
         # `null` = "HIC OLMADI". Gateway 0 GONDERMEZ ve biz de 0'a
         # cevirmeyiz: panelde 1970 tarihleri cikmasin diye.
+        alanlar[ad] = _as_float(kayit.get(ad))
+    for ad in _CIHAZ_ALANLARI_FLOAT_OLCU:
+        # Olcu alani: `0.0` mesru bir deger, `None`'a cevrilmez.
         alanlar[ad] = _as_float(kayit.get(ad))
 
     alanlar["dial_in_interval_min"] = _as_int(kayit.get("dial_in_interval_min"))

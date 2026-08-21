@@ -4566,6 +4566,22 @@
         "status": "Device Status",
         "other": "Other"
       }
+    },
+    "clock": {
+      "title": "Device clock",
+      "ok": "Clock OK",
+      "okHint": "The device sent a timestamp and it is within tolerance.",
+      "needTime": "Time requested",
+      "needTimeHint": "The device is asking for the time (IIN1.4); the next sync corrects it.",
+      "invalid": "Clock wrong",
+      "invalidHint": "The device clock is provably wrong. If the device is not asking for the time it will not fix itself; its event timestamps are unreliable.",
+      "unknown": "Clock unknown",
+      "unknownHint": "The device has not sent a timestamp yet.",
+      "offset": "Offset",
+      "offsetHint": "Device clock minus gateway clock. A positive value means the device is ahead.",
+      "needTimeFlag": "Device is asking for the time",
+      "noNeedTimeFlag": "Device is not asking for the time",
+      "notConnectionState": "Clock diagnostics do not affect the connection state."
     }
   },
   "map": {

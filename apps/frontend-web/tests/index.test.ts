@@ -179,6 +179,9 @@ import "./haberlesmeFormuDuzeni.test";
 // Uyuyan cihaza yapilandirma: arayuz kanitsiz basari IDDIA ETMEZ.
 import "./yapilandirmaUygulamaDurumu.test";
 
+// Cihaz RTC sagligi (gateway 1.15.1): teshis, BAGLANTI DURUMU DEGIL.
+import "./cihazSaatiTeshisi.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   connectionIsDead,

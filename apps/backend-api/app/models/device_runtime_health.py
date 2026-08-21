@@ -100,6 +100,46 @@ class DeviceRuntimeHealth(Base):
     last_valid_contact_epoch: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_frame_epoch: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # ----- Gateway 1.15.1: CIHAZ RTC SAGLIGI + OTURUM KANITI --------------
+    #
+    # HEPSI OPSIYONEL VE NULLABLE. 1.15.0 gateway'i bu alanlari GONDERMEZ;
+    # o zaman `None` kalirlar ve hicbir karar onlara "varmis gibi" davranmaz.
+    #
+    #: `unknown` | `ok` | `invalid` | `need_time` (sozlesme 1.15.1 bolum 5).
+    #:
+    #: BAGLANTI DURUMUNU ETKILEMEZ. Sahada bir Horstmann'in RTC'si 2066
+    #: yilina kaymisti; cihaz `online` idi, olcum gonderiyordu ve komut
+    #: kabul ediyordu. Etkilenen tek sey CIHAZIN KENDI OLAY DAMGASINA
+    #: duyulan guvendir. `invalid` gorup cihazi kopuk saymak saglikli
+    #: filoyu arizali gosterir.
+    device_clock_status: Mapped[str | None] = mapped_column(String(24), nullable=True)
+
+    #: `cihaz_saati - gateway_saati` (saniye, ISARETLI).
+    #: Pozitif = cihaz ileri, negatif = geri. `0.0` GECERLI bir degerdir
+    #: (tam senkron) ve `None` ile karistirilmamalidir.
+    device_clock_offset_sec: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    #: Cihazin KENDI bildirdigi son zaman damgasi (unix epoch, saniye).
+    last_device_time_epoch: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    #: IIN1.4 (NEED_TIME) bayragi. UC DURUMLU:
+    #:   True  = cihaz saat istiyor
+    #:   False = istemiyor
+    #:   None  = HIC IIN GORULMEDI (ya 1.15.0 gateway ya da hic yanit yok)
+    #: `False`a cevrilmemeli: "istemiyor" ile "bilmiyoruz" ayni sey degil.
+    #: Saat yanlis AMA cihaz saat istemiyorsa durum KENDILIGINDEN DUZELMEZ —
+    #: sahada gorulen tam olarak buydu, o yuzden ayrim onemli.
+    need_time_iin: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    #: Acik DNP3 oturumunun basladigi an (unix epoch, saniye).
+    #: OTURUM KAPALIYKEN `None` — `smart_idle` bir cihazda normal olarak
+    #: `None` gorulur, bu bir hata DEGILDIR.
+    #:
+    #: GOZLEM SINIFI: bu alanin degismesi delta TETIKLEMEZ (sozlesme 1.15.1
+    #: bolum 6). Guncel degeri her zaman periyodik snapshot'ta bulunur.
+    #: "Degismedi -> oturum yok" gibi bir cikarim YAPILMAMALIDIR.
+    session_started_epoch: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     #: SALT TESHIS — durum belirlemez. `ip_probe_status="unreachable"`
     #: gormek NORMALDIR: ICMP saha aglarinda/APN'lerde sikca engellidir ve
     #: Smart bir modem mesru olarak uykudadir.

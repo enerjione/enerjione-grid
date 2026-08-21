@@ -311,7 +311,16 @@ def cihazi_ilerlet(
     cmd: DeviceCommand | None = None
     if niyet.state == BEKLIYOR:
         karar = hazirlik_svc.degerlendir(
-            saglik=saglik, legacy_status=device.communication_status, simdi=simdi
+            saglik=saglik,
+            legacy_status=device.communication_status,
+            simdi=simdi,
+            # Yetenek GATEWAY SURUMUNDEN cozulur; alanin dolu olmasindan
+            # degil. Uyuyan bir 1.15.1 cihazinda `session_started_epoch`
+            # zaten `null`dur ve ikisi ayirt edilemezdi.
+            oturum_kaniti_var=hazirlik_svc.oturum_kaniti_destegi(
+                db,
+                saglik.gateway_code if saglik is not None else device.gateway_code,
+            ),
         )
         niyet.last_readiness_reason = karar.sebep
 

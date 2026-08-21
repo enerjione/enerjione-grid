@@ -148,6 +148,24 @@ UPDATE_PARAM_KEYS = frozenset({"nats_url", "image"})
 # Gerekceler gateway_compose.py basindaki yorumda ve docs/APPLIANCE.md
 # "Gateway compose'u" bolumunde. INSECURE_ALLOW_PLAINTEXT kosullu render
 # edilir (https -> false); bkz. render_compose.
+#: DNP3 saat senkronizasyon proseduru — backend `gateway_compose` ile
+#: BIREBIR AYNI kume ve varsayilan olmali (parite testi kontrol eder).
+TIME_SYNC_DEGERLERI = ("lan", "nonlan", "none")
+TIME_SYNC_VARSAYILAN = "nonlan"
+
+
+def _time_sync_dogrula(deger):
+    """Allowlist disi degeri REDDET; sessizce varsayilana DUSME."""
+    if deger is None:
+        return TIME_SYNC_VARSAYILAN
+    if deger not in TIME_SYNC_DEGERLERI:
+        raise ValueError(
+            "dnp3_time_sync gecersiz: %r (yalnizca %s)"
+            % (deger, ", ".join(TIME_SYNC_DEGERLERI))
+        )
+    return deger
+
+
 COMPOSE_TEMPLATE = """\
 # EnerjiOne DNP3 Gateway — {{GATEWAY_CODE}}
 # Kurulum: docker compose -f e1-gw-{{GATEWAY_CODE_LOWER}}.yml up -d
@@ -202,8 +220,8 @@ services:
       DNP3_EVENT_SCAN_INTERVAL_SEC: "5"
       # opendnp3 IO thread sayisi: 0 = otomatik (min 4).
       DNP3_MANAGER_THREADS: "0"
-      # Outstation saat senkronizasyonu (RTC drift + guc kesintisi sonrasi reset).
-      DNP3_TIME_SYNC: "lan"
+      # Outstation saat senkronizasyonu. Horstmann: nonlan (FC=23 + G50V1).
+      DNP3_TIME_SYNC: "{{DNP3_TIME_SYNC}}"
       GATEWAY_PUBLISH_DNP3_QUALITY: "{{PUBLISH_DNP3_QUALITY}}"
       # Cihaz basina calisma-zamani sagligi (1.15+); gerekce modul basinda.
       DEVICE_HEALTH_PUBLISH_ENABLED: "true"
@@ -996,6 +1014,14 @@ def render_compose(code: str, name: str, params: dict) -> str:
             params["initiating_port_base"], params["initiating_port_count"]
         ),
         "PUBLISH_DNP3_QUALITY": "true" if params.get("publish_dnp3_quality") else "false",
+        # DNP3 saat senkronizasyon proseduru. Backend `gateway_compose` ile
+        # AYNI allowlist ve AYNI varsayilan (`nonlan`): Horstmann profili
+        # FC=23 + G50V1 ilan eder, FC=24 + G50V3 ETMEZ.
+        #
+        # FAIL-CLOSED: tanimadigimiz deger sessizce `lan`a DUSMEZ. 1.15.0'a
+        # kadar gateway boyle davraniyordu ve duzeltmek istedigimiz sey tam
+        # da buydu; ustelik gateway 1.15.1 gecersiz degerde ACILMIYOR.
+        "DNP3_TIME_SYNC": _time_sync_dogrula(params.get("dnp3_time_sync")),
         # Sir yoksa satir HIC uretilmez -> gateway gecis davranisinda kalir.
         "COMMAND_DELIVERY_TOKEN_BLOCK": (
             '      GATEWAY_COMMAND_DELIVERY_TOKEN: "'

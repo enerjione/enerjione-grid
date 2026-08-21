@@ -43,6 +43,7 @@ import {
 import { useMinuteTick } from "../../shared/useMinuteTick";
 import { COMMUNICATION_GRACE_MIN_DEFAULT } from "../../shared/types";
 import type { DeviceRow } from "../../shared/types";
+import { clockGorunum, clockToneClass } from "./deviceClockStatus";
 
 type Props = {
   device: DeviceRow;
@@ -101,6 +102,9 @@ export function DeviceRuntimePanel({ device }: Props) {
   const now = useMinuteTick();
   const state = deviceRuntimeStateOf(device, now);
   const rt = device.runtimeHealth ?? null;
+  // Saat teshisi — saf, test edilebilir bir modulden. Gateway alani
+  // gondermiyorsa (1.15.0) null doner ve blok cizilmez.
+  const saat = clockGorunum(rt);
   const cfg = device.dnp3Extended;
 
   /** Belgelenmis enum ise cevrilir; degilse HAM deger gosterilir.
@@ -279,6 +283,42 @@ export function DeviceRuntimePanel({ device }: Props) {
                 />
                 <Row label={t("deviceRuntime.panel.lastProbe")} value={an(rt.last_probe_epoch)} />
               </ul>
+
+              {/* CIHAZ SAATI — 1.15.1.
+                  Sahada bir Horstmann'in RTC'si 2066 yilina kaymisti ve bu
+                  Grid'de HIC gorunmuyordu: cihaz `online`, olcum gonderiyor,
+                  komut kabul ediyor — ama urettigi her olay damgasi 40 yil
+                  ileri.
+
+                  BAGLANTI DURUMUNU ETKILEMEZ ve o yuzden burada, TESHIS
+                  sutununda duruyor. Gateway bu alani gondermiyorsa (1.15.0)
+                  blok HIC cizilmez: olculmemis bir seyi "bilinmiyor" diye
+                  gostermek de bir iddiadir. */}
+              {saat ? (
+                <div className={`device-clock ${clockToneClass(saat.tone)}`}>
+                  <div className="device-clock-head">
+                    <span className="device-clock-label">{t("deviceDetail.clock.title")}</span>
+                    <span className="device-clock-state">{t(saat.labelKey)}</span>
+                  </div>
+                  {saat.offsetText ? (
+                    <div className="device-clock-row" title={t("deviceDetail.clock.offsetHint")}>
+                      <span>{t("deviceDetail.clock.offset")}</span>
+                      <strong>{saat.offsetText}</strong>
+                    </div>
+                  ) : null}
+                  {/* UC DURUMLU: `null` iken satir HIC cizilmez —
+                      "hic IIN gorulmedi" ile "istemiyor" ayni sey degil. */}
+                  {saat.needTime !== null ? (
+                    <p className="device-clock-flag">
+                      {saat.needTime
+                        ? t("deviceDetail.clock.needTimeFlag")
+                        : t("deviceDetail.clock.noNeedTimeFlag")}
+                    </p>
+                  ) : null}
+                  <p className="device-clock-hint">{t(saat.hintKey)}</p>
+                </div>
+              ) : null}
+
               <p className="device-runtime-diag-note">{t("deviceRuntime.panel.diagnosticsHint")}</p>
             </>
           ) : (

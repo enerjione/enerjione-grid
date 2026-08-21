@@ -4563,6 +4563,22 @@
         "status": "Cihaz Durumu",
         "other": "Diğer"
       }
+    },
+    "clock": {
+      "title": "Cihaz saati",
+      "ok": "Saat doğru",
+      "okHint": "Cihaz zaman damgası gönderdi ve makul aralıkta.",
+      "needTime": "Saat isteniyor",
+      "needTimeHint": "Cihaz saat istiyor (IIN1.4); bir sonraki senkronizasyonda düzelir.",
+      "invalid": "Saat hatalı",
+      "invalidHint": "Cihaz saati kanıtlanabilir şekilde yanlış. Cihaz saat istemiyorsa kendiliğinden düzelmez; olay zaman damgaları güvenilmez.",
+      "unknown": "Saat bilinmiyor",
+      "unknownHint": "Cihaz henüz zaman damgası göndermedi.",
+      "offset": "Fark",
+      "offsetHint": "Cihaz saati eksi gateway saati. Artı değer cihazın ileri olduğunu gösterir.",
+      "needTimeFlag": "Cihaz saat istiyor",
+      "noNeedTimeFlag": "Cihaz saat istemiyor",
+      "notConnectionState": "Saat teşhisi bağlantı durumunu etkilemez."
     }
   },
   "map": {

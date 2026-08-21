@@ -45,6 +45,30 @@ class Gateway(Base):
     publish_dnp3_quality: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+    #: DNP3 outstation SAAT SENKRONIZASYON PROSEDURU (gateway 1.15.1+).
+    #:
+    #: VARSAYILAN `nonlan` VE BU BILINCLI. Horstmann SN 2.0 / Pole Master
+    #: profili FC=23 (DELAY MEASUREMENT) + G50V1'i ILAN EDER; FC=24 ve
+    #: G50V3'u ETMEZ. Gateway'de olculdu (yadnp3 3.2.1.1, gercek
+    #: outstation): `lan` seciliyken gateway cihazin ilan ETMEDIGI bir
+    #: nesneyi yaziyordu — NEED_TIME gelse bile senkronizasyon basarisiz
+    #: oluyor ve saat yanlis kaliyordu. Sahada bir cihazin RTC'si 2066
+    #: yilindaydi. Gerekce: `docs/gateway-contract/horstmann-time-sync-1.15.1.md`.
+    #:
+    #: NEDEN GRID'IN VARSAYILANI, GATEWAY'IN DEGIL: gateway varsayilani
+    #: `lan` olarak KALDI cunku orasi Horstmann olmayan kurulumlara da
+    #: hizmet ediyor. Grid ise Horstmann platformudur — kayitli modellerin
+    #: HEPSI Horstmann (`app/data/device_models.py`). Bu yuzden dogru
+    #: varsayilan burada `nonlan`.
+    #:
+    #: NEDEN MODEL BAZLI OTOMATIK SECIM YOK: bir gateway'e farkli modelde
+    #: cihazlar baglanabilir ve secim GATEWAY basinadir. Cihaz adina/
+    #: profiline bakip prosedur secmek bir string heuristic'i olurdu.
+    #: Deger ACIK, allowlist'li ve degistirilebilir.
+    dnp3_time_sync: Mapped[str] = mapped_column(
+        String(12), default="nonlan", server_default="nonlan", nullable=False
+    )
+
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 

@@ -54,6 +54,7 @@ from app.services.gateway_update_service import GatewayUpdateError
 from app.services.event_service import record_event
 from app.services.gateway_agent_service import GatewayAgentError
 from app.services.gateway_compose import (
+    TIME_SYNC_VARSAYILAN,
     ComposeRenderError,
     ComposeRenderInput,
     derive_nats_url,
@@ -734,6 +735,18 @@ def _build_render_input(
         # Indirilen compose ile "bu cihaza kur" akisi AYNI degeri tasimali;
         # aksi halde ayni gateway iki farkli davranisla kurulurdu.
         publish_dnp3_quality=bool(getattr(gateway, "publish_dnp3_quality", False)),
+        # DNP3 saat senkronizasyon proseduru. Gateway BASINA ayar: bir
+        # gateway'e farkli modelde cihazlar baglanabilir, dolayisiyla cihaz
+        # adina/profiline bakip prosedur secmek bir string heuristic'i
+        # olurdu. Deger ACIK, allowlist'li ve `gateways` tablosunda.
+        #
+        # `getattr` savunmasi: cok eski bir kayit/restore senaryosunda alan
+        # bos gelirse render katmani zaten allowlist ile REDDEDER; sessizce
+        # yanlis prosedure gecmez.
+        dnp3_time_sync=(
+            getattr(gateway, "dnp3_time_sync", None)
+            or TIME_SYNC_VARSAYILAN
+        ),
         # F5 komut duzlemi sirri: DB'de NULL ise env HIC uretilmez ve
         # gateway gecis davranisini surdurur. DOLU ise uretilen artefakt
         # (compose/.env) sirri tasir -- yoksa backend strict moda gecmis

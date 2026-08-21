@@ -143,8 +143,8 @@ services:
       DNP3_EVENT_SCAN_INTERVAL_SEC: "5"
       # opendnp3 IO thread sayisi: 0 = otomatik (min 4).
       DNP3_MANAGER_THREADS: "0"
-      # Outstation saat senkronizasyonu (RTC drift + guc kesintisi sonrasi reset).
-      DNP3_TIME_SYNC: "lan"
+      # Outstation saat senkronizasyonu. Horstmann: nonlan (FC=23 + G50V1).
+      DNP3_TIME_SYNC: "{{DNP3_TIME_SYNC}}"
       GATEWAY_PUBLISH_DNP3_QUALITY: "{{PUBLISH_DNP3_QUALITY}}"
       # Cihaz basina calisma-zamani sagligi (1.15+); gerekce modul basinda.
       DEVICE_HEALTH_PUBLISH_ENABLED: "true"
@@ -223,7 +223,7 @@ DNP3_TCP_PORT=20000
 DNP3_EVENT_BASELINE_INTERVAL_SEC=30
 DNP3_EVENT_SCAN_INTERVAL_SEC=5
 DNP3_MANAGER_THREADS=0
-DNP3_TIME_SYNC=lan
+DNP3_TIME_SYNC={{DNP3_TIME_SYNC}}
 GATEWAY_PUBLISH_DNP3_QUALITY={{PUBLISH_DNP3_QUALITY}}
 
 # Cihaz basina calisma-zamani sagligi (gateway 1.15+). STANDART VE HEP ACIK;
@@ -251,6 +251,20 @@ def generate_command_delivery_token() -> str:
     import secrets
 
     return secrets.token_urlsafe(32)
+
+
+#: DNP3 saat senkronizasyon proseduru — gateway 1.15.1 sozlesmesindeki
+#: TAM kume. Gateway gecersiz degerde ACILMAZ (fail-closed), o yuzden Grid
+#: de gecersiz deger URETMEMELI: burada reddetmek, sahada acilmayan bir
+#: konteynerden cok daha erken ve anlasilir bir hata.
+#:
+#: `off` / `disabled` takma adlari gateway tarafinda `none`a normalize
+#: edilir; Grid onlari URETMEZ, yalnizca kanonik uc degeri yazar.
+TIME_SYNC_DEGERLERI: tuple[str, ...] = ("lan", "nonlan", "none")
+
+#: Horstmann icin dogru deger. Gerekce:
+#: `docs/gateway-contract/horstmann-time-sync-1.15.1.md`
+TIME_SYNC_VARSAYILAN = "nonlan"
 
 
 @dataclass(frozen=True)
@@ -291,12 +305,31 @@ class ComposeRenderInput:
     #: sablonda da her zaman EXPLICIT render edilir.
     install_mode: Literal["local", "remote"] = "remote"
 
+    #: DNP3 outstation saat senkronizasyon proseduru: `lan` | `nonlan` | `none`.
+    #:
+    #: VARSAYILAN `nonlan`: Horstmann profili FC=23 + G50V1 ILAN EDER,
+    #: FC=24 + G50V3 ETMEZ. `lan` seciliyken gateway cihazin ilan etmedigi
+    #: bir nesneyi yaziyordu ve saat senkronizasyonu sessizce basarisiz
+    #: oluyordu (sahada bir cihazin RTC'si 2066 yilindaydi).
+    #:
+    #: Gateway'in KENDI varsayilani `lan` olarak kaldi — orasi Horstmann
+    #: olmayan kurulumlara da hizmet ediyor. Grid ise Horstmann
+    #: platformudur, o yuzden dogru varsayilan burada farkli.
+    dnp3_time_sync: str = TIME_SYNC_VARSAYILAN
+
 
 class ComposeRenderError(ValueError):
     pass
 
 
 def _validate(args: ComposeRenderInput) -> None:
+    if args.dnp3_time_sync not in TIME_SYNC_DEGERLERI:
+        # FAIL-CLOSED. Gateway gecersiz degerde ACILMAZ; sessizce `lan`a
+        # dusmek (1.15.0 davranisi) tam da duzeltmek istedigimiz sey.
+        raise ComposeRenderError(
+            f"dnp3_time_sync gecersiz: {args.dnp3_time_sync!r} "
+            f"(yalnizca {', '.join(TIME_SYNC_DEGERLERI)})"
+        )
     if args.install_mode not in ("local", "remote"):
         raise ComposeRenderError(
             f"install_mode gecersiz: {args.install_mode!r} (yalnizca 'local' veya 'remote')"
@@ -396,6 +429,7 @@ def _replacements(args: ComposeRenderInput) -> dict[str, str]:
         "INSTALL_MODE": args.install_mode,
         "INITIATING_PORTS_BLOCK": _build_initiating_ports_block(args),
         "PUBLISH_DNP3_QUALITY": "true" if args.publish_dnp3_quality else "false",
+        "DNP3_TIME_SYNC": args.dnp3_time_sync,
         "COMMAND_DELIVERY_TOKEN_BLOCK": _command_delivery_block(args),
         "COMMAND_DELIVERY_TOKEN_ENV": _command_delivery_env(args),
     }

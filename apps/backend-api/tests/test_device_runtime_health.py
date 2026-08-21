@@ -1004,3 +1004,165 @@ def test_report_late_TEK_BASINA_olay_uretmez(db, gateway):
         _zarf(devices=[_cihaz_kaydi("SN2-001", connection_state="smart_idle", report_late=True)], sequence=2),
     )
     assert _olaylar(db) == []
+
+
+# ===========================================================================
+# GATEWAY 1.15.1 — CIHAZ RTC SAGLIGI + OTURUM KANITI
+# ===========================================================================
+#
+# Sozlesme: `docs/gateway-contract/device-health-api-1.15.1.md`
+# (branch fix/health-delta-clock-observability-1.15.1, commit 34d9ee44).
+#
+# SEMA ADI DEGISMEDI. Bes alan EKLENDI, hepsi opsiyonel. Sahada hala 1.15.0
+# kosan gateway'ler var ve onlarin payload'i AYNEN calismaya devam etmeli.
+
+_YENI_ALANLAR = (
+    "device_clock_status",
+    "device_clock_offset_sec",
+    "last_device_time_epoch",
+    "need_time_iin",
+    "session_started_epoch",
+)
+
+
+def test_1150_PAYLOADI_AYNEN_CALISIR(db, gateway):
+    """A) Eski gateway yeni alanlari GONDERMEZ — istek gecmeli."""
+    _post(db, _zarf(devices=[_cihaz_kaydi("D-1")]))
+    satir = _satir(db, "D-1")
+    assert satir is not None
+    assert satir.connection_state == "smart_idle"
+    for ad in _YENI_ALANLAR:
+        assert getattr(satir, ad) is None, f"{ad} uydurulmus deger almis"
+
+
+def test_1151_BES_ALAN_DOGRU_SAKLANIR(db, gateway):
+    """B) Yeni alanlarin hepsi, sozlesmedeki tipleriyle yazilir."""
+    _post(
+        db,
+        _zarf(devices=[_cihaz_kaydi(
+            "D-1",
+            connection_state="online",
+            connected=True,
+            reachable=True,
+            device_clock_status="ok",
+            device_clock_offset_sec=-0.4,
+            last_device_time_epoch=1755600000.0,
+            need_time_iin=False,
+            session_started_epoch=1755599000.0,
+        )]),
+    )
+    s = _satir(db, "D-1")
+    assert s.device_clock_status == "ok"
+    assert s.device_clock_offset_sec == pytest.approx(-0.4)
+    assert s.last_device_time_epoch == pytest.approx(1755600000.0)
+    assert s.need_time_iin is False
+    assert s.session_started_epoch == pytest.approx(1755599000.0)
+
+
+def test_1151_GELECEKTEKI_ALAN_YOK_SAYILIR(db, gateway):
+    """C) Ileri uyumluluk: tanimadigimiz alan istegi DUSURMEZ."""
+    _post(
+        db,
+        _zarf(devices=[_cihaz_kaydi(
+            "D-1", device_clock_status="ok", gelecekteki_saat_alani={"x": 1}
+        )]),
+    )
+    s = _satir(db, "D-1")
+    assert s is not None
+    assert s.device_clock_status == "ok"
+    assert not hasattr(s, "gelecekteki_saat_alani")
+
+
+def test_1151_BOZUK_SAAT_BAGLANTI_DURUMUNU_DEGISTIRMEZ(db, gateway):
+    """D) Saati bozuk cihaz `online` KALIR.
+
+    Sahada bir Horstmann'in RTC'si 2066'ya kaymisti; cihaz olcum
+    gondermeye devam ediyor ve komut kabul ediyordu. `invalid` gorup
+    cihazi kopuk saymak saglikli filoyu arizali gosterir.
+    """
+    _post(
+        db,
+        _zarf(devices=[_cihaz_kaydi(
+            "D-1",
+            connection_state="online",
+            connected=True,
+            reachable=True,
+            device_clock_status="invalid",
+            device_clock_offset_sec=1_262_304_000.0,
+            need_time_iin=False,
+        )]),
+    )
+    s = _satir(db, "D-1")
+    assert s.connection_state == "online", "saat durumu baglanti durumunu ezmis"
+    assert s.reachable is True
+    assert s.device_clock_status == "invalid"
+
+
+def test_1151_OTURUM_NULL_ise_NULL_saklanir(db, gateway):
+    """E) `smart_idle` cihazda oturum kapalidir; `null` NORMALDIR."""
+    _post(
+        db,
+        _zarf(devices=[_cihaz_kaydi("D-1", session_started_epoch=None)]),
+    )
+    assert _satir(db, "D-1").session_started_epoch is None
+
+
+def test_1151_need_time_iin_UC_DURUMLU(db, gateway):
+    """F) `None` ile `False` AYNI SEY DEGILDIR.
+
+    `False` = "cihaz saat istemiyor". `None` = "hic IIN gorulmedi".
+    Ayrim onemli: saati yanlis AMA saat istemeyen cihaz kendiliginden
+    DUZELMEZ — sahada gorulen tam olarak buydu.
+    """
+    _post(db, _zarf(devices=[_cihaz_kaydi("D-1", need_time_iin=False)]))
+    assert _satir(db, "D-1").need_time_iin is False
+
+    _post(db, _zarf(sequence=2, devices=[_cihaz_kaydi("D-2")]))
+    assert _satir(db, "D-2").need_time_iin is None, (
+        "eksik IIN `False`a cevrilmis — 1.15.0 filosu 'saat istemiyor' gorunur"
+    )
+
+
+def test_1151_EPOCH_SIFIRA_CEVRILMEZ(db, gateway):
+    """F) `null` epoch "hic olmadi" demektir; 0'a cevirmek 1970 uretir."""
+    _post(
+        db,
+        _zarf(devices=[_cihaz_kaydi(
+            "D-1", last_device_time_epoch=None, session_started_epoch=None
+        )]),
+    )
+    s = _satir(db, "D-1")
+    assert s.last_device_time_epoch is None
+    assert s.session_started_epoch is None
+
+
+def test_1151_OFFSET_SIFIRI_NULL_SAYILMAZ(db, gateway):
+    """`device_clock_offset_sec = 0.0` TAM SENKRON demektir, "bilinmiyor" degil.
+
+    Epoch alanlarindaki "0 gelmez" gerekcesi bu OLCU alani icin GECERSIZ.
+    """
+    _post(
+        db,
+        _zarf(devices=[_cihaz_kaydi("D-1", device_clock_offset_sec=0.0)]),
+    )
+    s = _satir(db, "D-1")
+    assert s.device_clock_offset_sec == 0.0
+    assert s.device_clock_offset_sec is not None
+
+
+def test_1151_YETENEK_MATRISI(db, gateway):
+    """Yetenek `device_runtime_health_transport`tan AYRI olmali.
+
+    1.15.0 gateway'i saglik YAYINLAR ama bu bes alani GONDERMEZ. Ayni
+    satiri paylassalardi, calisan bir 1.15.0 kurulumu "uyumsuz" gorunur.
+    """
+    from app.services import gateway_compatibility as uyum
+
+    assert uyum.FEATURE_MIN_VERSION["device_clock_observability"] == "1.15.1"
+    assert uyum.supports("device_clock_observability", "1.15.0") is False
+    assert uyum.supports("device_clock_observability", "1.15.1") is True
+    assert uyum.supports("device_runtime_health_transport", "1.15.0") is True
+    assert (
+        uyum.FEATURE_MIN_VERSION["device_clock_observability"]
+        != uyum.FEATURE_MIN_VERSION["device_runtime_health_transport"]
+    )

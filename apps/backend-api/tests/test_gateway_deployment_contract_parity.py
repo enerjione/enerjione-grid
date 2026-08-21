@@ -78,6 +78,31 @@ def _sozlesme() -> dict:
 
 SOZLESME = _sozlesme()
 VARSAYILANLAR: dict[str, str] = SOZLESME["environment_defaults"]
+
+#: GRID'IN BILINCLI SAPMALARI — vendor edilmis sozlesmeden AYRILAN degerler.
+#:
+#: Sozlesme JSON'u gateway'in KENDI belgesidir ve TAHRIF EDILMEZ: onu
+#: Grid'in urettigi degere gore duzenlemek, karsilastirmayi anlamsiz kilar
+#: (test o zaman yalnizca kendini dogrular). Sapma BURADA, GEREKCESIYLE
+#: BEYAN EDILIR — tipki `gateway_compatibility.KNOWN_VERSION_DRIFT` gibi.
+#:
+#: Her sapma icin: (Grid'in urettigi deger, neden).
+BILINCLI_SAPMALAR: dict[str, tuple[str, str]] = {
+    "DNP3_TIME_SYNC": (
+        "nonlan",
+        "Horstmann SN 2.0 / Pole Master profili FC=23 (DELAY MEASUREMENT) + "
+        "G50V1'i ILAN EDER; FC=24 ve G50V3'u ETMEZ. Gateway 1.15.1 lab "
+        "olcumu (yadnp3 3.2.1.1, gercek outstation): `lan` seciliyken "
+        "gateway cihazin ilan ETMEDIGI bir nesneyi yaziyor, NEED_TIME "
+        "asserted olsa BILE senkronizasyon basarisiz oluyor ve saat yanlis "
+        "kaliyor — sahada bir cihazin RTC'si 2066 yilindaydi. "
+        "Gateway varsayilani `lan` olarak KALDI cunku orasi Horstmann "
+        "olmayan kurulumlara da hizmet ediyor; Grid ise Horstmann "
+        "platformudur (kayitli modellerin HEPSI Horstmann, bkz. "
+        "app/data/device_models.py). Gerekce: "
+        "docs/gateway-contract/horstmann-time-sync-1.15.1.md"
+    ),
+}
 YASAKLI: dict[str, str] = SOZLESME["forbidden_environment"]
 RUNTIME: dict = SOZLESME["docker_runtime"]
 
@@ -258,12 +283,22 @@ def test_T01b_her_varsayilanin_gerekcesi_var():
 @pytest.mark.parametrize("anahtar", sorted(VARSAYILANLAR))
 def test_T04_T05_uretim_yollari_sozlesme_degerini_tasiyor(yol: str, anahtar: str):
     env = _yol_env(yol)
-    beklenen = VARSAYILANLAR[anahtar]
+    sapma = BILINCLI_SAPMALAR.get(anahtar)
+    beklenen = sapma[0] if sapma else VARSAYILANLAR[anahtar]
     assert anahtar in env, (
         f"`{yol}` ciktisinda `{anahtar}` YOK. Sozlesme bunu zorunlu kiliyor; "
         f"eksik olmasi gateway'in kod varsayilanina dusmesi demektir "
         f"(beklenen {beklenen!r})."
     )
+    if sapma:
+        # Sapma BEYAN EDILMIS. Yine de UC YOLUN DA AYNI degeri tasidigi
+        # dogrulanir: sapmanin yalnizca bir yolda uygulanmasi, ayni
+        # gateway'in iki farkli davranisla kurulmasi demek olurdu.
+        assert env[anahtar] == beklenen, (
+            f"`{yol}` ciktisinda `{anahtar}` = {env[anahtar]!r}; Grid'in "
+            f"BEYAN EDILMIS sapmasi {beklenen!r} olmali. Gerekce: {sapma[1]}"
+        )
+        return
     assert env[anahtar] == beklenen, (
         f"`{yol}` ciktisinda `{anahtar}` = {env[anahtar]!r}, sozlesme {beklenen!r} diyor"
     )
@@ -635,4 +670,32 @@ def test_ci_workflow_ayni_snapshota_bakiyor():
         f"CI `{m.group(1)}` snapshot'ina bakiyor ama parity testi "
         f"`{SOZLESME_YOLU.relative_to(KOK).as_posix()}` kullaniyor. Ikisi ayni "
         f"olmali; yoksa CI yanlis surumu dogrular."
+    )
+
+
+def test_BILINCLI_SAPMA_gerekcesiz_olamaz():
+    """Sapma beyani bir KACIS DELIGI degil, KAYIT olmali.
+
+    Gerekcesiz bir sapma, testi "her degeri kabul et" haline getirirdi.
+    """
+    for anahtar, (deger, neden) in BILINCLI_SAPMALAR.items():
+        assert anahtar in VARSAYILANLAR, (
+            f"{anahtar} sozlesmede yok — sapma beyanina gerek yok, satiri kaldirin"
+        )
+        assert deger != VARSAYILANLAR[anahtar], (
+            f"{anahtar} sozlesmeyle AYNI ({deger!r}); sapma degil, satiri kaldirin"
+        )
+        assert len(neden) > 120, f"{anahtar} sapmasinin gerekcesi cok kisa"
+
+
+def test_TIME_SYNC_sapmasi_UC_YOLDA_DA_AYNI():
+    """`nonlan` yalnizca bir render yolunda uygulanmis olmamali.
+
+    Ayni gateway'in indirilen compose ile ajan uzerinden kurulan compose'u
+    farkli prosedur tasirsa, saha "neden bazi cihazlarda saat duzeliyor
+    bazilarinda duzelmiyor" sorusuyla bas basa kalir.
+    """
+    degerler = {yol: _yol_env(yol).get("DNP3_TIME_SYNC") for yol in YOLLAR}
+    assert set(degerler.values()) == {"nonlan"}, (
+        f"render yollari ayrisiyor: {degerler}"
     )

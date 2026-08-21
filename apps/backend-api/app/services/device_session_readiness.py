@@ -44,20 +44,36 @@ Horstmann'in `communication_status` degeri henuz `online` kalmis olabilir
 tam da onlemeye calistigimiz sey. Saglik satiri "uykuda" diyorsa karar
 UYKUDADIR, eski alan ne derse desin.
 
-TAHMIN YOK
-----------
-`session_started_epoch` bu kod tabaninda YOKTUR (gateway sozlesmesi PR #33
-/ 1.15.0 onu tanimlamaz; repo genelinde ve git gecmisinde hicbir izi yok).
-Oturumun BASLANGICINI bilmedigimiz icin "son gecerli temas SU ANKI
-oturuma ait" iddiasini kanitlayamayiz. Bu yuzden:
+IKI MOD — YETENEGE GORE, VERIYE GORE DEGIL
+------------------------------------------
+Gateway 1.15.1 `session_started_epoch` ekledi: ACIK DNP3 oturumunun
+basladigi an, oturum kapaliyken `null`. Bu, "son gecerli temas SU ANKI
+oturuma ait mi" sorusunu nihayet KANITLANABILIR yapiyor.
 
-  * O terim YOK SAYILMAZ, YERINE UYDURULMAZ — sadece kurulamaz.
-  * Yerine `connection_state == "online"` konur: sozlesme bolum 5 acikca
-    "Baglanti karari YALNIZCA `connection_state`indir" der, yani oturumun
-    SU AN canli oldugunun otoritesi odur.
-  * Alan geldiginde predicate'e EK bir AND terimi olarak girer
-    (`last_valid_contact_epoch >= session_started_epoch`); burasi o gun
-    tek satirla guclendirilecek sekilde yazildi.
+Ama alan varligina BAKARAK mod secilemez. `session_started_epoch is None`
+iki AYRI seyi birden anlatir:
+  * gateway 1.15.0 — alani hic gondermiyor,
+  * gateway 1.15.1 — oturum KAPALI (uyuyan cihazda NORMAL).
+Ikisini ayirt etmeden "null ise hazir degil" demek 1.15.0 sahalarinin
+TAMAMINDA yapilandirma gonderimini kalici olarak durdururdu.
+
+Bu yuzden mod GATEWAY SURUMUNDEN gelir (`device_clock_observability`
+yetenegi, `gateway_compatibility`):
+
+  KATI (yetenek VAR — 1.15.1+)
+      online + reachable + son temas VAR + oturum VAR
+      + son temas >= oturum baslangici + gozlem taze
+    Yani temasin SU ANKI oturuma ait oldugu KANITLANIR.
+
+  ESKI (yetenek YOK — 1.15.0 ve oncesi)
+      online + reachable + son temas VAR + gozlem taze
+    Oturum baslangici bilinmedigi icin o terim KURULAMAZ. Uydurulmaz da:
+    eksik terim sessizce "gecti" sayilmaz, mod ACIKCA isaretlenir ve
+    `Hazirlik.kaynak` degeri bunu tasir — arayuz kanit seviyesini
+    yuksek gostermesin diye.
+
+Yetenek BILINMIYORSA (surum hic bildirilmemis) KATI moda dusulur: emin
+olmadigimiz yerde daha az sey iddia etmek dogru taraftir.
 
 `last_valid_contact_epoch` uzerine TAZELIK PENCERESI KOYULMAZ. Bunu
 denemek cazip ama YANLIS olurdu: yalnizca istenmeyen rapor gonderen
@@ -110,9 +126,19 @@ ESKI_KANIT_CEVRIMDISI = "eski_kanit_cevrimdisi"
 #: Cihaz hazir ama son denemeden bu yana YENI bir gozlem gelmedi. Ayni
 #: gozlemle ikinci komut uretmek, kor tekrar dongusu olurdu.
 YENI_KANIT_BEKLENIYOR = "yeni_kanit_bekleniyor"
+#: Oturum kaniti yok: gateway 1.15.1 oldugu halde `session_started_epoch`
+#: gelmemis. Cihaz `online` gorunse bile acik bir oturum KANITLANAMIYOR.
+OTURUM_KANITI_YOK = "oturum_kaniti_yok"
+#: Son gecerli temas, ACIK OTURUMDAN ONCEYE ait. Yani bu oturumda cihazla
+#: henuz gercek bir DNP3 alisverisi olmamis.
+TEMAS_ONCEKI_OTURUMDAN = "temas_onceki_oturumdan"
 
 #: Kanit sinifi — hangi delile dayanildigi denetimde gorunur olmali.
+#: 1.15.1 oturum kaniti ile dogrulanmis — EN YUKSEK kanit sinifi.
 KAYNAK_SOZLESME = "runtime_health"
+#: 1.15.0: saglik var ama oturum kaniti YOK. Arayuz bunu yuksek kanit
+#: gibi gostermemeli.
+KAYNAK_SOZLESME_ESKI = "runtime_health_legacy"
 KAYNAK_ESKI = "legacy"
 KAYNAK_YOK = "yok"
 
@@ -162,11 +188,21 @@ def degerlendir(
     saglik: DeviceRuntimeHealth | None,
     legacy_status: CommunicationStatus | str | None,
     simdi: datetime,
+    oturum_kaniti_var: bool = True,
 ) -> Hazirlik:
     """Cihaz SU AN taze bir DNP3 oturumuna sahip mi ve komut alabilir mi?
 
     Saf fonksiyon: DB'ye gitmez, zamani disaridan alir. Boylece her kenar
     durumu tek tek test edilebilir.
+
+    :param oturum_kaniti_var: gateway `session_started_epoch` gonderiyor mu
+        (`device_clock_observability` yetenegi, 1.15.1+). Cagiran taraf bunu
+        GATEWAY SURUMUNDEN cozer — alanin dolu olup olmamasindan DEGIL:
+        uyuyan bir 1.15.1 cihazinda alan zaten `null`dur.
+
+        Varsayilan `True` = KATI mod. Emin olmadigimiz yerde daha az sey
+        iddia etmek dogru taraftir; cagiran taraf eski gateway'i ACIKCA
+        bildirmelidir.
     """
     # --- 1) SOZLESME KANITI — varsa TEK belirleyici ------------------------
     if saglik is not None:
@@ -189,19 +225,37 @@ def degerlendir(
             # degil, sozlesmenin kendi ifadesidir.
             return Hazirlik(False, ERISILEMEZ, KAYNAK_SOZLESME, durum)
 
+        # Kanit sinifi: oturum terimi kurulabiliyorsa YUKSEK, degilse eski.
+        kaynak = KAYNAK_SOZLESME if oturum_kaniti_var else KAYNAK_SOZLESME_ESKI
+
         if saglik.last_valid_contact_epoch is None:
             # Bu cihazla HIC gercek DNP3 temasi olmamis. `online` gorunse
             # bile (or. TCP acik, DNP3 el sikismasi yok) komut calistirmak
             # icin kanit yok.
-            return Hazirlik(False, TEMAS_YOK, KAYNAK_SOZLESME, durum)
+            return Hazirlik(False, TEMAS_YOK, kaynak, durum)
 
-        # NOT: `session_started_epoch` gelirse buraya TEK bir kontrol
-        # eklenecek:
-        #     if saglik.session_started_epoch is not None and (
-        #         saglik.last_valid_contact_epoch < saglik.session_started_epoch
-        #     ):
-        #         return Hazirlik(False, TEMAS_ESKI_OTURUM, KAYNAK_SOZLESME, durum)
-        # Alan YOKKEN bu kontrol kurulamaz; uydurulmaz da.
+        if not oturum_kaniti_var:
+            # ESKI MOD (1.15.0). Oturum baslangici BILINMIYOR, dolayisiyla
+            # "bu temas su anki oturuma ait" iddiasi KURULAMAZ. Uydurulmaz:
+            # eksik terim sessizce gecmis sayilmaz, kanit sinifi dusuk
+            # isaretlenir ve arayuz bunu yuksek kanit gibi gostermez.
+            return Hazirlik(True, HAZIR, KAYNAK_SOZLESME_ESKI, durum)
+
+        # --- KATI MOD (1.15.1+) --------------------------------------------
+        if saglik.session_started_epoch is None:
+            # Cihaz `online` ama ACIK OTURUM KANITLANAMIYOR. 1.15.1'de acik
+            # oturumda bu alan DOLU olmalidir; bos gelmesi ya oturumun
+            # kapandigini ya da gateway'in henuz bildirmedigini gosterir.
+            # Ikisinde de komut uretmek icin yeterli kanit yok.
+            return Hazirlik(False, OTURUM_KANITI_YOK, KAYNAK_SOZLESME, durum)
+
+        if saglik.last_valid_contact_epoch < saglik.session_started_epoch:
+            # Son gecerli temas, ACIK OTURUMDAN ONCEYE ait: TCP kalkmis ama
+            # bu oturumda henuz gercek bir DNP3 alisverisi olmamis. Onceki
+            # oturumun temasina bakip komut uretmek, tam da bu terimin
+            # engellemek icin var oldugu hata.
+            return Hazirlik(False, TEMAS_ONCEKI_OTURUMDAN, KAYNAK_SOZLESME, durum)
+
         return Hazirlik(True, HAZIR, KAYNAK_SOZLESME, durum)
 
     # --- 2) ESKI KANIT — yalnizca saglik satiri HIC YOKKEN -----------------
@@ -224,6 +278,27 @@ def degerlendir(
     return Hazirlik(False, YOK_KANIT, KAYNAK_YOK, None)
 
 
+def oturum_kaniti_destegi(db: Session, gateway_code: str | None) -> bool:
+    """Bu gateway `session_started_epoch` gonderiyor mu? (1.15.1+)
+
+    Karar GATEWAY SURUMUNDEN verilir, alanin dolu olmasindan DEGIL: uyuyan
+    bir 1.15.1 cihazinda alan zaten `null`dur ve ikisi ayirt edilemezdi.
+
+    Surum BILINMIYORSA `True` (kati mod) doner. Emin olmadigimiz yerde daha
+    az sey iddia etmek dogru taraftir: yanlislikla kati moda dusmek en fazla
+    bir yapilandirmayi bekletir, yanlislikla eski moda dusmek ise uyuyan bir
+    cihaza komut uretmeye calisabilir.
+    """
+    if not gateway_code:
+        return True
+    from app.services import gateway_compatibility, gateway_update_service
+
+    surum = gateway_update_service._health_version(db, gateway_code)
+    # `supports` UC DURUMLU: True/False/None (surum cozulemedi).
+    # `is False` — yani YALNIZCA kesin olarak desteklemiyorsa eski mod.
+    return gateway_compatibility.supports("device_clock_observability", surum) is not False
+
+
 def cihaz_icin(db: Session, device: Device, *, simdi: datetime) -> Hazirlik:
     """`degerlendir` icin saglik satirini cekip karari doner.
 
@@ -233,7 +308,12 @@ def cihaz_icin(db: Session, device: Device, *, simdi: datetime) -> Hazirlik:
     """
     saglik = db.get(DeviceRuntimeHealth, device.code)
     return degerlendir(
-        saglik=saglik, legacy_status=device.communication_status, simdi=simdi
+        saglik=saglik,
+        legacy_status=device.communication_status,
+        simdi=simdi,
+        oturum_kaniti_var=oturum_kaniti_destegi(
+            db, saglik.gateway_code if saglik is not None else device.gateway_code
+        ),
     )
 
 
@@ -245,9 +325,12 @@ __all__ = [
     "Hazirlik",
     "KAYNAK_ESKI",
     "KAYNAK_SOZLESME",
+    "KAYNAK_SOZLESME_ESKI",
     "KAYNAK_YOK",
     "RUNTIME_STALE_AFTER_SEC",
     "SNAPSHOT_INTERVAL_SEC",
+    "OTURUM_KANITI_YOK",
+    "TEMAS_ONCEKI_OTURUMDAN",
     "TEMAS_YOK",
     "UYKUDA",
     "YENI_KANIT_BEKLENIYOR",
@@ -255,5 +338,6 @@ __all__ = [
     "cihaz_icin",
     "degerlendir",
     "gozlem_bayat",
+    "oturum_kaniti_destegi",
     "utc",
 ]

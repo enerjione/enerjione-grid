@@ -126,7 +126,14 @@ def _niyet_ac(db, no: int = 1, icerik: bytes = ICERIK, an: datetime = AN):  # no
     )
 
 
-def _saglik(db, *, durum: str, reachable: bool, temas: float | None = 1.0,  # noqa: ANN001
+#: Oturum baslangici ve son temas — VARSAYILAN olarak temas oturumdan
+#: SONRADIR (yani "bu oturumda gercek DNP3 alisverisi oldu").
+OTURUM_T = 1_000_000.0
+TEMAS_T = 1_000_060.0
+
+
+def _saglik(db, *, durum: str, reachable: bool, temas: float | None = TEMAS_T,  # noqa: ANN001
+           oturum: float | None = OTURUM_T,
            gozlem: datetime = AN) -> DeviceRuntimeHealth:
     satir = db.get(DeviceRuntimeHealth, KOD)
     if satir is None:
@@ -137,9 +144,23 @@ def _saglik(db, *, durum: str, reachable: bool, temas: float | None = 1.0,  # no
     satir.reachable = reachable
     satir.connected = reachable
     satir.last_valid_contact_epoch = temas
+    # 1.15.1: oturum kaniti. Uyuyan cihazda gateway bunu `None` gonderir.
+    satir.session_started_epoch = None if durum != "online" else oturum
     satir.updated_at = gozlem
     db.flush()
     return satir
+
+
+def _gw_surum(db, surum: str | None) -> None:  # noqa: ANN001
+    """Gateway'in bildirdigi surum — yetenek kapisi bunu okur."""
+    from app.models.gateway_health import GatewayHealth
+
+    row = db.get(GatewayHealth, "GW-1")
+    if row is None:
+        row = GatewayHealth(gateway_code="GW-1", reported_at=AN)
+        db.add(row)
+    row.gateway_version = surum
+    db.flush()
 
 
 def _ilerlet(db, an: datetime = AN):  # noqa: ANN001
@@ -678,7 +699,7 @@ def test_N3_BAYAT_gozlem_hazir_saymaz(db):
 
 
 def test_O_online_reachable_temas_var_ISE_hazir(db):
-    _saglik(db, durum="online", reachable=True, temas=1.0)
+    _saglik(db, durum="online", reachable=True)
     k = hazir.degerlendir(
         saglik=db.get(DeviceRuntimeHealth, KOD), legacy_status=None, simdi=AN
     )
@@ -727,12 +748,14 @@ def test_P2_bos_saglik_satiri_COKMEZ(db):
     assert k.hazir is False
 
 
-def test_P3_session_started_epoch_UYDURULMADI():
-    """Alan sozlesmede YOK; predicate onu TAHMIN ETMEMELI.
+def test_P3_oturum_kaniti_VARLIGINDAN_DEGIL_SURUMDEN_cozulur():
+    """Mod secimi alanin DOLU olmasina bakarak yapilmamali.
 
-    Gateway 1.15.1 ile gelirse guclendirme terimi olarak eklenecek; o gune
-    kadar kurulamayan bir sarti "varmis gibi" saymak, uyuyan cihaza komut
-    gonderilmesine yol acardi.
+    `session_started_epoch is None` IKI ayri seyi birden anlatir:
+      * gateway 1.15.0 — alani hic gondermiyor,
+      * gateway 1.15.1 — oturum KAPALI (uyuyan cihazda normal).
+    Ikisini ayirt etmeden "null ise hazir degil" demek, 1.15.0 sahalarinin
+    TAMAMINDA yapilandirma gonderimini kalici olarak durdururdu.
     """
     import pathlib
 
@@ -740,11 +763,34 @@ def test_P3_session_started_epoch_UYDURULMADI():
         pathlib.Path(__file__).resolve().parents[1]
         / "app/services/device_session_readiness.py"
     ).read_text(encoding="utf-8")
-    # Yalnizca YORUMDA gecmeli, calisan kodda DEGIL.
-    kod = "\n".join(
-        s for s in kaynak.splitlines() if not s.strip().startswith("#")
+    assert "def oturum_kaniti_destegi(" in kaynak, "yetenek cozucusu yok"
+    assert "device_clock_observability" in kaynak, "yetenek surumden cozulmuyor"
+    # Cozucu SURUM okumali, saglik satirini DEGIL.
+    i = kaynak.index("def oturum_kaniti_destegi(")
+    tam = kaynak[i:kaynak.index("def cihaz_icin(", i)]
+    # DOCSTRING DISLANIR: aciklama metninde alan adinin gecmesi normaldir;
+    # aranan sey CALISAN KODDA kullanilip kullanilmadigi.
+    parcalar = tam.split('"""')
+    govde = parcalar[0] + ("".join(parcalar[2:]) if len(parcalar) > 2 else "")
+    assert "_health_version" in govde, "surum okunmuyor"
+    assert "session_started_epoch" not in govde, (
+        "yetenek karari alanin doluluguna bakiyor — uyuyan 1.15.1 cihazi "
+        "eski gateway sanilir"
     )
-    assert "saglik.session_started_epoch" not in kod
+
+
+def test_P4_bilinmeyen_surumde_KATI_moda_dusulur(db):
+    """Emin olmadigimiz yerde daha az sey iddia etmek dogru taraftir.
+
+    Yanlislikla kati moda dusmek en fazla bir yapilandirmayi bekletir;
+    yanlislikla eski moda dusmek uyuyan cihaza komut uretmeye calisir.
+    """
+    from app.services import device_session_readiness as r
+
+    _gw_surum(db, None)
+    assert r.oturum_kaniti_destegi(db, "GW-1") is True
+    _gw_surum(db, "bozuk-surum")
+    assert r.oturum_kaniti_destegi(db, "GW-1") is True
 
 
 # ===========================================================================
@@ -851,3 +897,173 @@ def test_SUPERSEDE_olayi_yazilir(db):
     _niyet_ac(db, 1, b"V10")
     _niyet_ac(db, 2, b"V11", an=AN + timedelta(minutes=5))
     assert "config_superseded" in _olaylar(db)
+
+
+# ===========================================================================
+# 1.15.1 — OTURUM KANITI (session_started_epoch)
+# ===========================================================================
+#
+# Gateway 1.15.1 acik DNP3 oturumunun basladigi ani bildiriyor. Bu, "son
+# gecerli temas SU ANKI oturuma ait mi" sorusunu nihayet KANITLANABILIR
+# yapiyor: TCP kalkmis ama bu oturumda henuz gercek bir DNP3 alisverisi
+# olmamis bir cihaza komut uretmek, onceki oturumun temasina guvenmek olurdu.
+
+
+def _kati(db, **kw):  # noqa: ANN001
+    """KATI mod (1.15.1) degerlendirmesi."""
+    satir = _saglik(db, **kw)
+    return hazir.degerlendir(
+        saglik=satir, legacy_status=None, simdi=AN, oturum_kaniti_var=True
+    )
+
+
+def test_S_A_temas_OTURUMDAN_ONCE_ise_HAZIR_DEGIL(db):
+    """TCP kalkti ama bu oturumda gercek DNP3 alisverisi YOK."""
+    k = _kati(db, durum="online", reachable=True, oturum=2000.0, temas=1999.0)
+    assert k.hazir is False
+    assert k.sebep == hazir.TEMAS_ONCEKI_OTURUMDAN
+
+
+def test_S_B_temas_OTURUMDAN_SONRA_ise_HAZIR(db):
+    k = _kati(db, durum="online", reachable=True, oturum=2000.0, temas=2001.0)
+    assert k.hazir is True
+    assert k.kaynak == hazir.KAYNAK_SOZLESME
+
+
+def test_S_B2_temas_oturumla_AYNI_an_ise_HAZIR(db):
+    """Sinir: `>=` — esitlik gecerli bir kanittir."""
+    k = _kati(db, durum="online", reachable=True, oturum=2000.0, temas=2000.0)
+    assert k.hazir is True
+
+
+def test_S_C_oturum_NULL_ise_HAZIR_DEGIL(db):
+    """1.15.1'de acik oturumda bu alan DOLU olmali."""
+    satir = _saglik(db, durum="online", reachable=True)
+    satir.session_started_epoch = None
+    db.flush()
+    k = hazir.degerlendir(
+        saglik=satir, legacy_status=None, simdi=AN, oturum_kaniti_var=True
+    )
+    assert k.hazir is False
+    assert k.sebep == hazir.OTURUM_KANITI_YOK
+
+
+def test_S_D_smart_idle_KATI_modda_da_HAZIR_DEGIL(db):
+    k = _kati(db, durum="smart_idle", reachable=False)
+    assert k.hazir is False
+    assert k.sebep == hazir.UYKUDA
+
+
+def test_S_E_recovering_KATI_modda_da_HAZIR_DEGIL(db):
+    k = _kati(db, durum="recovering", reachable=False)
+    assert k.hazir is False
+
+
+def test_S_F_bayat_gozlem_KATI_modda_da_HAZIR_DEGIL(db):
+    satir = _saglik(db, durum="online", reachable=True, gozlem=AN)
+    gec = AN + timedelta(seconds=hazir.RUNTIME_STALE_AFTER_SEC + 1)
+    k = hazir.degerlendir(
+        saglik=satir, legacy_status=None, simdi=gec, oturum_kaniti_var=True
+    )
+    assert k.hazir is False
+    assert k.sebep == hazir.BAYAT_GOZLEM
+
+
+def test_S_G_ESKI_modda_oturum_terimi_ARANMAZ(db):
+    """1.15.0: alan yok, terim KURULAMAZ. Uydurulmaz da — kanit sinifi
+    dusuk isaretlenir ki arayuz yuksek kanit gibi gostermesin."""
+    satir = _saglik(db, durum="online", reachable=True)
+    satir.session_started_epoch = None
+    db.flush()
+    k = hazir.degerlendir(
+        saglik=satir, legacy_status=None, simdi=AN, oturum_kaniti_var=False
+    )
+    assert k.hazir is True
+    assert k.kaynak == hazir.KAYNAK_SOZLESME_ESKI
+    assert k.kaynak != hazir.KAYNAK_SOZLESME, "eski yol yuksek kanit gibi isaretlenmis"
+
+
+# ===========================================================================
+# §9 KRITIK ENTEGRASYON — uyanma dizisi
+# ===========================================================================
+
+
+def test_S_H_UYANMA_DIZISI_tam_akis(db):
+    """Smart uyku -> oturum acildi (henuz temas yok) -> ilk frame -> TEK komut.
+
+    Ortadaki adim kritik: TCP kalkti, `session_started` dolu, ama son temas
+    ONCEKI oturumdan. O anda komut uretmek, cihazla bu oturumda hic
+    konusmadan ona is yollamak olurdu.
+    """
+    _niyet_ac(db)
+
+    # 1) Uyuyor
+    _saglik(db, durum="smart_idle", reachable=False)
+    assert _ilerlet(db) is None
+    assert _niyet(db).state == BEKLIYOR
+
+    # 2) Oturum acildi (T1) ama son temas onceki oturumdan (T0)
+    t1 = AN + timedelta(minutes=30)
+    _saglik(db, durum="online", reachable=True, oturum=5000.0, temas=4000.0, gozlem=t1)
+    assert _ilerlet(db, t1) is None, "temas onceki oturumdanken komut uretildi"
+    assert _niyet(db).state == BEKLIYOR
+    assert _niyet(db).last_readiness_reason == hazir.TEMAS_ONCEKI_OTURUMDAN
+    assert _komutlar(db) == 0
+
+    # 3) Bu oturumda ilk gercek DNP3 frame'i (T2 >= T1)
+    t2 = t1 + timedelta(minutes=1)
+    _saglik(db, durum="online", reachable=True, oturum=5000.0, temas=5001.0, gozlem=t2)
+    assert _ilerlet(db, t2) is not None
+    assert _komutlar(db) == 1, "tam olarak bir komut uretilmeliydi"
+    assert _niyet(db).state == KUYRUKTA
+
+
+# ===========================================================================
+# SAAT TESHISI — baglanti durumunu ETKILEMEZ
+# ===========================================================================
+
+
+def test_S_I_bozuk_SAAT_baglanti_durumunu_DEGISTIRMEZ(db):
+    """Sahada bir Horstmann'in RTC'si 2066'ya kaymisti; cihaz `online` idi,
+    olcum gonderiyordu ve komut kabul ediyordu. `invalid` gorup cihazi kopuk
+    saymak saglikli filoyu arizali gosterir."""
+    satir = _saglik(db, durum="online", reachable=True)
+    satir.device_clock_status = "invalid"
+    satir.device_clock_offset_sec = 1_262_304_000.0  # ~40 yil ileri
+    satir.need_time_iin = False
+    db.flush()
+
+    assert satir.connection_state == "online", "saat durumu baglantiyi ezmis"
+    k = hazir.degerlendir(
+        saglik=satir, legacy_status=None, simdi=AN, oturum_kaniti_var=True
+    )
+    assert k.hazir is True, "bozuk saat komut hazirligini engellemis"
+
+
+def test_S_J_need_time_komut_hazirligini_ENGELLEMEZ(db):
+    satir = _saglik(db, durum="online", reachable=True)
+    satir.device_clock_status = "need_time"
+    satir.need_time_iin = True
+    db.flush()
+    assert hazir.degerlendir(
+        saglik=satir, legacy_status=None, simdi=AN, oturum_kaniti_var=True
+    ).hazir is True
+
+
+def test_S_K_hazirlik_yuklemi_SAAT_ALANLARINA_HIC_BAKMAZ():
+    """Saat teshisi ile baglanti karari AYRI kalmali."""
+    import pathlib
+
+    kaynak = (
+        pathlib.Path(__file__).resolve().parents[1]
+        / "app/services/device_session_readiness.py"
+    ).read_text(encoding="utf-8")
+    kod = "\n".join(
+        satir for satir in kaynak.splitlines() if not satir.strip().startswith("#")
+    )
+    parcalar = kod.split('"""')
+    kod = parcalar[0] + "".join(parcalar[2::2]) if len(parcalar) > 2 else kod
+    for alan in ("device_clock_status", "need_time_iin", "device_clock_offset_sec"):
+        assert f"saglik.{alan}" not in kod, (
+            f"{alan} komut hazirligi kararina girmis — saat teshisi ayri kalmali"
+        )

@@ -87,6 +87,29 @@ export type DeviceHealthWire = {
   last_probe_epoch?: number | null;
   /** `listening` | `initiating`. */
   ip_endpoint_type?: string | null;
+
+  // ----- Gateway 1.15.1: CIHAZ RTC SAGLIGI + OTURUM KANITI ---------------
+  //
+  // Hepsi opsiyonel; 1.15.0 gateway'i GONDERMEZ ve `null`/tanimsiz kalirlar.
+
+  /** `unknown` | `ok` | `invalid` | `need_time`.
+   *
+   *  SALT TESHIS — `connection_state`i ETKILEMEZ. Saati bozuk bir cihaz
+   *  `online` olabilir, olcum gonderir ve komut kabul eder. Sahada bir
+   *  Horstmann'in RTC'si 2066 yilindaydi ve cihaz calisiyordu. `invalid`
+   *  gorup cihazi kopuk saymak saglikli filoyu arizali gosterir. */
+  device_clock_status?: string | null;
+  /** `cihaz_saati - gateway_saati` (saniye, ISARETLI).
+   *  Pozitif = cihaz ileri, negatif = geri. `0` GECERLI bir degerdir. */
+  device_clock_offset_sec?: number | null;
+  /** Cihazin KENDI bildirdigi son damga (unix epoch). */
+  last_device_time_epoch?: number | null;
+  /** IIN1.4 (NEED_TIME). UC DURUMLU: `true` istiyor, `false` istemiyor,
+   *  `null`/tanimsiz HIC IIN GORULMEDI. Ucu de AYRI anlam tasir. */
+  need_time_iin?: boolean | null;
+  /** Acik DNP3 oturumunun basladigi an (unix epoch).
+   *  OTURUM KAPALIYKEN `null` — uyuyan cihazda NORMALDIR. */
+  session_started_epoch?: number | null;
 };
 
 /** Backend'in sakladigi satir: wire kaydi + BACKEND'e ait iki alan.

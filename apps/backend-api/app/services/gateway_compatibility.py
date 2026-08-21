@@ -66,6 +66,22 @@ FEATURE_MIN_VERSION: dict[str, str] = {
     # gateway "saglik gonderiyor" sanilirdi. Yetenek ADIYLA anahtarlanir
     # (bkz. modul basligi) — surumle degil.
     "device_runtime_health_transport": "1.15.0",
+
+    # Cihaz RTC sagligi + OTURUM KANITI (1.15.1).
+    #
+    #   device_clock_status / device_clock_offset_sec / last_device_time_epoch
+    #   need_time_iin / session_started_epoch
+    #
+    # `device_runtime_health_transport`tan AYRI TUTULUR ve bu bilinclidir:
+    # 1.15.0 gateway'i saglik YAYINLAR ama bu bes alani GONDERMEZ. Ayni
+    # satiri paylassalardi, calisan bir 1.15.0 kurulumu "uyumsuz" gorunur;
+    # ya da tersine, Grid oturum kaniti geliyormus gibi davranip uyuyan bir
+    # cihaza komut uretebilirdi. Yetenek ADIYLA anahtarlanir.
+    #
+    # BU YETENEK BIR KARAR KAPISIDIR: yapilandirma komutu uretme karari,
+    # yetenek VARSA katı oturum kanitina (`session_started_epoch`) dayanir;
+    # YOKSA eski uyumluluk yoluna duser (bkz. `device_session_readiness`).
+    "device_clock_observability": "1.15.1",
 }
 
 
@@ -246,8 +262,19 @@ _PR33_SAPMA_GEREKCESI = (
     "1.15.0 release artifact'i vendor edildiginde kapanir."
 )
 
+_V1151_SAPMA_GEREKCESI = (
+    "Gateway 1.15.1 (branch `fix/health-delta-clock-observability-1.15.1`, "
+    "commit 34d9ee44) cihaz RTC sagligi ve oturum kaniti alanlarini ekledi; "
+    "sozlesme `docs/gateway-contract/device-health-api-1.15.1.md` olarak "
+    "vendor edildi. `infra/gateway-contract/` altindaki JSON artifact'i ise "
+    "hala v1.11.4'te — release cikmadigi icin. Saha kirilmaz: alanlar "
+    "opsiyoneldir ve 1.15.0 gateway'inde `None` kalir. Sapma, 1.15.1 release "
+    "artifact'i vendor edildiginde kapanir."
+)
+
 KNOWN_VERSION_DRIFT: dict[str, str] = {
     "device_runtime_health_transport": _PR33_SAPMA_GEREKCESI,
+    "device_clock_observability": _V1151_SAPMA_GEREKCESI,
     "smart_auto": _V114_SAPMA_GEREKCESI,
     "smart_listening": _V114_SAPMA_GEREKCESI,
     "dial_in_health": _V114_SAPMA_GEREKCESI,
