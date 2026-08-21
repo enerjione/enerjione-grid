@@ -162,7 +162,7 @@ def test_A12_tek_head_ve_0072():
     # TEK HEAD sarti degismez; SURUM ise zincir ilerledikce guncellenir.
     # Sabit "0072" yerine "en yuksek revizyon" demiyoruz cunku o, iki head
     # olustugunda da gecerdi — asil korunan sey CATALLANMAMA.
-    assert heads == ["0077"], f"tek head bekleniyordu, gelen: {heads}"
+    assert heads == ["0078"], f"tek head bekleniyordu, gelen: {heads}"
 
 
 # --------------------------------------------------------------------------

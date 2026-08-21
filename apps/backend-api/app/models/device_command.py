@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Index, Integer, String
+from sqlalchemy import BigInteger, DateTime, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.services import command_identity
 
 
 def _utcnow() -> datetime:
@@ -54,7 +55,33 @@ class DeviceCommand(Base):
         ),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    #: KIMLIK VERITABANINDAN DEGIL UYGULAMADAN GELIR.
+    #:
+    #: Eskiden bu bir SERIAL'di ve sequence'in degeri VERITABANININ ICINDE
+    #: yasiyordu: veritabani daha eski bir ana alindiginda sequence de o ana
+    #: doner ve DAGITILMIS kimlikler yeniden uretilirdi. Gateway defteri ise
+    #: baska bir makinede durur ve geri gitmez — sahada tam olarak bu yasandi
+    #: (GW-002, id 39-42 tekrar kullanildi; gateway fiziksel islemi hakli
+    #: olarak tekrarlamadi, backend `token_mismatch` uretti).
+    #:
+    #: Artik deger `command_identity.yeni_kimlik()` ile uretilir
+    #: (`epoch_ms * 1000 + rastgele`) ve INSERT sirasinda ACIKCA verilir.
+    #: `autoincrement=False`: sequence'in devreye girip uygulamanin verdigi
+    #: degeri ezmesini engeller.
+    #:
+    #: `BigInteger` ZORUNLU: uretilen deger bugun ~1.79e15 ve int4 tavani
+    #: 2.147.483.647. Eski kucuk kimlikler aynen okunmaya devam eder.
+    #: `default` MODELDE: kimlik uretimi TEK YERDE olmali. Cagiran tarafa
+    #: birakilsaydi, ileride eklenen bir ekleme yolu (ya da bir test)
+    #: sessizce kimliksiz satir yazmaya calisir ve kural yalnizca bir
+    #: koddan gecerken uygulanirdi.
+    id: Mapped[int] = mapped_column(
+        BigInteger,
+        primary_key=True,
+        index=True,
+        autoincrement=False,
+        default=command_identity.yeni_kimlik,
+    )
     gateway_code: Mapped[str] = mapped_column(String(50), index=True)
     device_code: Mapped[str] = mapped_column(String(50), index=True)
     # Komut slug'i (SignalCatalog binary_output key'inin master. sonrasi) + cozulmus

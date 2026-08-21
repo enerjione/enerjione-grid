@@ -139,6 +139,38 @@ app.include_router(ws_live.router, prefix=settings.api_prefix)
 
 
 @app.on_event("startup")
+def komut_kimligi_tabanini_yukselt():
+    """Bilinen en yuksek komut kimligini surec sayacina isler.
+
+    TEK BASINA BIR GUVENCE DEGILDIR ve oyle sunulmamali: `max(id)` degeri de
+    yedegin ICINDEDIR, yani veritabani geri alindiginda o da geriye doner.
+    Restore'a karsi guvence kimligin DUVAR SAATI bileseni (bkz.
+    `command_identity`).
+
+    Buradaki dar amac: saat bir sekilde geri gitmisken (NTP duzeltmesi)
+    uretilecek kimligin, AYNI veritabaninda ZATEN duran bir kimlikle
+    cakismasini engellemek.
+    """
+    try:
+        from sqlalchemy import func, select
+
+        from app.models.device_command import DeviceCommand
+        from app.services import command_identity
+
+        db = SessionLocal()
+        try:
+            command_identity.taban_yukselt(
+                db.scalar(select(func.max(DeviceCommand.id)))
+            )
+        finally:
+            db.close()
+    except Exception as exc:  # noqa: BLE001
+        # Taban okunamazsa kimlik uretimi YINE DE calisir (saat bileseni
+        # yeterlidir); backend'i ayaga kalkmaktan alikoymamali.
+        print(f"[startup] komut kimligi tabani okunamadi: {exc}")
+
+
+@app.on_event("startup")
 def reconcile_remote_access_audit():
     """Backend kapaliyken kapanan uzaktan bakim oturumlarini denetime yaz.
 

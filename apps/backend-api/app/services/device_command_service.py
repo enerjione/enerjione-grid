@@ -28,13 +28,14 @@ import logging
 from dataclasses import dataclass
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.device import Device
 from app.models.device_command import DeviceCommand
 from app.models.gateway import Gateway
 from app.models.signal_catalog import SignalCatalog
-from app.services import device_kit_service
+from app.services import command_identity, device_kit_service
 from app.services.event_service import record_event
 
 logger = logging.getLogger(__name__)
@@ -253,6 +254,11 @@ def queue_command(
     )
 
     cmd = DeviceCommand(
+        # KIMLIK: model varsayilani uretir (`command_identity.yeni_kimlik`).
+        # Sequence KULLANILMAZ — degeri veritabaninin ICINDE yasiyordu ve DB
+        # daha eski bir ana alindiginda DAGITILMIS kimlikler yeniden
+        # uretiliyordu. Gateway defteri baska bir makinede durur ve geri
+        # gitmez; sahada tam olarak bu yasandi (GW-002, id 39-42).
         gateway_code=gateway.code,
         device_code=hedef.code,
         command=slug,
@@ -269,7 +275,18 @@ def queue_command(
         actor_username=actor,
     )
     db.add(cmd)
-    db.flush()  # id icin
+    # CAKISMA SANSA BIRAKILMAZ. Ayni milisaniyede 1000 yuva var ve komut
+    # hizi saniyede tek haneli, ama birincil anahtar son sozu soylemeli:
+    # cakisirsa TAZE bir kimlikle bir kez daha denenir. Ikinci kez cakismak
+    # icin iki surecin ayni milisaniyede ayni yuvayi UST USTE IKI KEZ
+    # secmesi gerekir.
+    try:
+        with db.begin_nested():
+            db.flush()  # id zaten verildi; burada satir yazilir
+    except IntegrityError:
+        cmd.id = command_identity.yeni_kimlik()
+        with db.begin_nested():
+            db.flush()
 
     record_event(
         db,

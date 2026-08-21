@@ -58,7 +58,7 @@ def _yukle(yol: pathlib.Path):
 #: kosulmus semalar uzerinde calisti ve bazilari veri tasima adimlari
 #: iceriyor (bos semada anlamsiz). Yeni eklenen her migration BURAYA
 #: eklenmelidir — asagidaki bekci testi bunu zorlar.
-SON_HALKALAR = ("0073", "0074", "0075", "0076", "0077")
+SON_HALKALAR = ("0073", "0074", "0075", "0076", "0077", "0078")
 
 
 def _son_migrationlar() -> list[pathlib.Path]:

@@ -29,6 +29,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     DateTime,
     ForeignKey,
     Index,
@@ -139,8 +140,14 @@ class DeviceConfigApplication(Base):
     #: --- KOMUT -----------------------------------------------------------
     #: Uretilen TAZE komut. Her uyanmada yenisi uretilebilir, bu yuzden
     #: alan tek ve son komutu gosterir; gecmis `device_commands` tablosunda.
+    #: `BigInteger`: hedef kolon (device_commands.id) restore'a dayanikli
+    #: kimlik icin int8'e genisletildi; FK tipi ONUNLA AYNI olmak zorunda,
+    #: yoksa yeni kimlik tasiyan bir komuta baglanmak "integer out of range"
+    #: ile patlar.
     command_id: Mapped[int | None] = mapped_column(
-        ForeignKey("device_commands.id", ondelete="SET NULL"), nullable=True
+        BigInteger,
+        ForeignKey("device_commands.id", ondelete="SET NULL"),
+        nullable=True,
     )
     #: SON komut uretme ani. Komut bayatlayip niyet beklemeye dondugunde
     #: TEMIZLENMEZ: "en son ne zaman denedik" bilgisi, ayni gozlemle ikinci
