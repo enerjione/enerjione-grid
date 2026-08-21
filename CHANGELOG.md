@@ -14,6 +14,27 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.107.3] — 2026-08-21
+
+### Düzeltildi
+
+- **Hat arızası çizimi artık arızaya odaklı açılıyor.** 100+ direkli bir hatta
+  81 metrelik arıza kesimi, hattın tamamı ekrana sığdırıldığı için birkaç
+  piksele iniyordu; "arıza nerede" sorusu ekrandan cevaplanamıyordu. Açılış
+  görünümü arıza aralığı + iki yanında 3 sağlam açıklık. Direkler **silinmez**:
+  sürükleyerek hattın tamamı gezilebilir.
+- **Cihaz IP adresi doğrulanıyor.** Önceden "asdf" bile kaydediliyordu; hata
+  günler sonra ve yanlış kılıkta ("haberleşme yok") ortaya çıkıyordu. Artık
+  geçerli IPv4 zorunlu.
+- **Haberleşme alarmı "arızayı açan alarm" listesinden çıktı.** Motor onu
+  zaten arıza üretmez sayıyordu, ama arıza kartı cihazın o penceredeki tüm
+  alarmlarını listeliyordu — operatör hat arızasını haberleşme kopmasına
+  bağlayıp yanlış teşhise gidebiliyordu.
+- **Gateway güncelleme kartının bozuk görünümü.** Dört stil sınıfı hiç
+  tanımlanmamıştı; değerler etiketlerin altına girintili düşüyordu.
+
+---
+
 ## [2.107.2] — 2026-08-20
 
 ### Düzeltildi
