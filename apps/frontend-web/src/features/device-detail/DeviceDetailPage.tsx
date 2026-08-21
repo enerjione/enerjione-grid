@@ -708,7 +708,12 @@ export function DeviceDetailPage({
     { key: "poleMaster", icon: "dns", show: kitKaydi != null },
     { key: "trends", icon: "show_chart", show: true },
     { key: "events", icon: "history", show: true },
-    { key: "commands", icon: "terminal", show: canCommand },
+    // KOMUTLAR HERKESE GORUNUR, YETKISIZE KILITLI.
+    // Gizlemek "boyle bir sey yok" demekti; operator cihaza ne
+    // yapilabilecegini bilmeden calisiyordu. Liste gorunur, butonlar kapali
+    // ve neden kapali oldugu panelde yaziyor. Gercek kapi backend'de
+    // (`api/devices.py` require_roles) — bu satir yalnizca GORUNURLUK.
+    { key: "commands", icon: "terminal", show: true },
     { key: "config", icon: "tune", show: canConfig },
   ];
 
@@ -890,7 +895,7 @@ export function DeviceDetailPage({
           </div>
         ) : null}
 
-        {activeTab === "commands" && canCommand && onDeviceCommand && token ? (
+        {activeTab === "commands" && token ? (
           <DeviceCommandsPanel
             deviceCode={device.code}
             signals={signals}

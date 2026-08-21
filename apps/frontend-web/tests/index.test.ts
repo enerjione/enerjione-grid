@@ -163,6 +163,11 @@ import "./ipDogrulama.test";
 // "hangi cihazin haberlesmesi yok" sorusu satirdan cevaplanabilmeli.
 import "./hatAgaci.test";
 
+// Komutlar sekmesi: gizlemek "boyle bir sey yok" demekti. Artik gorunur ama
+// kilitli; kilit gerekcesi SLUG bazinda cunku `trigger_config_download`
+// backend'de installer-only oldugu halde UI'da "general" grubunda duruyor.
+import "./komutYetkisi.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   connectionIsDead,

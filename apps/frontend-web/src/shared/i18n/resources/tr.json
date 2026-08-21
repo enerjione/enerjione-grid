@@ -4231,7 +4231,9 @@
       },
       "noPermission": "Bu cihaza komut gönderme yetkiniz yok.",
       "historyTitle": "Komut Geçmişi",
-      "asyncNote": "Not: Yapılandırma, yükleme ve firmware komutları cihazda arka planda işlenir. \"Cihaza iletildi\" komutun ulaştığını gösterir; işlemin bitişi cihaza bağlıdır ve zaman alabilir. Bazı komutlarda cihaz işlem için modemi/bağlantıyı kısa süre kapatabilir (FTP indirme/yükleme); bu sırada geçici \"çevrimdışı\" görünmesi normaldir, cihaz işlem bitince yeniden bağlanır."
+      "asyncNote": "Not: Yapılandırma, yükleme ve firmware komutları cihazda arka planda işlenir. \"Cihaza iletildi\" komutun ulaştığını gösterir; işlemin bitişi cihaza bağlıdır ve zaman alabilir. Bazı komutlarda cihaz işlem için modemi/bağlantıyı kısa süre kapatabilir (FTP indirme/yükleme); bu sırada geçici \"çevrimdışı\" görünmesi normaldir, cihaz işlem bitince yeniden bağlanır.",
+      "readOnly": "Bu komutları yalnızca Mühendis ve Kurulumcu gönderebilir. Liste bilgi amaçlı gösteriliyor.",
+      "lockedInstaller": "Yapılandırma komutlarını yalnızca Kurulumcu gönderebilir."
     },
     "tabs": {
       "measures": "Ölçümler",

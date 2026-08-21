@@ -4234,7 +4234,9 @@
       },
       "noPermission": "You do not have permission to send commands to this device.",
       "historyTitle": "Command History",
-      "asyncNote": "Note: Configuration, upload and firmware commands run in the background on the device. \"Delivered\" means the command reached the device; completion depends on the device and may take time. For some commands the device may briefly close the modem/link to process it (FTP download/upload); a temporary \"offline\" state during this is normal and the device reconnects when done."
+      "asyncNote": "Note: Configuration, upload and firmware commands run in the background on the device. \"Delivered\" means the command reached the device; completion depends on the device and may take time. For some commands the device may briefly close the modem/link to process it (FTP download/upload); a temporary \"offline\" state during this is normal and the device reconnects when done.",
+      "readOnly": "Only Engineer and Installer can send these commands. The list is shown for reference.",
+      "lockedInstaller": "Only Installer can send configuration commands."
     },
     "tabs": {
       "measures": "Measurements",

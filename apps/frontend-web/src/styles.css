@@ -31929,6 +31929,32 @@ th.event-col-category {
 }
 
 /* ---- Komut paneli (gruplu) ---- */
+/* SALT-OKUNUR KOMUT PANELI — "neden basamiyorum" gorunur cevap.
+   `title` ipucuna guvenilmez: disabled buton pointer olayi uretmez ve
+   dokunmatikte hic gorunmez (ayni ders PDF indirme butonunda yasandi). */
+.device-cmd-locked {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 10px;
+  padding: 8px 11px;
+  border-radius: 9px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.device-cmd-locked .material-symbols-outlined { font-size: 16px; color: #94a3b8; }
+
+/* Kilitli komut: gorunur ama tiklanamaz. Silik DEGIL — okunabilir kalmali,
+   cunku amac "cihazda ne var" sorusunu cevaplamak. */
+.device-cmd-btn.is-locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: grayscale(0.4);
+}
+
 .device-cmd-panel {
   display: flex;
   flex-direction: column;

@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CONFIG_ONLY_SLUGS } from "./commandScopes";
 import { useTranslation } from "react-i18next";
 
 import { fetchDeviceCommands } from "../../shared/api";
@@ -63,6 +64,7 @@ const GROUP_ORDER: { key: CmdGroup; icon: string }[] = [
   { key: "danger", icon: "warning" },
 ];
 
+
 type CommandItem = { slug: string; label: string; icon: string; group: CmdGroup; order: number };
 
 type Props = {
@@ -70,8 +72,9 @@ type Props = {
   signals: SignalCatalogRow[];
   canCommand: boolean;
   canConfig: boolean;
-  /** Komut gonderme handler'i (confirm + toast App.tsx'te merkezi). */
-  onDeviceCommand: (deviceCode: string, command: string, label: string) => Promise<void>;
+  /** Komut gonderme handler'i (confirm + toast App.tsx'te merkezi).
+   *  Yetkisiz kullanicida VERILMEZ — panel salt-okunur cizilir. */
+  onDeviceCommand?: (deviceCode: string, command: string, label: string) => Promise<void>;
   token: string;
 };
 
@@ -136,6 +139,9 @@ export function DeviceCommandsPanel({
   });
 
   const runCommand = async (slug: string, label: string) => {
+    // IKINCI KAPI. Buton kilitliyken buraya gelinmemeli; yine de duruyor
+    // cunku `disabled` DOM'dan silinebilir. UCUNCU ve GERCEK kapi backend.
+    if (!canCommand || onDeviceCommand == null) return;
     setBusyCmd(slug);
     try {
       await onDeviceCommand(deviceCode, slug, label);
@@ -150,22 +156,43 @@ export function DeviceCommandsPanel({
     [commands]
   );
 
-  if (!canCommand) {
-    return (
-      <div className="device-detail-empty">
-        <span className="material-symbols-outlined">lock</span>
-        <p className="helper-text">{t("deviceDetail.commands.noPermission")}</p>
-      </div>
-    );
-  }
+  /** Bu komut neden basilamiyor? `null` = basilabilir.
+   *
+   *  TEK KARAR NOKTASI: ayni gerekce hem butonun `disabled` halini hem de
+   *  ekranda yazan aciklamayi uretir. Ikiye ayrilirsa panel "kapali ama
+   *  neden bilinmiyor" haline duser — kullanicinin sikayeti tam olarak
+   *  buydu.
+   *
+   *  BU BIR GUVENLIK SINIRI DEGILDIR. Gercek kapi backend'de
+   *  (`api/devices.py`, require_roles + _CONFIG_COMMAND_SLUGS). Burasi
+   *  yalnizca "ne yapilabilir, neden yapilamiyor" sorusunu cevaplar. */
+  const kilitSebebi = (slug: string): "role" | "installer" | null => {
+    if (!canCommand || onDeviceCommand == null) return "role";
+    if (CONFIG_ONLY_SLUGS.has(slug) && !canConfig) return "installer";
+    return null;
+  };
 
   return (
     <div className="device-cmd-panel">
+      {/* SALT-OKUNUR BILDIRIMI.
+          Sekme eskiden yetkisiz kullaniciya HIC gorunmuyordu; operator
+          cihaza ne yapilabilecegini bilmeden calisiyordu. Artik liste
+          gorunur, butonlar kapali ve NEDEN kapali oldugu burada yaziyor.
+          `title` ipucuna guvenilmiyor: disabled buton pointer olayi
+          uretmez, dokunmatikte hic gorunmez (ayni ders PDF indirme
+          butonunda yasandi). */}
+      {!canCommand ? (
+        <p className="device-cmd-locked" role="note">
+          <span className="material-symbols-outlined" aria-hidden="true">lock</span>
+          {t("deviceDetail.commands.readOnly")}
+        </p>
+      ) : null}
       {GROUP_ORDER.map(({ key, icon }) => {
         const items = byGroup[key];
         if (items.length === 0) return null;
-        // config grubu installer-only: yetkisizse gizle.
-        if (key === "config" && !canConfig) return null;
+        // Config grubu ARTIK GIZLENMIYOR. Gizlemek "boyle bir sey yok"
+        // demekti; kilitli gostermek "var ama senin yetkin yok" der.
+        // Butonlarin kilidi slug bazinda cozulur (bkz. `kilitSebebi`).
         const open = !!openGroups[key];
         return (
           <section key={key} className={`device-cmd-accordion is-${key}${open ? " is-open" : ""}`}>
@@ -188,11 +215,19 @@ export function DeviceCommandsPanel({
                   <button
                     key={c.slug}
                     type="button"
-                    className={`device-cmd-btn${key === "danger" ? " is-danger" : ""}`}
-                    disabled={busyCmd != null}
+                    className={`device-cmd-btn${key === "danger" ? " is-danger" : ""}${
+                      kilitSebebi(c.slug) ? " is-locked" : ""
+                    }`}
+                    disabled={busyCmd != null || kilitSebebi(c.slug) != null}
                     aria-busy={busyCmd === c.slug}
                     onClick={() => void runCommand(c.slug, c.label)}
-                    title={c.label}
+                    title={
+                      kilitSebebi(c.slug) === "installer"
+                        ? t("deviceDetail.commands.lockedInstaller")
+                        : kilitSebebi(c.slug) === "role"
+                          ? t("deviceDetail.commands.readOnly")
+                          : c.label
+                    }
                   >
                     {busyCmd === c.slug ? (
                       <span className="btn-spinner" aria-hidden="true" />
