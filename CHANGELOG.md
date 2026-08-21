@@ -14,6 +14,20 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.109.1] — 2026-08-21
+
+### Düzeltildi
+
+- **Yükseltme sırasında migration çakışması.** 2.109.0'daki üç yeni migration
+  "zaten varsa atla" kapısını taşımıyordu. Temiz kurulum şemayı `create_all`
+  ile kurduğu için tablo/kolonlar migration hiç koşmadan da var olabiliyor;
+  bu durumda yükseltme `already exists` ile düşüyor ve migration konteyner
+  başlangıcında uvicorn'dan önce koştuğu için sonuç kalıcı bir açılış
+  döngüsü oluyordu. Üç migration da idempotent hale getirildi.
+
+
+---
+
 ## [2.109.0] — 2026-08-21
 
 > **Gateway 1.15.1 gerektirir** (saat/oturum alanları için). 1.15.0 ve

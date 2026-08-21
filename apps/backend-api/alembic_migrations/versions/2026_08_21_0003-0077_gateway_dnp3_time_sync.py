@@ -53,7 +53,16 @@ depends_on: Union[str, Sequence[str], None] = None
 VARSAYILAN = "nonlan"
 
 
+def _var_mi() -> bool:
+    return "dnp3_time_sync" in {
+        k["name"] for k in sa.inspect(op.get_bind()).get_columns("gateways")
+    }
+
+
 def upgrade() -> None:
+    # ZATEN VARSA ATLA — temiz kurulum semayi `create_all` ile kuruyor.
+    if _var_mi():
+        return
     op.add_column(
         "gateways",
         sa.Column(
@@ -66,4 +75,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column("gateways", "dnp3_time_sync")
+    if _var_mi():
+        op.drop_column("gateways", "dnp3_time_sync")

@@ -47,6 +47,17 @@ ACIK_WHERE = "state IN ('cihaz_bekleniyor', 'kuyrukta', 'iletildi')"
 
 
 def upgrade() -> None:
+    # ZATEN VARSA ATLA — 0073/0074 ile ayni gerekce: temiz kurulum ile
+    # yukseltilen kurulum AYNI YERDEN GECMIYOR. Temiz kurulum semayi
+    # `create_all` + `stamp head` ile kuruyor (bkz. `scripts/migrate_db.py`),
+    # dolayisiyla tablo bu migration hic kosmadan da var olabilir. Var olani
+    # yeniden yaratmaya calismak yukseltmeyi "already exists" ile kirar —
+    # ve migration konteyner CMD'sinde uvicorn'dan ONCE kostugu icin sonuc
+    # kalici bir crash-loop olur.
+    bind = op.get_bind()
+    if sa.inspect(bind).has_table("device_config_applications"):
+        return
+
     op.create_table(
         "device_config_applications",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -129,6 +140,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Geri alma da dayanikli: tablo yoksa hata vermek yerine atla.
+    if not sa.inspect(op.get_bind()).has_table("device_config_applications"):
+        return
     op.drop_index("uq_device_config_app_acik", table_name="device_config_applications")
     op.drop_index(
         op.f("ix_device_config_applications_requested_at"),

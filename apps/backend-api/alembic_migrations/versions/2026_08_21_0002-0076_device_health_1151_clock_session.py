@@ -55,13 +55,25 @@ YENI_KOLONLAR = (
 )
 
 
+def _kolonlar() -> set[str]:
+    return {k["name"] for k in sa.inspect(op.get_bind()).get_columns(TABLO)}
+
+
 def upgrade() -> None:
+    # ZATEN VARSA ATLA — temiz kurulum semayi `create_all` ile kuruyor ve
+    # kolonlar bu migration hic kosmadan da var olabilir. Migration'in
+    # gorevi SONUCU garanti etmek: kolon varsa is zaten yapilmis.
+    mevcut = _kolonlar()
     for ad, tip in YENI_KOLONLAR:
+        if ad in mevcut:
+            continue
         # `server_default` YOK ve bu BILINCLI: eksik gozlemi uydurma bir
         # degere cevirmek, "bilmiyoruz"u "hayir" yapardi.
         op.add_column(TABLO, sa.Column(ad, tip, nullable=True))
 
 
 def downgrade() -> None:
+    mevcut = _kolonlar()
     for ad, _tip in reversed(YENI_KOLONLAR):
-        op.drop_column(TABLO, ad)
+        if ad in mevcut:
+            op.drop_column(TABLO, ad)
