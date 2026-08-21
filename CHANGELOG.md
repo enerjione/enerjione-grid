@@ -14,6 +14,41 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.108.0] — 2026-08-21
+
+### Değişti
+
+- **Ana sayfa durum süzgeci tek görsel dile çekildi.** Şerit aynı satırda iki
+  ayrı tasarım dili kullanıyordu: *Tümü / Çevrimiçi / Çevrimdışı / Alarmlı*
+  koyu gradient + beyaz yazı, *Smart Bekleme / Gecikmiş* ise pastel dolgu +
+  koyu yazı. Artık hepsi tek dil: düz ton dolgu, kendi durum renginde ince
+  kenarlık, koyu okunur metin. Her durum çipine haritadaki ve hat ağacındaki
+  aynı renge bağlayan küçük bir nokta eklendi.
+- **Cihaz haberleşme ayarları formu gruplandı.** 15+ ayar tek düz ızgarada
+  duruyordu; artık altı bölüme ayrıldı: Bağlantı, Oturum ve uyku, Raporlama,
+  Adresleme ve doğrulama, Zaman aşımları, Gelişmiş.
+- **Ayar açıklamaları isteğe bağlı hale geldi.** Yedi alanın altındaki kalıcı
+  açıklama paragrafları, etiketin yanındaki yardım işaretine taşındı;
+  üzerine gelince (dokunmatikte dokununca, klavyede sekme ile) açılır.
+  Açıklamaların hiçbiri silinmedi. Gateway uyumluluk **uyarısı** yerinde
+  görünür kaldı — açıklama isteğe bağlı okunur, uyarı görülmek zorundadır.
+
+### Düzeltildi
+
+- **"Çevrimdışı" süzgeci artık kırmızı.** Haritada ve hat ağacında haberleşme
+  kaybı kırmızıyken süzgeç şeridinde gri gösteriliyordu; aynı durumu iki
+  yerde iki renkle göstermek okumayı bozuyordu.
+- **"Tümü" çipinden indigo kaldırıldı.** Hiçbir cihaz durumuna karşılık
+  gelmeyen bir renk taşıyordu; nötr tona alındı.
+- **Master adres açıklaması iki kez basılmıyor.** Hem `title` özniteliği hem
+  alt satırda paragraf olarak görünüyordu.
+- **Durum ipucu dokunmatikte ekranda asılı kalmıyor.** Parmak kalkınca
+  `mouseleave` üretilmediği için kutu kapanmıyordu; artık dışarı dokunmakla
+  da kapanır.
+
+
+---
+
 ## [2.107.3] — 2026-08-21
 
 ### Düzeltildi
