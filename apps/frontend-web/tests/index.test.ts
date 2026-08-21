@@ -159,6 +159,10 @@ import "./canliDegerlerCikis.test";
 // yok" kiliginda ortaya cikiyor, yani yazim hatasi ARIZA gibi teshis ediliyordu.
 import "./ipDogrulama.test";
 
+// Hat agaci: renk bir DURUMA karsilik gelmeli (indigo gelmiyordu) ve
+// "hangi cihazin haberlesmesi yok" sorusu satirdan cevaplanabilmeli.
+import "./hatAgaci.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   connectionIsDead,

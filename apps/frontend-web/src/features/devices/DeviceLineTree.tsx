@@ -120,6 +120,15 @@ function DeviceTreeRow({
       title={`${device.name} (${device.code}) · ${locationLabel}`}
     >
       <RuntimeStateDot state={runtime} className="device-tree-dot" />
+      {/* HABERLESMESI OLMAYAN CIHAZ ISARETLENIR.
+          Satirdaki tek sinyal 7px'lik bir noktaydi ve "hangi cihazin
+          haberlesmesi yok" sorusu ekrandan cevaplanamiyordu — hat basligi
+          yalnizca SAYI veriyordu ("5 kopuk"), hangileri oldugunu degil.
+          Ikon YALNIZCA gercekten kopuk olanlarda cikar: `smart_idle`
+          SAGLIKLIDIR ve uyuyan filo isaretlenirse gosterge anlamsizlasir. */}
+      {runtime.bucket === "unhealthy" ? (
+        <WifiOff size={12} strokeWidth={2.4} className="device-tree-row-off" />
+      ) : null}
       {/* Seri no satirda YAZMAZ — dar sidebar'da gurultu yapiyordu; tam
           kunye (ad, kod, konum) tooltip'te. */}
       <span className="device-tree-row-name">{device.name}</span>
@@ -361,17 +370,6 @@ export function DeviceLineTree({
                               title={t("dashboard.tree.alarmCount", { count: line.alarmCount })}
                             >
                               {line.alarmCount}
-                            </span>
-                          ) : null}
-                          {line.commLostCount > 0 ? (
-                            <span
-                              className="device-tree-badge device-tree-badge--comm"
-                              title={t("dashboard.tree.commLostCount", {
-                                count: line.commLostCount
-                              })}
-                            >
-                              <WifiOff size={11} strokeWidth={2.4} />
-                              {line.commLostCount}
                             </span>
                           ) : null}
                           <span
