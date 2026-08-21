@@ -37653,14 +37653,6 @@ input[aria-invalid="true"]:focus {
   outline: 2px solid rgba(239, 68, 68, 0.35);
   outline-offset: 1px;
 }
-.field-error {
-  display: block;
-  margin-top: 3px;
-  color: #b91c1c;
-  font-size: 11px;
-  line-height: 1.4;
-}
-
 .gw-update-detail {
   display: flex;
   flex-direction: column;
@@ -44587,4 +44579,34 @@ input[aria-invalid="true"]:focus {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* --- ALAN ETIKETI + SATIR ICI HATA ---------------------------------------
+
+   IP dogrulama hatasi ONCEDEN alanin ALTINDA ayri bir satir olarak
+   ciziliyordu. `label` bir `grid` (bkz. `.device-detail-form label`) oldugu
+   icin o satir belirip kaybolunca SATIR YUKSEKLIGI DEGISIYOR ve alan her
+   tusa basista asagi/yukari zipliyordu — ustelik ayni izgara satirindaki
+   komsu alanlari (port, DNP3 adresi) ve alttaki aciklama satirini da
+   itiyordu.
+
+   Etiket satiri ZATEN var ve sagi bos. Mesaj oraya girince hicbir sey yer
+   degistirmez: satirin yuksekligini 13px'lik etiket metni belirler, 11px'lik
+   hata ona sigar. */
+.field-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.field-error-inline {
+  color: #b91c1c;
+  font-size: 11px;
+  font-weight: 700;
+  /* Kirpilmasin: kisa metin bilincli secildi, tam kural yer tutucuda ve
+     `title`da duruyor. */
+  white-space: nowrap;
+  flex: 0 0 auto;
 }

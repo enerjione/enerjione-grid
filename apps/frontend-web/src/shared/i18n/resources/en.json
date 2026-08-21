@@ -2589,7 +2589,8 @@
         "unitNo": "Unit {{no}}",
         "satelliteNo": "Satellite {{no}}",
         "satellitePhaseTitle": "Satellite and phase mapping",
-        "ipInvalid": "Enter a valid IPv4 address. Example: 192.168.1.50"
+        "ipInvalid": "Enter a valid IPv4 address. Example: 192.168.1.50",
+        "ipInvalidShort": "Invalid"
       },
       "footer": {
         "ok": "OK",

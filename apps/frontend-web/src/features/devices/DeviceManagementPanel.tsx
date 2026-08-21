@@ -1802,19 +1802,26 @@ export function DeviceManagementPanel({
                       ) : (
                         <>
                           <label>
-                            {t("engineering.devicesPanel.form.ipShort")}
+                            {/* Hata ETIKET SATIRINDA — gerekce olusturma
+                                formundakiyle ayni: altta ayri satir olarak
+                                belirip kaybolunca alan zipliyordu. */}
+                            <span className="field-label-row">
+                              {t("engineering.devicesPanel.form.ipShort")}
+                              {ipv4Gecerli(ipAddress) ? null : (
+                                <span className="field-error-inline">
+                                  {t("engineering.devicesPanel.form.ipInvalidShort")}
+                                </span>
+                              )}
+                            </span>
                             <input
                               value={ipAddress}
                               onChange={(event) => setIpAddress(event.target.value)}
                               required
+                              placeholder="192.168.1.50"
                               aria-invalid={!ipv4Gecerli(ipAddress)}
                               className={ipv4Gecerli(ipAddress) ? undefined : "is-invalid"}
+                              title={t("engineering.devicesPanel.form.ipInvalid")}
                             />
-                            {ipv4Gecerli(ipAddress) ? null : (
-                              <small className="field-error">
-                                {t("engineering.devicesPanel.form.ipInvalid")}
-                              </small>
-                            )}
                           </label>
                           {canSeeDnp3 ? (
                             <>
@@ -2194,7 +2201,25 @@ export function DeviceManagementPanel({
               ) : (
                 <>
                   <label>
-                    {t("engineering.devicesPanel.form.ipAddress")}
+                    {/* HATA ETIKET SATIRINDA, ALANIN ALTINDA DEGIL.
+                        Altta ayri bir satir olarak cizildiginde belirip
+                        kayboluyor ve `label` bir `grid` oldugu icin satir
+                        yuksekligi degisiyordu: alan her tusa basista
+                        asagi/yukari zipliyordu. Etiket satiri ZATEN var ve
+                        bos yeri var, dolayisiyla mesaj oraya girince hicbir
+                        sey yer degistirmiyor.
+
+                        Kisa metin bilincli: tam kural ("Ornek: 192.168.1.50")
+                        yer tutucuda ve `title`da zaten duruyor; etiket
+                        satirina sigmayan bir metin sutunu tasitirdi. */}
+                    <span className="field-label-row">
+                      {t("engineering.devicesPanel.form.ipAddress")}
+                      {ipv4Gecerli(createIpAddress) ? null : (
+                        <span className="field-error-inline">
+                          {t("engineering.devicesPanel.form.ipInvalidShort")}
+                        </span>
+                      )}
+                    </span>
                     <input
                       value={createIpAddress}
                       onChange={(event) => setCreateIpAddress(event.target.value)}
@@ -2202,15 +2227,8 @@ export function DeviceManagementPanel({
                       required
                       aria-invalid={!ipv4Gecerli(createIpAddress)}
                       className={ipv4Gecerli(createIpAddress) ? undefined : "is-invalid"}
+                      title={t("engineering.devicesPanel.form.ipInvalid")}
                     />
-                    {/* Hata alanin YANINDA, gonderdikten SONRA degil: kural
-                        yalnizca backend'deyken operator "Olustur"a basip geri
-                        donen balonu okumak zorunda kaliyordu. */}
-                    {ipv4Gecerli(createIpAddress) ? null : (
-                      <small className="field-error">
-                        {t("engineering.devicesPanel.form.ipInvalid")}
-                      </small>
-                    )}
                   </label>
                   {canSeeDnp3 ? (
                     <>

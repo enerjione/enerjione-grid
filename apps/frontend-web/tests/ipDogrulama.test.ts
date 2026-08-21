@@ -95,3 +95,69 @@ test("hata metni iki dilde var", () => {
     assert.ok(typeof metin === "string" && metin.length > 10, `${lang}: ipInvalid yok`);
   }
 });
+
+
+// ---------------------------------------------------------------------------
+// HATA MESAJI YERLESIMI — alan ZIPLAMAMALI
+// ---------------------------------------------------------------------------
+
+test("hata ETIKET SATIRINDA, alanin ALTINDA DEGIL", () => {
+  // YASANAN: mesaj alanin altinda ayri bir satir olarak ciziliyordu ve
+  // `label` bir `grid` oldugu icin belirip kaybolunca SATIR YUKSEKLIGI
+  // DEGISIYORDU. Kullanici her tusa basista alanin asagi/yukari
+  // zipladigini gordu; ustelik ayni izgara satirindaki port ve DNP3 adresi
+  // alanlari ile alttaki aciklama satiri da itiliyordu.
+  const kaynak = readFileSync(
+    join(process.cwd(), "src", "features", "devices", "DeviceManagementPanel.tsx"),
+    "utf8"
+  );
+  assert.ok(
+    !kaynak.includes('className="field-error"'),
+    "hata hala alanin altinda ayri satir olarak ciziliyor"
+  );
+  // Iki form da (olustur + duzenle) satir ici mesaji kullanmali.
+  const satirIci = (kaynak.match(/field-error-inline/g) ?? []).length;
+  assert.equal(satirIci, 2, `beklenen 2 satir ici hata, bulunan ${satirIci}`);
+  const satirlar = (kaynak.match(/field-label-row/g) ?? []).length;
+  assert.equal(satirlar, 2, `beklenen 2 etiket satiri, bulunan ${satirlar}`);
+});
+
+test("etiket satiri YUKSEKLIGI hatadan ETKILENMEZ", () => {
+  const css = readFileSync(join(process.cwd(), "src", "styles.css"), "utf8");
+  const i = css.indexOf(".field-label-row {");
+  assert.ok(i > 0, "etiket satiri stili yok");
+  const blok = css.slice(i, css.indexOf("}", i));
+  // Taban cizgisine hizali: 11px hata, 13px etiketin satirina SIGAR ve
+  // yuksekligi etiket belirler.
+  assert.match(blok, /align-items:\s*baseline/);
+  assert.match(blok, /display:\s*flex/);
+
+  const j = css.indexOf(".field-error-inline {");
+  const hata = css.slice(j, css.indexOf("}", j));
+  const px = Number(/font-size:\s*(\d+(?:\.\d+)?)px/.exec(hata)?.[1]);
+  assert.ok(px <= 12, `hata metni ${px}px — etiket satirini buyutur`);
+});
+
+test("TAM kural hala erisilebilir", () => {
+  // Satir ici mesaj KISA ("Gecersiz"); tam kural ("Ornek: 192.168.1.50")
+  // kaybolmamali — yer tutucuda ve `title`da durmali.
+  const kaynak = readFileSync(
+    join(process.cwd(), "src", "features", "devices", "DeviceManagementPanel.tsx"),
+    "utf8"
+  );
+  const title = (kaynak.match(/title=\{t\("engineering\.devicesPanel\.form\.ipInvalid"\)\}/g) ?? []);
+  assert.equal(title.length, 2, "tam kural iki formda da `title` olarak yok");
+  const yerTutucu = (kaynak.match(/placeholder="192\.168\.1\.50"/g) ?? []);
+  assert.equal(yerTutucu.length, 2, "ornek adres yer tutucusu iki formda da yok");
+});
+
+test("kisa hata metni iki dilde var ve GERCEKTEN kisa", () => {
+  for (const lang of ["tr", "en"]) {
+    const d = JSON.parse(
+      readFileSync(join(process.cwd(), "src", "shared", "i18n", "resources", `${lang}.json`), "utf8")
+    );
+    const kisa = d.engineering.devicesPanel.form.ipInvalidShort;
+    assert.ok(typeof kisa === "string" && kisa.length > 2, `${lang}: ipInvalidShort yok`);
+    assert.ok(kisa.length <= 14, `${lang}: "${kisa}" etiket satirina sigmaz`);
+  }
+});

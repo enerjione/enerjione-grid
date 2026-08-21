@@ -2586,7 +2586,8 @@
         "unitNo": "{{no}}. ünite",
         "satelliteNo": "Satellite {{no}}",
         "satellitePhaseTitle": "Uydu ve faz eşlemesi",
-        "ipInvalid": "Geçerli bir IPv4 adresi girin. Örnek: 192.168.1.50"
+        "ipInvalid": "Geçerli bir IPv4 adresi girin. Örnek: 192.168.1.50",
+        "ipInvalidShort": "Geçersiz"
       },
       "footer": {
         "ok": "OK",
