@@ -3692,6 +3692,7 @@ export async function deleteMapPack(
 
 import type {
   BulkApplyResult,
+  ConfigApplication,
   ConfigCurrent,
   ConfigDiffRow,
   ConfigRow,
@@ -3710,6 +3711,14 @@ type ApiConfigVersion = {
   template_id: number | null; note: string | null; created_by: string | null;
   created_at: string; applied_at: string | null; size_bytes: number;
   checksum_valid: boolean | null; ftp_written?: boolean | null;
+};
+
+type ApiConfigApplication = {
+  state: string; version: number; requested_at: string;
+  requested_by: string | null; reason: string | null;
+  queued_at: string | null; delivered_at: string | null;
+  verified_at: string | null; verified_by: string | null;
+  failure_reason: string | null; attempt: number;
 };
 
 const mapConfigRow = (r: ApiConfigRow): ConfigRow => ({
@@ -3739,6 +3748,7 @@ export async function fetchDeviceConfig(token: string, deviceId: number): Promis
     dial_in_configured_min?: number | null;
     dial_in_readback_min?: number | null;
     dial_in_readback_status?: string | null;
+    application?: ApiConfigApplication | null;
   };
   return {
     version: mapConfigVersion(data.version),
@@ -3747,7 +3757,33 @@ export async function fetchDeviceConfig(token: string, deviceId: number): Promis
     deviceLastUpdate: data.device_last_update ?? null,
     dialInConfiguredMin: data.dial_in_configured_min ?? null,
     dialInReadbackMin: data.dial_in_readback_min ?? null,
-    dialInReadbackStatus: dialInReadbackStatus(data.dial_in_readback_status)
+    dialInReadbackStatus: dialInReadbackStatus(data.dial_in_readback_status),
+    application: mapConfigApplication(data.application)
+  };
+}
+
+/** Uygulama sureci — arayuzun "uygulandi" demeden once neye dayandigi.
+ *
+ *  Bilinmeyen bir durum metni SESSIZCE "dogrulandi" sayilmaz: alan ham
+ *  string olarak tasinir ve gorunum katmani tanimadigi degeri notr
+ *  gosterir. Tanimadigimiz bir durumu basari saymak, tam da bu isin
+ *  duzeltmek icin var oldugu hatanin ta kendisi olurdu. */
+function mapConfigApplication(
+  a: ApiConfigApplication | null | undefined
+): ConfigApplication | null {
+  if (!a) return null;
+  return {
+    state: a.state,
+    version: a.version,
+    requestedAt: a.requested_at,
+    requestedBy: a.requested_by ?? null,
+    reason: a.reason ?? null,
+    queuedAt: a.queued_at ?? null,
+    deliveredAt: a.delivered_at ?? null,
+    verifiedAt: a.verified_at ?? null,
+    verifiedBy: a.verified_by ?? null,
+    failureReason: a.failure_reason ?? null,
+    attempt: a.attempt ?? 0
   };
 }
 

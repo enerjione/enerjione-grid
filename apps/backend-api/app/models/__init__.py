@@ -36,6 +36,7 @@ from app.models.bulk_notification_template import BulkNotificationTemplate
 from app.models.device import Device
 from app.models.device_command import DeviceCommand
 from app.models.device_config import DeviceConfigTemplate, DeviceConfigVersion
+from app.models.device_config_application import DeviceConfigApplication
 from app.models.device_model_settings import DeviceModelSettings
 from app.models.device_purge_job import DevicePurgeJob
 from app.models.device_runtime_health import DeviceRuntimeHealth
@@ -83,6 +84,7 @@ __all__ = [
     "Device",
     "DeviceCommand",
     "DeviceConfigTemplate",
+    "DeviceConfigApplication",
     "DeviceConfigVersion",
     "DeviceModelSettings",
     "DevicePurgeJob",

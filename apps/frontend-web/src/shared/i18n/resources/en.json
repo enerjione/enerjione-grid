@@ -4367,7 +4367,27 @@
         "port": "Port",
         "user": "User",
         "pass": "Password",
-        "dir": "Directory"
+        "dir": "Directory",
+        "apply": {
+          "staged": "File staged",
+          "waiting": "Waiting for the device to connect",
+          "queued": "Apply command queued",
+          "delivered": "Apply command delivered to device",
+          "verified": "Configuration verified",
+          "failed": "Could not be applied",
+          "superseded": "Replaced by a newer configuration",
+          "unknown": "Status unknown",
+          "deliveredHint": "The command reached the device. It is not yet confirmed that the device loaded the file.",
+          "verifiedStrong": "Verified against the file the device wrote itself.",
+          "verifiedWeak": "The device's update stamp changed. This does not pin down which version was loaded.",
+          "reasonSleeping": "Device is in Smart idle; its modem is off.",
+          "reasonUnreachable": "The device cannot accept commands right now.",
+          "reasonStale": "No current status is arriving from the gateway.",
+          "reasonNoContact": "No valid DNP3 contact with this device yet.",
+          "reasonWaitEvidence": "Waiting for fresh device status before retrying.",
+          "reasonLegacyOffline": "The device appears offline.",
+          "attempt": "attempt {{count}}"
+        }
       },
       "readonly": "read-only",
       "readonlyHint": "These settings are edited on the Device Management page. Shown here for diagnostics.",

@@ -2330,6 +2330,35 @@ export type ConfigVersion = {
  *  `yok`       = cihazdan okunmus bir dosya hic gorulmedi. */
 export type DialInReadbackStatus = "eslesiyor" | "farkli" | "yok";
 
+/** Yapilandirmanin CIHAZA UYGULANMA sureci.
+ *
+ *  NEDEN AYRI: `version.appliedAt` artik YALNIZCA cihazin kendi kaniti
+ *  goruldugunde dolar. Arasindaki butun asamalar burada tasinir. Bu alanlar
+ *  olmadan arayuz yalnizca iki sey soyleyebilirdi — "uygulandi" ya da
+ *  "hicbir sey yok"; uyuyan bir Horstmann'da ikisi de YANLISTI.
+ *
+ *  `state` DAR BIRLESIM DEGIL `string`: backend ileride yeni bir durum
+ *  eklerse arayuz cokmemeli, notr gostermeli. Tanimadigi bir durumu
+ *  "dogrulandi" saymak ise en tehlikeli varsayim olurdu. */
+export type ConfigApplication = {
+  //: cihaz_bekleniyor | kuyrukta | iletildi | dogrulandi | basarisiz |
+  //: gecersiz_kilindi
+  state: string;
+  version: number;
+  requestedAt: string;
+  requestedBy: string | null;
+  //: Neden hala bekliyor (uykuda, erisilemez, bayat_gozlem,
+  //: yeni_kanit_bekleniyor...). Operator "takildi mi" sorusunu bununla ayirir.
+  reason: string | null;
+  queuedAt: string | null;
+  deliveredAt: string | null;
+  verifiedAt: string | null;
+  //: cihaz_dosyasi (KESIN) | damga_degisti (ZAYIF)
+  verifiedBy: string | null;
+  failureReason: string | null;
+  attempt: number;
+};
+
 export type ConfigCurrent = {
   version: ConfigVersion;
   // null = cihazin serisi hicbir kaynaktan cozulemedi; dosya adi uretilemiyor.
@@ -2348,6 +2377,8 @@ export type ConfigCurrent = {
   //: saha kosullarinda guvenilir olmadigi icin karara girmez.
   dialInReadbackMin: number | null;
   dialInReadbackStatus: DialInReadbackStatus;
+  //: Devam eden ya da en son tamamlanan uygulama sureci. null = hic denenmemis.
+  application: ConfigApplication | null;
 };
 
 export type ConfigDiffRow = {

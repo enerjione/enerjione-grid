@@ -39,6 +39,7 @@ import {
 } from "../../shared/api";
 import type { ConfigCurrent, ConfigVersion } from "../../shared/types";
 import { useToast } from "../../components/ToastProvider";
+import { applyGorunum, applyToneClass } from "./configApplyState";
 
 type Props = {
   deviceId: number;
@@ -368,6 +369,8 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
   }
 
   const v = current.version;
+  // Uygulama sureci gorunumu — saf, test edilebilir bir modulden.
+  const uygulama = applyGorunum(current.application);
 
   return (
     <section className="device-config-section dev-ftp">
@@ -465,13 +468,40 @@ export function DeviceFtpConfigCard({ deviceId, deviceCode, accessToken, canEdit
         </div>
       </div>
 
-      {/* Durum satiri — yalnizca soyleyecek bir sey varsa basilir. Cihazin
-          KENDI bildirdigi damga en degerli bilgi: komut sonrasi degistiyse
-          guncelleme cihazda GERCEKTEN uygulandi demektir. */}
-      {current.filename === null || v.appliedAt || current.deviceLastUpdate ? (
+      {/* Durum satiri — yalnizca soyleyecek bir sey varsa basilir.
+
+          ESKIDEN BURASI YALAN SOYLEYEBILIYORDU: tek satir vardi ve
+          `appliedAt`e bakiyordu; o alan ise komut kuyruga girer girmez
+          doluyordu. Uyuyan bir Horstmann'da "Cihaza gonderildi" yaziyor ama
+          cihaz hala eski yapilandirmayla calisiyordu.
+
+          Artik surecin asamasi `application`dan gelir ve `appliedAt`
+          YALNIZCA cihazin kendi kaniti goruldugunde dolar. */}
+      {current.filename === null ||
+      uygulama !== null ||
+      v.appliedAt ||
+      current.deviceLastUpdate ? (
         <div className="dev-ftp-meta">
           {current.filename === null ? (
             <span>{t("deviceDetail.config.ftp.noSerialHint")}</span>
+          ) : null}
+          {uygulama ? (
+            <span
+              className={`dev-ftp-apply ${applyToneClass(uygulama.tone)}`}
+              title={uygulama.hintKey ? t(uygulama.hintKey) : undefined}
+            >
+              {t(uygulama.labelKey)}
+              {/* Deneme sayisi yalnizca BIRDEN FAZLA denendiyse yazilir;
+                  "1. deneme" her zaman gorunse gurultu olurdu. */}
+              {current.application && current.application.attempt > 1
+                ? ` · ${t("deviceDetail.config.ftp.apply.attempt", {
+                    count: current.application.attempt
+                  })}`
+                : null}
+            </span>
+          ) : null}
+          {uygulama?.hintKey ? (
+            <span className="dev-ftp-apply-hint">{t(uygulama.hintKey)}</span>
           ) : null}
           {v.appliedAt ? (
             <span className="dev-ftp-applied">

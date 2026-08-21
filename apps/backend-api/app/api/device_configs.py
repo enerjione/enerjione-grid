@@ -27,18 +27,21 @@ gondermemis olmak" ya da tersini uretirdi.
 """
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_roles
 from app.db.session import get_db
 from app.models.device import Device
-from app.models.device_config import DeviceConfigTemplate
+from app.models.device_config import DeviceConfigTemplate, DeviceConfigVersion
+from app.models.device_runtime_health import DeviceRuntimeHealth
 from app.models.enums import UserRole
 from app.models.user import User
 from app.schemas.dnp3_extended import merge_dnp3_extended
 from app.schemas.device_config import (
     BulkApplyRequest,
     BulkApplyResult,
+    ConfigApplicationRead,
     ConfigChangeRequest,
     ConfigCurrentRead,
     ConfigDiffRow,
@@ -208,6 +211,55 @@ def guncel_config(
         dial_in_configured_min=_yapilandirilan,
         dial_in_readback_min=_okunan,
         dial_in_readback_status=_durum,
+        application=_uygulama_durumu(db, cihaz),
+    )
+
+
+def _uygulama_durumu(db: Session, cihaz: Device) -> ConfigApplicationRead | None:
+    """Cihazin en guncel uygulama sureci — OKUNURKEN UZLASTIRILARAK.
+
+    NEDEN OKURKEN: komut bes ayri yerde terminal duruma gecebilir (cihaz
+    sonucu, mutlak TTL, kira kaybi, teslim hatasi, sonuc supurucusu). Her
+    birine bir kanca takmak, ileride eklenen ALTINCI cikis noktasinin
+    sessizce atlanmasi demekti — ve atlanan niyet arayuzde sonsuza kadar
+    "komut sirada" gorunurdu. Komut satiri zaten tek dogruluk kaynagi;
+    durumu ondan TURETIYORUZ.
+
+    Bu ayrica komut boru hattina hicbir kanca eklemeden calisir.
+    """
+    from datetime import datetime, timezone
+
+    from app.models.device_config_application import DeviceConfigApplication
+    from app.services import device_config_apply_service as apply_svc
+
+    niyet = db.scalars(
+        select(DeviceConfigApplication)
+        .where(DeviceConfigApplication.device_id == cihaz.id)
+        .order_by(DeviceConfigApplication.id.desc())
+        .limit(1)
+    ).first()
+    if niyet is None:
+        return None
+
+    an = datetime.now(timezone.utc)
+    onceki = niyet.state
+    apply_svc.komut_durumunu_senkronize_et(db, niyet=niyet, simdi=an)
+    if niyet.state != onceki:
+        db.commit()
+
+    surum = db.get(DeviceConfigVersion, niyet.config_version_id)
+    return ConfigApplicationRead(
+        state=niyet.state,
+        version=(surum.version if surum is not None else 0),
+        requested_at=niyet.requested_at,
+        requested_by=niyet.requested_by,
+        reason=niyet.last_readiness_reason,
+        queued_at=niyet.queued_at,
+        delivered_at=niyet.delivered_at,
+        verified_at=niyet.verified_at,
+        verified_by=niyet.verified_by,
+        failure_reason=niyet.failure_reason,
+        attempt=int(niyet.attempt or 0),
     )
 
 
@@ -500,27 +552,38 @@ def sablondan_olustur(
 def cihaza_uygula(
     device_id: int, db: Session = Depends(get_db), user: User = _YETKI
 ) -> ConfigVersionRead:
-    """Guncel surumu FTP'ye yazar + `config_update` komutunu kuyruga alir.
+    """Guncel surumu FTP'ye yazar ve UYGULAMA NIYETINI kalici hale getirir.
 
-    Eskiden kullanici dosyayi FTP'ye ELLE koymak zorundaydi; komut gidiyor
-    ama cihaz eski dosyayi okuyordu. Bu uc zinciri kapatir:
+    NE DEGISTI VE NEDEN
+    -------------------
+    Bu uc eskiden dosyayi yazip HEMEN bir `config_update` komutu kuyruga
+    aliyor ve `applied_at` alanini O AN dolduruyordu. Horstmann Smart modda
+    modemini BILEREK kapatir ve Dial-In araligi 24 saate kadar cikar; komutun
+    tazelik suresi ise 120 SANIYEDIR. Yani uyuyan bir cihaza yapilan her
+    gonderim, cihaz uyanmadan cok once oluyordu — ama arayuz "Cihaza
+    gonderildi" yaziyordu. Uyuyan cihazda bu duz bir yalandi.
 
-      1. dosya FTP'ye yazilir (gomulu volume ya da harici sunucu — mod
-         ayarina gore, bkz. ftp_client_service),
-      2. DNP3 `config_update` (binary output 0) kuyruga alinir,
-      3. surumun `applied_at` alani isaretlenir.
+    Simdi:
+      1. dosya FTP'ye yazilir (KALICI; cihazi orada bekler),
+      2. kalici bir NIYET kaydi olusur (`device_config_applications`),
+      3. cihaz SU AN komut alabiliyorsa komut HEMEN uretilir (surekli
+         calisan cihazlarda davranis DEGISMEZ),
+      4. alamiyorsa niyet `cihaz_bekleniyor` kalir ve cihaz DOGAL OLARAK
+         uyandiginda backend o an TAZE bir komut uretir.
 
-    `applied_at` = "dosya cihazin okuyacagi yere kondu ve komut kuyruga
-    alindi". Cihazin dosyayi GERCEKTEN okudugu an degil — cihaz komutu ancak
-    bir sonraki DNP oturumunda alir ve harici modda indirme anini goremeyiz.
-    Bos birakmaktan (hicbir iz yok) cok daha durustur; kesin teyit FTP
-    'download' olayindan izlenebilir.
+    `applied_at` ARTIK BURADA YAZILMAZ. Yalnizca cihazin KENDI kaniti
+    goruldugunde dolar (bkz. `device_config_apply_service.dogrulamayi_dene`).
 
-    Sira onemli: FTP yazimi BASARISIZSA komut kuyruga ALINMAZ — cihaza "yeni
-    dosyayi oku" deyip eski dosyayi okutmak, tam da kapatmaya calistigimiz
-    hatanin kendisi olurdu.
+    Komut omru UZATILMADI: 120 saniye bir guvenlik invaryantidir ve ayni
+    kanaldan kesici komutlari da gecer. Kalici olan komut degil NIYETTIR.
+
+    Sira onemli: FTP yazimi BASARISIZSA niyet de komut da OLUSMAZ — cihaza
+    "yeni dosyani oku" deyip eski dosyayi okutmak, tam da kapatmaya
+    calistigimiz hatanin kendisi olurdu.
     """
-    from app.services import device_command_service as cmd_svc
+    from datetime import datetime, timezone
+
+    from app.services import device_config_apply_service as apply_svc
     from app.services import ftp_client_service
 
     cihaz = _device(db, device_id)
@@ -544,37 +607,59 @@ def cihaza_uygula(
         # Sebep kullanicinin gorebilecegi kisa bir metin olarak doner.
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
 
-    try:
-        komut = cmd_svc.queue_command(
-            db, device=cihaz, slug="config_update", actor=user.username, origin="ui"
-        )
-    except cmd_svc.CommandRejected as exc:
-        # Dosya yazildi ama komut gidemedi (orn. gateway yok). Acik soyle:
-        # kullanici komutu Komutlar sekmesinden ayrica tetikleyebilir.
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"Dosya FTP'ye yazildi ({yazilan_yol}) ama komut kuyruga alinamadi: {exc.detail}",
-        ) from exc
-
-    from datetime import datetime, timezone
-
-    surum.applied_at = datetime.now(timezone.utc)
+    an = datetime.now(timezone.utc)
+    niyet = apply_svc.niyet_olustur(
+        db,
+        device=cihaz,
+        surum=surum,
+        raw=raw,
+        ftp_path=yazilan_yol,
+        actor=user.username,
+        simdi=an,
+    )
     record_event(
         db,
         category="device",
-        event_type="config_applied",
+        event_type="config_staged",
         message=(
             f"{cihaz.name}: yapilandirma v{surum.version} FTP'ye yazildi "
-            f"({yazilan_yol}) ve config_update komutu kuyruga alindi (#{komut.id})"
+            f"({yazilan_yol}); cihaza uygulanmasi icin siraya alindi."
         ),
         actor_username=user.username,
         device_code=cihaz.code,
         metadata={
             "version": surum.version,
             "ftp_path": yazilan_yol,
-            "command_id": komut.id,
+            "application_id": niyet.id,
         },
     )
+
+    # Cihaz SU AN komut alabiliyorsa bekletme: surekli calisan (continuous /
+    # Boost) cihazlarda deneyim eskisiyle AYNI kalmali.
+    komut = apply_svc.cihazi_ilerlet(
+        db,
+        device=cihaz,
+        saglik=db.get(DeviceRuntimeHealth, cihaz.code),
+        simdi=an,
+    )
+    if komut is None and niyet.state == apply_svc.BEKLIYOR_DURUMU:
+        record_event(
+            db,
+            category="device",
+            event_type="config_waiting_for_device",
+            message=(
+                f"{cihaz.name}: cihaz su an komut alamiyor "
+                f"({niyet.last_readiness_reason}); yapilandirma cihaz "
+                "uyandiginda uygulanacak."
+            ),
+            actor_username=user.username,
+            device_code=cihaz.code,
+            metadata={
+                "application_id": niyet.id,
+                "reason": niyet.last_readiness_reason,
+            },
+        )
+
     db.commit()
     return _version_read(surum, raw)
 

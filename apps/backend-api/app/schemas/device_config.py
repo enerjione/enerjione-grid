@@ -49,6 +49,38 @@ class ConfigVersionRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ConfigApplicationRead(BaseModel):
+    """Yapilandirmanin CIHAZA UYGULANMA sureci — arayuzun dogruyu soylemesi icin.
+
+    NEDEN AYRI ALAN: `version.applied_at` bir BELGE alanidir ve artik
+    YALNIZCA cihazin kendi kaniti goruldugunde dolar. Arasindaki butun
+    asamalar (dosya hazir / cihaz bekleniyor / komut sirada / iletildi)
+    burada tasinir.
+
+    Arayuz bu alanlar olmadan yalnizca iki sey soyleyebilirdi: "uygulandi"
+    ya da "hicbir sey yok". Uyuyan bir cihazda ikisi de yanlisti.
+    """
+
+    #: `cihaz_bekleniyor` | `kuyrukta` | `iletildi` | `dogrulandi` |
+    #: `basarisiz` | `gecersiz_kilindi`
+    state: str
+    version: int
+    requested_at: datetime
+    requested_by: str | None = None
+    #: Neden hala bekliyor (`device_session_readiness` gerekce sabitleri).
+    #: `uykuda`, `erisilemez`, `bayat_gozlem`, `yeni_kanit_bekleniyor`...
+    reason: str | None = None
+    queued_at: datetime | None = None
+    delivered_at: datetime | None = None
+    verified_at: datetime | None = None
+    #: `cihaz_dosyasi` (KESIN) | `damga_degisti` (ZAYIF). Kanit sinifi
+    #: gorunur olmali: "dogrulandi" yazip nedenini gizlemek, sonradan
+    #: guvenilirligi tartisilamaz hale getirirdi.
+    verified_by: str | None = None
+    failure_reason: str | None = None
+    attempt: int = 0
+
+
 class ConfigCurrentRead(BaseModel):
     """Cihazin guncel yapilandirmasi + gosterilecek satirlar.
 
@@ -82,6 +114,10 @@ class ConfigCurrentRead(BaseModel):
     #: `eslesiyor` | `farkli` | `yok`. `farkli` bir ARIZA IDDIASI DEGILDIR:
     #: cihaz dosyasini henuz yazmamis ya da eski bir kopya yazmis olabilir.
     dial_in_readback_status: str = "yok"
+
+    #: Devam eden ya da en son tamamlanan uygulama sureci. `None` = bu cihaz
+    #: icin hic uygulama denenmemis.
+    application: ConfigApplicationRead | None = None
 
 
 class ConfigDiffRow(BaseModel):

@@ -510,6 +510,50 @@ def sagligi_uygula(
     # Uzlastirma silmesi, bu partinin yazdiklarini gormeli.
     db.flush()
     silinen = _uzlastir(db, zarf)
+
+    # --- UYANAN CIHAZ -> BEKLEYEN YAPILANDIRMA -----------------------------
+    #
+    # Uyuyan bir Horstmann'a gonderilen yapilandirma komutu 120 saniyede
+    # oluyordu; cihaz ise 24 saate kadar uyuyabilir. Cozum komut omrunu
+    # uzatmak DEGIL (o sure kesici komutlarini da kapsayan bir guvenlik
+    # invaryantidir), cihaz DOGAL OLARAK uyandiginda O AN taze bir komut
+    # uretmektir.
+    #
+    # NEDEN BURADA: bu, cihazin uyandigini ogrendigimiz TEK yer. Ayri bir
+    # zamanlayici ile dakikada bir yoklamak hem gecikme eklerdi hem de
+    # gereksiz sorgu uretirdi.
+    #
+    # NEDEN COMMIT'TEN ONCE: saglik satiri, niyetin durum gecisi ve uretilen
+    # komut AYNI transaction'da yazilir. Backend tam ortada yeniden
+    # baslarsa ya hepsi vardir ya hicbiri — "komut uretildi ama niyet hala
+    # bekliyor" gibi bir ara durum olusamaz.
+    #
+    # HER PARTIDE KOMUT URETMEZ: once tek indeksli sorguyla bu partide
+    # bekleyen niyet var mi diye bakar; 600 cihazlik filoda bu genelde
+    # sifirdir.
+    # SAVEPOINT: yapilandirma tarafi KENDI ICINDE atomiktir ama sagligi
+    # REHIN ALMAZ.
+    #
+    # Iki gereksinim ayni anda saglanmali:
+    #   * Durum gecisi (`BEKLIYOR -> KUYRUKTA`) ve uretilen komut ya IKISI
+    #     BIRDEN yazilir ya hicbiri; yoksa "komut var ama niyet hala
+    #     bekliyor" gibi bir ara durum ikinci bir komut daha urettirirdi.
+    #   * Yapilandirma tarafindaki bir hata SAGLIK ALIMINI DUSURMEMELI. Bu
+    #     kanal 600 cihazin durum gozlemini tasiyor; 5xx donmek gateway'i
+    #     sonsuz yeniden denemeye sokar ve butun filonun durumu bayatlar.
+    #
+    # Ic islem (nested) ikisini birden verir: hata halinde yalnizca
+    # savepoint geri alinir, saglik satirlari yazilmaya devam eder.
+    try:
+        from app.services import device_config_apply_service as apply_svc
+
+        with db.begin_nested():
+            apply_svc.uyanma_degerlendir(db, saglik_satirlari=mevcut, simdi=an)
+    except Exception:  # noqa: BLE001 - saglik alimi korunur
+        logger.exception(
+            "device_health uyanma degerlendirmesi basarisiz gateway=%s", gateway_code
+        )
+
     db.commit()
 
     return {

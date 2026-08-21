@@ -176,6 +176,9 @@ import "./filtreSeridi.test";
 // paragrafi kalici olarak ekrandaydi.
 import "./haberlesmeFormuDuzeni.test";
 
+// Uyuyan cihaza yapilandirma: arayuz kanitsiz basari IDDIA ETMEZ.
+import "./yapilandirmaUygulamaDurumu.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   connectionIsDead,

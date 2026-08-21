@@ -44251,3 +44251,67 @@ input[aria-invalid="true"]:focus {
   border-top-color: transparent;
   border-bottom-color: #0f172a;
 }
+
+/* --- YAPILANDIRMA UYGULAMA DURUMU ----------------------------------------
+
+   Kart eskiden TEK bir sey soyluyordu: "Cihaza gonderildi". O metin komut
+   kuyruga girer girmez ciziliyordu; uyuyan bir Horstmann'da duz bir yalandi.
+   Simdi surecin asamasi gorunur ve TON ile ayirt edilir.
+
+   KRITIK AYRIM: `ilerliyor` (komut iletildi) ile `basarili` (cihaz kaniti
+   goruldu) AYNI RENK DEGIL. Ikisini ayni gostermek, tam da kapatmaya
+   calistigimiz "kanitsiz basari" izlenimini geri getirirdi. */
+.dev-ftp-apply {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.14rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Notr: gecersiz kilinmis ya da tanimadigimiz durum. Renk IDDIA ETMEZ. */
+.dev-ftp-apply--notr {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
+/* Bekleme: uyuyan cihaz. ARIZA DEGIL — Smart modda modem BILEREK kapali,
+   bu yuzden kirmizi degil mavi. Ayni renk `smart_idle` durum rozetinde de
+   kullaniliyor (bkz. deviceRuntimeState sozlesmesi). */
+.dev-ftp-apply--bekleme {
+  background: #dbeafe;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+
+/* Ilerliyor: komut sirada ya da iletildi. HENUZ BASARI DEGIL. */
+.dev-ftp-apply--ilerliyor {
+  background: #fef3c7;
+  border-color: #d97706;
+  color: #92400e;
+}
+
+/* Basarili: YALNIZCA cihazin kendi kaniti goruldugunde. */
+.dev-ftp-apply--basarili {
+  background: #dcfce7;
+  border-color: #16a34a;
+  color: #166534;
+}
+
+.dev-ftp-apply--hata {
+  background: #fee2e2;
+  border-color: #dc2626;
+  color: #991b1b;
+}
+
+/* Gerekce: "neden hala bekliyor" sorusunun cevabi. Rozetin yaninda duz
+   metin — operator once durumu, sonra sebebini okur. */
+.dev-ftp-apply-hint {
+  font-size: 0.75rem;
+  color: #64748b;
+}

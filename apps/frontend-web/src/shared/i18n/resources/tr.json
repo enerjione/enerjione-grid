@@ -4364,7 +4364,27 @@
         "port": "Port",
         "user": "Kullanıcı",
         "pass": "Parola",
-        "dir": "Dizin"
+        "dir": "Dizin",
+        "apply": {
+          "staged": "Dosya hazırlandı",
+          "waiting": "Cihazın bağlanması bekleniyor",
+          "queued": "Uygulama komutu sırada",
+          "delivered": "Cihaza uygulama komutu iletildi",
+          "verified": "Yapılandırma doğrulandı",
+          "failed": "Uygulanamadı",
+          "superseded": "Daha yeni yapılandırma ile değiştirildi",
+          "unknown": "Durum bilinmiyor",
+          "deliveredHint": "Komut cihaza iletildi. Cihazın dosyayı gerçekten yüklediği henüz doğrulanmadı.",
+          "verifiedStrong": "Cihazın kendi yazdığı dosya ile doğrulandı.",
+          "verifiedWeak": "Cihazın bildirdiği güncelleme damgası değişti. Hangi sürümün yüklendiğini kesinleştirmez.",
+          "reasonSleeping": "Cihaz Smart beklemede; modemi kapalı.",
+          "reasonUnreachable": "Cihaz şu an komut kabul edemiyor.",
+          "reasonStale": "Gateway'den güncel durum gelmiyor.",
+          "reasonNoContact": "Cihazla henüz geçerli bir DNP3 teması olmadı.",
+          "reasonWaitEvidence": "Yeniden denemek için cihazdan yeni bir durum bilgisi bekleniyor.",
+          "reasonLegacyOffline": "Cihaz çevrimdışı görünüyor.",
+          "attempt": "{{count}}. deneme"
+        }
       },
       "readonly": "salt-okuma",
       "readonlyHint": "Bu ayarlar Cihaz Yönetimi sayfasından düzenlenir. Burada teşhis için gösterilir.",
