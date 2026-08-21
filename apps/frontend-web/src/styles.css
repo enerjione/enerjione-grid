@@ -24100,6 +24100,15 @@ th.event-col-category {
   margin: 0;
   padding: 0;
   list-style: none;
+  /* COK BRANŞMANDA LISTE KENDI ICINDE KAYAR. Onceden 20 kol tum paneli
+     asagi itiyor, "Ariza Kunyesi" ve "Gecmis" ekranin disina cikiyordu;
+     operator arizanin kunyesine ulasmak icin uzun uzun kaydiriyordu.
+     ~5 kol gorunur, gerisi listenin kendi kaydirmasinda. */
+  max-height: 232px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding-right: 2px;
 }
 .fx-branch {
   display: flex;
@@ -24566,18 +24575,22 @@ th.event-col-category {
   overscroll-behavior: contain;
   scrollbar-width: thin;
 }
-/* Bloklar BENZER YUKSEKLIKTE dursun: alarm/sure/gecmis bloklari icerik
-   uzunluguna gore 40-110px arasinda oynuyor ve panel duzensiz bir merdivene
-   donuyordu. Ortak taban yukseklik ritmi sabitler; kunye gibi gercekten uzun
-   bir blok yine buyuyebilir (tavan degil TABAN veriyoruz). Icerik dikeyde
-   ortalanir, boylece taban yukseklikten kucuk bloklar kutunun ustune
-   yapismaz. */
+/* Bloklar tek bir dikey RITIMDE dursun.
+   `min-height` + `justify-content: center` IKILISI KALKTI. Amaci "bloklar
+   benzer yukseklikte gorunsun"du ama bir tuzak tasiyordu: dikeyde ortalanan
+   bir flex kutusunda icerik kutuyu asinca tasma IKI UCA BIRDEN gider ve ust
+   taraf komsu blogun basligiyla UST USTE biner. Cok branşmanli ya da cok
+   alarmli bir arizada gorulen tam olarak buydu — "21sa 44dk surdu" blogu
+   "ARIZA KUNYESI" basliginin uzerine yaziyordu.
+   Ayni gorsel ritim sabit padding ile, tasma riski OLMADAN saglanir. */
 .fx-ev-block {
-  padding: 11px 0;
-  min-height: 104px;
+  padding: 13px 0;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  /* Ustten hizali: icerik ne kadar uzarsa uzasin blok ASAGI dogru buyur. */
+  justify-content: flex-start;
+  /* Uzun cihaz kodu / hat adi kutuyu yatayda zorlamasin. */
+  min-width: 0;
 }
 .fx-ev-block > .fx-ev-title { flex: none; }
 .fx-ev-block + .fx-ev-block { border-top: 1px solid #f1f5f9; }

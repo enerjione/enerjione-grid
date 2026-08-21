@@ -8,6 +8,8 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   PHASE_LINES,
@@ -953,4 +955,44 @@ test("butun direkler sahnede KALIR — yalnizca cerceve daralir", () => {
   // kullanici surukleyerek hattin tamamini gezebilmeli.
   const scene = uzunHat(60, 61);
   assert.equal(scene.rows[0].geo.seqs.length, 100);
+});
+
+// ---------------------------------------------------------------------------
+// KANIT PANELI — bloklar UST USTE BINMEZ
+//
+// `.fx-ev-block` hem `min-height` hem `justify-content: center` tasiyordu.
+// Dikeyde ortalanan bir flex kutusunda icerik kutuyu asinca tasma IKI UCA
+// BIRDEN gider: ust taraf komsu blogun basliginin uzerine yazilir. Cok
+// branşmanli / cok alarmli bir arizada gorulen tam olarak buydu.
+// ---------------------------------------------------------------------------
+
+const STIL = readFileSync(join(process.cwd(), "src", "styles.css"), "utf8");
+
+function kuralGovdesi(secici: string): string {
+  const i = STIL.indexOf(`${secici} {`);
+  assert.ok(i >= 0, `${secici} kurali yok`);
+  return STIL.slice(i, STIL.indexOf("}", i));
+}
+
+test("fx-ev-block dikeyde ORTALAMAZ (tasma iki uca gitmesin)", () => {
+  const govde = kuralGovdesi(".fx-ev-block");
+  assert.doesNotMatch(
+    govde,
+    /justify-content:\s*center/,
+    "ortalama geri geldi — uzun blok komsu basligin uzerine biner"
+  );
+});
+
+test("fx-ev-block'ta min-height ile ortalama BIRLIKTE bulunmaz", () => {
+  const govde = kuralGovdesi(".fx-ev-block");
+  const ortali = /justify-content:\s*center/.test(govde);
+  const tabanli = /min-height:\s*\d/.test(govde);
+  assert.ok(!(ortali && tabanli), "min-height + center ikilisi tasma tuzagi");
+});
+
+test("branşman listesi COK KOLDA kendi icinde kayar", () => {
+  // 20 kol tum paneli asagi itiyor, kunye ve gecmis ekranin disina cikiyordu.
+  const govde = kuralGovdesi(".fx-branch-list");
+  assert.match(govde, /max-height:\s*\d/, "liste sinirsiz buyuyor");
+  assert.match(govde, /overflow-y:\s*auto/, "liste kendi icinde kaymiyor");
 });
