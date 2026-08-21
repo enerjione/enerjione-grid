@@ -89,7 +89,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Derlenecek kaynagin TA KENDISI. Dalin ucuna bakilmaz.
           ref: ${{ inputs.sha }}
@@ -178,7 +178,7 @@ jobs:
       matrix:
         service: ${{ fromJSON(needs.hazirla.outputs.matris) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.hazirla.outputs.sha }}
 
