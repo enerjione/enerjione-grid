@@ -44610,3 +44610,40 @@ input[aria-invalid="true"]:focus {
   white-space: nowrap;
   flex: 0 0 auto;
 }
+
+/* --- KOMUTLAR: IKI KOLON --------------------------------------------------
+
+   Komut gecmisi ONCEDEN listenin ALTINDAYDI: gonderilen bir komutun
+   sonucunu gormek icin sayfayi asagi kaydirmak gerekiyordu ve gruplar
+   acilinca aradaki mesafe daha da uzuyordu. Artik solda "ne yapabilirim",
+   sagda "ne oldu" — ikisi ayni anda gorunur.
+
+   Sag kolon SABIT genislikte degil oranli: cok dar olursa komut adlari ve
+   zaman damgalari kirpilir. */
+.device-cmd-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.device-cmd-col-actions,
+.device-cmd-col-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* Gecmis uzun olabilir; kendi icinde kaydirilir ki komut listesi ekranin
+   disina itilmesin. */
+.device-cmd-col-log .device-cmd-history-box {
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+/* Dar ekranda tek kolon: yan yana sikistirmak iki tarafi da okunmaz yapar. */
+@media (max-width: 1200px) {
+  .device-cmd-cols { grid-template-columns: 1fr; }
+  .device-cmd-col-log .device-cmd-history-box { max-height: 360px; }
+}

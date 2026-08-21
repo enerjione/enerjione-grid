@@ -152,3 +152,58 @@ test("iki dilde metin var", () => {
     }
   }
 });
+
+// ---------------------------------------------------------------------------
+// YERLESIM — solda "ne yapabilirim", sagda "ne oldu"
+// ---------------------------------------------------------------------------
+
+test("komut gruplari KAPALI baslar", () => {
+  // Onceden `alarm_reset` acik geliyordu ve panel acilir acilmaz butonlarla
+  // doluyordu; operatorun ilk gordugu sey taranabilir bir liste degil, bir
+  // buton yiginiydi.
+  assert.match(
+    PANEL,
+    /useState<Record<string, boolean>>\(\{\}\)/,
+    "bir grup hala acik basliyor"
+  );
+});
+
+test("gecmis SAG KOLONDA — komut listesinin altinda DEGIL", () => {
+  // Onceden gonderilen komutun sonucunu gormek icin sayfayi asagi
+  // kaydirmak gerekiyordu; gruplar acilinca mesafe daha da uzuyordu.
+  assert.match(PANEL, /device-cmd-cols/, "iki kolon sarmalayicisi yok");
+  const iEylem = PANEL.indexOf("device-cmd-col-actions");
+  const iLog = PANEL.indexOf("device-cmd-col-log");
+  assert.ok(iEylem > 0 && iLog > iEylem, "kolon sirasi bozuk");
+  assert.ok(
+    PANEL.indexOf("device-cmd-history-section") > iLog,
+    "gecmis sag kolonun icinde degil"
+  );
+});
+
+test("KALICI aciklama notu kaldirildi", () => {
+  // Dort satirlik teknik metin her acilista listenin ustunde duruyordu;
+  // her satirin durum rozeti ayni bilgiyi TEK KELIMEYLE veriyor.
+  assert.ok(!PANEL.includes("asyncNote"), "not blogu hala ciziliyor");
+  for (const lang of ["tr", "en"]) {
+    const d = JSON.parse(
+      readFileSync(join(process.cwd(), "src", "shared", "i18n", "resources", `${lang}.json`), "utf8")
+    );
+    assert.ok(
+      !("asyncNote" in d.deviceDetail.commands),
+      `${lang}: kullanilmayan asyncNote anahtari duruyor`
+    );
+  }
+});
+
+test("dar ekranda TEK kolona duser", () => {
+  // Yan yana sikistirmak iki tarafi da okunmaz yapar.
+  const css = readFileSync(join(process.cwd(), "src", "styles.css"), "utf8");
+  const i = css.indexOf(".device-cmd-cols {");
+  assert.ok(i > 0, "kolon stili yok");
+  assert.match(
+    css.slice(i, i + 900),
+    /@media \(max-width: 1200px\)[\s\S]*device-cmd-cols \{ grid-template-columns: 1fr/,
+    "dar ekran kirilma noktasi yok"
+  );
+});

@@ -90,7 +90,11 @@ export function DeviceCommandsPanel({
   const [busyCmd, setBusyCmd] = useState<string | null>(null);
   const [cmdHistory, setCmdHistory] = useState<DeviceCommandRow[]>([]);
   // Accordion: varsayilan alarm_reset acik (en cok kullanilan), digerleri kapali.
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ alarm_reset: true });
+  // TUM GRUPLAR KAPALI BASLAR. Onceden `alarm_reset` acik geliyordu ve
+  // panel acilir acilmaz butonlarla doluyordu; operatorun ilk bakista
+  // gordugu sey "ne yapabilirim" listesi degil, bir buton yiginiydi.
+  // Kapali baslamak listeyi taranabilir yapar — hangi grup lazimsa o acilir.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const toggleGroup = (k: string) => setOpenGroups((s) => ({ ...s, [k]: !s[k] }));
 
   // Komut listesi: master binary_output sinyalleri -> grup meta ile zenginlestir.
@@ -174,6 +178,12 @@ export function DeviceCommandsPanel({
 
   return (
     <div className="device-cmd-panel">
+      {/* IKI KOLON: solda "ne yapabilirim", sagda "ne oldu".
+          Onceden gecmis komut listesinin ALTINDAYDI ve gonderilen komutun
+          sonucunu gormek icin sayfayi asagi kaydirmak gerekiyordu —
+          ustelik gruplar acilinca mesafe daha da uzuyordu. */}
+      <div className="device-cmd-cols">
+        <div className="device-cmd-col-actions">
       {/* SALT-OKUNUR BILDIRIMI.
           Sekme eskiden yetkisiz kullaniciya HIC gorunmuyordu; operator
           cihaza ne yapilabilecegini bilmeden calisiyordu. Artik liste
@@ -243,6 +253,9 @@ export function DeviceCommandsPanel({
         );
       })}
 
+        </div>
+
+        <div className="device-cmd-col-log">
       {cmdHistory.length > 0 ? (
         <section className="device-cmd-history-section">
           <h4 className="device-cmd-group-title">
@@ -250,10 +263,12 @@ export function DeviceCommandsPanel({
             {t("deviceDetail.commands.historyTitle")}
             <span className="device-cmd-history-count">{cmdHistory.length}</span>
           </h4>
-          <p className="device-cmd-async-note">
-            <span className="material-symbols-outlined">info</span>
-            {t("deviceDetail.commands.asyncNote")}
-          </p>
+          {/* ACIKLAMA NOTU KALDIRILDI. Dort satirlik teknik bir metin
+              ("cihaza iletildi komutun ulastigini gosterir, islemin bitisi
+              cihaza baglidir, bazi komutlarda modem kisa sure kapanabilir...")
+              her acilista listenin ustunde duruyordu. Her satirin durum
+              rozeti zaten ayni bilgiyi TEK KELIMEYLE veriyor; kalici bir
+              paragraf gurultuden ibaretti. */}
           <div className="device-cmd-history-box">
             {cmdHistory.map((c) => (
               <div key={c.id} className={`device-cmd-row is-${c.status}`}>
@@ -283,6 +298,8 @@ export function DeviceCommandsPanel({
           </div>
         </section>
       ) : null}
+        </div>
+      </div>
     </div>
   );
 }
