@@ -61,3 +61,31 @@ test("toplam sayac da filtrelenmis listeden geliyor", () => {
     "toplam sayi ham listeden okunuyor — tablodan fazla gosterir"
   );
 });
+
+// ---------------------------------------------------------------------------
+// GATEWAY GUNCELLEME KARTI — sinifsiz kalmasin
+//
+// Bu blogun dort sinifi hic tanimlanmamisti; `<dl>` tarayici varsayilaniyla
+// ciziliyor, `dd` kendi satirina inip girintili duruyordu ("Surum" alt satirda
+// "1.15.0 -> en guncel"). Kart bastan asaga hizasiz bir liste gibi gorunuyordu.
+// ---------------------------------------------------------------------------
+
+const CSS = readFileSync(join(process.cwd(), "src", "styles.css"), "utf8");
+const GW_MODAL = readFileSync(
+  join(process.cwd(), "src", "features", "gateways", "GatewayEditModal.tsx"),
+  "utf8"
+);
+
+test("gateway guncelleme kartinin siniflari CSS'te tanimli", () => {
+  for (const sinif of ["gw-update-detail", "gw-update-meta", "gw-uyari", "gw-rollback-btn"]) {
+    assert.match(CSS, new RegExp(`\\.${sinif}\\s*[,{]`), `.${sinif} icin kural yok`);
+    assert.match(GW_MODAL, new RegExp(sinif), `${sinif} artik kullanilmiyor — kural olu`);
+  }
+});
+
+test("dd tarayici girintisi SIFIRLANMIS", () => {
+  // `dd`nin varsayilan `margin-inline-start: 40px` degeri, degeri etiketin
+  // altina ve iceri kaydiriyordu — gorulen bozukluk buydu.
+  const blok = CSS.slice(CSS.indexOf(".gw-update-meta dd"), CSS.indexOf(".gw-uyari"));
+  assert.match(blok, /margin:\s*0/, "dd girintisi sifirlanmamis");
+});

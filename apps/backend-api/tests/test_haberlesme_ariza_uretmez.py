@@ -397,3 +397,60 @@ def test_ingest_ucu_kind_alanini_KABUL_eder():
     assert ornek.kind == "comm_loss"
     # Alan gelmezse eski davranis (rule) korunmali.
     assert InternalAlarmIngest(title="x", description="y").kind is None
+
+
+# ---------------------------------------------------------------------------
+# HABERLESME ALARMI "ARIZAYI ACAN ALARM" LISTESINDE DE GORUNMEZ
+#
+# SAHADAN GELEN KAFA KARISIKLIGI: motor haberlesme alarmini bilerek ariza
+# uretmez sayiyor (yukaridaki testler), ama ariza kartindaki "ARIZAYI ACAN
+# ALARM" bolumu `last_red` cihazinin ZAMAN PENCERESINDEKI TUM alarmlarini
+# listeliyordu. Ekranda arizayi acmasi IMKANSIZ olan bir haberlesme alarmi
+# "arizayi acan" basligi altinda gorunuyor, operator hat arizasini haberlesme
+# kopmasina bagliyordu.
+# ---------------------------------------------------------------------------
+
+
+def test_ariza_acan_alarm_listesi_produces_fault_FALSE_olani_ELER():
+    """Liste "bunlar bu arizayi acti" iddiasinda; iddiayi tasimayan satir girmez."""
+    import inspect
+
+    from app.api import faults as faults_api
+
+    kaynak = inspect.getsource(faults_api._trigger_alarms)
+    assert "produces_fault" in kaynak, (
+        "_trigger_alarms produces_fault olcutune HIC bakmiyor — haberlesme "
+        "alarmi 'arizayi acan alarm' olarak listelenir"
+    )
+
+
+def test_ariza_acan_alarm_listesi_gercekten_filtreliyor():
+    """Davranis testi: ayni cihazda biri ariza ureten biri uretmeyen iki alarm."""
+    from datetime import timedelta
+    from types import SimpleNamespace
+
+    from app.api import faults as faults_api
+
+    an = datetime(2026, 8, 20, 9, 33, tzinfo=timezone.utc)
+
+    def alarm(id_, baslik, uretir):
+        return SimpleNamespace(
+            id=id_, title=baslik, description=None, level="critical",
+            signal_key=None, device_id=7, acknowledged=False, reset=False,
+            reset_at=None, created_at=an + timedelta(minutes=id_),
+            produces_fault=uretir,
+        )
+
+    f = SimpleNamespace(
+        last_red_device_id=7, opened_at=an, closed_at=None, resolved_at=None,
+    )
+    refs = SimpleNamespace(
+        alarms={7: [alarm(1, "Test alarmi", True), alarm(2, "Haberlesme arizasi", False)]}
+    )
+    cihaz = SimpleNamespace(code="DEMO-2", name="DEMO-2")
+
+    secilen = faults_api._trigger_alarms(f, refs, cihaz)
+    basliklar = [s.title for s in secilen]
+    assert basliklar == ["Test alarmi"], (
+        f"haberlesme alarmi elenmedi: {basliklar}"
+    )

@@ -297,12 +297,32 @@ def _trigger_alarms(
     secilir: alarm sifirlansa bile "bu arizayi ne acti" sorusunun cevabi
     degismez. Ust sinir sart — ayni cihaz aylar icinde defalarca arizalanir
     ve eski arizanin alarmi yeni kaydin kartinda gorunmemeli.
+
+    ARIZA URETMEYEN ALARM BU LISTEDE YER ALMAZ
+    ------------------------------------------
+    Zaman penceresi TEK BASINA yetmiyordu: pencereye denk gelen HER alarm
+    listeye giriyordu, `produces_fault=False` olanlar dahil. En sik gorulen
+    ornek haberlesme alarmi — motor onu bilerek ariza uretmez sayar
+    (bkz. `test_haberlesme_ariza_uretmez.py`: sessiz kalan cihaz ariza
+    akimi GORMUS DEGILDIR, sadece bilmiyoruzdur).
+
+    Sonuc ekranda su oluyordu: baslik "ARIZAYI ACAN ALARM" diyor ama altta
+    arizayi acmasi IMKANSIZ olan bir haberlesme alarmi listeleniyor. Operator
+    hat arizasini haberlesme kopmasina baglayip yanlis teshise gidiyordu.
+    Kayit "bunlar bu arizayi acti" iddiasinda; iddiayi tasiyamayan satir
+    listede durmamali.
     """
     bitis = _utc(f.closed_at or f.resolved_at)
     alt = _utc(f.opened_at) - _ALARM_PENCERE
     ust = bitis + _ALARM_PENCERE if bitis else None
     secilen: list[FaultTriggerAlarm] = []
     for a in refs.alarms.get(f.last_red_device_id, []):
+        # `produces_fault` alarm satirina DONDURULMUS haldedir (kural sonradan
+        # degisse de bu alarmin davranisi sabit) — motorun kullandigi olcutun
+        # ta kendisi. Ayni olcute bakmak, ekranin motorla ayni seyi soylemesini
+        # garanti eder.
+        if not bool(getattr(a, "produces_fault", True)):
+            continue
         dogus = _utc(a.created_at)
         if dogus is None or dogus < alt:
             continue

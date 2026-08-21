@@ -692,6 +692,72 @@ export function frameSceneToBox(
   return { x: (scene.width - w) / 2, y: (scene.height - h) / 2, w, h };
 }
 
+/** Ariza araliginin iki yaninda gosterilecek SAGLAM span sayisi. */
+export const FOCUS_MARGIN_SPANS = 3;
+
+/**
+ * ACILIS GORUNUMU — hattin tamami degil, ARIZANIN OLDUGU YER.
+ *
+ * NE COZUYOR
+ * ----------
+ * Sahnenin tamamini cerceveye sigdirmak (bkz. `frameSceneToBox`) 100+ direkli
+ * bir hatta arizayi GORUNMEZ yapiyordu: 81 metrelik bir kesim, kilometrelerce
+ * hattin icinde birkac piksellik bir cizgiye iniyor ve operator "ariza nerede"
+ * sorusunu ekrandan CEVAPLAYAMIYORDU. Sahadan gelen sikayet tam olarak buydu.
+ *
+ * Cozum kirpmak DEGIL cercevelemek: butun direkler sahnede KALIR, yalnizca
+ * acilis penceresi ariza araligina + iki yanindaki birkac saglam direge
+ * oturur. Kullanici surukleyerek hattin geri kalanini gezebilir
+ * (`FaultPoleStrip` panning'i taban cercevenin icinde tutar). Kirpsaydik
+ * "arizanin iki yanindaki hat nasil" sorusu cevapsiz kalirdi.
+ *
+ * NEDEN ANA SATIR
+ * ---------------
+ * Kol satirlari ana hattin altina/ustune diziliyor ve kendi x eksenleri ana
+ * hattinkinden kaymis olabiliyor. Odak ARIZA ARALIGININ bulundugu satira
+ * gore kurulur; o satir yoksa (ya da ariza araligi cozulememisse) tam sahne
+ * cercevesine dusulur — yanlis bir yere yakinlasmaktansa hepsini gostermek
+ * yeglenir.
+ *
+ * DIKEY EKSEN DARALTILMAZ: kollar ana hattin altinda/ustunde duruyor ve
+ * yatayda yakinlasip dikeyde kirpmak, ariza bolgesindeki bir kolu ekran
+ * disinda birakirdi.
+ */
+export function faultFocusView(
+  scene: FaultScene,
+  box: ScenePx | null,
+  marginSpans: number = FOCUS_MARGIN_SPANS
+): { x: number; y: number; w: number; h: number } {
+  const taban = frameSceneToBox(scene, box);
+  // Ariza araligini TASIYAN satir. `span` yoksa cizilecek kirmizi kesim de
+  // yok demektir; o zaman yakinlasmanin dayanagi olmaz.
+  const satir = scene.rows.find((r) => r.geo.span != null);
+  if (!satir || !satir.geo.span || !box || box.w <= 0) return taban;
+
+  const sol = satir.x0 + satir.geo.pointAt(satir.geo.span.a).x;
+  const sag = satir.x0 + satir.geo.pointAt(satir.geo.span.b).x;
+  const pay = Math.max(0, marginSpans) * SPAN_W;
+  const istenenW = sag - sol + pay * 2;
+
+  // Sahnenin tamami zaten pencereye siginiyorsa yakinlasmaya gerek yok —
+  // ustelik yakinlasmak bos kenarlik yaratirdi.
+  if (istenenW >= taban.w) return taban;
+
+  // Oran KORUNUR: viewBox'in en/boy orani kutunun oraniyla ayni kalmali,
+  // yoksa cizim yatayda ezilir.
+  const w = istenenW;
+  const h = (taban.h / taban.w) * w;
+  const merkez = (sol + sag) / 2;
+  return {
+    // Taban cercevenin DISINA cikilmaz: kenardaki bir arizada bos alana
+    // bakmak yerine pencere hattin ucuna yaslanir.
+    x: Math.max(taban.x, Math.min(taban.x + taban.w - w, merkez - w / 2)),
+    y: Math.max(taban.y, Math.min(taban.y + Math.max(0, taban.h - h), taban.y + (taban.h - h) / 2)),
+    w,
+    h
+  };
+}
+
 /**
  * Satirlari yerlestirir ve her kolu asili oldugu direge baglar.
  *

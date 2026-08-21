@@ -37341,6 +37341,77 @@ th.event-col-category {
 .gw-switch-body strong { font-size: 13px; font-weight: 650; color: #0f172a; }
 .gw-switch-body small { font-size: 11.5px; color: #64748b; line-height: 1.5; }
 
+/* --- GATEWAY GUNCELLEME DETAYI -------------------------------------------
+
+   Bu blogun DORT sinifi hic tanimlanmamisti (`gw-update-detail`,
+   `gw-update-meta`, `gw-uyari`, `gw-rollback-btn`), yani tarayici
+   varsayilaniyla ciziliyordu. En gorunur sonucu `<dl>`di: `dd` kendi
+   satirina inip GIRINTILI duruyordu, yani "Surum / 1.15.0 -> en guncel"
+   iki satira boluniyor ve kart bastan asagi hizasiz bir liste gibi
+   gorunuyordu. Modalin geri kalani (form satirlari, `gw-islem`) hizali
+   oldugu icin fark daha da batiyordu. */
+.gw-update-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* Etiket SOLDA, deger SAGDA — modaldeki diger bilgi satirlariyla ayni
+   okuma duzeni. `auto 1fr` degil `max-content 1fr`: en uzun etiket ne
+   kadarsa sutun o kadar, degerler tek hizada baslar. */
+.gw-update-meta {
+  margin: 0;
+  display: grid;
+  gap: 4px 12px;
+  font-size: 12px;
+}
+.gw-update-meta > div {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 12px;
+  align-items: baseline;
+  padding: 3px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.gw-update-meta > div:last-child { border-bottom: none; }
+.gw-update-meta dt {
+  color: #64748b;
+  white-space: nowrap;
+}
+.gw-update-meta dd {
+  margin: 0;                 /* tarayici varsayilani 40px GIRINTI verir */
+  color: #0f172a;
+  font-weight: 600;
+  text-align: right;
+  word-break: break-word;    /* digest/uzun surum metni tasmasin */
+}
+
+/* Uyari satiri — surum atlama, eksik yetenek, hata metni. */
+.gw-uyari {
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.gw-uyari.is-fail {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+/* Geri alma: yikici degil ama geri donus — birincil eylemle ayni agirlikta
+   durmamali, bu yuzden kendi satirinda ve dar. */
+.gw-rollback-btn {
+  align-self: flex-start;
+  font-size: 12px;
+  padding: 5px 12px;
+}
+
 .gw-islem {
   display: flex;
   align-items: flex-start;

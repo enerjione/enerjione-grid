@@ -19,7 +19,10 @@ import {
   buildStripGeometry,
   frameSceneToBox,
   hotPathOf,
-  sagAt
+  sagAt,
+  faultFocusView,
+  SPAN_W,
+  FOCUS_MARGIN_SPANS
 } from "../src/features/faults/faultStripGeometry";
 
 const POLES = [1, 2, 3, 4, 5];
@@ -861,4 +864,93 @@ test("giris cihazi GORMEDIYSE ana hat eskisi gibi boyanir", () => {
   });
   assert.ok(geo.span, "ana hat bolgesi kaybolmus");
   assert.equal(geo.branchTapSeq, null);
+});
+
+// ---------------------------------------------------------------------------
+// ACILIS GORUNUMU — hattin tamami degil ARIZANIN OLDUGU YER
+//
+// SAHADAN GELEN SIKAYET: 100+ direkli bir hatta 81 metrelik ariza kesimi,
+// tam sahne cerceveye sigdirildigi icin birkac piksellik bir cizgiye
+// iniyordu. Operator ekrana bakip "ariza nerede" sorusunu CEVAPLAYAMIYORDU.
+// ---------------------------------------------------------------------------
+
+const KUTU = { w: 1200, h: 400 };
+
+function uzunHat(fromSeq: number, toSeq: number, direkSayisi = 100) {
+  return buildFaultScene([
+    {
+      key: "main",
+      kind: "main",
+      title: "ANA HAT",
+      poleSeqs: Array.from({ length: direkSayisi }, (_, i) => i + 1),
+      fromSeq,
+      toSeq,
+      faultPhases: ["a"]
+    }
+  ]);
+}
+
+test("uzun hatta acilis penceresi ariza + iki yanda 3 span", () => {
+  const scene = uzunHat(60, 61);
+  const odak = faultFocusView(scene, KUTU);
+  const spanSayisi = odak.w / SPAN_W;
+  // 1 ariza span'i + iki yanda FOCUS_MARGIN_SPANS
+  assert.ok(
+    Math.abs(spanSayisi - (1 + FOCUS_MARGIN_SPANS * 2)) < 0.5,
+    `pencere ${spanSayisi.toFixed(1)} span, beklenen ~${1 + FOCUS_MARGIN_SPANS * 2}`
+  );
+  // Tam sahnenin kucuk bir dilimi olmali — yoksa yakinlasma yok demektir.
+  const tam = frameSceneToBox(scene, KUTU);
+  assert.ok(odak.w < tam.w / 5, "pencere hala hattin tamamina yakin");
+});
+
+test("pencere ARIZAYI iceriyor", () => {
+  const scene = uzunHat(60, 61);
+  const odak = faultFocusView(scene, KUTU);
+  const satir = scene.rows[0];
+  const sol = satir.x0 + satir.geo.pointAt(satir.geo.span!.a).x;
+  const sag = satir.x0 + satir.geo.pointAt(satir.geo.span!.b).x;
+  assert.ok(odak.x <= sol, "arizanin solu pencerenin disinda");
+  assert.ok(odak.x + odak.w >= sag, "arizanin sagi pencerenin disinda");
+});
+
+test("en/boy orani KORUNUR — cizim yatayda ezilmez", () => {
+  const scene = uzunHat(60, 61);
+  const tam = frameSceneToBox(scene, KUTU);
+  const odak = faultFocusView(scene, KUTU);
+  assert.ok(Math.abs(tam.w / tam.h - odak.w / odak.h) < 0.01);
+});
+
+test("hat KISAYSA yakinlasilmaz — bos kenarlik olusmaz", () => {
+  // Uc direkli bir hat zaten tamamen goruntuye siginiyor; yakinlasmak
+  // cizimi buyutup iki yanda bosluk birakirdi.
+  const scene = uzunHat(1, 2, 3);
+  const tam = frameSceneToBox(scene, KUTU);
+  const odak = faultFocusView(scene, KUTU);
+  assert.deepEqual(odak, tam);
+});
+
+test("KENAR arizasinda pencere sahnenin disina TASMAZ", () => {
+  for (const [a, b] of [[1, 2], [99, 100]] as const) {
+    const scene = uzunHat(a, b);
+    const tam = frameSceneToBox(scene, KUTU);
+    const odak = faultFocusView(scene, KUTU);
+    assert.ok(odak.x >= tam.x - 0.01, `sol tasma (${a}-${b})`);
+    assert.ok(odak.x + odak.w <= tam.x + tam.w + 0.01, `sag tasma (${a}-${b})`);
+  }
+});
+
+test("ariza araligi COZULEMEMISSE tam sahne gosterilir", () => {
+  // Yanlis bir yere yakinlasmaktansa hepsini gostermek yeglenir.
+  const scene = buildFaultScene([
+    { key: "main", kind: "main", title: "H", poleSeqs: [1, 2, 3, 4, 5] }
+  ]);
+  assert.deepEqual(faultFocusView(scene, KUTU), frameSceneToBox(scene, KUTU));
+});
+
+test("butun direkler sahnede KALIR — yalnizca cerceve daralir", () => {
+  // Kirpsaydik "arizanin iki yanindaki hat nasil" sorusu cevapsiz kalirdi;
+  // kullanici surukleyerek hattin tamamini gezebilmeli.
+  const scene = uzunHat(60, 61);
+  assert.equal(scene.rows[0].geo.seqs.length, 100);
 });

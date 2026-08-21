@@ -1,3 +1,4 @@
+import ipaddress
 from datetime import date, datetime, timezone
 from typing import Literal
 
@@ -10,6 +11,45 @@ from app.schemas.dnp3_extended import Dnp3ExtendedSettings, merge_dnp3_extended
 #: birbirinden habersiz yazimlarin birikmesi ve faz gruplamasinin bolunmesi
 #: demekti. Kucuk harf zorunlu degil — dogrulama oncesi normalize edilir.
 PhaseCode = Literal["a", "b", "c"]
+
+
+def dogrula_ip(value: str | None) -> str | None:
+    """Cihazin DNP3 uc noktasi — GECERLI bir IPv4 olmak ZORUNDA.
+
+    ONCEDEN HICBIR DOGRULAMA YOKTU: alan duz `str` idi ve "asdf", "192.168",
+    "10.0.0.256" gibi her sey kaydediliyordu. Hata sahada, cihaz eklendikten
+    gunler sonra ortaya cikiyordu: gateway o adrese baglanmayi deniyor,
+    baglanamiyor ve cihaz "haberlesme yok" olarak gorunuyordu. Yani yazim
+    hatasi bir ARIZA gibi teshis ediliyor, kimse alan degerine bakmiyordu.
+
+    HOSTNAME KABUL EDILMEZ: gateway bu degeri dogrudan DNP3 TCP baglantisinda
+    kullaniyor ve saha aglarinda (APN, izole VLAN) DNS cogu zaman yok. Ad
+    kabul etmek, cozulemedigi anda yine "haberlesme yok" uretirdi.
+
+    IPv6 de KABUL EDILMEZ: DNP3 outstation tarafi ve `_require_unique_endpoint`
+    esitlik karsilastirmasi bastan sona IPv4 varsayiyor.
+
+    `0.0.0.0` ve multicast REDDEDILIR — bir cihazin adresi olamazlar. Loopback
+    ise BILEREK SERBEST: ayni makinede kosan simulatore baglanmak mesru bir
+    kurulum (saha oncesi dogrulama boyle yapiliyor).
+    """
+    if value is None:
+        return None
+    kirpik = str(value).strip()
+    try:
+        addr = ipaddress.ip_address(kirpik)
+    except ValueError as exc:
+        raise ValueError(
+            f"Gecersiz IP adresi: {kirpik!r}. Ornek: 192.168.1.50"
+        ) from exc
+    if addr.version != 4:
+        raise ValueError("Yalnizca IPv4 adresi kabul edilir")
+    if addr.is_unspecified or addr.is_multicast or addr.is_reserved:
+        raise ValueError(f"{addr} bir cihaz adresi olamaz")
+    # Normalize edilmis hali yazilir: "010.0.0.1" ve "10.0.0.1" ayni cihazi
+    # gosterir ama metin olarak farklidir; tekil uc nokta kontrolu
+    # (`_require_unique_endpoint`) esitlige baktigi icin ikisi ayri sayilirdi.
+    return str(addr)
 
 
 class DeviceScalarBase(BaseModel):
@@ -47,6 +87,11 @@ class DeviceScalarBase(BaseModel):
     # (orada ucuncu unite `master`'dir), bu yuzden yalnizca set kayitlarinda
     # doldurulur.
     phase_sat03: PhaseCode | None = None
+
+    @field_validator("ip_address")
+    @classmethod
+    def _ip_gecerli(cls, v: str) -> str:
+        return dogrula_ip(v) or v
 
 
 class DeviceCreate(DeviceScalarBase):
@@ -96,6 +141,11 @@ class DeviceUpdate(BaseModel):
     # fazla setler SILINIR (telemetrisi, alarmlari, arizalari ve hat
     # yerlesimiyle birlikte) — bu yuzden arayuz once acik uyari gosterir.
     satellite_set_count: int | None = Field(default=None, ge=1, le=3)
+
+    @field_validator("ip_address")
+    @classmethod
+    def _ip_gecerli(cls, v: str | None) -> str | None:
+        return dogrula_ip(v)
 
 
 class DeviceRuntimeHealthRead(BaseModel):

@@ -38,7 +38,8 @@ import {
   GROUND_Y,
   PHASE_LINES,
   buildFaultScene,
-  frameSceneToBox
+  frameSceneToBox,
+  faultFocusView
 } from "./faultStripGeometry";
 import type {
   FaultRowInput,
@@ -398,8 +399,14 @@ export function FaultPoleStrip({
     [boxPx, scene]
   );
 
+  // ACILIS PENCERESI ARIZAYA ODAKLI. `base` (tam sahne) yalnizca panning
+  // SINIRI olarak kalir: kullanici surukleyerek hattin tamamini gezebilir.
+  // Tam sahneyle acmak 100+ direkli bir hatta arizayi birkac piksele
+  // indiriyordu — ekranda "ariza nerede" sorusu cevapsiz kaliyordu.
+  const odak: View = useMemo(() => faultFocusView(scene, boxPx), [scene, boxPx]);
+
   const [view, setView] = useState<View | null>(null);
-  const v = view ?? base;
+  const v = view ?? odak;
   const drag = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
 
   /** Pencereyi taban cercevenin ICINDE tutar — kenarda bosluga bakilmaz. */
