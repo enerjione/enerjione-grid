@@ -340,6 +340,14 @@ jobs:
       # degistiren komut sayisi 0 olmak zorunda.
       - name: Guncelleme oncesi yedek kapisi (fail-closed)
         run: bash infra/scripts/linux/tests/test-update-backup-gate.sh "$PWD"
+      # NATS/JETSTREAM VOLUME KORUMASI. Otomatik onarim, saglikli olmayan bir
+      # servisin veri alanini sifirlayabiliyor. NATS o listedeydi ve gerekce
+      # "stream'leri backend ensure eder" idi — ama stream TANIMI donerken
+      # STORE'DAKI MESAJLAR donmez. Mevcut kurulumda `install.sh` tekrar
+      # kosturuldugunda teslim edilmemis telemetri backlog'u sessizce
+      # silinebiliyordu. Test log metnine degil CAGRILAN KOMUTLARA bakar.
+      - name: NATS kalici volume korumasi
+        run: bash infra/scripts/linux/tests/test-nats-volume-preservation.sh "$PWD"
       # NATS TLS hazirlama. TLS'in calismasi UC seyin ayni anda dogru olmasina
       # bagli (sertifika, NATS_CA_FILE, NATS_URL* semasi) ve yarim kalirsa
       # ariza SESSIZ: NATS healthcheck'i TLS'siz izleme portunu prob ettigi

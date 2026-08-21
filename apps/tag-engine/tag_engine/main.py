@@ -58,6 +58,7 @@ logging.basicConfig(
 logger = logging.getLogger("tag-engine")
 
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
+from tag_engine.redaction import redact_url_credentials
 # Stream isimleri — backend'in olusturdugu stream'lerle ayni olmali.
 STREAM_NORMALIZED = os.getenv("NATS_STREAM_TELEMETRY_NORMALIZED", "TELEMETRY_NORMALIZED")
 # Consumer subject pattern (incoming) — backend'in TELEMETRY_RAW stream'ine bind.
@@ -454,7 +455,7 @@ async def _run() -> None:
             logger.info(
                 "tag-engine-running url=%s in=%s out=%s.<gw>.{prio|bulk} durable=%s "
                 "katalog_yuklendi=%s sinyal=%d",
-                NATS_URL,
+                redact_url_credentials(NATS_URL),
                 SUBJECT_RAW,
                 SUBJECT_NORMALIZED_PREFIX,
                 DURABLE_NAME,
@@ -471,7 +472,10 @@ async def _run() -> None:
             if _stop_event.is_set():
                 break
             logger.warning(
-                "tag-engine-reconnect error=%s backoff=%ds url=%s", ex, backoff, NATS_URL
+                "tag-engine-reconnect error=%s backoff=%ds url=%s",
+                ex,
+                backoff,
+                redact_url_credentials(NATS_URL),
             )
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 60)

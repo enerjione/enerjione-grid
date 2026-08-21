@@ -21,6 +21,7 @@ from alarm_service.rules import AlarmRuleCache, evaluate_composite, evaluate_rul
 
 # ----- Telemetri kaynagi: NATS JetStream (gateway -> tag-engine -> JetStream) -
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
+from alarm_service.redaction import redact_url_credentials
 NATS_SUBJECT_NORMALIZED = os.getenv(
     "NATS_SUBJECT_TELEMETRY_NORMALIZED", "e1.telemetry.normalized.>"
 )
@@ -1258,7 +1259,7 @@ async def _consume_jetstream() -> None:
             # (ack_wait, max_ack_pending, max_deliver) hat basina
             # `_hatlari_kur` icinde belirlenir.
             subs, hat_adlari = await _hatlari_kur(js, _on_message)
-            print(f"alarm-service-running hatlar={hat_adlari} url={NATS_URL}")
+            print(f"alarm-service-running hatlar={hat_adlari} url={redact_url_credentials(NATS_URL)}")
             backoff = 2
             while not _stop_event.is_set():
                 await asyncio.sleep(1)
@@ -1274,7 +1275,7 @@ async def _consume_jetstream() -> None:
         except Exception as ex:  # noqa: BLE001
             if _stop_event.is_set():
                 break
-            print(f"alarm-service-reconnect error={ex} backoff={backoff}s url={NATS_URL}")
+            print(f"alarm-service-reconnect error={ex} backoff={backoff}s url={redact_url_credentials(NATS_URL)}")
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 60)
         finally:

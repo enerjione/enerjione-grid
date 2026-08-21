@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from iec104_outbound.redaction import redact_url_credentials
 import os
 import ssl
 from datetime import datetime
@@ -219,7 +220,7 @@ class TelemetryConsumer:
                     "iec104_consumer_running subject=%s durable=%s url=%s",
                     s.nats_subject,
                     s.nats_durable,
-                    s.nats_url,
+                    redact_url_credentials(s.nats_url),
                 )
                 backoff = 2
                 while not self._stop.is_set():
@@ -233,7 +234,7 @@ class TelemetryConsumer:
                     "iec104_consumer_reconnect error=%s backoff=%ds url=%s",
                     exc,
                     backoff,
-                    s.nats_url,
+                    redact_url_credentials(s.nats_url),
                 )
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 60)

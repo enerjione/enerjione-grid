@@ -26,6 +26,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+
+from app.core.redaction import redact_url_credentials
 import threading
 from collections.abc import Callable
 from typing import Any
@@ -186,7 +188,7 @@ class JetStreamBus:
             logger.warning(
                 "jetstream_bus_start_failed url=%s error=%s "
                 "(RabbitMQ akisi devam ediyor — bu arizadan etkilenmez)",
-                self._url,
+                redact_url_credentials(self._url),
                 exc,
             )
             # loop'u kapat; tekrar deneme cagiraninin sorumlulugu
@@ -196,7 +198,7 @@ class JetStreamBus:
         self._ready.set()
         logger.info(
             "jetstream_bus_ready url=%s streams=[%s, %s, %s]",
-            self._url,
+            redact_url_credentials(self._url),
             self._stream_raw,
             self._stream_normalized,
             self._stream_dlq,
@@ -640,7 +642,7 @@ def _try_start_once(*, quiet: bool) -> None:
             _bus = bus
             logger.info(
                 "jetstream_bus_started url=%s — telemetri akisi JetStream uzerinden",
-                settings.nats_url,
+                redact_url_credentials(settings.nats_url),
             )
         else:
             _bus = None
@@ -649,7 +651,7 @@ def _try_start_once(*, quiet: bool) -> None:
                     "jetstream_bus_unavailable url=%s — telemetri akisi DURABILIR! "
                     "NATS server'i kontrol edin. Backend ayagi kalmaya devam ediyor; "
                     "baglanti kurulana kadar %ds araliklarla yeniden denenecek.",
-                    settings.nats_url,
+                    redact_url_credentials(settings.nats_url),
                     int(_RETRY_INTERVAL_SEC),
                 )
 

@@ -393,14 +393,59 @@ e1_wait_healthy() {
 #      container/ag durumunu temizler; VERI ALANINA DOKUNMAZ.
 #   2) Hala olmuyorsa servisin veri volume'unu silip sifirdan baslat.
 #
-# 2. asama YALNIZCA veri kaybi kabul edilebilir servisler icin yapilir
-# (rabbitmq, nats). RabbitMQ'da kuyruklar gecicidir ve gateway kullanicilarini
-# backend yeniden uretir; NATS JetStream stream'lerini backend acilista ensure
-# eder. POSTGRES bu listede DEGILDIR — orada silinecek sey abonenin verisidir,
+# 2. asama YALNIZCA veri kaybi kabul edilebilir servisler icin yapilir.
+# POSTGRES bu listede DEGILDIR — orada silinecek sey abonenin verisidir,
 # asla otomatik silmeyiz.
 #
 #   e1_repair_service rabbitmq 240
-E1_WIPEABLE_SERVICES=" rabbitmq nats "
+#
+# RabbitMQ: kuyruklar gecicidir ve gateway kullanicilarini backend yeniden
+# uretir.
+E1_WIPEABLE_SERVICES=" rabbitmq "
+
+# NATS: KALICI VERI TASIR — yalnizca BU KOSUMDA olusmussa silinebilir.
+#
+# NEDEN LISTEDEN CIKARILDI
+# ------------------------
+# Eskiden `nats` de `E1_WIPEABLE_SERVICES` icindeydi ve gerekce "JetStream
+# stream'lerini backend acilista ensure eder" idi. Bu YARIM DOGRU: stream
+# TANIMI yeniden uretilir ama STORE'DAKI MESAJLAR geri gelmez. Yani
+# `install.sh` mevcut bir kurulumda tekrar kosturuldugunda (saha PC'sinde
+# sik: kurulum yarida kaldi, operator komutu tekrar calistirdi) ve NATS
+# force-recreate'ten sonra hala unhealthy ise, teslim edilmemis telemetri
+# backlog'u SESSIZCE siliniyor, sistem "onarildi" diyordu.
+#
+# Veri silerek healthy gorunmek, cozmeye calistigi sorundan pahalidir.
+#
+# YENI KURAL: silme yalnizca volume'un SAHIBI bu kosumsa serbest. Sahiplik
+# `e1_snapshot_preexisting_volumes` ile kurulum BASINDA (compose up'tan
+# ONCE) alinan kanit defterinden okunur. Defter alinmamissa ya da volume
+# defterde varsa -> KORU ve GUVENLI SEKILDE BASARISIZ OL.
+E1_PERSISTENT_SERVICES=" nats "
+
+#: Kurulum baslarken var olan docker volume'leri (bosluklarla cevrili).
+E1_PREEXISTING_VOLUMES=""
+#: Defter alindi mi. ALINMADIYSA hicbir kalici volume silinemez (fail-safe):
+#: "muhtemelen temiz kurulum" gibi bir tahminle veri silinmez.
+E1_PREEXISTING_SNAPSHOT=0
+
+# Kurulum ONCESI volume envanterini al. `docker compose up` calismadan ONCE
+# cagrilmali; sonra cagrilirsa bu kosumun yarattigi volume'ler de "onceden
+# vardi" sayilir — hata YONU GUVENLI taraftadir (koruma).
+e1_snapshot_preexisting_volumes() {
+  E1_PREEXISTING_VOLUMES=" $(docker volume ls -q 2>/dev/null | tr '\n' ' ') "
+  E1_PREEXISTING_SNAPSHOT=1
+}
+
+# "Bu volume kurulumdan ONCE de var miydi?"
+#   0 (evet/bilinmiyor) -> KORU
+#   1 (hayir, bu kosumda olustu) -> silinebilir
+e1_volume_preexisted() {
+  local vol="$1"
+  # Defter yoksa iddia edemeyiz; en guvenli cevap "vardi".
+  [[ "$E1_PREEXISTING_SNAPSHOT" == "1" ]] || return 0
+  [[ "$E1_PREEXISTING_VOLUMES" == *" ${vol} "* ]]
+}
 
 e1_repair_service() {
   local svc="$1" timeout="${2:-180}" cid vol dest
@@ -412,7 +457,10 @@ e1_repair_service() {
     return 0
   fi
 
-  if [[ "$E1_WIPEABLE_SERVICES" != *" $svc "* ]]; then
+  local kalici=0
+  if [[ "$E1_PERSISTENT_SERVICES" == *" $svc "* ]]; then
+    kalici=1
+  elif [[ "$E1_WIPEABLE_SERVICES" != *" $svc "* ]]; then
     e1_err "${svc} icin veri alani sifirlama GUVENLI DEGIL — otomatik onarim burada duruyor."
     return 1
   fi
@@ -433,8 +481,22 @@ e1_repair_service() {
     return 1
   fi
 
+  # KALICI SERVISTE SAHIPLIK KAPISI. Volume bu kosumdan once de varsa icinde
+  # teslim edilmemis mesajlar olabilir; otomatik onarim ona DOKUNMAZ.
+  if [[ "$kalici" == "1" ]] && e1_volume_preexisted "$vol"; then
+    e1_err "${svc}: veri alani (${vol}) bu kurulumdan ONCE de vardi — otomatik"
+    e1_err "  onarim onu SILMEZ. JetStream store'undaki teslim edilmemis"
+    e1_err "  mesajlar geri getirilemez; veri silerek 'saglikli' gorunmeyiz."
+    e1_hint "Elle inceleyin: docker compose logs ${svc}"
+    return 1
+  fi
+
   e1_warn "Otomatik onarim (2/2): ${svc} veri alani sifirlaniyor (${vol})."
-  e1_hint "Bu alanda kalici veri yok — kuyruk/stream tanimlari yeniden uretilir."
+  if [[ "$kalici" == "1" ]]; then
+    e1_hint "Bu alan BU KURULUMDA olustu — icinde onceki bir kuruluma ait veri yok."
+  else
+    e1_hint "Bu alanda kalici veri yok — kuyruk/stream tanimlari yeniden uretilir."
+  fi
   docker compose rm -sf "$svc" >/dev/null 2>&1 || true
   docker volume rm "$vol" >/dev/null 2>&1 || true
   docker compose up -d "$svc" >/dev/null 2>&1 || true
@@ -596,6 +658,13 @@ e1_rollback_run() {
 #   yoktu  -> `down -v`   (bu kosumda olustu, iz birakmadan gider)
 e1_rollback_register_compose() {
   local dizin="$1"
+  # SAHIPLIK KANIT DEFTERI ayni yerde alinir: bu fonksiyon `docker compose up`
+  # calismadan ONCE cagriliyor, yani "onceden neler vardi" sorusunun dogru
+  # cevabinin alinabilecegi TEK an burasi. Ayri bir cagri noktasi eklemek,
+  # bir gun unutuldugunda otomatik onarimi sessizce yikici hale getirirdi
+  # (defter yoksa `e1_volume_preexisted` zaten KORU der, yani unutmanin
+  # bedeli veri kaybi degil "onarim yapmadi" olur).
+  e1_snapshot_preexisting_volumes
   if e1_compose_has_existing_state; then
     e1_rollback_add "cd '${dizin}' && docker compose down --remove-orphans"
   else
