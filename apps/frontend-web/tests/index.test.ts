@@ -168,6 +168,10 @@ import "./hatAgaci.test";
 // backend'de installer-only oldugu halde UI'da "general" grubunda duruyor.
 import "./komutYetkisi.test";
 
+// Durum suzgeci: ayni satirdaki alti dugme iki farkli gorsel dil
+// kullaniyordu ve renkler durum sozlesmesiyle cakisiyordu.
+import "./filtreSeridi.test";
+
 import { isTrusted, signalTrust } from "../src/shared/signalQuality";
 import {
   connectionIsDead,

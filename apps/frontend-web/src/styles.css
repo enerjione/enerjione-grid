@@ -12919,6 +12919,62 @@ th.event-col-category {
   color: #0f172a;
 }
 
+/* --- DURUM SUZGECI: TEK GORSEL DIL ----------------------------------------
+
+   ONCEKI HALI IKI AYRI DILDI: `Tumu/Cevrimici/Cevrimdisi/Alarmli` koyu
+   GRADIENT + beyaz yazi, `Smart Bekleme/Gecikmis` ise pastel + koyu yazi
+   kullaniyordu. Ayni kontrolde iki dil, "AI uretimi" hissinin asil kaynagi:
+   hicbir tasarim sistemi ayni satirdaki alti dugmeye iki farkli stil vermez.
+
+   RENK DURUM SOZLESMESINDEN GELIR (`shared/deviceRuntimeState.ts`):
+     yesil=Cevrimici · MAVI=Smart Bekleme (SAGLIKLI) · turuncu=Gecikmis
+     kirmizi=Cevrimdisi · gri=Tumu · amber=Alarmli (durum degil, OLAY)
+
+   Iki duzeltme daha:
+   * "Tumu" INDIGO idi. Indigo hicbir duruma karsilik gelmiyor; notr griye
+     alindi (ayni temizlik hat agacinda da yapildi).
+   * "Cevrimdisi" GRI gradientti ama haritada/agacta haberlesme kaybi
+     KIRMIZI. Ayni seyi iki yerde iki renkle gostermek okumayi bozuyordu.
+
+   Gradient ve renkli golge YOK: her cip tek bir ton, ince kenarlik ve
+   okunur koyu metin. Aktiflik RENKLE degil DOLGU+KENARLIK ile anlatilir,
+   boylece secili cip renk korlugunde de ayirt edilir. */
+.map-filter-chip {
+  --mf: #94a3b8;          /* durum rengi (notr: "Tumu") */
+  /* AKTIF DOLGU BEYAZ. Serit zemini zaten #f1f5f9; ayni tonu dolgu yapmak
+     secili "Tumu" cipini seride karistirir ve hangi filtrenin acik oldugu
+     kaybolurdu. Beyaz + slate kenarlik, durum ciplerinin renkli tonlariyla
+     ayni agirlikta ama renk IDDIA ETMEZ. */
+  --mf-soft: #ffffff;
+}
+.map-filter-chip--online   { --mf: #16a34a; --mf-soft: #dcfce7; }
+.map-filter-chip--smartidle{ --mf: #3b82f6; --mf-soft: #dbeafe; }
+.map-filter-chip--late     { --mf: #f97316; --mf-soft: #ffedd5; }
+.map-filter-chip--offline  { --mf: #dc2626; --mf-soft: #fee2e2; }
+.map-filter-chip--alarm    { --mf: #d97706; --mf-soft: #fef3c7; }
+
+/* Durum noktasi: cipi haritadaki/agactaki ayni renge BAGLAR. Filtrenin
+   hangi renge karsilik geldigi metni okumadan anlasilir. */
+.map-filter-chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--mf);
+  flex: 0 0 auto;
+}
+
+.map-filter-chip.active {
+  background: var(--mf-soft);
+  border-color: var(--mf);
+  color: #0f172a;
+  font-weight: 700;
+}
+.map-filter-chip.active .map-filter-chip-count {
+  background: var(--mf);
+  color: #fff;
+  border-color: transparent;
+}
+
 .map-filter-chip-count {
   display: inline-flex;
   align-items: center;
@@ -12934,34 +12990,9 @@ th.event-col-category {
   border: 1px solid #e2e8f0;
 }
 
-.map-filter-chip.active {
-  background: linear-gradient(135deg, #6366f1, #4f46e5);
-  color: #fff;
-  border-color: #4f46e5;
-  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.25);
-}
-.map-filter-chip.active .map-filter-chip-count {
-  background: rgba(255, 255, 255, 0.25);
-  color: #fff;
-  border-color: transparent;
-}
 
-.map-filter-chip--online.active {
-  background: linear-gradient(135deg, #10b981, #059669);
-  border-color: #059669;
-  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.25);
-}
 
-.map-filter-chip--offline.active {
-  background: linear-gradient(135deg, #94a3b8, #64748b);
-  border-color: #64748b;
-}
 
-.map-filter-chip--alarm.active {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  border-color: #d97706;
-  box-shadow: 0 1px 3px rgba(245, 158, 11, 0.25);
-}
 
 .map-filter-divider {
   width: 1px;
@@ -44089,16 +44120,6 @@ input[aria-invalid="true"]:focus {
 }
 
 /* Filtre rozetleri: Smart Bekleme (mavi) ve Gecikmis (turuncu). */
-.map-filter-chip--smartidle.active {
-  background: #dbeafe;
-  border-color: #3b82f6;
-  color: #1d4ed8;
-}
-.map-filter-chip--late.active {
-  background: #ffedd5;
-  border-color: #f97316;
-  color: #c2410c;
-}
 
 /* Topoloji menusundeki cihaz durum satiri: renk artik CALISMA-ZAMANI
    tonundan geliyor (ikili is-online/is-offline yerine). */

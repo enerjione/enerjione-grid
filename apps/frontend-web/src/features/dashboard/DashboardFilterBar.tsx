@@ -125,6 +125,7 @@ export function DashboardFilterBar({
           className={`map-filter-chip map-filter-chip--online ${statusFilter === "online" ? "active" : ""}`}
           onClick={() => onStatusFilterChange("online")}
         >
+          <span className="map-filter-chip-dot" aria-hidden="true" />
           {t("dashboard.filter.online")} <span className="map-filter-chip-count">{counts.online}</span>
         </button>
         {/* SMART BEKLEME — MAVI, saglikli. Eski gateway'de (sayi 0) hic
@@ -136,6 +137,7 @@ export function DashboardFilterBar({
             onClick={() => onStatusFilterChange("smartIdle")}
             title={t("deviceRuntime.stateHint.smartIdle")}
           >
+            <span className="map-filter-chip-dot" aria-hidden="true" />
             {t("deviceRuntime.kpi.smartIdle")}{" "}
             <span className="map-filter-chip-count">{counts.smartIdle}</span>
           </button>
@@ -147,6 +149,7 @@ export function DashboardFilterBar({
             onClick={() => onStatusFilterChange("late")}
             title={t("deviceRuntime.stateHint.late")}
           >
+            <span className="map-filter-chip-dot" aria-hidden="true" />
             {t("deviceRuntime.kpi.late")}{" "}
             <span className="map-filter-chip-count">{counts.late}</span>
           </button>
@@ -155,7 +158,9 @@ export function DashboardFilterBar({
           type="button"
           className={`map-filter-chip map-filter-chip--offline ${statusFilter === "offline" ? "active" : ""}`}
           onClick={() => onStatusFilterChange("offline")}
+          title={t("deviceRuntime.stateHint.commLost")}
         >
+          <span className="map-filter-chip-dot" aria-hidden="true" />
           {t("dashboard.filter.offline")} <span className="map-filter-chip-count">{counts.offline}</span>
         </button>
         <button
@@ -163,6 +168,7 @@ export function DashboardFilterBar({
           className={`map-filter-chip map-filter-chip--alarm ${statusFilter === "alarm" ? "active" : ""}`}
           onClick={() => onStatusFilterChange("alarm")}
         >
+          <span className="map-filter-chip-dot" aria-hidden="true" />
           {t("dashboard.filter.withAlarm")} <span className="map-filter-chip-count">{counts.alarm}</span>
         </button>
       </div>
