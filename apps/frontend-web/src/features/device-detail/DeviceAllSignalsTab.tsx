@@ -172,12 +172,28 @@ export function DeviceAllSignalsTab({
               <>
                 {/* KPI mini grid (2x2) */}
                 <div className="device-set-kpis">
-                  <SetKpi icon="bolt" tone="amber" label={t("deviceDetail.kpi.current")} value={fmtNum(cur?.value ?? undefined, cur?.unit)} />
-                  <SetKpi icon="electric_bolt" tone="blue" label={t("deviceDetail.kpi.voltage")} value={fmtNum(volt?.value ?? undefined, volt?.unit)} />
-                  <SetKpi icon="device_thermostat" tone="rose" label={t("deviceDetail.kpi.temperature")} value={fmtNum(temp?.value ?? undefined, temp?.unit)} />
+                  {/* AKIM / GERILIM / SICAKLIK birer OLCUMDUR, durum degil.
+                      Her birine ayri renkli rozet vermek renge anlam
+                      yuklemeden gurultu uretiyordu; ustelik Akim rozeti
+                      (amber) kartin Master KIMLIK rozetiyle BIREBIR ayni
+                      renkti. Notr cizilirler. */}
+                  <SetKpi icon="bolt" tone="notr" label={t("deviceDetail.kpi.current")} value={fmtNum(cur?.value ?? undefined, cur?.unit)} />
+                  <SetKpi icon="electric_bolt" tone="notr" label={t("deviceDetail.kpi.voltage")} value={fmtNum(volt?.value ?? undefined, volt?.unit)} />
+                  <SetKpi icon="device_thermostat" tone="notr" label={t("deviceDetail.kpi.temperature")} value={fmtNum(temp?.value ?? undefined, temp?.unit)} />
+                  {/* PIL ISTISNA: yuzdesi bir DURUMDUR (iyi/dusuk/kritik) ve
+                      rengi o durumdan gelir. Olculemediyse notr — "bilmiyoruz"
+                      bir uyari degildir. */}
                   <SetKpi
                     icon="battery_full"
-                    tone={battPct == null ? "slate" : (batteryClass(battPct) === "ok" ? "green" : batteryClass(battPct) === "low" ? "amber" : "red")}
+                    tone={
+                      battPct == null
+                        ? "notr"
+                        : batteryClass(battPct) === "ok"
+                          ? "green"
+                          : batteryClass(battPct) === "low"
+                            ? "amber"
+                            : "red"
+                    }
                     label={t("deviceDetail.meta.battery")}
                     value={battPct == null ? "—" : `%${Math.round(battPct)}`}
                   />
@@ -246,27 +262,60 @@ export function DeviceAllSignalsTab({
                 </div>
 
                 {/* Sayaclar */}
+                {/* SAYACLAR — renk DEGERDEN gelir, KAPTAN degil.
+                    Onceden iki kutu da KOSULSUZ alarm zeminliydi: sifir
+                    ariza, yani IYI HABER, kart dibinde iki kirmizi kutu
+                    olarak duruyordu. Duzen KPI ile ayni (deger ustte). */}
                 <div className="device-set-counters">
-                  <div className="device-set-counter tone-red">
-                    <span className="material-symbols-outlined">report</span>
-                    <div>
-                      <span className="device-set-counter-label">{t("deviceDetail.permanentFaults")}</span>
-                      <strong>{permCount != null ? Math.round(permCount) : "—"}</strong>
-                    </div>
-                  </div>
-                  <div className="device-set-counter tone-orange">
-                    <span className="material-symbols-outlined">flash_on</span>
-                    <div>
-                      <span className="device-set-counter-label">{t("deviceDetail.momentaryFaults")}</span>
-                      <strong>{momCount != null ? Math.round(momCount) : "—"}</strong>
-                    </div>
-                  </div>
+                  <SetCounter
+                    icon="report"
+                    tone="red"
+                    label={t("deviceDetail.permanentFaults")}
+                    count={permCount}
+                  />
+                  <SetCounter
+                    icon="flash_on"
+                    tone="orange"
+                    label={t("deviceDetail.momentaryFaults")}
+                    count={momCount}
+                  />
                 </div>
               </>
             )}
           </section>
         );
       })}
+    </div>
+  );
+}
+
+/** Ariza sayaci. Renk YALNIZCA sifirdan buyukken.
+ *
+ *  `count == null` (olculemedi) bir ariza DEGILDIR: tire gosterilir ve
+ *  kutu notr kalir. "Bilmiyoruz"u alarm gibi gostermek, gercek bir
+ *  arizanin dikkat cekiciligini azaltirdi. */
+function SetCounter({
+  icon,
+  tone,
+  label,
+  count
+}: {
+  icon: string;
+  tone: "red" | "orange";
+  label: string;
+  count: number | null | undefined;
+}) {
+  const sayi = count != null && Number.isFinite(count) ? Math.round(count) : null;
+  const arizaVar = sayi != null && sayi > 0;
+  return (
+    <div
+      className={`device-set-counter tone-${tone}${arizaVar ? " has-fault" : ""}`}
+    >
+      <span className="material-symbols-outlined">{icon}</span>
+      <div>
+        <strong>{sayi != null ? sayi : "—"}</strong>
+        <span className="device-set-counter-label">{label}</span>
+      </div>
     </div>
   );
 }

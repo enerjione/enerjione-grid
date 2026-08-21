@@ -64,17 +64,41 @@ test("kilit karari SLUG'a gore, gruba gore DEGIL", () => {
   );
 });
 
-test("sekme HERKESE gorunur", () => {
+test("komutlar HERKESE gorunur (Baglanti ve Komutlar sekmesinde)", () => {
+  // Komutlar artik AYRI bir sekme DEGIL: `Baglanti` sekmesiyle birlesti.
+  // "Cihaz su an konusuyor mu" ile "ona ne yollayabilirim" ayni anin
+  // sorulari; ikisi arasinda sekme degistirmek gerekiyordu.
+  //
+  // DEGISMEYEN SEY: gorunurluk yetkiye bagli DEGIL. Sekmeyi (ya da paneli)
+  // gizlemek "boyle bir sey yok" demekti; operator cihaza ne
+  // yapilabilecegini bilmeden calisiyordu.
   assert.match(
     SAYFA,
-    /key: "commands", icon: "terminal", show: true/,
-    "komut sekmesi hala yetkiye bagli gizleniyor"
+    /\{ key: "connection", icon: "wifi", show: true \}/,
+    "birlesik sekme yetkiye bagli gizleniyor"
+  );
+  assert.doesNotMatch(
+    SAYFA,
+    /key: "commands", icon: "terminal"/,
+    "ayri komut sekmesi hala duruyor"
   );
 });
 
 test("icerik kapisi yetkisizde de paneli cizer", () => {
-  assert.match(SAYFA, /activeTab === "commands" && token \?/);
-  assert.doesNotMatch(SAYFA, /activeTab === "commands" && canCommand/);
+  // Kapi YALNIZCA `token` — yetki DEGIL. Panel her zaman cizilir, butonlar
+  // kilitli olur ve neden kilitli oldugu panelde YAZAR.
+  const i = SAYFA.indexOf('activeTab === "connection"');
+  assert.ok(i > 0, "birlesik sekme dali yok");
+  const blok = SAYFA.slice(i, i + 700);
+  assert.match(blok, /\{token \? \(\s*<DeviceCommandsPanel/, "komut paneli cizilmiyor");
+  assert.doesNotMatch(
+    blok,
+    /canCommand \? \(\s*<DeviceCommandsPanel/,
+    "panel yetkiye bagli gizleniyor"
+  );
+  // Yetki bayraklari panele GECIRILIR (kilit orada cozulur).
+  assert.match(blok, /canCommand=\{canCommand\}/);
+  assert.match(blok, /canConfig=\{canConfig\}/);
 });
 
 test("CONFIG sekmesi DEGISMEDI (kapsam kaymasi yok)", () => {
@@ -97,8 +121,9 @@ test("SEKME SIRASI korundu", () => {
     ["overview", "connection", "all"],
     `sekme sirasi degismis: ${sira.join(",")}`
   );
-  // Komutlar sekmesi yerinde mi (config'ten once)?
-  assert.ok(sira.indexOf("commands") < sira.indexOf("config"), "komut/config sirasi bozulmus");
+  // Komutlar ARTIK AYRI SEKME DEGIL — `connection` ile birlesti.
+  assert.ok(!sira.includes("commands"), "ayri komut sekmesi geri gelmis");
+  assert.ok(sira.indexOf("connection") < sira.indexOf("config"), "sekme sirasi bozulmus");
 });
 
 test("yetkisizde GORUNUR gerekce var (title'a guvenilmiyor)", () => {

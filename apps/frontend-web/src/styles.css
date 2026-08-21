@@ -33749,77 +33749,110 @@ th.event-col-category {
 .device-events-actor.is-system { color: #94a3b8; }
 
 /* ---- Tumu sekmesi ---- */
-/* ===================== TUMU: SET OZETI (3 cihaz yan yana) ===================== */
+/* ===================== TUMU: SET OZETI (3 cihaz yan yana) =====================
+
+   NEDEN YENIDEN YAZILDI
+   ---------------------
+   Bu blok TEK bilesen icin 44 farkli renk, 14 gradient kurali (ekranda 18
+   gradient yuzey) ve 7 metin boyutu tasiyordu. "AI uretimi" hissinin sebebi
+   somut: ayni kartta dort farkli etiket/deger duzeni, alti ayri vurgu rengi
+   ve birbirini tekrarlayan uc kimlik isareti vardi.
+
+   Kardes sekme (Genel Bakis) AYNI rozetleri duz dolguyla ciziyordu — yani
+   ayni cihazin iki sekmesi iki ayri gorsel dil konusuyordu. Bu blok o dile
+   hizalandi.
+
+   BENIMSENEN KURALLAR (ana sayfa suzgeci ve hat agacinda da ayni):
+     1. GRADIENT YOK.
+     2. RENK ANLAM TASIR. Olcum bir DURUM DEGILDIR; notr cizilir.
+        Renk yalnizca ISTISNADA: aktif ariza, dusuk pil, sifirdan buyuk sayac.
+     3. KIMLIK TEK YERDE. Unite kimligi yalnizca ust seritte.
+     4. TEK ETIKET/DEGER DUZENI: deger ustte, etiket altta.
+
+   TIPOGRAFI: 7 basamak -> 4 (11 / 13 / 15 / 20).
+   Ara basamaklar (%8-10 fark) ayirt edilemiyordu, dolayisiyla uc onem
+   seviyesi tek seviye gibi okunuyordu.
+
+   AGIRLIK: govde fontu ARIAL (kanonik karar) ve Arial'da yalnizca 400/700
+   yuzu var — 600/700/800 AYNI cikiyordu. Sahte basamaklar kaldirildi.
+
+   KONTRAST: #94a3b8 beyaz uzerinde 2.51:1 ve tam da en kucuk boyutlarda
+   kullaniliyordu. Metinlerde #64748b (4.42:1); #94a3b8 yalnizca IKONDA. */
 .device-set {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   align-items: start;
 }
+
 .device-set-card {
+  /* Unite kimlik rengi — kart basina TEK aksan, yalnizca ust seritte. */
+  --st: #64748b;
   position: relative;
   display: flex;
   flex-direction: column;
-  border: 1px solid #e8edf3;
-  border-radius: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
   background: #fff;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
-  transition: box-shadow 0.2s, transform 0.2s;
+  /* HOVER'DA YUKSELME YOK: kart tiklanabilir DEGIL (ne `<button>` ne
+     `onClick`). Yukselen bir yuzey olmayan bir etkilesim vaat ediyordu. */
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
-.device-set-card:hover { box-shadow: 0 8px 24px rgba(15, 23, 42, 0.09); transform: translateY(-2px); }
-/* Ust renkli aksan seridi (tona gore) — daha belirgin */
+
+/* Ust aksan seridi — TEK RENK, 3px (kardes sekmeyle ayni olcu).
+   Onceden 5px ve UC DURAKLI bir gradientti; kimligi soylemek yerine
+   dekorasyon yapiyordu. */
 .device-set-card::before {
   content: "";
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 5px;
+  height: 3px;
+  background: var(--st);
 }
-.device-set-card.tone-master::before { background: linear-gradient(90deg, #fcd34d, #f59e0b, #ea580c); }
-.device-set-card.tone-green::before { background: linear-gradient(90deg, #6ee7b7, #22c55e, #16a34a); }
-.device-set-card.tone-amber::before { background: linear-gradient(90deg, #fdba74, #f97316, #ea580c); }
-.device-set-card.tone-blue::before { background: linear-gradient(90deg, #7dd3fc, #38bdf8, #0284c7); }
-/* Baslik bolgesi hafif renk tonu (kaynaga gore) */
-.device-set-card.tone-master .device-set-head { background: linear-gradient(180deg, #fffbeb 0%, #fff 100%); }
-.device-set-card.tone-green .device-set-head { background: linear-gradient(180deg, #f0fdf4 0%, #fff 100%); }
-.device-set-card.tone-amber .device-set-head { background: linear-gradient(180deg, #fff7ed 0%, #fff 100%); }
-.device-set-card.tone-blue .device-set-head { background: linear-gradient(180deg, #f0f9ff 0%, #fff 100%); }
+
+.device-set-card.tone-master { --st: #f59e0b; }
+.device-set-card.tone-green  { --st: #22c55e; }
+.device-set-card.tone-amber  { --st: #f97316; }
+.device-set-card.tone-blue   { --st: #38bdf8; }
+
 .device-set-card.is-offline { opacity: 0.6; background: #f8fafc; }
-.device-set-card.is-offline:hover { transform: none; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
 
 .device-set-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 16px 16px 14px;
-  border-bottom: 1px solid #f1f5f9;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid #eef2f7;
+  /* BASLIK ZEMINI DUZ BEYAZ. Onceden tona gore bir gradient washi vardi ve
+     kimligi UCUNCU kez tekrarliyordu (serit + rozet + zemin). */
 }
 .device-set-icon {
-  font-size: 20px;
-  width: 36px; height: 36px;
+  font-size: 18px;
+  width: 34px; height: 34px;
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: 10px;
   flex: 0 0 auto;
+  /* KIMLIK ROZETI NOTR. Onceden Master rozeti (#fef3c7/#d97706) ile Akim
+     KPI rozeti BIREBIR AYNI renkti: "bu unite Master" ile "bu deger akim"
+     ayirt edilemiyordu. Kimlik artik yalnizca ust seritte. */
+  background: #f1f5f9;
+  color: #475569;
 }
-.device-set-card.tone-master .device-set-icon { background: #fef3c7; color: #d97706; }
-.device-set-card.tone-green .device-set-icon { background: #dcfce7; color: #16a34a; }
-.device-set-card.tone-amber .device-set-icon { background: #ffedd5; color: #ea580c; }
-.device-set-card.tone-blue .device-set-icon { background: #e0f2fe; color: #0284c7; }
 .device-set-title { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
-.device-set-name { font-size: 15px; font-weight: 800; color: #0f172a; }
-.device-set-serial { font-size: 12px; color: #94a3b8; font-weight: 600; font-variant-numeric: tabular-nums; }
+.device-set-name { font-size: 15px; font-weight: 700; color: #0f172a; }
+.device-set-serial { font-size: 11px; color: #64748b; font-variant-numeric: tabular-nums; }
 .device-set-status {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 12px;
+  gap: 6px;
+  font-size: 13px;
   font-weight: 700;
-  white-space: nowrap;
 }
 .device-set-status-dot { width: 8px; height: 8px; border-radius: 50%; }
 .device-set-status.is-online { color: #15803d; }
-.device-set-status.is-online .device-set-status-dot { background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,0.18); }
-.device-set-status.is-off { color: #94a3b8; }
+.device-set-status.is-online .device-set-status-dot { background: #22c55e; }
+.device-set-status.is-off { color: #64748b; }
 .device-set-status.is-off .device-set-status-dot { background: #cbd5e1; }
 
 /* Bagli degil */
@@ -33830,123 +33863,205 @@ th.event-col-category {
   justify-content: center;
   gap: 8px;
   padding: 48px 20px;
-  color: #94a3b8;
+  color: #64748b;
   font-size: 13px;
 }
-.device-set-nodata .material-symbols-outlined { font-size: 36px; color: #cbd5e1; }
+.device-set-nodata .material-symbols-outlined { font-size: 32px; color: #cbd5e1; }
 .device-set-nodata p { margin: 0; }
 
-/* KPI mini grid (2x2) */
+/* KPI izgarasi (2x2)
+   -----------------
+   Akim / Gerilim / Sicaklik birer OLCUMDUR, durum degil: her birine ayri
+   renkli gradient rozet vermek (amber/mavi/gul) renge anlam yuklemeden
+   gurultu uretiyordu. Ucu de notr.
+   PIL ISTISNA: yuzdesi bir DURUMDUR (iyi/dusuk/kritik) ve rengi oradan gelir. */
 .device-set-kpis {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1px;
-  background: #f1f5f9;
-  border-bottom: 1px solid #f1f5f9;
+  background: #eef2f7;
+  border-bottom: 1px solid #eef2f7;
 }
 .device-set-kpi {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 13px 14px;
+  gap: 12px;
+  padding: 12px 16px;
   background: #fff;
 }
 .device-set-kpi-icon {
-  font-size: 19px;
-  width: 36px; height: 36px;
+  font-size: 18px;
+  width: 32px; height: 32px;
   display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 11px;
+  border-radius: 9px;
   flex: 0 0 auto;
-  box-shadow: 0 2px 6px rgba(15,23,42,0.08);
+  /* Duz dolgu, golge YOK — kardes sekmedeki rozetlerle ayni. */
+  background: #f1f5f9;
+  color: #475569;
 }
-.device-set-kpi.tone-amber .device-set-kpi-icon { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #d97706; }
-.device-set-kpi.tone-blue .device-set-kpi-icon { background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: #2563eb; }
-.device-set-kpi.tone-rose .device-set-kpi-icon { background: linear-gradient(135deg, #ffe4e6, #fecdd3); color: #e11d48; }
-.device-set-kpi.tone-green .device-set-kpi-icon { background: linear-gradient(135deg, #dcfce7, #bbf7d0); color: #16a34a; }
-.device-set-kpi.tone-red .device-set-kpi-icon { background: linear-gradient(135deg, #fee2e2, #fecaca); color: #dc2626; }
-.device-set-kpi.tone-slate .device-set-kpi-icon { background: linear-gradient(135deg, #f1f5f9, #e2e8f0); color: #94a3b8; }
-.device-set-kpi-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.device-set-kpi-value { font-size: 17px; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.device-set-kpi-label { font-size: 11px; color: #94a3b8; font-weight: 600; }
+/* Yalnizca PIL durum bildirir. Degerler kardes sekmedekilerle AYNI. */
+.device-set-kpi.tone-green .device-set-kpi-icon { background: #dcfce7; color: #16a34a; }
+.device-set-kpi.tone-amber .device-set-kpi-icon { background: #fef3c7; color: #d97706; }
+.device-set-kpi.tone-red   .device-set-kpi-icon { background: #fee2e2; color: #dc2626; }
 
-/* Ariza durumu blogu */
-.device-set-block { padding: 14px 16px; }
+.device-set-kpi-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.device-set-kpi-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.device-set-kpi-label { font-size: 11px; color: #64748b; }
+
+/* Bolum basligi */
+.device-set-block { padding: 16px; }
 .device-set-block-title {
   display: block;
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: #64748b;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
-.device-set-status-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+
+/* Ariza durumu
+   ------------
+   YAZI BUYUDU, BLOK BUYUMEDI. Satir yuksekligini onceden metin degil 16px'lik
+   ikon belirliyordu ve `line-height` hicbir yerde tanimli degildi; dikey
+   alanin buyuk kismi bostu. Artik satiri metin yonetiyor.
+
+   AYIRICI CIZGI EKLENDI: `justify-content: space-between` etiket ile rozet
+   arasinda 170-355px bosluk birakiyordu ve gozun tutunacagi bir sey yoktu.
+   Cozum 40 satir asagidaki olcum satirlarinda ZATEN vardi. */
+.device-set-status-list { list-style: none; margin: 0; padding: 0; }
 .device-set-status-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid #f5f7fa;
 }
+.device-set-status-row:last-child { border-bottom: none; }
 .device-set-status-name {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font-size: 12px;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.25;
   color: #334155;
+  min-width: 0;
 }
-.device-set-status-name .material-symbols-outlined { font-size: 16px; color: #94a3b8; }
+.device-set-status-name .material-symbols-outlined { font-size: 15px; color: #94a3b8; }
+
+/* Rozet: NORMAL SESSIZ, ISTISNA GORUNUR.
+   Onceden saglikli bir kartta ust uste ALTI yesil onay isareti oluyordu ve
+   renk hicbir seyi ayirt etmiyordu. Projenin kendi doktrini: vurgu renkle
+   degil DOLGU + KENARLIK ile. */
 .device-set-badge {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  font-size: 11px;
-  font-weight: 700;
+  gap: 5px;
+  font-size: 13px;
+  line-height: 1.25;
   white-space: nowrap;
 }
-.device-set-badge .material-symbols-outlined { font-size: 14px; }
-.device-set-badge.is-normal { color: #16a34a; }
-.device-set-badge.is-active { color: #d97706; }
+.device-set-badge .material-symbols-outlined { font-size: 15px; }
+
+/* Normal = beklenen durum. Sessiz. */
+.device-set-badge.is-normal { color: #64748b; }
+.device-set-badge.is-normal .material-symbols-outlined { font-size: 11px; color: #cbd5e1; }
+
+/* Aktif ariza = ISTISNA. Tek gercek vurgu burada. */
+.device-set-badge.is-active {
+  color: #b45309;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-weight: 700;
+}
 .device-set-badge.is-unknown { color: #94a3b8; }
 
 /* Analog olcumler (2 kolon) */
 .device-set-measures {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 3px 20px;
+  gap: 4px 20px;
 }
 .device-set-measure {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 5px 0;
+  padding: 4px 0;
   border-bottom: 1px solid #f5f7fa;
   min-width: 0;
 }
-.device-set-measure-label { font-size: 12px; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.device-set-measure-value { font-size: 12px; font-weight: 700; color: #0f172a; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.device-set-measure-label { font-size: 13px; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.device-set-measure-value { font-size: 13px; font-weight: 700; color: #0f172a; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-/* Sayaclar */
+/* Sayaclar
+   --------
+   RENK DEGERDEN GELIR, KAPTAN DEGIL. Onceden "Kalici" kutusu KOSULSUZ
+   kirmizi, "Gecici" kosulsuz turuncu zeminliydi — yani SIFIR ariza, yani
+   IYI HABER, kart dibinde iki alarm kutusu olarak duruyordu. Ustelik
+   kodlama tersti: renk kaptaydi, veri notrdu.
+
+   DUZEN KPI ILE AYNI: deger ustte, etiket altta. Onceden bu ikisi
+   birbirinin TAM TERSIYDI ve ayni kartta dort farkli duzen vardi. */
 .device-set-counters {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 12px;
   padding: 0 16px 16px;
   margin-top: auto;
 }
 .device-set-counter {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 11px 12px;
-  border-radius: 11px;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
 }
-.device-set-counter.tone-red { background: #fef2f2; }
-.device-set-counter.tone-orange { background: #fff7ed; }
-.device-set-counter .material-symbols-outlined { font-size: 20px; }
-.device-set-counter.tone-red .material-symbols-outlined { color: #dc2626; }
-.device-set-counter.tone-orange .material-symbols-outlined { color: #ea580c; }
-.device-set-counter-label { display: block; font-size: 10px; color: #94a3b8; font-weight: 600; }
-.device-set-counter strong { font-size: 20px; font-weight: 800; color: #0f172a; }
+.device-set-counter > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.device-set-counter .material-symbols-outlined { font-size: 18px; color: #94a3b8; }
+.device-set-counter strong {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #475569;
+  font-variant-numeric: tabular-nums;
+}
+.device-set-counter-label { display: block; font-size: 11px; color: #64748b; }
+
+/* SIFIRDAN BUYUK: artik gercekten bir ariza var, renk HAK EDILDI. */
+.device-set-counter.has-fault { background: #fff; }
+.device-set-counter.has-fault.tone-red { border-color: #fecaca; }
+.device-set-counter.has-fault.tone-red .material-symbols-outlined { color: #dc2626; }
+.device-set-counter.has-fault.tone-red strong { color: #b91c1c; }
+.device-set-counter.has-fault.tone-orange { border-color: #fed7aa; }
+.device-set-counter.has-fault.tone-orange .material-symbols-outlined { color: #ea580c; }
+.device-set-counter.has-fault.tone-orange strong { color: #c2410c; }
+
+/* Genis ekranda ariza listesini iki kolona bol: 6 satir 3'e iner, yatay
+   kosu yariya duser ve kart kisalir (sayfa KAYDIRILMIYOR, tasan icerik
+   kirpiliyor — bkz. `.device-detail-main:has(> .device-set)`). */
+@media (min-width: 1600px) {
+  .device-set-status-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 20px;
+  }
+  .device-set-status-row:nth-last-child(2) { border-bottom: none; }
+}
 
 @media (max-width: 1100px) {
   .device-set { grid-template-columns: 1fr; }
@@ -34690,31 +34805,104 @@ th.event-col-category {
 .device-cmd-accordion-chevron { font-size: 20px; color: #94a3b8; }
 .device-cmd-accordion-body {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 8px;
-  padding: 14px 16px;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+  padding: 14px 16px 16px;
 }
+/* KOMUT BUTONU
+   ------------
+   Onceden duz bir kutuydu: 18px mavi ikon + tek satir etiket, hover'da
+   mavi zemin. Uc sorunu vardi:
+
+   1. IKON RENGI HER KOMUTTA AYNIYDI (#0284c7). "Alarm sifirla" ile
+      "CSV yuklemeyi baslat" ayni gorunuyordu; goz listeyi tararken
+      hicbir sey ayirt edemiyordu.
+   2. KILITLI BUTON YALNIZCA SOLUYORDU (`opacity: .5`). Neden kapali
+      oldugu yalnizca `title`da yaziyordu — ve disabled buton pointer
+      olayi uretmez, yani ipucu ACILMAZ. Ayni ders bu projede PDF indirme
+      butonunda zaten yasanmis.
+   3. TEHLIKELI KOMUT yalnizca kenarlik renginden anlasiliyordu.
+
+   Simdi: ikon kendi kabinda (durum degil KIMLIK), kilitli buton acikca
+   kilit ikonu tasiyor, tehlikeli grup kendi tonunu ikonda da gosteriyor. */
 .device-cmd-btn {
-  display: inline-flex;
+  position: relative;
+  display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 10px 12px;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #fff;
-  color: #334155;
+  color: #1e293b;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   text-align: left;
-  transition: background 0.15s, border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
-.device-cmd-btn:hover:not(:disabled) { background: #f0f9ff; border-color: #7dd3fc; }
-.device-cmd-btn:disabled { opacity: 0.5; cursor: default; }
-.device-cmd-btn .material-symbols-outlined { font-size: 18px; color: #0284c7; flex: 0 0 auto; }
-.device-cmd-btn-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.device-cmd-btn.is-danger { border-color: #fecaca; color: #b91c1c; }
-.device-cmd-btn.is-danger:hover:not(:disabled) { background: #fef2f2; border-color: #f87171; }
+.device-cmd-btn:hover:not(:disabled) {
+  border-color: #cbd5e1;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+.device-cmd-btn:active:not(:disabled) { box-shadow: none; }
+
+/* Ikon kabi — komutun KIMLIGI. Butonun geri kalani notr kalir ki
+   tehlikeli komutlar ayirt edilebilsin. */
+.device-cmd-btn .material-symbols-outlined {
+  font-size: 18px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+  flex: 0 0 auto;
+}
+.device-cmd-btn-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+/* TEHLIKELI: hem kenarlik hem ikon kabi. Tek isaret yetmiyordu. */
+.device-cmd-btn.is-danger { border-color: #fecaca; color: #991b1b; }
+.device-cmd-btn.is-danger .material-symbols-outlined { background: #fee2e2; color: #dc2626; }
+.device-cmd-btn.is-danger:hover:not(:disabled) {
+  border-color: #f87171;
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.14);
+}
+
+/* Islem suruyor */
+.device-cmd-btn[aria-busy="true"] { border-color: #cbd5e1; background: #f8fafc; }
+
+/* KILITLI: solmak YETMEZ, NEDEN kapali oldugu gorunmeli.
+   `opacity` dusurmek yerine renkleri sakinlestiriyoruz — soluk metin hem
+   okunmaz hem de "yukleniyor" gibi okunuyordu. */
+.device-cmd-btn:disabled { cursor: default; }
+.device-cmd-btn.is-locked {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #94a3b8;
+}
+.device-cmd-btn.is-locked .material-symbols-outlined { background: #f1f5f9; color: #cbd5e1; }
+.device-cmd-btn.is-locked::after {
+  /* Kilit isareti — `title`a guvenilmiyor: disabled buton pointer olayi
+     uretmez ve ipucu hic acilmaz. */
+  content: "lock";
+  font-family: "Material Symbols Outlined", sans-serif;
+  font-size: 15px;
+  line-height: 1;
+  color: #cbd5e1;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+/* Yalnizca yetki dolayisiyla kapali OLMAYAN (or. baska komut kosuyor)
+   butonlar eski soluk hali korur. */
+.device-cmd-btn:disabled:not(.is-locked) { opacity: 0.55; }
 .device-cmd-btn.is-danger .material-symbols-outlined { color: #dc2626; }
 
 /* ---- Komut gecmisi: ayri scroll kutu ---- */
@@ -44384,3 +44572,19 @@ input[aria-invalid="true"]:focus {
 
 /* Olculemedi — hicbir sey iddia etmez. */
 .device-clock--bilinmiyor .device-clock-state { color: #94a3b8; }
+
+/* --- BAGLANTI VE KOMUTLAR: TEK ALAN --------------------------------------
+
+   Ikisi ayri sekmelerdeydi ve operator surekli aralarinda gidip geliyordu:
+   "cihaz su an konusuyor mu" ile "ona ne yollayabilirim" ayni anin
+   sorulari. Komut gonderip sonucunu gormek icin sekme degistirmek
+   gerekiyordu.
+
+   DIKEY SIRA, YAN YANA DEGIL: durum paneli kendi ic izgarasini
+   `auto-fit minmax(230px, 1fr)` ile kuruyor; dar bir kolona sikistirilirsa
+   17 satir alt alta dizilir ve panel okunmaz hale gelir. */
+.device-ops {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}

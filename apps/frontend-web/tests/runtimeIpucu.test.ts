@@ -285,10 +285,13 @@ test("uc sebebin de iki dilde metni var", () => {
 test("Baglanti kendi sekmesi — Genel Bakis'in ortasinda DEGIL", () => {
   const sayfa = okuSrc("features", "device-detail", "DeviceDetailPage.tsx");
   assert.match(sayfa, /key: "connection"/, "connection sekmesi yok");
+  // Panel artik `Baglanti ve Komutlar` sarmalayicisinin ICINDE (iki bolum
+  // tek sekmede birlesti); yine de ONCE gelir — operatorun ilk sorusu
+  // "cihaz su an konusuyor mu".
   assert.match(
     sayfa,
-    /activeTab === "connection" \? <DeviceRuntimePanel/,
-    "panel kendi sekmesinde cizilmiyor"
+    /activeTab === "connection" \? \(\s*<div className="device-ops">\s*<DeviceRuntimePanel/,
+    "panel baglanti sekmesinde ilk sirada cizilmiyor"
   );
   assert.doesNotMatch(
     sayfa,

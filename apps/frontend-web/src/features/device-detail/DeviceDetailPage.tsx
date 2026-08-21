@@ -56,7 +56,6 @@ type TabKey =
   | "poleMaster"
   | "trends"
   | "events"
-  | "commands"
   | "config";
 
 type Props = {
@@ -684,11 +683,20 @@ export function DeviceDetailPage({
 
   const tabs: { key: TabKey; icon: string; show: boolean }[] = [
     { key: "overview", icon: "dashboard", show: true },
-    // BAGLANTI: kendi sekmesi. Onceden "Genel Bakis"in ORTASINA gomulu
-    // duruyordu ve olcum kartlarini asagi itiyordu; operatorun o ekranda
-    // aradigi sey once OLCUM. Oturum/teshis ayri bir soru, ayri yerde
-    // durmali. Ikon `wifi` — subset fontunda ZATEN VAR (sidebar ve harita
-    // paneli kullaniyor), yani yeni ikon eklenmedi.
+    // BAGLANTI VE KOMUTLAR — TEK SEKME.
+    //
+    // Ikisi ayri sekmelerdeydi ve operator surekli aralarinda gidip
+    // geliyordu: "cihaz su an konusuyor mu" sorusu ile "ona ne
+    // yollayabilirim" sorusu ayni anin sorulari. Komut gonderip sonucunu
+    // gormek icin sekme degistirmek gerekiyordu.
+    //
+    // KOMUTLAR HERKESE GORUNUR, YETKISIZE KILITLI. Gizlemek "boyle bir sey
+    // yok" demekti; operator cihaza ne yapilabilecegini bilmeden
+    // calisiyordu. Liste gorunur, butonlar kapali ve neden kapali oldugu
+    // panelde yaziyor. Gercek kapi backend'de (`api/devices.py`
+    // require_roles) — buradaki her sey yalnizca GORUNURLUK.
+    //
+    // Ikon `wifi` — subset fontunda ZATEN VAR, yeni ikon eklenmedi.
     { key: "connection", icon: "wifi", show: true },
     { key: "all", icon: "table_rows", show: true },
     // KIT SEVIYESI: yalnizca bir Pole Master Kit setinde gorunur. Kitin
@@ -708,12 +716,6 @@ export function DeviceDetailPage({
     { key: "poleMaster", icon: "dns", show: kitKaydi != null },
     { key: "trends", icon: "show_chart", show: true },
     { key: "events", icon: "history", show: true },
-    // KOMUTLAR HERKESE GORUNUR, YETKISIZE KILITLI.
-    // Gizlemek "boyle bir sey yok" demekti; operator cihaza ne
-    // yapilabilecegini bilmeden calisiyordu. Liste gorunur, butonlar kapali
-    // ve neden kapali oldugu panelde yaziyor. Gercek kapi backend'de
-    // (`api/devices.py` require_roles) — bu satir yalnizca GORUNURLUK.
-    { key: "commands", icon: "terminal", show: true },
     { key: "config", icon: "tune", show: canConfig },
   ];
 
@@ -857,7 +859,25 @@ export function DeviceDetailPage({
         {/* BAGLANTI VE OTURUM — kendi sekmesi (yapilandirma / calisma
             zamani / teshis). Genel Bakis'in icinde dururken olcum
             kartlarini asagi itiyordu. */}
-        {activeTab === "connection" ? <DeviceRuntimePanel device={device} /> : null}
+        {/* BAGLANTI VE KOMUTLAR — tek alan, iki bolum.
+            Ust: cihazin SU ANKI durumu. Alt: o cihaza ne yapilabilecegi.
+            Komut gonderip sonucunu gormek artik sekme degistirmeyi
+            gerektirmiyor. */}
+        {activeTab === "connection" ? (
+          <div className="device-ops">
+            <DeviceRuntimePanel device={device} />
+            {token ? (
+              <DeviceCommandsPanel
+                deviceCode={device.code}
+                signals={signals}
+                canCommand={canCommand}
+                canConfig={canConfig}
+                onDeviceCommand={onDeviceCommand}
+                token={token}
+              />
+            ) : null}
+          </div>
+        ) : null}
 
         {activeTab === "all" ? (
           <DeviceAllSignalsTab
@@ -893,17 +913,6 @@ export function DeviceDetailPage({
               <DeviceEventsTable token={token} deviceCode={device.code} variant="full" />
             </section>
           </div>
-        ) : null}
-
-        {activeTab === "commands" && token ? (
-          <DeviceCommandsPanel
-            deviceCode={device.code}
-            signals={signals}
-            canCommand={canCommand}
-            canConfig={canConfig}
-            onDeviceCommand={onDeviceCommand}
-            token={token}
-          />
         ) : null}
 
         {activeTab === "config" && canConfig ? (
