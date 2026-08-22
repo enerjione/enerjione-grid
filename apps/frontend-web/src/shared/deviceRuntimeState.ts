@@ -1,14 +1,14 @@
 /**
  * CIHAZ CALISMA-ZAMANI DURUMU — TEK NORMALIZER.
  *
- * Sozlesme: `device_health_v1`, Gateway PR #33 (HENUZ ACIK).
- * Vendor kopyasi: `docs/gateway-contract/device-health-api-pr33.md`
+ * Sozlesme: `device_health_v1`, gateway 1.15.0+ (YAYINLANDI).
+ * Kanonik kaynak: `infra/gateway-contract/v1.15.1.json`
  * (kaynak: enerjione-grid-dnp3-gateway, commit bd502c49,
  * `docs/GRID_DEVICE_HEALTH_API.md`).
  *
  * NEDEN TEK DOSYA
  * ---------------
- * Sozlesme HENUZ ACIK bir PR'da. Wire <-> model eslemesi tek bir adaptorde
+ * Wire <-> model eslemesi tek bir adaptorde
  * (`normalizeDeviceRuntime`) toplanir; PR birlesirken alan adi ya da enum
  * degeri degisirse degisecek yer BURASIDIR. Liste, kart, harita, KPI ve
  * detay ekrani ham alanlara DOKUNMAZ, hepsi buradan cikan `DeviceRuntimeState`

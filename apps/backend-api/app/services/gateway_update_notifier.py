@@ -2,8 +2,12 @@
 
 NASIL TESPİT EDİLİYOR
 ---------------------
-Gateway imajı `:latest` etiketine sabit, yani karşılaştırılacak bir sürüm
-numarası yok. Host ajanı iki digest bildiriyor:
+Karşılaştırma DIGEST üzerinden yapılır. (Bu satır bir zamanlar "gateway
+imajı `:latest` etiketine sabit, sürüm numarası yok" diyordu; artık öyle
+değil — imaj onaylı sürümün digest'ine sabitleniyor, bkz.
+`gateway_release_policy`. Digest karşılaştırması yine de doğru araç:
+etiketin işaret ettiği manifest değiştiyse yeni bir imaj yayınlanmıştır.)
+Host ajanı iki digest bildiriyor:
 
     image_digest   — çalışan imajın kayıt defteri digest'i
     remote_digest  — etiketin kayıt defterindeki şu anki digest'i

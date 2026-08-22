@@ -1,14 +1,29 @@
 """Gateway guncelleme modeli: UPDATE cekerken RESTART/START CEKMEZ.
 
-URUN KARARI (bilincli, degistirilmeyecek)
------------------------------------------
-Gateway guncellemesi LATEST-RELEASE modelinde calisir:
+URUN KARARI — 2026-08-21'DE DEGISTI
+-----------------------------------
+ESKI MODEL (latest-release): "Guncelle" `:latest` ceker, kayit defterinde o
+an ne varsa onu kurardi.
 
-    Gateway Guncelle -> `ghcr.io/.../enerjione-grid-dnp3-gateway:latest` PULL
-                     -> kayit defterinde latest hangi release ise o
-                     -> container o release ile RECREATE edilir
+NEDEN BIRAKILDI: `:latest` + `pull_policy: always` birlikte, Grid AYNI
+SURUMDE KALSA BILE container'in yeniden olusturuldugu HER an (yeniden
+kurulum, `docker compose up`, cihaz degisimi) operator ONAYI OLMADAN farkli
+bir gateway kodunu calistiriyordu. Dagitim karari "o an latest ne ise o"
+ifadesini tasidigi surece hangi kodun sahada oldugu bilinemez.
+
+YENI MODEL (deterministic release):
+
+    Kurulum          -> ONAYLI surumun DIGEST'i (`repo:1.15.1@sha256:...`)
+    Gateway Guncelle -> operator hedef surumu secer
+                     -> uyumluluk kapisi (min Grid surumu, FAIL-CLOSED)
+                     -> digest cozulur, cozulemezse GUNCELLEME BASLAMAZ
+                     -> container TAM digest ile RECREATE edilir
+    Geri Al          -> ONCEKI TAM digest (etiket DEGIL)
     Restart          -> MEVCUT imajla yeniden baslat (pull YOK, upgrade YOK)
     Start            -> MEVCUT imajla baslat        (pull YOK, upgrade YOK)
+
+DEGISMEYEN: yeni surumler yine GORULUR ve operator guncelleyebilir. Kalkan
+sey otomatik surum kaymasidir, guncelleme yetenegi degil.
 
 Yani `restart != update` ve `start != update`. Bu ayrim sahada kritiktir:
 operator "servisi bir yeniden baslatayim" derken FARKINDA OLMADAN yeni bir
@@ -53,6 +68,7 @@ import pytest
 from app.core.config import settings
 from app.schemas.gateway_agent import GatewayAgentStatus, LocalGateway
 from app.services import gateway_agent_service as ajan
+from app.services import gateway_release_policy as kayit_politikasi
 from app.services import gateway_release_service as kayit
 from app.services.gateway_compose import DEFAULT_GATEWAY_IMAGE
 
@@ -130,28 +146,37 @@ def _compose_alt_komutlari(calistirilan: list[list[str]]) -> list[str]:
 # ---------------------------------------------------------------------------
 # A) request_update -> :latest
 # ---------------------------------------------------------------------------
-def test_A_update_istegi_latest_imaji_tasir(durum_dizini):
-    """Guncelleme HER ZAMAN `:latest` ister -- urun karari.
+def test_A_update_istegi_LATEST_TASIMAZ(durum_dizini):
+    """Guncelleme istegi `:latest` TASIMAZ — urun karari 2026-08-21'de degisti.
 
-    Sahada bir kez sabit etiket yazilmis kurulumlar (`:1.5.0`) ilk
-    guncellemede kendiliginden `:latest`e doner; yoksa "Guncelle" butonu
-    o kurulumu bir daha ilerletemez ve ekran kalici "Guncel" der.
+    `:latest` + `pull_policy: always`, container'in yeniden olusturuldugu her
+    anda operator onayi olmadan surum degistiriyordu. Varsayilan artik ONAYLI
+    SURUMUN etiketi; gercek guncelleme yolu (`gateway_update_service.prepare`)
+    bunu ayrica DIGEST'e sabitler.
     """
     ajan.request_update(KOD, KULLANICI)
     istek = _yazilan_istek(durum_dizini)
 
     assert istek["action"] == "update"
     assert istek["params"]["image"] == DEFAULT_GATEWAY_IMAGE
-    assert istek["params"]["image"].endswith(":latest"), (
-        f"guncelleme :latest DISINDA bir etikete sabitlenmis: "
-        f"{istek['params']['image']!r}. Bu bilincli urun kararina aykiri."
+    assert not istek["params"]["image"].endswith(":latest"), (
+        f"guncelleme hala `:latest` tasiyor: {istek['params']['image']!r} — "
+        "kayit defterindeki etiket tasindiginda sahaya onaysiz surum iner."
+    )
+    assert kayit_politikasi.is_production_ref(istek["params"]["image"]), (
+        "guncelleme hedefi uretim referansi degil"
     )
 
 
-def test_A2_varsayilan_imaj_beklenen_paket(durum_dizini):
-    """Paket adi da sozlesmenin parcasi: yanlis repo sessizce cekilmesin."""
-    assert DEFAULT_GATEWAY_IMAGE == (
-        "ghcr.io/enerjione/enerjione-grid-dnp3-gateway:latest"
+def test_A2_varsayilan_imaj_ONAYLI_SURUM(durum_dizini):
+    """Paket adi da sozlesmenin parcasi: yanlis repo sessizce cekilmesin.
+
+    Surum TEK KAYNAKTAN gelir; literal kopya, birinde yapilan degisikligin
+    otekilerde unutulmasi demekti.
+    """
+    assert DEFAULT_GATEWAY_IMAGE == kayit_politikasi.approved_image_tag()
+    assert DEFAULT_GATEWAY_IMAGE.startswith(
+        "ghcr.io/enerjione/enerjione-grid-dnp3-gateway:"
     )
 
 

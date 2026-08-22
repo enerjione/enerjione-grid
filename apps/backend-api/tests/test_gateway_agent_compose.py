@@ -25,6 +25,7 @@ import re
 
 import pytest
 
+from app.services import gateway_release_policy as kayit_politikasi
 from app.services.gateway_compose import ComposeRenderInput, render_compose
 
 # --- e1-gwd.py'yi modul olarak yukle (tire iceriyor, normal import olmaz) ----
@@ -50,7 +51,7 @@ def agent():
 
 def _params(**over):
     base = {
-        "image": "ghcr.io/enerjione/enerjione-grid-dnp3-gateway:latest",
+        "image": kayit_politikasi.approved_image_tag(),
         "token": "abcdefghijklmnop0123456789",
         "backend_url": "http://host.docker.internal/api/v1",
         "nats_url": "nats://gateway:secretpass@10.0.0.5:4222",

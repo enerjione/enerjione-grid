@@ -85,7 +85,11 @@ def test_reset_komutu_REGISTRY_e_giriyor():
     assert c.command_slug == "reset_all_fcis"
     assert (c.common_address, c.ioa) == (CA, RESET_IOA)
     # Kontrol noktasi IZLEME noktasi olarak yayinlanmamali.
-    assert reg.points == (), "kontrol noktasi izleme listesine sizmis"
+    #
+    # `system.*` HARIC: calisma-zamani sagligi bir katalog sinyali degil,
+    # her cihaza kosulsuz eklenen ayri bir alandir (bkz. `runtime_health`).
+    katalog = tuple(p for p in reg.points if not p.signal_key.startswith("system."))
+    assert katalog == (), "kontrol noktasi izleme listesine sizmis"
 
 
 @pytest.mark.parametrize(

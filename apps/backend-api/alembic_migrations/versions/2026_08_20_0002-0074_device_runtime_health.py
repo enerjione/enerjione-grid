@@ -1,6 +1,8 @@
 """device_runtime_health — gateway'in bildirdigi cihaz basina calisma-zamani sagligi.
 
-Sozlesme: `device_health_v1` (gateway PR #33, HENUZ ACIK). Vendor kopyasi:
+Sozlesme: `device_health_v1`. (Bu migration yazildiginda sozlesme gateway
+PR #33'te acikti; 1.15.0 ile YAYINLANDI ve kanonik artifact
+`infra/gateway-contract/v1.15.1.json` olarak vendor edildi.) Vendor kopyasi:
 `docs/gateway-contract/device-health-api-pr33.md`.
 
 NEDEN YENI TABLO (alternatifler elendi)

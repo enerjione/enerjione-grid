@@ -1,12 +1,15 @@
 """Cihaz basina calisma-zamani sagligi — `device_health_v1` alimi.
 
-SOZLESME PR #33'TE ACIK; DEGISIRSE YALNIZCA BURASI DEGISIR.
-Vendor kopyasi: `docs/gateway-contract/device-health-api-pr33.md`
-(kaynak: enerjione-grid-dnp3-gateway PR #33, commit bd502c49,
-`docs/GRID_DEVICE_HEALTH_API.md`).
+SOZLESME YAYINLANDI; DEGISIRSE YALNIZCA BURASI DEGISIR.
+Kanonik kaynak: `infra/gateway-contract/v1.15.1.json` bolum
+`device_runtime_health_transport` (gateway 1.15.0'da yayina girdi, 1.15.1'de
+saat/oturum alanlariyla genisledi). Okunabilir vendor kopyasi:
+`docs/gateway-contract/device-health-api-1.15.1.md`.
+Tarihce: sozlesme PR #33'te (commit bd502c49) tasarlandi; Grid ucu PR acikken
+yazildi. Bu ARTIK gecerli durum DEGIL — release v1.15.1 vendor edildi.
 
 Wire <-> model eslemesi TEK bir adaptor fonksiyonundadir (`_wire_to_model`).
-PR birlesirken sozlesme degisirse degistirilecek yer ORASIDIR; router,
+Sozlesme degisirse degistirilecek yer ORASIDIR; router,
 migration ve testler alan adlarina dogrudan bagimli DEGILDIR. Ayni sebeple
 zarf ayristirmasi da burada: pydantic sema dosyasina bolmek, sozlesmeyi iki
 dosyaya yayip "degisirse tek nokta" garantisini bozardi.

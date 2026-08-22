@@ -31,6 +31,8 @@ from pathlib import Path
 
 import pytest
 
+from app.services import gateway_release_policy as kayit_politikasi
+
 AJAN = Path(__file__).resolve().parents[3] / "infra" / "appliance" / "e1-gwd.py"
 FE = Path(__file__).resolve().parents[3] / "apps" / "frontend-web"
 
@@ -200,7 +202,11 @@ def test_update_istegi_nats_url_tasiyor(monkeypatch):
     assert yakalanan["params"]["nats_url"] == "nats://gateway:pw@h:4222"
     # `image` ARTIK HER GUNCELLEMEDE gonderilir: sabit etikete kilitlenmis
     # kurulumlar (orn. `:1.5.0`) aksi halde guncellemeyle DUZELMIYOR.
-    assert yakalanan["params"]["image"].endswith(":latest")
+    # URUN KARARI DEGISTI: `:latest` artik uretim hedefi degil. Istek
+    # ONAYLI SURUMU tasir; gercek guncelleme yolu bunu ayrica digest'e
+    # sabitler (bkz. `gateway_update_service.prepare`).
+    assert not yakalanan["params"]["image"].endswith(":latest")
+    assert kayit_politikasi.is_production_ref(yakalanan["params"]["image"])
 
 
 def test_update_istegi_nats_url_yoksa_yalnizca_imaj_gonderir(monkeypatch):
@@ -220,11 +226,19 @@ def test_update_istegi_nats_url_yoksa_yalnizca_imaj_gonderir(monkeypatch):
     monkeypatch.setattr(s, "_write_request", _yakala)
     s.request_update("GW-001", "installer")
     assert "nats_url" not in yakalanan["params"]
-    assert yakalanan["params"]["image"].endswith(":latest")
+    # URUN KARARI DEGISTI: `:latest` artik uretim hedefi degil. Istek
+    # ONAYLI SURUMU tasir; gercek guncelleme yolu bunu ayrica digest'e
+    # sabitler (bkz. `gateway_update_service.prepare`).
+    assert not yakalanan["params"]["image"].endswith(":latest")
+    assert kayit_politikasi.is_production_ref(yakalanan["params"]["image"])
     yakalanan.clear()
     s.request_update("GW-001", "installer", nats_url="   ")
     assert "nats_url" not in yakalanan["params"]
-    assert yakalanan["params"]["image"].endswith(":latest")
+    # URUN KARARI DEGISTI: `:latest` artik uretim hedefi degil. Istek
+    # ONAYLI SURUMU tasir; gercek guncelleme yolu bunu ayrica digest'e
+    # sabitler (bkz. `gateway_update_service.prepare`).
+    assert not yakalanan["params"]["image"].endswith(":latest")
+    assert kayit_politikasi.is_production_ref(yakalanan["params"]["image"])
 
 
 def test_endpoint_standart_nats_url_turetiyor():

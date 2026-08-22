@@ -104,8 +104,13 @@ def test_guncelleme_istegi_latest_etiketi_gonderir():
         svc._write_request = orijinal  # type: ignore[assignment]
 
     assert yazilan["params"]["image"] == DEFAULT_GATEWAY_IMAGE
-    assert DEFAULT_GATEWAY_IMAGE.endswith(":latest"), (
-        "takip edilen etiket sabit bir surume baglanmis — guncelleme kilitlenir"
+    # URUN KARARI DEGISTI (2026-08-21): `:latest` + `pull_policy: always`,
+    # container'in yeniden olusturuldugu her anda operator onayi olmadan
+    # surum degistiriyordu. Varsayilan artik ONAYLI SURUMUN etiketi.
+    # Surumun sabitlenmesi guncellemeyi KILITLEMEZ: yeni release'ler yine
+    # gorulur ve `gateway_update_service.prepare` hedefi digest'e sabitler.
+    assert not DEFAULT_GATEWAY_IMAGE.endswith(":latest"), (
+        "varsayilan imaj hala `:latest` — onaysiz surum kaymasina acik"
     )
 
 

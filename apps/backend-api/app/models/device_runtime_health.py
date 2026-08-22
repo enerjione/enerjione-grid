@@ -9,8 +9,9 @@ from app.db.base import Base
 class DeviceRuntimeHealth(Base):
     """Gateway'in bildirdigi CIHAZ BASINA calisma-zamani sagligi.
 
-    Sozlesme: `device_health_v1` — Gateway PR #33 (HENUZ ACIK).
-    Vendor kopyasi: `docs/gateway-contract/device-health-api-pr33.md`.
+    Sozlesme: `device_health_v1` — gateway 1.15.0 ile YAYINLANDI.
+    Kanonik kaynak: `infra/gateway-contract/v1.15.1.json`
+    (`device_runtime_health_transport`).
 
     NEDEN AYRI TABLO — `devices`e kolon EKLENMEDI:
       `devices` satiri cihaz KAYDIDIR (operatorun girdigi kimlik, konum,

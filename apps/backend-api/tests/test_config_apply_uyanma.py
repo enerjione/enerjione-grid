@@ -1067,3 +1067,80 @@ def test_S_K_hazirlik_yuklemi_SAAT_ALANLARINA_HIC_BAKMAZ():
         assert f"saglik.{alan}" not in kod, (
             f"{alan} komut hazirligi kararina girmis — saat teshisi ayri kalmali"
         )
+
+
+# ===========================================================================
+# BUYUK KOMUT KIMLIGI — restore-guvenli kimlikle tam zincir
+# ===========================================================================
+#
+# `device_config_applications.command_id` migration 0078 ile bigint'e
+# genisledi. Genisleme YAPILMASAYDI uyanma aninda uretilen komut satiri
+# yazilir, ona baglanan NIYET kaydi "integer out of range" ile patlardi:
+# cihaz komutu alir, backend niyeti ilerletemez ve yapilandirma sonsuza
+# kadar "uygulaniyor" gorunurdu.
+
+
+def test_BUYUK_kimlik_niyete_baglanir_ve_KIRPILMAZ(db):
+    """Uyuyan cihaz -> uyanma -> taze komut -> niyet baglanmasi.
+
+    Zincirin her halkasi ayni buyuk kimligi tasimali; bir yerde kirpilirsa
+    niyet baska bir komutu (ya da hicbirini) izler.
+    """
+    from app.services import command_identity as ci
+
+    niyet = _niyet_ac(db)
+    db.commit()
+
+    cmd = apply_svc.komut_uret(
+        db, niyet=niyet, device=_cihaz(db), simdi=AN,
+    )
+    db.commit()
+
+    assert cmd is not None, "uyanma sonrasi komut uretilmedi"
+    assert cmd.id > 2_147_483_647, "kimlik int4 araliginda — 0078 gerekmezdi"
+    assert not ci.eski_kimlik_mi(cmd.id)
+
+    # DISKTEN geri okunan deger birebir ayni olmali.
+    okunan = db.scalar(
+        select(DeviceConfigApplication.command_id).where(
+            DeviceConfigApplication.id == niyet.id
+        )
+    )
+    assert okunan == cmd.id, f"niyet.command_id kirpildi: {okunan} != {cmd.id}"
+    assert niyet.state == apply_svc.KUYRUKTA
+
+
+def test_BUYUK_kimlik_ILISKI_uzerinden_komuta_ulasir(db):
+    """`db.get(DeviceCommand, niyet.command_id)` yolu (senkronizasyon ve
+    dogrulama bu yoldan gecer) buyuk kimlikte de calismali."""
+    niyet = _niyet_ac(db)
+    db.commit()
+    cmd = apply_svc.komut_uret(db, niyet=niyet, device=_cihaz(db), simdi=AN)
+    db.commit()
+
+    geri = db.get(DeviceCommand, niyet.command_id)
+    assert geri is not None, "buyuk kimlikle komut satirina ulasilamadi"
+    assert geri.id == cmd.id
+    assert geri.command == "config_update"
+
+
+def test_BUYUK_kimlik_API_yanitinda_SAYI_olarak_gider(db):
+    """Arayuz kimligi `number` olarak tasiyor; pydantic dizeye cevirmemeli
+    ve deger JS guvenli tamsayi tavaninin ALTINDA kalmali."""
+    import json
+
+    from app.schemas.device import DeviceCommandRow
+    from app.services import command_identity as ci
+
+    niyet = _niyet_ac(db)
+    db.commit()
+    cmd = apply_svc.komut_uret(db, niyet=niyet, device=_cihaz(db), simdi=AN)
+    db.commit()
+
+    govde = json.loads(DeviceCommandRow.model_validate(cmd).model_dump_json())
+    assert isinstance(govde["id"], int), "kimlik JSON'da sayi degil"
+    assert govde["id"] == cmd.id, "serilestirmede kirpildi"
+    assert govde["id"] < ci.AZAMI_KIMLIK, "kimlik JS guvenli tamsayi tavanini asti"
+    # JSON metninde de tam sayiyi gormeliyiz (bilimsel gosterim/float degil).
+    ham = DeviceCommandRow.model_validate(cmd).model_dump_json()
+    assert str(cmd.id) in ham, f"kimlik JSON metninde bozulmus: {ham[:120]}"

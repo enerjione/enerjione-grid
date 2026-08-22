@@ -363,3 +363,179 @@ def test_K_config_apply_YENI_kimlik_kullanir(db):
     db.commit()
     assert kuyruk.id > 1_000_000_000_000
     assert not ci.eski_kimlik_mi(kuyruk.id)
+
+
+# ===========================================================================
+# L) COK SURECLI CAKISMA — GERCEK SERVIS YOLUNDA YENIDEN DENEME
+# ===========================================================================
+#
+# B ve C testleri uretecin kendisini olcuyor. Sahada onemli olan ise SERVISIN
+# cakismayi ATLATIP atlatamadigi: iki backend sureci (uretimde en az bes var)
+# ayni milisaniyede ayni yuvayi secerse birincil anahtar ikinci INSERT'i
+# reddeder ve `queue_command` TAZE bir kimlikle yeniden denemelidir.
+#
+# Cakisma OLCULDU (6 surec, ard arda uretim): binde 6. Gercek komut hizinda
+# cok daha nadir, ama sifir degil.
+
+
+#: Cakismayi TEMIZ BIR SURECTE zorlayan cocuk betik.
+#:
+#: NEDEN AYRI SUREC
+#: ----------------
+#: `DeviceCommand.id` varsayilani (`default=command_identity.yeni_kimlik`)
+#: SQLAlchemy mapper'i tarafindan ILK KULLANIMDA cozulur ve orada kalir;
+#: sonradan `Column.default`i ya da `command_identity.yeni_kimlik`i
+#: yamalamak ILK INSERT'i ARTIK ETKILEMEZ (olculdu: yamali degere ragmen
+#: gercek uretec calisti).
+#:
+#: Bu, uretim icin ISTENEN bir ozelliktir — kimlik uretimi calisma aninda
+#: degistirilemez. Ama testte cakismayi zorlamak icin yama, o sinif hic
+#: flush edilmeden ONCE konmalidir. Tek guvenilir yol taze bir surectir.
+_CAKISMA_BETIGI = """
+import json, sys
+sys.path.insert(0, sys.argv[1])
+
+from sqlalchemy import create_engine, func, select
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql.schema import ColumnDefault
+
+import app.models  # noqa: F401
+from app.db.base import Base
+from app.models.device import Device
+from app.models.device_command import DeviceCommand
+from app.models.gateway import Gateway
+from app.models.signal_catalog import SignalCatalog
+from app.services import command_identity as ci
+from app.services import device_command_service as svc
+
+CAKISAN = 777000111222333
+tekrar = int(sys.argv[2])          # kac kez cakisan deger uretilsin
+sira = [CAKISAN] * (tekrar + 1)    # +1: ilk INSERT de cakissin
+sayac = {"n": 0}
+
+
+def sahte():
+    sayac["n"] += 1
+    return sira.pop(0) if sira else ci_gercek()
+
+
+ci_gercek = ci.yeni_kimlik
+# YAMA, SINIF HIC FLUSH EDILMEDEN ONCE konur.
+DeviceCommand.__table__.c.id.default = ColumnDefault(sahte)
+ci.yeni_kimlik = sahte
+
+eng = create_engine("sqlite://", future=True)
+Base.metadata.create_all(eng)
+db = sessionmaker(bind=eng, future=True)()
+db.add(Gateway(code="GW-1", name="G", host="10.0.0.1", listen_port=20000,
+               token="t" * 20, is_active=True))
+db.commit()
+db.add(Device(code="DEV-1", name="D", serial_number="DEV-1", gateway_code="GW-1",
+              model="horstmann_sn_2_0", ip_address="10.0.0.9",
+              latitude=39.0, longitude=35.0))
+db.add(SignalCatalog(key="master.reset_fault", model="horstmann_sn_2_0", label="R",
+                     data_type="binary_output", dnp3_index=3, is_active=True))
+db.commit()
+dev = db.scalar(select(Device).where(Device.code == "DEV-1"))
+
+# 1) Cakisacak kimligi tasiyan satir olusur.
+ilk = svc.queue_command(db, device=dev, slug="reset_fault", actor="m", origin="ui")
+db.commit()
+
+# 2) Ayni kimlik yeniden uretilir -> birincil anahtar reddeder -> yeniden dene.
+sonuc = {"ilk_id": ilk.id}
+try:
+    ikinci = svc.queue_command(db, device=dev, slug="reset_fault", actor="m", origin="ui")
+    db.commit()
+    sonuc["ikinci_id"] = ikinci.id
+    sonuc["hata"] = None
+except Exception as exc:                       # noqa: BLE001
+    db.rollback()
+    sonuc["ikinci_id"] = None
+    sonuc["hata"] = type(exc).__name__
+sonuc["uretim_sayisi"] = sayac["n"]
+sonuc["satir"] = db.scalar(select(func.count()).select_from(DeviceCommand))
+sonuc["deneme_hakki"] = svc._KIMLIK_DENEME
+print(json.dumps(sonuc))
+"""
+
+
+def _cakisma_kos(tekrar: int) -> dict:
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    kok = str(Path(__file__).resolve().parents[1])
+    p = subprocess.run(
+        [sys.executable, "-c", _CAKISMA_BETIGI, kok, str(tekrar)],
+        capture_output=True, text=True, timeout=180,
+    )
+    assert p.returncode == 0, f"cocuk surec dustu: {p.stderr[-400:]}"
+    return json.loads(p.stdout.strip().splitlines()[-1])
+
+
+def test_L_CAKISMADA_servis_TAZE_kimlikle_devam_eder():
+    """GERCEK cakisma, GERCEK servis yolu: komut yine de kuyruga girer.
+
+    Yeniden deneme calismasaydi operator komutu gonderemedigini gorur ve
+    sebebini asla anlamazdi (500).
+    """
+    s = _cakisma_kos(tekrar=1)
+    assert s["hata"] is None, f"cakisma atlatilamadi: {s['hata']}"
+    assert s["ikinci_id"] is not None
+    assert s["ikinci_id"] != s["ilk_id"], "cakisan kimlik ezildi"
+    assert s["satir"] == 2
+    assert s["uretim_sayisi"] >= 3, "cakisma hic yasanmadi — kurgu bosa dondu"
+
+
+def test_L2_deneme_hakki_TUKENIRSE_hata_YUKARI_cikar():
+    """Yeniden deneme bir KACIS DELIGI degil.
+
+    Kimlik hep ayni gelirse servis sessizce basarili gorunmemeli; hak
+    bitince istisna cagirana gider ve yarim satir yazilmaz.
+    """
+    s = _cakisma_kos(tekrar=50)
+    assert s["hata"] == "IntegrityError", f"beklenen istisna gelmedi: {s['hata']}"
+    assert s["satir"] == 1, "hata sonrasi yarim satir kaldi"
+
+
+def test_L3_deneme_sayisi_SINIRLI():
+    """Uretim sayisi `_KIMLIK_DENEME` ile SINIRLI olmali.
+
+    Tam esitlik ARANMAZ: model varsayilani ilk degeri uretir ve basarisiz
+    bir flush sonrasinda SQLAlchemy nesneyi yeniden bekleyen duruma
+    aldiginda varsayilan bir kez daha degerlendirilebilir. Onemli olan
+    ustten sinirli olmasi — sinirsiz dongu, kimlikle ilgisiz bir butunluk
+    hatasinda istegi hic bitirmezdi.
+    """
+    s = _cakisma_kos(tekrar=50)
+    hak = s["deneme_hakki"]
+    assert hak <= s["uretim_sayisi"] <= hak + 1, (
+        f"kimlik {s['uretim_sayisi']} kez uretildi; {hak}..{hak + 1} bekleniyordu"
+    )
+
+
+def test_L4_kimlik_uretimi_CALISMA_ANINDA_degistirilemez(db):
+    """Uretim ozelligi: varsayilan mapper'da sabitlenir.
+
+    `command_identity.yeni_kimlik` sonradan yamalanirsa ILK INSERT
+    ETKILENMEZ. Yani calisma aninda kimlik uretimini degistirebilecek bir
+    yol yok — bu testler bu yuzden ayri surecte kosuyor.
+    """
+    svc.queue_command(db, device=_cihaz(db), slug=SLUG, actor="muh", origin="ui")
+    db.commit()
+
+    import app.services.command_identity as canli
+
+    eski = canli.yeni_kimlik
+    try:
+        canli.yeni_kimlik = lambda: 42
+        yeni = svc.queue_command(
+            db, device=_cihaz(db), slug=SLUG, actor="muh", origin="ui"
+        )
+        db.commit()
+        assert yeni.id != 42, "kimlik uretimi calisma aninda degistirilebiliyor"
+        assert yeni.id > 1_000_000_000_000
+    finally:
+        canli.yeni_kimlik = eski

@@ -635,7 +635,7 @@ jobs:
           # (apps/backend-api/tests/test_gateway_deployment_contract_parity.py).
           # Ikisi ayrisirsa CI yanlis surumu karsilastirir; bir bekci test
           # esitligi zorunlu kilar (test_ci_workflow_ayni_snapshota_bakiyor).
-          VENDOR=infra/gateway-contract/v1.11.4.json
+          VENDOR=infra/gateway-contract/v1.15.1.json
           REPO=enerjione/enerjione-grid-dnp3-gateway
           RAW=https://raw.githubusercontent.com/$REPO
           # NE VENDOR EDILIYOR (v1.11.4'ten beri): release workflow'unun

@@ -175,7 +175,7 @@ name: e1-gw-{{GATEWAY_CODE_LOWER}}
 services:
   gateway:
     image: {{IMAGE}}
-    # Her kalkista imaji yeniden ceker (:latest tek basina yetmez).
+    # Yalnizca `up`/`create` okur; `restart`/`start` yukseltmeye donmez.
     pull_policy: always
     container_name: e1-gw-{{GATEWAY_CODE_LOWER}}
     restart: unless-stopped

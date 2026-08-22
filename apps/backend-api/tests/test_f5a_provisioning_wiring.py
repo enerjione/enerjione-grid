@@ -24,6 +24,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 import app.models  # noqa: F401
+from app.services import gateway_release_policy as kayit_politikasi
 from app.api.gateways import _build_render_input
 from app.db.base import Base
 from app.models.gateway import Gateway
@@ -73,7 +74,7 @@ def _girdi(db, g):
         backend_url="http://10.0.0.5/api/v1",
         nats_url="nats://gateway:pw@10.0.0.5:4222",
         host_port=8020,
-        image="ghcr.io/enerjione/enerjione-grid-dnp3-gateway:latest",
+        image=kayit_politikasi.approved_image_tag(),
         app_environment="production",
     )
 
@@ -155,7 +156,7 @@ def test_C11_ajan_sablonu_sirri_compose_a_yaziyor():
     temel = dict(
         token="t" * 40, backend_url="http://host.docker.internal/api/v1",
         nats_url="nats://a:b@h:4222", host_port=8020,
-        image="ghcr.io/enerjione/enerjione-grid-dnp3-gateway:latest",
+        image=kayit_politikasi.approved_image_tag(),
         app_environment="production", initiating_port_base=20100,
         initiating_port_count=0, publish_dnp3_quality=False,
     )
@@ -253,7 +254,7 @@ def _ajan():
 
 def _ham_params(**ek):
     temel = dict(
-        image="ghcr.io/enerjione/enerjione-grid-dnp3-gateway:latest",
+        image=kayit_politikasi.approved_image_tag(),
         token="t" * 40,
         backend_url="http://host.docker.internal/api/v1",
         nats_url="nats://gateway:pw@host.docker.internal:4222",

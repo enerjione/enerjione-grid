@@ -151,8 +151,8 @@ class DeviceUpdate(BaseModel):
 class DeviceRuntimeHealthRead(BaseModel):
     """Gateway'in bildirdigi CALISMA-ZAMANI sagligi — OKUMA projeksiyonu.
 
-    Sozlesme: `device_health_v1` (Gateway PR #33). Vendor kopyasi:
-    `docs/gateway-contract/device-health-api-pr33.md`.
+    Sozlesme: `device_health_v1` (gateway 1.15.0+). Kanonik kaynak:
+    `infra/gateway-contract/v1.15.1.json`.
 
     Kaynak `device_runtime_health` SATIRIDIR, wire govdesi degil: alim
     tarafindaki tek adaptor (`device_runtime_health_service._wire_to_model`)

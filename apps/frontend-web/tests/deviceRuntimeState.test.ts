@@ -15,7 +15,7 @@
  * GERCEKTEN CALISTIRILARAK sinaniyor.
  *
  * Sozlesme: `docs/gateway-contract/device-health-api-pr33.md`
- * (Gateway PR #33, commit bd502c49 — PR HENUZ ACIK).
+ * (Gateway 1.15.0+; kanonik artifact infra/gateway-contract/v1.15.1.json).
  *
  * Kaynak metni okunan uc kural var (React kosucusu yok, bkz. tests/run.mjs):
  *   1. Hicbir yerde 1 SANIYELIK geri sayim zamanlayicisi kurulmuyor.

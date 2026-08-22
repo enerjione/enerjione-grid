@@ -482,3 +482,7 @@ test("govde yazi tipi kurali derlenmis CSS'te canli kalmali", async () => {
     "selektor hala kacisli bir karakterle basliyor — kural olu",
   );
 });
+
+// Komut kimligi: backend artik ~1.79e15 uretiyor; tarayicida 2^53 ustunde
+// tamsayi hassasiyeti SESSIZCE kaybolur.
+import "./komutKimligiJsGuvenli.test";

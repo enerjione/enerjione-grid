@@ -4,7 +4,7 @@ Endüstriyel akıllı şebeke izleme platformu. Horstmann Smart Navigator 2.0 ar
 göstergesi cihazlarını izler/yönetir. Event-driven mikroservis mimarisi, Docker + systemd
 ile deploy edilir.
 
-- **Sürüm:** 2.109.1
+- **Sürüm:** 2.110.0
 - **Ana dal:** `main` (tek gövde, her an release edilebilir). Sürümler `v2.25.0` gibi
   **tag** ile çıkar; deploy tag'den tetiklenir, daldan değil. İş dalları: `feat/...`, `fix/...`.
 - **Dil:** Kod yorumları ve UI **Türkçe**. Kod tabanında ASCII-only yorum tercih edilir
@@ -116,7 +116,8 @@ cd apps/frontend-web && npx tsc -b          # type check (--noEmit DEGIL: kok
 
 ## Deploy / Docker
 
-- `docker-compose.yml` tüm stack. Image: `e1-grid/<service>:${E1_VERSION:-latest}`.
+- `docker-compose.yml` tüm stack. Image: `${E1_REGISTRY}/<service>:${E1_VERSION}` —
+  `E1_VERSION` **zorunlu**, sessiz `latest` yedeği yok (tanımsızsa compose hata verir).
 - Güncelleme: `sudo bash update.sh [backend|frontend|alarm|tag|notification|iec]`.
 - systemd: `sudo systemctl {start,stop,restart,status} enerjione-grid`.
 

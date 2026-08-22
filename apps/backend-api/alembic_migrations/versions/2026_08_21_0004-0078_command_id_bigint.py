@@ -95,17 +95,36 @@ def upgrade() -> None:
         op.execute(f"ALTER TABLE {tablo} ALTER COLUMN {kolon} TYPE BIGINT")
         logger.warning("0078: %s.%s int4 -> int8 cevrildi", tablo, kolon)
 
-    # SEQUENCE AYRICA CEVRILIR (0021'in belgeledigi tuzak): SERIAL'in
-    # arkasindaki sequence'in kendi veri tipi de int4'tur ve kolonu
-    # genisletmek onu genisletmez.
+    # ESKI KIMLIK OTORITESI SOKULUR — GENISLETMEK YETMEZ.
+    #
+    # Kolonu bigint yapmak sequence'i ORTADAN KALDIRMAZ: `DEFAULT
+    # nextval(...)` yerinde kalir ve kimliksiz her INSERT hala oradan
+    # beslenir. Olculdu (PostgreSQL, bu migration kosturulduktan SONRA):
+    #
+    #     INSERT INTO device_commands (gateway_code, device_code) VALUES (...)
+    #     -> id = 1
+    #
+    # Yani genisletilmis ama sequence'i duran bir tabloda, kimligi ACIKCA
+    # vermeyen tek bir yazma yolu sahadaki arizayi geri getirir — kucuk
+    # kimlik, gateway defteriyle cakisma, token_mismatch. Uygulama bugun
+    # kimligi her zaman veriyor (`command_identity.yeni_kimlik`, model
+    # varsayilani), ama bir migration'in gorevi "bugunku kod dogru
+    # davraniyor" varsayimi degil, YANLIS DAVRANISI IMKANSIZ KILMAKTIR.
+    #
+    # AYRICA SEMA PARITESI: temiz kurulum (`create_all`, autoincrement=False)
+    # bu kolonu DEFAULT'SUZ uretir. Sequence birakilirsa yukseltilmis ve
+    # temiz kurulumlar KALICI OLARAK ayrisir ve A15 parite testi kirmizi
+    # olur — iki farkli uretim semasi demektir.
     op.execute(
         """
         DO $$
         DECLARE seq text;
         BEGIN
+            -- Ad ONCE alinir: default dusunce bag da kopar.
             seq := pg_get_serial_sequence('device_commands', 'id');
             IF seq IS NOT NULL THEN
-                EXECUTE format('ALTER SEQUENCE %s AS bigint', seq);
+                ALTER TABLE device_commands ALTER COLUMN id DROP DEFAULT;
+                EXECUTE format('DROP SEQUENCE IF EXISTS %s', seq);
             END IF;
         END $$;
         """
@@ -127,15 +146,28 @@ def downgrade() -> None:
         if _kolon_tipi(bind, tablo, kolon) is None:
             continue
         op.execute(f"ALTER TABLE {tablo} ALTER COLUMN {kolon} TYPE INTEGER")
+    # SEQUENCE GERI KURULUR. Upgrade onu sokuyor; geri alinan bir kurulumda
+    # kimligi uygulama vermiyorsa (2.109.1 ve oncesi) tablo hic yazilamaz.
+    # Deger tablodaki en buyuk kimlige ayarlanir ki eski kod cakisan bir
+    # kimlik uretmesin.
+    #
+    # DIKKAT — BU GERI ALMA ARIZAYI DA GERI GETIRIR: sequence yeniden
+    # kimlik otoritesi olur ve veritabani daha eski bir ana alinirsa ayni
+    # tekrar-kullanim yasanir. Geri alma yalnizca BILINCLI ve gecici bir
+    # adim olarak dusunulmelidir.
     op.execute(
         """
         DO $$
-        DECLARE seq text;
+        DECLARE enb bigint;
         BEGIN
-            seq := pg_get_serial_sequence('device_commands', 'id');
-            IF seq IS NOT NULL THEN
-                EXECUTE format('ALTER SEQUENCE %s AS integer', seq);
+            IF to_regclass('device_commands_id_seq') IS NULL THEN
+                CREATE SEQUENCE device_commands_id_seq AS integer
+                    OWNED BY device_commands.id;
             END IF;
+            SELECT COALESCE(MAX(id), 0) INTO enb FROM device_commands;
+            PERFORM setval('device_commands_id_seq', GREATEST(enb, 1), enb > 0);
+            ALTER TABLE device_commands
+                ALTER COLUMN id SET DEFAULT nextval('device_commands_id_seq');
         END $$;
         """
     )

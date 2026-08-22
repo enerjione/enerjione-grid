@@ -61,6 +61,17 @@ def test_desteklenen_tipler_YALNIZCA_izleme():
     assert SUPPORTED_MONITORING_TYPES == frozenset({1, 13, 15})
 
 
+
+def _katalog_noktalari(reg):
+    """KATALOG kaynakli noktalar — sistem noktalari HARIC.
+
+    Calisma-zamani sagligi (`system.*`) bir DNP3 katalog sinyali DEGIL;
+    gateway'in cihazla olan oturumu hakkinda ayri bir alandir ve her cihaza
+    kosulsuz eklenir (bkz. `runtime_health` modul basligi). Bu dosyanin
+    konusu ise katalog sinyallerinin TIP KAPSAMI — ikisi karistirilmamali.
+    """
+    return tuple(p for p in reg.points if not p.signal_key.startswith("system."))
+
 @pytest.mark.parametrize(
     "tip,aciklama",
     [
@@ -79,7 +90,7 @@ def test_kapsam_disi_tip_REGISTRY_e_girmiyor(tip: int, aciklama: str):
         devices=[_cihaz()],
         signals=[_sinyal("master.x", tip, 1001)],
     )
-    assert reg.points == (), f"kapsam disi tip registry'ye girdi: {aciklama}"
+    assert _katalog_noktalari(reg) == (), f"kapsam disi tip registry'ye girdi: {aciklama}"
 
 
 @pytest.mark.parametrize("tip", sorted(SUPPORTED_MONITORING_TYPES))
@@ -91,8 +102,8 @@ def test_desteklenen_tip_REGISTRY_e_giriyor(tip: int):
         devices=[_cihaz()],
         signals=[_sinyal("master.x", tip, 1001)],
     )
-    assert len(reg.points) == 1
-    assert reg.points[0].type_id == tip
+    assert len(_katalog_noktalari(reg)) == 1
+    assert _katalog_noktalari(reg)[0].type_id == tip
 
 
 def test_karisik_katalogda_yalnizca_izleme_tipleri_kaliyor():
@@ -109,7 +120,7 @@ def test_karisik_katalogda_yalnizca_izleme_tipleri_kaliyor():
             _sinyal("master.setpoint", 49, 1005, data_type="analog_output"),
         ],
     )
-    anahtarlar = {p.signal_key for p in reg.points}
+    anahtarlar = {p.signal_key for p in _katalog_noktalari(reg)}
     assert anahtarlar == {"master.voltage", "master.fault", "master.counter"}
 
 

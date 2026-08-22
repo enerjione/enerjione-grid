@@ -8,7 +8,7 @@
 #
 # Parametreler:
 #   -InstallDir  Hedef dizin (default: C:\enerjione)
-#   -Version     E1_VERSION secimi (default: latest)
+#   -Version     E1_VERSION secimi (default: repo VERSION dosyasi)
 #   -SkipPull    Image cekme adimini atla (offline kurulumda image'lar
 #                'docker load' ile onceden yuklenmis olmali)
 #
@@ -19,7 +19,11 @@
 [CmdletBinding()]
 param(
     [string]$InstallDir = "C:\enerjione",
-    [string]$Version = "latest",
+    # VARSAYILAN "latest" DEGIL, repo VERSION dosyasi (2026-08-21).
+    # `latest` rollback imkani birakmaz: bozuk bir imaj push edilirse geri
+    # donulecek somut bir etiket kalmaz. Bos birakilirsa asagida VERSION
+    # dosyasindan cozulur; okunamazsa kurulum DURUR.
+    [string]$Version = "",
     [switch]$SkipPull
 )
 
@@ -70,6 +74,17 @@ Write-Host ""
 Write-Host "  EnerjiOne Grid - Windows Installer" -ForegroundColor White
 Write-Host "  -----------------------------------" -ForegroundColor DarkGray
 Write-Host "  Hedef dizin : $InstallDir"
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $versionFile = Join-Path $PSScriptRoot "VERSION"
+    if (Test-Path $versionFile) {
+        $Version = (Get-Content $versionFile -Raw).Trim()
+    }
+}
+if ($Version -notmatch '^\d+\.\d+\.\d+$' -and $Version -ne "latest") {
+    Write-Host "HATA: Surum semver degil ('$Version'). Uretim kurulumu somut" -ForegroundColor Red
+    Write-Host "      bir surum ister; gelistirme icin -Version latest verin." -ForegroundColor Red
+    exit 1
+}
 Write-Host "  Version     : $Version"
 Write-Host ""
 
@@ -156,7 +171,10 @@ if (-not (Test-Path $envPath)) {
     $content = $content -replace 'INTERNAL_SERVICE_TOKEN=please-change-me-internal-32-bytes-hex', "INTERNAL_SERVICE_TOKEN=$secret2"
     $content = $content -replace 'POSTGRES_PASSWORD=change-me-strong-password', "POSTGRES_PASSWORD=$pgPass"
     $content = $content -replace 'RABBITMQ_PASSWORD=change-me-strong-password', "RABBITMQ_PASSWORD=$rabbitPass"
-    $content = $content -replace 'E1_VERSION=latest', "E1_VERSION=$Version"
+    # .env.example artik somut bir semver tasiyor (`latest` DEGIL), o yuzden
+    # satirin TAMAMI hedeflenir: eski desen (`E1_VERSION=latest`) artik
+    # eslesmez ve sessizce hicbir sey yazilmazdi.
+    $content = $content -replace '(?m)^E1_VERSION=.*$', "E1_VERSION=$Version"
     # APP_ENV varsayilan production yap
     if ($content -match 'APP_ENV=') {
         $content = $content -replace 'APP_ENV=development', 'APP_ENV=production'

@@ -47,6 +47,7 @@ from app.schemas.gateway import (
 )
 from app.services import device_config_service
 from app.services import gateway_compatibility
+from app.services import gateway_release_policy
 from app.services import command_delivery_service, gateway_agent_service
 from app.services import device_runtime_health_service
 from app.services import gateway_update_service
@@ -220,7 +221,6 @@ _INITIATING_PORT_BASE_MAX = 60000  # 65535 - 1000 buffer; ustu kabul edilmez
 # DNP3 gateway imaji. Hem "dosya indir" hem "bu cihaza kur" akisi ayni
 # varsayilani kullanmali; aksi halde indirilen compose ile kurulan container
 # farkli surumden olur.
-_DEFAULT_GATEWAY_IMAGE = "ghcr.io/enerjione/enerjione-grid-dnp3-gateway:latest"
 
 # Cihaz modeli bilinmiyorsa kullanilan profil anahtari.
 #
@@ -781,9 +781,13 @@ def download_gateway_compose(
         le=65535,
         description="(Opsiyonel) Host'ta health/metrics endpoint icin acilacak port. Verilmezse gateway sirasina gore 8020/8021/... olarak otomatik atanir.",
     ),
-    image: str = Query(
-        _DEFAULT_GATEWAY_IMAGE,
-        description="Docker image tag (registry/name:tag). Varsayilan GHCR public paketidir; ozel registry kullanilacaksa override edilir.",
+    image: str | None = Query(
+        None,
+        description=(
+            "Docker image referansi (registry/name:tag[@sha256:...]). Verilmezse "
+            "onayli surumun DEGISMEZ digest'ine sabitlenmis referans uretilir; "
+            "ozel registry kullanilacaksa override edilir."
+        ),
     ),
     app_environment: Literal["development", "staging", "production"] = Query(
         "production",
@@ -822,6 +826,23 @@ def download_gateway_compose(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway not found")
     # Eski rabbitmq_url parametresi DEPRECATED — sessizce goz ardi edilir.
     _ = rabbitmq_url  # legacy param, kullanilmiyor
+
+    # INDIRILEN COMPOSE DA BIR KURULUMDUR.
+    #
+    # Operator bu dosyayi hedef makinede `docker compose up -d` ile calistirir;
+    # "bu cihaza kur" akisindan tek farki kimin tetikledigi. Varsayilan olarak
+    # ETIKET yazmak, dosyanin uretildigi an ile calistirildigi an arasinda
+    # etiketin tasinmasi halinde BASKA bir gateway kurardi — ve dosyanin
+    # icinde bunu ele verecek hicbir sey olmazdi.
+    image = (image or "").strip() or None
+    if image is None:
+        try:
+            image, _digest = gateway_release_policy.production_image_ref()
+        except gateway_release_policy.DigestCozulemedi as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+            ) from exc
+
     try:
         render_input = _build_render_input(
             db,
@@ -945,7 +966,24 @@ def install_gateway_locally(
     # oldugu icin LAN IP'sine gerek yok — ve IP degisse bile kurulum bozulmaz
     # (compose sablonunda extra_hosts ile host-gateway zaten tanimli).
     backend_url = (payload.backend_url or "").strip() or "http://host.docker.internal/api/v1"
-    image = (payload.image or "").strip() or _DEFAULT_GATEWAY_IMAGE
+    # URETIM KURULUMU DEGISMEZ REFERANSA SABITLENIR — ISTISNASIZ.
+    #
+    # Cagiran acikca bir imaj verdiyse ona dokunulmaz (ozel kayit defteri /
+    # gelistirme kacisi; sorumluluk cagiranda). Vermediyse onayli surumun
+    # DIGEST'ine sabitlenmis referans uretilir. Uretilemezse KURULUM
+    # REDDEDILIR: degisebilir etikete dusmek, "hangi kod kuruldu" sorusunun
+    # cevabini kaybetmek demektir (bkz. `gateway_release_policy.
+    # production_image_ref` — fail-closed gerekcesi).
+    acik_imaj = (payload.image or "").strip()
+    if acik_imaj:
+        image = acik_imaj
+    else:
+        try:
+            image, _digest = gateway_release_policy.production_image_ref()
+        except gateway_release_policy.DigestCozulemedi as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+            ) from exc
 
     # `_build_render_input` hem parametreleri normalize eder hem dogrular
     # (kod/token/port araliklari). compose'u BURADA uretmiyoruz: ajan kendi
@@ -2519,8 +2557,8 @@ def report_device_runtime_health(
 ):
     """Gateway'in bildirdigi CIHAZ BASINA calisma-zamani sagligi.
 
-    Sema: `device_health_v1`. Sozlesme (PR #33, HENUZ ACIK) vendor kopyasi:
-    `docs/gateway-contract/device-health-api-pr33.md`. Tum ayristirma ve
+    Sema: `device_health_v1` (gateway 1.15.0+). Kanonik sozlesme:
+    `infra/gateway-contract/v1.15.1.json`. Tum ayristirma ve
     esleme `device_runtime_health_service` icinde — sozlesme degisirse
     burasi degil orasi degisir.
 

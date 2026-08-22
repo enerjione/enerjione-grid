@@ -14,6 +14,89 @@ Türler: `Eklendi`, `Değişti`, `Düzeltildi`, `Kaldırıldı`, `Güvenlik`.
 
 ---
 
+## [2.110.0] — 2026-08-22
+
+> **Migration ZORUNLU: 0078.** `device_commands.id` ve
+> `device_config_applications.command_id` `bigint`e genişletilir ve eski
+> `SERIAL` sequence'i **sökülür**. Migration konteyner açılışında uvicorn'dan
+> önce koşar; ayrı bir işlem gerekmez.
+>
+> **Yalnızca imajı geri almak DESTEKLENMEZ.** 0078 uygulandıktan sonra
+> 2.109.1 imajına dönülürse eski backend **yeni komut kuyruklayamaz**:
+> kimliği veritabanından beklerdi, artık üreten yok (sequence söküldü).
+> Okuma ve geçmiş listeleme çalışmaya devam eder — yani arıza sessiz değil
+> ama kısmi.
+>
+> Geri alma politikası:
+> - **Normal kurtarma yolu ileri düzeltmedir** (forward-fix). Bir sorun
+>   çıkarsa düzeltilmiş bir sürüm çıkarın, eski imaja dönmeyin.
+> - **Şema geri alma yalnızca kontrollü bakım prosedürüyle** yapılır:
+>   önce `alembic downgrade 0077`, sonra eski imaj. Bu işlem kimlik
+>   otoritesini sequence'e geri verir; yani bu sürümün düzelttiği arızanın
+>   koşulları yeniden oluşur.
+> - **Tabloda int32'yi aşan komut kimliği varsa 0077 downgrade reddedilir**
+>   (`integer out of range`). Bu doğru davranıştır: sessizce veri kırpmaz.
+> - **Eski imajı körlemesine ayağa kaldırmayın.** Önce hangi migration'ların
+>   uygulandığını doğrulayın.
+>
+> Bu, gateway imajının geri alınmasıyla **aynı şey değildir**: gateway
+> rollback'i digest'e sabitli ve şemadan bağımsızdır; buradaki kısıt Grid'in
+> kendi veritabanı migration'ıyla ilgilidir.
+>
+> **Gateway 1.15.1 yeterlidir**; yeni bir gateway sürümü gerekmiyor.
+
+### Düzeltildi
+
+- **Veritabanı geri yüklemesinden sonra komutlar sessizce ölüyordu.** Saha
+  cihazında yedekten dönüldüğünde komut kimliklerini üreten sequence de
+  geriye döndü ve daha önce dağıtılmış kimlikler (43, 44) yeni komutlara
+  tekrar verildi. Gateway o kimlikleri defterinde *tamamlandı* olarak
+  bildiği için **fiziksel işlemi haklı olarak tekrarlamadı** ve eski onayı
+  geri gönderdi; backend yeni komut için başka bir teslim jetonu beklediği
+  için onayı reddetti. Görünen sonuç: komut "iletildi" durumuna hiç
+  geçmiyor, 120 saniye sonra başarısız oluyor ve sonucu bilinmiyor kalıyordu.
+  Kimlik artık veritabanının içinde yaşayan bir sayaçtan değil, geri
+  gitmeyen duvar saatinden türetiliyor.
+- **Gateway kurulumu değişebilir bir etikete düşebiliyordu.** Yeni kurulum
+  artık her koşulda onaylı sürümün **değişmez digest'ine** sabitlenir; digest
+  üretilemezse kurulum sessizce devam etmek yerine reddedilir.
+- **SCADA'da uyuyan cihaz "haberleşme kaybı" görünüyordu.** Horstmann Smart
+  modda modemini bilerek kapatır. IEC 104 çıkışı artık cihazın çalışma-zamanı
+  durumunu ayrı bir noktadan yayınlıyor ve `smart_idle` ile `lost` **ayrı
+  kodlar**.
+- **SCADA eski bir sağlık değerinde takılı kalabiliyordu.** Bir cihaz sağlık
+  listesinden düşerse ya da uç erişilemez kalırsa nokta artık `unknown` +
+  kötü kalite olarak yayınlanıyor; "en son ONLINE'dı" değeri süresiz
+  korunmuyor.
+- **Aynı Common Address'i paylaşan cihazlar SCADA'da tek cihaza çöküyordu.**
+  Sistem noktalarının adresi artık cihaz kimliğinden türetiliyor; çakışma
+  yapısal olarak imkânsız.
+- **NATS disk tavanı belgesi gerçeği söylemiyordu.** Yorumlar 10 GiB'lik eski
+  tasarımı anlatırken çalışan yapılandırma 38 GiB akış + 48 GiB hesap
+  tavanıydı. Yorumdaki değere dönmek telemetri akışını durdururdu.
+- **Üretim kurulumu `latest` etiketiyle açılabiliyordu.** `.env.example`
+  "her zaman semver kullanın" derken varsayılanı `latest`ti ve compose'un
+  sessiz bir `latest` yedeği vardı.
+
+### Değişti
+
+- **Komut kimlikleri artık geri-yüklemeden bağımsız 64-bit değerler.**
+  Biçim `epoch_ms * 1000 + rastgele`; bugün ~1,79e15 üretiyor ve tarayıcının
+  güvenli tamsayı sınırının (2^53) altında kalıyor — **2255 yılına kadar**.
+  Eski küçük kimlikli kayıtlar aynen okunmaya devam eder. UUID'ye
+  geçilmedi ve gateway sözleşmesi değişmedi.
+- **Onaylı gateway sürümü 1.15.1 olarak kalıyor** (kaynak commit
+  `ae9f00df`). Kanonik dağıtım sözleşmesi de artık bu sürümün gerçek release
+  artifact'ı.
+- **`E1_VERSION` artık zorunlu.** Tanımsızsa `docker compose` açık bir hata
+  verir; geliştirme için bilinçli olarak `latest` yazılabilir.
+
+### Güvenlik
+
+- Teslim jetonu doğrulaması, 120 saniyelik komut tazelik penceresi ve
+  gateway sahiplik kontrolü **değişmedi**. Bu sürüm kimlik çakışmasını
+  ortadan kaldırır; hiçbir doğrulamayı gevşetmez.
+
 ## [2.109.1] — 2026-08-21
 
 ### Düzeltildi

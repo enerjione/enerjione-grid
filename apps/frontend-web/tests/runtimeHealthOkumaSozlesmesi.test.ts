@@ -15,7 +15,7 @@
  * tablosunu ayni sekilde okuyor (React kosucusu yok, bkz. tests/run.mjs).
  *
  * Sozlesme: `docs/gateway-contract/device-health-api-pr33.md`
- * (Gateway PR #33 — HENUZ ACIK).
+ * (Gateway 1.15.0+; kanonik artifact infra/gateway-contract/v1.15.1.json).
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";

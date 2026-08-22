@@ -227,67 +227,36 @@ def smart_session_warning(
 #: Bilinen ve KABUL EDILMIS sapmalar: ozellik -> gerekce.
 #: Buraya bir satir eklemek bilincli bir karardir; silmek, sapmanin
 #: kapandigini (vendor guncellendigini) soyler.
-#: v1.14.0 YETENEKLERININ ORTAK GEREKCESI.
+#: SAPMA YOK — 2026-08-21'de KAPANDI.
 #:
-#: Dordu de ayni sebeple sapiyor, o yuzden metin tek yerde tutulur: dort ayri
-#: kopya zamanla ayrisir ve hangisinin guncel oldugu belirsizlesir.
-_V114_SAPMA_GEREKCESI = (
-    "Gateway v1.14.0 uc tipi kisitini kaldirdi ve `auto` politikasi + Dial-In "
-    "farkindali gecikme takibini getirdi; Grid bu yetenekleri destekliyor. "
-    "Vendor edilen sozlesme ise hala v1.11.4 — cunku v1.14.0 icin GitHub "
-    "Release ve release ARTIFACT'i henuz uretilmedi ve Grid, tag'deki repo "
-    "dosyasini canonical artifact gibi vendor ETMEZ (provenance karari, "
-    "2026-08-20). SAHA KIRILMAZ: bu yetenekleri desteklemeyen gateway'e ilgili "
-    "payload GONDERILMEZ (bkz. `eksik_yetenekler`), guvenli tarafa `continuous` "
-    "dusurulur ve operatore uyari gosterilir. Sapma, v1.14.0 release "
-    "artifact'i vendor edildiginde kapanir."
-)
-
-#: `device_runtime_health_transport` KENDI gerekcesini tasir — v1.14.0
-#: metnini paylasmaz. Sebep farkli: v1.14.0 YAYINLANDI (yalnizca release
-#: artifact'i uretilmedi), bu yetenek ise HENUZ BIRLESMEMIS BIR PR'da.
-_PR33_SAPMA_GEREKCESI = (
-    "Cihaz basina saglik tasiyicisi gateway PR #33'te (commit bd502c49) "
-    "tanimli ve HENUZ ACIK; gateway 1.15.0 YAYINLANMADI. Grid ucu once "
-    "hazir olmali (sozlesme bolum 9: 'once backend ucu yayina alin, sonra "
-    "gateway'lerde bayragi acin'), bu yuzden yetenek matrise sozlesme "
-    "vendor edilmeden giriyor. Vendor edilen sozlesme hala v1.11.4. SAHA "
-    "KIRILMAZ: gateway tarafinda kanal varsayilan olarak KAPALI "
-    "(`DEVICE_HEALTH_PUBLISH_ENABLED=false`) ve tasiyicisi olmayan bir "
-    "gateway bu uca hic istek atmaz — Grid de karsiliginda hicbir cihaz "
-    "yapilandirmasini degistirmez, yalnizca gozlem tablosu bos kalir. "
-    "Sozlesme PR birlesene kadar DEGISEBILIR; wire<->model eslemesi bu "
-    "yuzden tek adaptorde toplandi "
-    "(`app/services/device_runtime_health_service.py`). Sapma, gateway "
-    "1.15.0 release artifact'i vendor edildiginde kapanir."
-)
-
-_V1151_SAPMA_GEREKCESI = (
-    "Gateway 1.15.1 (branch `fix/health-delta-clock-observability-1.15.1`, "
-    "commit 34d9ee44) cihaz RTC sagligi ve oturum kaniti alanlarini ekledi; "
-    "sozlesme `docs/gateway-contract/device-health-api-1.15.1.md` olarak "
-    "vendor edildi. `infra/gateway-contract/` altindaki JSON artifact'i ise "
-    "hala v1.11.4'te — release cikmadigi icin. Saha kirilmaz: alanlar "
-    "opsiyoneldir ve 1.15.0 gateway'inde `None` kalir. Sapma, 1.15.1 release "
-    "artifact'i vendor edildiginde kapanir."
-)
-
-KNOWN_VERSION_DRIFT: dict[str, str] = {
-    "device_runtime_health_transport": _PR33_SAPMA_GEREKCESI,
-    "device_clock_observability": _V1151_SAPMA_GEREKCESI,
-    "smart_auto": _V114_SAPMA_GEREKCESI,
-    "smart_listening": _V114_SAPMA_GEREKCESI,
-    "dial_in_health": _V114_SAPMA_GEREKCESI,
-    "smart_listen_reconnect": _V114_SAPMA_GEREKCESI,
-    "smart_session": (
-        "B5 (2026-08-20) gateway 1.12.0'in Smart Mode sozlesmesini uyguladi; "
-        "Grid o tarihte hala v1.11.4 sozlesmesini vendor ediyordu. Saha "
-        "kirilmaz — 1.12.0 oncesi gateway yeni alanlari yok sayar ve "
-        "`continuous` calisir — ama arayuzdeki 'Akilli' iddiasi karsiliksiz "
-        "kalir. Uyumluluk uyarisi tam da bunu gorunur kilar. Sapma, vendor "
-        "edilen sozlesme 1.12.0+ surumune tasindiginda kapanir."
-    ),
-}
+#: NE OLDU
+#: -------
+#: Grid uzun sure v1.11.4 sozlesmesini vendor ederken 1.12.0..1.15.1 arasi
+#: yeteneklere bagimliydi. Sapma YASAK degildi (ozellik once gateway'de
+#: cikar, Grid sonra vendor eder) ama BEYAN zorunluydu; asagidaki sozluk o
+#: beyanlari tutuyordu:
+#:
+#:   smart_session .............. v1.12.0 (B5, 2026-08-20)
+#:   smart_auto / smart_listening / dial_in_health / smart_listen_reconnect
+#:                                v1.14.0 — release artifact'i uretilmemisti
+#:   device_runtime_health_transport  v1.15.0 — PR #33 henuz acikti
+#:   device_clock_observability       v1.15.1 — release cikmamisti
+#:
+#: Gateway v1.15.1 GERCEKTEN yayinlandi (tag v1.15.1, commit ae9f00df,
+#: release workflow run 32476830826) ve generated artifact
+#: `infra/gateway-contract/v1.15.1.json` olarak vendor edildi. Vendor edilen
+#: surum artik yedi yetenegin de ustunde; beyanlarin hepsi karsiliksiz kaldi.
+#:
+#: NEDEN BOS BIRAKILDI, SILINMEDI
+#: ------------------------------
+#: Mekanizma AYAKTA: yeni bir yetenek vendor edilen surumu asarsa
+#: `undeclared_drift` onu yakalar ve GU-20 kirmizi olur. Bos sozluk
+#: "sapma yok" der; sozlugun kendisini kaldirmak "sapma OLAMAZ" derdi ve
+#: bir sonraki gateway ozelligi sessizce girerdi.
+#:
+#: Buraya yeniden satir eklemek bilincli bir karardir; satir eklerken
+#: gerekceyi de yazin (bos gerekce testte kirmizi olur).
+KNOWN_VERSION_DRIFT: dict[str, str] = {}
 
 
 def vendored_contract_version(contract_dir) -> str | None:

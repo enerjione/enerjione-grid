@@ -27,9 +27,13 @@ class LocalGateway(BaseModel):
 
     # --- Guncelleme durumu -------------------------------------------------
     #
-    # Digest KARSILASTIRMASI ile: gateway imaji `:latest` etiketiyle sabit,
-    # yani surum numarasi yok. Etiketin isaret ettigi manifest digest'i
+    # Digest KARSILASTIRMASI ile: etiketin isaret ettigi manifest digest'i
     # degistiyse yeni bir imaj yayinlanmis demektir.
+    #
+    # (Eskiden burada "gateway imaji `:latest` etiketiyle sabit, surum
+    # numarasi yok" yaziyordu. 2026-08-21'den beri uretim imaji onayli
+    # surume + digest'e sabitli; karsilastirma araci degismedi, gerekcesi
+    # degisti.)
     #: Calisan imajin kayit defteri digest'i.
     image_digest: str | None = None
     #: Kayit defterindeki etiketin su anki digest'i.

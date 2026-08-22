@@ -317,14 +317,93 @@ def test_nats_stream_caps_stay_under_account_limit():
     # .template okunur, `nats-server.conf` DEGIL: ikincisi .gitignore'da
     # (sifre hash'leri iceriyor) ve temiz bir klonda / CI'da HIC bulunmaz.
     # Takip edilen tek kaynak template'tir.
-    conf = _read(REPO / "infra" / "nats" / "nats-server.conf.template")
-    m = re.search(r"^\s*max_file_store:\s*(\d+)\s*GB", conf, re.MULTILINE)
-    assert m, "nats-server.conf.template icinde max_file_store bulunamadi"
-    account_bytes = int(m.group(1)) * 1000**3  # NATS 'GB' = 10^9
+    account_bytes = _hesap_tavani_bayt()
     total = sum(_settings_default(f) for f, _e in NATS_BYTE_FIELDS)
     assert total < account_bytes, (
         f"stream tavanlari toplami ({total}) hesap tavanini ({account_bytes}) "
         "asiyor — hesap tavani once carpar ve publish reddedilir"
+    )
+
+
+#: NATS boyut eki `GB` = 2^30. OLCULDU, VARSAYILMADI (2026-08-21,
+#: nats-server v2.10.25): conf'ta `48GB` yazan deger `/jsz` uzerinde
+#: `config.max_storage = 51.539.607.552` olarak goruluyor.
+#:
+#: Onceki hali 10^9 varsayiyordu. Yanlislik GUVENLI yondeydi (tavani
+#: oldugundan kucuk sayiyor, yani karsilastirma daha sikiydi) ama yine de
+#: yanlisti: birini tavani daraltmaya ikna edecek bir sayi, kaynakta
+#: dogrulanmis olmali.
+NATS_GB = 1024**3
+
+
+def _hesap_tavani_bayt() -> int:
+    """`nats-server.conf.template` icindeki hesap tavani, BAYT.
+
+    .template okunur, `nats-server.conf` DEGIL: ikincisi .gitignore'da
+    (sifre hash'leri iceriyor) ve temiz bir klonda / CI'da HIC bulunmaz.
+    """
+    conf = _read(REPO / "infra" / "nats" / "nats-server.conf.template")
+    m = re.search(r"^\s*max_file_store:\s*(\d+)\s*GB", conf, re.MULTILINE)
+    assert m, "nats-server.conf.template icinde max_file_store bulunamadi"
+    return int(m.group(1)) * NATS_GB
+
+
+def test_nats_hesap_tavani_YORUMU_runtime_ile_AYNI():
+    """Yorumun ILAN ETTIGI toplam, config.py'deki GERCEK toplamla ayni olmali.
+
+    YASANAN SORUN (2026-08-21 denetimi)
+    -----------------------------------
+    Template'teki yorum "raw 6 + normalized 3 + dlq 1 = 10 GiB" ve hesap
+    tavani icin "12GB" diyordu; runtime ise 24 + 12 + 2 = 38 GiB ve 48GB
+    idi. Tavanlar 2026-08-04 saha olcumunden sonra yukseltilmis, YORUM
+    tasinmamisti.
+
+    Bu sadece kozmetik degil: yoruma bakip tavani "12 GB'a geri cekelim"
+    diyen biri, hesap tavanini stream toplaminin ALTINA indirir. Hesap
+    tavani BUDAMA YAPMAZ — dolunca publish REDDEDILIR ve telemetri akisi
+    DURUR. Yani bayat yorum, uretimi kirmaya davet eden bir talimattir.
+
+    Test yorumdaki GiB rakamlarini kaynaktan okur ve gercek degerlerle
+    karsilastirir; ikisi bir daha sessizce ayrisamaz.
+    """
+    conf = _read(REPO / "infra" / "nats" / "nats-server.conf.template")
+    gercek = {
+        "raw": _settings_default("nats_stream_raw_max_bytes"),
+        "normalized": _settings_default("nats_stream_normalized_max_bytes"),
+        "dlq": _settings_default("nats_stream_dlq_max_bytes"),
+    }
+    for ad, bayt in gercek.items():
+        # Yorumda "raw  25.769.803.776  = 24 GiB" gibi bir satir olmali.
+        nokta_ayirmali = f"{bayt:,}".replace(",", ".")
+        assert nokta_ayirmali in conf, (
+            f"{ad} tavani ({bayt}) template yorumunda ilan edilmemis — "
+            "yorum runtime'dan sapmis"
+        )
+
+    toplam_gib = sum(gercek.values()) // NATS_GB
+    assert f"TOPLAM      40.802.189.312  = {toplam_gib} GiB" in conf, (
+        f"yorumdaki toplam gercek toplamla ({toplam_gib} GiB) uyusmuyor"
+    )
+
+    hesap_gib = _hesap_tavani_bayt() // NATS_GB
+    assert f"{hesap_gib} GiB > {toplam_gib} GiB" in conf, (
+        f"yorum hesap tavani/stream toplami iliskisini ({hesap_gib} > "
+        f"{toplam_gib}) dogru anlatmiyor"
+    )
+
+
+def test_nats_hesap_tavani_STREAM_toplamindan_yeterince_BUYUK():
+    """Pay yalnizca "buyuk" degil, YETERINCE buyuk olmali.
+
+    Hesap tavani stream toplamina cok yakin olursa, JetStream'in mesaj
+    baytlarina EK olarak tuttugu indeks/metadata dosyalari tavani stream'ler
+    budamaya baslamadan ONCE doldurabilir; sonuc yine sert red olur.
+    """
+    toplam = sum(_settings_default(f) for f, _e in NATS_BYTE_FIELDS)
+    pay = _hesap_tavani_bayt() - toplam
+    assert pay >= 4 * NATS_GB, (
+        f"hesap tavani stream toplamindan yalnizca {pay / NATS_GB:.1f} GiB "
+        "buyuk — metadata/indeks payi icin dar"
     )
 
 

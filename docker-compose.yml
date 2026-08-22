@@ -461,7 +461,7 @@ services:
     build:
       context: ./apps/backend-api
       dockerfile: Dockerfile
-    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/backend-api:${E1_VERSION:-latest}
+    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/backend-api:${E1_VERSION:?E1_VERSION yok - .env icinde SOMUT semver gerekli (rollback icin sart; bkz. .env.example)}
     container_name: e1-grid-backend-api
     restart: unless-stopped
     depends_on:
@@ -527,7 +527,7 @@ services:
       # Ayni degisken imaj etiketi olarak da kullaniliyor; 'latest' gibi
       # semver olmayan bir deger gelirse config.py imajla paketlenen
       # surume duser (arayuzde "latest" yazmasin diye).
-      E1_VERSION: ${E1_VERSION:-latest}
+      E1_VERSION: ${E1_VERSION:?E1_VERSION yok - .env icinde SOMUT semver gerekli (rollback icin sart; bkz. .env.example)}
       # Guncelleme kontrolu SADECE BILGI amaclidir; arayuzden guncelleme
       # baslatilamaz. Bos ise kontrol tamamen kapalidir.
       UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-}
@@ -698,8 +698,9 @@ services:
       WS_FANOUT_SUBJECT: ${WS_FANOUT_SUBJECT:-e1.ws.telemetry}
       # NATS JetStream stream basina DISK tavani (bayt). max_age tek basina
       # bayt siniri vermez; bu tavanlar + discard=old sayesinde tampon dolunca
-      # en eski mesajlar duser ve telemetri akisi DURMAZ. Toplam 10 GiB;
-      # infra/nats/nats-server.conf max_file_store bunun ustunde kalmali.
+      # en eski mesajlar duser ve telemetri akisi DURMAZ. Toplam 38 GiB
+      # (24 + 12 + 2); infra/nats/nats-server.conf max_file_store bunun
+      # ustunde kalmali (48 GiB).
       #
       # DUSURMEDEN ONCE config.py'deki gerekceyi okuyun: budama tuketicinin
       # nerede oldugunu UMURSAMAZ, tavan = tuketicinin geri kalabilecegi
@@ -1007,7 +1008,7 @@ services:
     build:
       context: ./apps/tag-engine
       dockerfile: Dockerfile
-    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/tag-engine:${E1_VERSION:-latest}
+    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/tag-engine:${E1_VERSION:?E1_VERSION yok - .env icinde SOMUT semver gerekli (rollback icin sart; bkz. .env.example)}
     container_name: e1-grid-tag-engine
     restart: unless-stopped
     volumes: *nats-certs
@@ -1080,7 +1081,7 @@ services:
     build:
       context: ./apps/alarm-service
       dockerfile: Dockerfile
-    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/alarm-service:${E1_VERSION:-latest}
+    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/alarm-service:${E1_VERSION:?E1_VERSION yok - .env icinde SOMUT semver gerekli (rollback icin sart; bkz. .env.example)}
     container_name: e1-grid-alarm-service
     restart: unless-stopped
     volumes: *nats-certs
@@ -1135,7 +1136,7 @@ services:
     build:
       context: ./apps/notification-worker
       dockerfile: Dockerfile
-    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/notification-worker:${E1_VERSION:-latest}
+    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/notification-worker:${E1_VERSION:?E1_VERSION yok - .env icinde SOMUT semver gerekli (rollback icin sart; bkz. .env.example)}
     container_name: e1-grid-notification-worker
     restart: unless-stopped
     depends_on:
@@ -1170,7 +1171,7 @@ services:
     build:
       context: ./apps/iec104-outbound
       dockerfile: Dockerfile
-    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/iec104-outbound:${E1_VERSION:-latest}
+    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/iec104-outbound:${E1_VERSION:?E1_VERSION yok - .env icinde SOMUT semver gerekli (rollback icin sart; bkz. .env.example)}
     container_name: e1-grid-iec104-outbound
     restart: unless-stopped
     volumes: *nats-certs
@@ -1220,7 +1221,7 @@ services:
     build:
       context: ./apps/modbus-outbound
       dockerfile: Dockerfile
-    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/modbus-outbound:${E1_VERSION:-latest}
+    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/modbus-outbound:${E1_VERSION:?E1_VERSION yok - .env icinde SOMUT semver gerekli (rollback icin sart; bkz. .env.example)}
     container_name: e1-grid-modbus-outbound
     restart: unless-stopped
     volumes: *nats-certs
@@ -1283,7 +1284,7 @@ services:
     build:
       context: ./apps/ftp-server
       dockerfile: Dockerfile
-    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/ftp-server:${E1_VERSION:-latest}
+    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/ftp-server:${E1_VERSION:?E1_VERSION yok - .env icinde SOMUT semver gerekli (rollback icin sart; bkz. .env.example)}
     container_name: e1-grid-ftp-server
     restart: unless-stopped
     environment:
@@ -1326,7 +1327,7 @@ services:
     build:
       context: ./apps/whatsapp-web-gateway
       dockerfile: Dockerfile
-    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/whatsapp-web-gateway:${E1_VERSION:-latest}
+    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/whatsapp-web-gateway:${E1_VERSION:?E1_VERSION yok - .env icinde SOMUT semver gerekli (rollback icin sart; bkz. .env.example)}
     container_name: e1-grid-whatsapp-web-gateway
     restart: unless-stopped
     security_opt:
@@ -1357,7 +1358,7 @@ services:
     build:
       context: ./apps/frontend-web
       dockerfile: Dockerfile
-    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/frontend-web:${E1_VERSION:-latest}
+    image: ${E1_REGISTRY:-ghcr.io/enerjione/enerjione-grid}/frontend-web:${E1_VERSION:?E1_VERSION yok - .env icinde SOMUT semver gerekli (rollback icin sart; bkz. .env.example)}
     container_name: e1-grid-frontend-web
     restart: unless-stopped
     depends_on:

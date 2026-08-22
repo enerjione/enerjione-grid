@@ -1,6 +1,7 @@
 """Cihaz basina calisma-zamani sagligi alimi (`device_health_v1`).
 
-Sozlesme: gateway PR #33 (commit bd502c49), vendor kopyasi
+Sozlesme: gateway 1.15.0+ (`device_health_v1`), kanonik artifact
+`infra/gateway-contract/v1.15.1.json`. Vendor kopyasi
 `docs/gateway-contract/device-health-api-pr33.md`.
 
 BU DOSYANIN KILITLEDIGI SESSIZ HATALAR
@@ -726,14 +727,32 @@ def test_yetenek_1_15_0_ve_smart_sessiondan_AYRI():
     assert uyum.supports("device_runtime_health_transport", None) is None
 
 
-def test_yetenek_sapmasi_KENDI_gerekcesiyle_beyanli():
-    """PR #33 acik ve 1.15.0 yayinlanmadi — sapma beyansiz kalmamali."""
+def test_yetenek_sapmasi_KAPANDI():
+    """Sapma artik BEYANLA degil, VENDOR EDILMIS SOZLESMEYLE karsilaniyor.
+
+    Bu test eskiden bunun tersini dogruluyordu: yetenek gateway PR #33'te
+    acikken Grid ucu once yazilmisti, bu yuzden `KNOWN_VERSION_DRIFT`e
+    gerekcesiyle beyan ediliyordu. Gateway 1.15.1 yayinlandi ve generated
+    artifact vendor edildi; beyan karsiliksiz kaldi.
+
+    Beyan silinince kontrol ZAYIFLAMAZ, yer degistirir: `undeclared_drift`
+    artik yetenegi vendor edilen surumle karsilastirir. Vendor geri alinirsa
+    ya da yeni bir yetenek surumu asarsa GU-20 kirmizi olur.
+    """
+    from pathlib import Path
+
     from app.services import gateway_compatibility as uyum
 
-    gerekce = uyum.KNOWN_VERSION_DRIFT.get("device_runtime_health_transport")
-    assert gerekce, "yeni yetenek KNOWN_VERSION_DRIFT'e beyan edilmemis"
-    assert gerekce != uyum._V114_SAPMA_GEREKCESI, "v1.14.0 gerekcesi ODUNC alinmis"
-    assert "#33" in gerekce and "1.15.0" in gerekce
+    kok = Path(__file__).resolve().parents[3]
+    vendored = uyum.vendored_contract_version(kok / "infra" / "gateway-contract")
+    assert uyum.supports("device_runtime_health_transport", vendored) is True, (
+        f"vendor edilen sozlesme ({vendored}) yetenegi karsilamiyor"
+    )
+    assert "device_runtime_health_transport" not in uyum.KNOWN_VERSION_DRIFT, (
+        "sozlesme yetenegi karsiliyor ama sapma hala beyanli — beyan "
+        "karsiliksiz kaldi, silinmeli"
+    )
+    assert uyum.undeclared_drift(vendored) == {}
 
 
 # ---------------------------------------------------------------------------

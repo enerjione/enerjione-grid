@@ -160,6 +160,72 @@ def list_devices_internal(
     return list(db.scalars(stmt).all())
 
 
+@router.get("/device-runtime-health")
+def device_runtime_health_internal(
+    db: Session = Depends(get_db),
+    x_service_token: str | None = Header(default=None),
+):
+    """Cihaz basina CALISMA-ZAMANI SAGLIGI — SCADA cikisi icin.
+
+    NEDEN AYRI UC
+    -------------
+    IEC 104 outbound yalnizca `telemetry.normalized.*` tuketiyordu; oradaki
+    her sey bir SAHA OLCUMUDUR. Calisma-zamani sagligi ise BASKA BIR
+    ALANDIR: gateway'in cihazla olan oturumu hakkinda. Onu normal telemetri
+    yukune sahte bir sinyal olarak eklemek, "olcum" ile "baglanti durumu"
+    ayrimini bozardi.
+
+    Disari cikan sey SCADA'nin gormesi gereken TEK gercek: cihaz su an
+    hangi durumda.
+
+    NEDEN ANLIK SORGU (NATS DEGIL)
+    ------------------------------
+    IEC 104 servisi zaten bu internal uclari periyodik cekiyor
+    (`/internal/devices`, `/internal/signals`). Ayni yolu kullanmak
+    BASLANGIC SNAPSHOT'INI BEDAVA verir: servis yeniden basladiginda bir
+    sonraki durum GECISINI beklemez, mevcut durumu hemen okur. Ayri bir
+    NATS system subject'i ayni sonucu daha fazla parcayla verirdi.
+
+    BAYATLIK KARARI BURADA — TEK KAYNAK
+    -----------------------------------
+    "Bu gozleme hala guvenilir mi" sorusunun cevabi backend'de
+    (`device_session_readiness.gozlem_bayat`). IEC 104 tarafinda IKINCI bir
+    esik tanimlamak, arayuzde `bilinmiyor` gorunen bir cihazin SCADA'da
+    yillar once kalmis `smart_idle` degeriyle "saglikli" gorunmesine yol
+    acardi. Bayat gozlem burada `unknown`a cevrilir.
+    """
+    from datetime import datetime, timezone
+
+    from app.models.device_runtime_health import DeviceRuntimeHealth
+    from app.services import device_session_readiness as hazirlik
+
+    _require_service_token(x_service_token)
+    simdi = datetime.now(timezone.utc)
+    cikti = []
+    for satir in db.scalars(
+        select(DeviceRuntimeHealth).order_by(DeviceRuntimeHealth.device_code.asc())
+    ).all():
+        bayat = hazirlik.gozlem_bayat(satir, simdi=simdi)
+        durum = (satir.connection_state or "unknown").strip().lower()
+        cikti.append(
+            {
+                "device_code": satir.device_code,
+                # BAYAT GOZLEM `unknown`: eski bir `smart_idle` degerini
+                # sonsuza kadar "saglikli" diye yayinlamak, SCADA'ya
+                # dogrulanmamis bir iyimserlik satmak olurdu.
+                "state": "unknown" if bayat else durum,
+                # `report_late` AYRI BAYRAK — kanonik durumu EZMEZ.
+                # Bayat gozlemde bayrak da iddia edilmez.
+                "report_late": (
+                    None if bayat else bool(satir.report_late)
+                ),
+                "stale": bayat,
+                "updated_at": hazirlik.utc(satir.updated_at),
+            }
+        )
+    return cikti
+
+
 @router.get("/device-map")
 def device_map_internal(
     db: Session = Depends(get_db),

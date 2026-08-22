@@ -19,6 +19,8 @@ import logging
 from dataclasses import dataclass
 from typing import Iterable, Mapping
 
+from iec104_outbound import runtime_health
+
 logger = logging.getLogger(__name__)
 
 # IEC 60870-5-101: 0xFFFF rezerve edilmis; "broadcast" anlami tasir, cihaza
@@ -313,6 +315,7 @@ def build_point_registry(
     signals_by_model: dict[str, list] = {}
     for eslesme in mapped_signals:
         signals_by_model.setdefault(str(eslesme[0].get("model") or ""), []).append(eslesme)
+
     commands_by_model: dict[str, list] = {}
     for eslesme in komut_adaylari:
         commands_by_model.setdefault(str(eslesme[0].get("model") or ""), []).append(eslesme)
@@ -330,6 +333,43 @@ def build_point_registry(
             adressiz.append(device_code)
         ca = _resolve_device_ca(device, default=default_common_address)
         device_model = str(device.get("model") or "")
+
+        # SISTEM NOKTALARI — her cihazda, CIHAZ BASINA AYRI IOA.
+        #
+        # Calisma-zamani sagligi bir SAHA OLCUMU degil; gateway'in cihazla
+        # olan oturumu hakkinda. Katalogda DNP3 sinyali olarak durmuyor
+        # (CSV/katalog disa aktarimlarinda gercek bir cihaz noktasiymis gibi
+        # gorunurdu) ama ADRESLEME ayni yoldan gecer.
+        #
+        # IOA `device_id`den turer: `iec104_common_address` NULLABLE ve
+        # UNIQUE KISITI YOK, dolayisiyla iki cihaz ayni CA'yi paylasabilir.
+        # Sabit bir IOA kullanmak o durumda CAKISMA GARANTISI olurdu —
+        # sistem noktalari HER cihazda bulundugu icin.
+        device_id = device.get("id")
+        if device_id is None:
+            # Kimliksiz cihaza deterministik adres uretilemez. Sessizce
+            # sabit bir IOA vermek cakismaya doner; nokta URETILMEZ ve
+            # sebep loglanir.
+            logger.warning(
+                "iec104_sistem_noktasi_atlandi target=%s device=%s — cihaz "
+                "kimligi yok, deterministik IOA uretilemiyor",
+                target_id, device_code,
+            )
+        else:
+            for sistem in runtime_health.system_signals_for_device(
+                int(device_id), device_model
+            ):
+                points.append(
+                    PointAddress(
+                        device_code=device_code,
+                        signal_key=str(sistem["key"]),
+                        type_id=int(sistem["iec104_type_id"]),
+                        common_address=ca,
+                        ioa=int(sistem["iec104_ioa"]),
+                        with_timestamp=True,
+                    )
+                )
+
         for signal, type_id, ioa, with_ts in signals_by_model.get(device_model, ()):
             signal_key = str(signal.get("key") or "")
             if not signal_key:

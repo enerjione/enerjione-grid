@@ -40,6 +40,13 @@ from app.services.event_service import record_event
 
 logger = logging.getLogger(__name__)
 
+#: Kimlik cakismasinda kac INSERT denenir.
+#:
+#: 5 SECILDI: olculen surecler-arasi cakisma orani binde 6 (sentetik burst);
+#: bes ust uste cakisma ~8e-12. Buyutmek kazanc getirmez, kucultmek nadir de
+#: olsa operatore aciklanamayan bir 500 birakir.
+_KIMLIK_DENEME = 5
+
 #: Bir dis protokolun (IEC 104) tetikleyebilecegi komutlar.
 #: Genisletmek bilincli bir urun karari olmali — bkz. modul docstring'i.
 PROTOCOL_ALLOWED_SLUGS = frozenset({"reset_all_fcis"})
@@ -274,19 +281,47 @@ def queue_command(
         status="pending",
         actor_username=actor,
     )
-    db.add(cmd)
-    # CAKISMA SANSA BIRAKILMAZ. Ayni milisaniyede 1000 yuva var ve komut
-    # hizi saniyede tek haneli, ama birincil anahtar son sozu soylemeli:
-    # cakisirsa TAZE bir kimlikle bir kez daha denenir. Ikinci kez cakismak
-    # icin iki surecin ayni milisaniyede ayni yuvayi UST USTE IKI KEZ
-    # secmesi gerekir.
-    try:
-        with db.begin_nested():
-            db.flush()  # id zaten verildi; burada satir yazilir
-    except IntegrityError:
-        cmd.id = command_identity.yeni_kimlik()
-        with db.begin_nested():
-            db.flush()
+    # CAKISMA SANSA BIRAKILMAZ.
+    #
+    # Kimlik `epoch_ms * 1000 + rastgele(0..999)`. Ayni SUREC icinde kilit ve
+    # sayac cakismayi imkansiz kilar; SURECLER ARASINDA ise oyle bir guvence
+    # YOKTUR — uretimde en az bes surec kosar (`backend-api` + `backend-worker`,
+    # her biri kendi UVICORN_WORKERS'i ile) ve her birinin kendi sayaci vardir.
+    # Iki surec ayni milisaniyede ayni yuvayi secerse birincil anahtar reddeder.
+    #
+    # OLCUM (6 surec, her biri 2000 kimligi ard arda uretirken): binde 6.
+    # Bu SENTETIK bir ust sinirdir — gercek komut hizi saniyede tek hanelidir
+    # ve iki komutun ayni milisaniyeye dusmesi zaten nadirdir.
+    #
+    # NEDEN TEK DENEME YETMIYOR: onceki hali cakismada bir kez daha deniyordu
+    # ve ikinci deneme de cakisirsa istisna operatore 500 olarak gidiyordu.
+    # Nadir ama sessiz degil: kullanici komutu gonderemedigini gorur, sebebini
+    # anlamaz. Sinirli dongu ayni mimariyle bunu pratikte imkansiz kilar
+    # (binde 6'nin besinci kuvveti ~ 8e-12).
+    #
+    # SINIRSIZ DONGU DEGIL: kimlikle ilgisi olmayan bir butunluk hatasi
+    # (or. FK ihlali) sonsuza kadar donerdi. Deneme hakki bitince istisna
+    # OLDUGU GIBI yukari cikar.
+    #
+    # `db.add()` SAVEPOINT'IN ICINDE — DISARIDA OLURSA YENIDEN DENEME HIC
+    # CALISMAZ. Nesne savepoint baslamadan once oturuma eklenirse basarisiz
+    # flush oturumun KENDISINI "rollback bekliyor" durumuna sokar; bir
+    # sonraki `begin_nested()` `IntegrityError` degil `PendingRollbackError`
+    # firlatir, dongunun except dali onu yakalamaz ve komut 500 ile duser.
+    # Yani yeniden deneme VARMIS GIBI gorunur ama hicbir zaman ikinci
+    # denemeye gecmez. Olculdu (temiz surecte gercek cakisma zorlanarak):
+    # add() disarida -> PendingRollbackError, satir yazilmaz;
+    # add() iceride  -> ikinci denemede basarili.
+    for kalan_deneme in range(_KIMLIK_DENEME - 1, -1, -1):
+        try:
+            with db.begin_nested():
+                db.add(cmd)
+                db.flush()  # id zaten verildi; burada satir yazilir
+            break
+        except IntegrityError:
+            if kalan_deneme == 0:
+                raise
+            cmd.id = command_identity.yeni_kimlik()
 
     record_event(
         db,

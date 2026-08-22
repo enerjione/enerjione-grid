@@ -1,5 +1,5 @@
 ﻿/** Cihaz calisma-zamani sagligi (`device_health_v1`) — sozlesme tipleri ve
- *  TEK normalizer `shared/deviceRuntimeState.ts` icindedir; sozlesme PR #33
+ *  TEK normalizer `shared/deviceRuntimeState.ts` icindedir; sozlesme
  *  ile degisirse degisecek tek yer orasidir. Buraya KOPYALANMAZ. */
 import type { DeviceRuntimeHealthRecord } from "./deviceRuntimeState";
 export type { DeviceRuntimeHealthRecord };

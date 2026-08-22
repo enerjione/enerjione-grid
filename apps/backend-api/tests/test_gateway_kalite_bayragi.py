@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.services import gateway_release_policy as kayit_politikasi
 from app.services.gateway_compose import ComposeRenderInput, render_compose, render_env
 
 
@@ -79,7 +80,7 @@ def test_ajan_ve_backend_ayni_composeyu_uretiyor(acik: bool) -> None:
 
     params = ajan._validate_params(
         {
-            "image": "ghcr.io/enerjione/enerjione-grid-dnp3-gateway:latest",
+            "image": kayit_politikasi.approved_image_tag(),
             "token": "a" * 24,
             "backend_url": "https://grid.example.com/api/v1",
             "nats_url": "nats://backend:pass@nats:4222",
@@ -110,7 +111,7 @@ def test_ajan_sacma_degeri_ACIK_saymaz() -> None:
     spec.loader.exec_module(ajan)
 
     temel = {
-        "image": "ghcr.io/enerjione/enerjione-grid-dnp3-gateway:latest",
+        "image": kayit_politikasi.approved_image_tag(),
         "token": "a" * 24,
         "backend_url": "https://grid.example.com/api/v1",
         "nats_url": "nats://backend:pass@nats:4222",

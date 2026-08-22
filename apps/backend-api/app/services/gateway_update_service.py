@@ -44,7 +44,12 @@ from sqlalchemy.orm import Session
 
 from app.models.gateway_update import GatewayUpdate
 from app.schemas.gateway_agent import LocalGateway
-from app.services import gateway_agent_service, gateway_release_service
+from app.core.config import settings
+from app.services import (
+    gateway_agent_service,
+    gateway_release_policy,
+    gateway_release_service,
+)
 from app.services.gateway_agent_service import GatewayAgentError
 
 logger = logging.getLogger(__name__)
@@ -61,10 +66,40 @@ BUSY_STATUSES = frozenset({"requested", "running"})
 #: "guncelleme mevcut" diye sunmak, operatoru test edilmemis bir imaja
 #: yonlendirirdi.
 def is_development_tag(tag: str | None) -> bool:
+    """Bu etiket URETIM guncelleme hedefi olamaz mi?
+
+    `latest` 2026-08-21'de BU LISTEYE GIRDI. Eskiden uretim hedefiydi;
+    `pull_policy: always` ile birlikte container'in yeniden olusturuldugu
+    her anda operator onayi olmadan surum degistirdigi icin birakildi
+    (bkz. `gateway_release_policy` modul basligi).
+    """
     t = (tag or "").strip().lower()
     if not t:
         return False
-    return t == "main" or t.startswith("sha-")
+    if t.startswith("sha-"):
+        return True
+    from app.services.gateway_release_policy import DEV_TAGS
+
+    return t in DEV_TAGS
+
+
+def is_valid_update_target(tag: str | None) -> bool:
+    """Bu etiket URETIM guncelleme HEDEFI olabilir mi?
+
+    `is_development_tag`ten AYRI ve bu ayrim sahayi kurtariyor:
+
+      * `is_development_tag` -> KANAL sorusu ("bu kurulum bir dal imaji mi").
+        Sahadaki her kurulum `:latest` izliyor; onlari gelistirme sayarsak
+        arayuzde surum bilgisi ve Guncelle butonu KAPANIR.
+      * `is_valid_update_target` -> HEDEF sorusu. `:latest` hareketli bir
+        etiket oldugu icin hedef OLAMAZ; onaylanan ile kurulan ayrisir.
+    """
+    t = (tag or "").strip().lower()
+    if not t or t.startswith("sha-"):
+        return False
+    from app.services.gateway_release_policy import NON_PRODUCTION_TARGET_TAGS
+
+    return t not in NON_PRODUCTION_TARGET_TAGS
 
 
 #: Kabul edilen imaj referansi bicimi — e1-gwd'deki `IMAGE_RE` ile AYNI
@@ -166,7 +201,30 @@ def prepare(
             "Bu gateway icin devam eden bir guncelleme var; bitmesini bekleyin.",
         )
 
-    hedef_ref = (target_image or "").strip() or (local.tracked_image or "").strip()
+    acik_hedef = (target_image or "").strip()
+    izlenen = (local.tracked_image or "").strip()
+
+    # ESKI KURULUMLAR `:latest` IZLIYOR ve bu ONLARIN HATASI DEGIL: `:latest`
+    # 2026-08-21'e kadar uretim hedefiydi. Operator ACIK bir hedef vermediyse
+    # ve izlenen imaj bir gelistirme etiketiyse, hedefi ONAYLI SURUME cevirip
+    # ilerliyoruz — aksi halde sahadaki her eski gateway "guncellenemez"
+    # olurdu ve bu bir koruma degil KILITLENME olurdu.
+    #
+    # ACIK hedef verilmisse dokunulmaz: operator `:latest` yazdiysa asagidaki
+    # gelistirme-etiketi kapisi onu reddeder.
+    hedef_ref = acik_hedef
+    if not hedef_ref:
+        hedef_ref = izlenen
+        parcali = gateway_release_service.parse_image_ref(izlenen) if izlenen else None
+        if parcali and not is_valid_update_target(parcali[2]):
+            hedef_ref = gateway_release_policy.approved_image_tag()
+            logger.info(
+                "gateway_update: %s eski `%s` etiketini izliyor; hedef onayli "
+                "surume cevrildi (%s)",
+                gateway_code,
+                parcali[2],
+                hedef_ref,
+            )
     if not hedef_ref:
         raise GatewayUpdateError(
             "target_unknown",
@@ -198,12 +256,33 @@ def prepare(
             f"baslatilmadi. Sebep: {uzak.error or 'digest okunamadi'}",
         )
 
-    if is_development_tag(tag):
+    if not is_valid_update_target(tag):
         raise GatewayUpdateError(
             "target_not_released",
             f"'{tag}' bir gelistirme etiketi; uretim guncelleme hedefi "
             "olamaz. Yayinlanmis bir surum etiketi secin.",
         )
+
+    # --- GRID/GATEWAY UYUMLULUK KAPISI — FAIL-CLOSED --------------------
+    #
+    # Yeni bir gateway surumu, Grid'in henuz saglamadigi bir sozlesme
+    # bekleyebilir (or. 1.15.1 saat/oturum alanlari Grid 2.109.0 ile geldi).
+    # Uyumsuz bir hedefi kurmak, calisan bir sahayi Grid'i guncelleyene
+    # kadar bozuk birakirdi.
+    #
+    # BILINMEYEN SURUM DE REDDEDILIR. Gateway imaji kendi Grid gereksinimini
+    # ILAN ETMIYOR (Dockerfile'da `min-grid-version` gibi bir etiket yok),
+    # dolayisiyla bilgi Grid tarafindaki tabloda durur. Tabloda olmayan bir
+    # surum icin "muhtemelen uyumludur" demek FAIL-OPEN olurdu: 1.17.0
+    # Grid 2.112 isteseydi ve biz 2.109'da olsaydik, sessizce kurup sahayi
+    # bozardik. Maliyeti kabul edildi — yeni gateway release'i Grid tarafinda
+    # bir satirla onaylanir.
+    hedef_surum = uzak.version or tag
+    uygun, gerekce = gateway_release_policy.uyumlu_mu(
+        hedef_surum, settings.app_version
+    )
+    if not uygun:
+        raise GatewayUpdateError("incompatible_target", gerekce)
 
     mevcut_digest = (local.image_digest or "").strip()
     if mevcut_digest and mevcut_digest == uzak.digest:

@@ -48,7 +48,7 @@ export const RUNTIME_HEALTH_CAPABILITY = "device_runtime_health_transport";
 const YETENEK_EN_DUSUK_SURUM: Readonly<Record<string, string>> = {
   smart_auto: V114_MIN,
   smart_listening: V114_MIN,
-  // Cihaz basina calisma-zamani sagligi (`device_health_v1`, gateway PR #33).
+  // Cihaz basina calisma-zamani sagligi (`device_health_v1`, gateway 1.15.0+).
   //
   // NEDEN BURADA: bu yetenek olmadan arayuz "saglik verisi yok"un SEBEBINI
   // bilemez ve tek acikamayla yetinirdi ("eski gateway"). Oysa 1.15.0

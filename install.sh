@@ -457,10 +457,24 @@ _set_env_var "E1_REGISTRY" "${E1_REGISTRY:-$E1_REGISTRY_DEFAULT}"
 if [[ "$E1_VERSION_LABEL" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   _set_env_var "E1_VERSION" "$E1_VERSION_LABEL"
 else
-  # Surum okunamadi (yayin oncesi checkout, bozuk VERSION dosyasi): 'latest'
-  # ile devam et ama bunu gizleme — rollback imkani olmadigini kullanici bilsin.
-  _set_env_var "E1_VERSION" "latest"
-  e1_warn "Surum semver olarak okunamadi; imaj etiketi 'latest' olacak (rollback zorlasir)."
+  # FAIL-CLOSED (2026-08-21). Burasi eskiden 'latest' yazip UYARI basiyordu.
+  #
+  # Uyari yetmiyordu: kurulum yesil bitiyor, sistem ayaga kalkiyor ve saha
+  # cihazi hangi surumu calistirdigini SOYLEYEMEZ hale geliyordu. Daha
+  # kotusu, `docker compose up -d` her cagrildiginda kayit defterindeki
+  # `latest` neye isaret ediyorsa O geliyordu — yani operator hicbir sey
+  # yapmadan surum degisebiliyordu ve geri donulecek bir etiket yoktu.
+  #
+  # Bu dal yalnizca VERSION dosyasi okunamadiginda/bozuk oldugunda calisir;
+  # yani normal bir release checkout'unda HIC girilmez. Girildiginde dogru
+  # davranis kurulumu DURDURMAKTIR: yanlis surumle acilmis bir saha
+  # kurulumunu sonradan teshis etmek, kurulumu bastan reddetmekten cok daha
+  # pahalidir.
+  e1_err "Surum semver olarak okunamadi (VERSION: '${E1_VERSION_LABEL:-bos}')."
+  e1_err "Uretim kurulumu 'latest' etiketiyle YAPILMAZ — rollback imkani kalmaz."
+  e1_err "Bir release tag'i checkout edin (orn. 'git checkout v2.109.1')"
+  e1_err "ya da gelistirme icin .env icine bilincli olarak E1_VERSION=latest yazin."
+  exit 1
 fi
 
 # Kurulum anahtarini .env'e yaz — update.sh sonraki guncellemelerde bunu

@@ -52,6 +52,7 @@ from app.services import (
     gateway_release_service,
     gateway_update_service,
 )
+from app.services import gateway_release_policy as kayit_politikasi
 from app.services.gateway_release_service import RegistryImage
 from app.services.ingest_service import hash_gateway_token
 
@@ -256,10 +257,16 @@ def test_GU_05_hedef_DIGESTE_SABITLENIR(db, gateway, kurulumcu, ajan, kayit_deft
     """
     durum = _hazirla(db, kurulumcu)
     assert durum.expected_digest == D_YENI
-    assert durum.target_image == f"{REPO}:latest@{D_YENI}"
+
+    # ESKI KURULUM `:latest` IZLIYOR ve acik hedef verilmedi: hedef ONAYLI
+    # SURUME cevrilir. `:latest@digest` gondermek, hareketli bir etiketi
+    # kaydin icine yazmak olurdu — geri alma ve denetim o referansa bakiyor.
+    beklenen = f"{kayit_politikasi.approved_image_tag()}@{D_YENI}"
+    assert durum.target_image == beklenen
+    assert ":latest@" not in durum.target_image
 
     gateways_api.apply_gateway_update(gateway_code=GW, current_user=kurulumcu, db=db)
-    assert ajan.istekler[-1]["image"] == f"{REPO}:latest@{D_YENI}"
+    assert ajan.istekler[-1]["image"] == beklenen
 
 
 def test_GU_12_alternatif_kayit_defteri_referansi_kabul(db, gateway, kurulumcu, ajan, kayit_defteri):
@@ -568,6 +575,9 @@ def test_GU_17_yayinlanmis_surum_etiketi_KARARLI_sayilir(db, gateway, kurulumcu,
 
 @pytest.mark.parametrize(
     "etiket,gelistirme",
+    # `latest` KANAL olarak hala "stable": sahadaki her kurulum onu izliyor
+    # ve gelistirme sayilirsa arayuz surum bilgisini kaybeder. HEDEF olarak
+    # ise reddedilir — bkz. `is_valid_update_target`.
     [("main", True), ("sha-abc1234", True), ("latest", False), ("1.14.0", False), ("1.13.0", False)],
 )
 def test_GU_18_surum_yayinlaninca_normal_hedef_olur(etiket, gelistirme):

@@ -39,6 +39,8 @@ Initiating mode port araligi:
 
 from __future__ import annotations
 
+from app.services import gateway_release_policy
+
 import re
 from dataclasses import dataclass
 from typing import Literal
@@ -87,7 +89,17 @@ _PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
 #: Gateway imajinin TAKIP EDILEN etiketi. Sabit bir surume (`:1.5.0` gibi)
 #: sabitlemek guncellemeyi kalici olarak kilitler — bkz.
 #: gateway_agent_service.request_update.
-DEFAULT_GATEWAY_IMAGE = "ghcr.io/enerjione/enerjione-grid-dnp3-gateway:latest"
+#: Varsayilan gateway imaji — ONAYLI SURUMUN ETIKETI, `:latest` DEGIL.
+#:
+#: `:latest` ile `pull_policy: always` birlikte sunu uretiyordu: Grid ayni
+#: surumde kalsa bile, kayit defterinde `latest` baska bir release'e
+#: tasindiginda container'in yeniden olusturuldugu HER an operator ONAYI
+#: OLMADAN farkli bir gateway kodu calisiyordu.
+#:
+#: Deger TEK KAYNAKTAN gelir (`gateway_release_policy`): ayni bilgi uc ayri
+#: sabite kopyalanmisti ve birinde yapilan degisiklik otekilerde unutulunca
+#: "hangisi gecerli" sorusunun cevabi belirsizlesiyordu.
+DEFAULT_GATEWAY_IMAGE = gateway_release_policy.approved_image_tag()
 
 _COMPOSE_TEMPLATE = """\
 # EnerjiOne DNP3 Gateway — {{GATEWAY_CODE}}
@@ -98,7 +110,7 @@ name: e1-gw-{{GATEWAY_CODE_LOWER}}
 services:
   gateway:
     image: {{IMAGE}}
-    # Her kalkista imaji yeniden ceker (:latest tek basina yetmez).
+    # Yalnizca `up`/`create` okur; `restart`/`start` yukseltmeye donmez.
     pull_policy: always
     container_name: e1-gw-{{GATEWAY_CODE_LOWER}}
     restart: unless-stopped

@@ -34,19 +34,40 @@ jetstream {
     # telemetri akisi durur. Bu yuzden asil sinir burasi DEGIL, stream basina
     # `max_bytes` + `discard=old` olmali (bkz. config.py nats_stream_*_max_bytes
     # ve services/jetstream_bus.py). Backend bunlari her boot'ta idempotent
-    # uygular; toplam 10 GiB (raw 6 + normalized 3 + dlq 1).
+    # uygular.
     #
-    # 50GB -> 12GB. Eski deger bir emniyet subabi DEGILDI: saha cihazinda o
-    # kadar bos alan hicbir zaman olmadigi icin NATS kendi tavanina ULASMADAN
-    # once host diskini doldururdu — yani subap hic calismazdi. Emniyet
-    # subabinin ise yaramasi icin iki sarti birden saglamasi gerekir:
-    #   (1) stream tavanlari toplaminin USTUNDE  -> 12e9 > 10 GiB (10,74e9)
-    #   (2) cihazin bos diskinin ALTINDA         -> 12 GB her sahada gecerli
+    # GERCEK TAVANLAR (config.py, LITERAL bayt):
+    #   raw         25.769.803.776  = 24 GiB
+    #   normalized  12.884.901.888  = 12 GiB
+    #   dlq          2.147.483.648  =  2 GiB
+    #   ------------------------------------
+    #   TOPLAM      40.802.189.312  = 38 GiB
+    #
+    # Emniyet subabinin ise yaramasi icin iki sarti birden saglamasi gerekir:
+    #   (1) stream tavanlari toplaminin USTUNDE -> 48 GiB > 38 GiB (10 GiB pay)
+    #   (2) cihazin bos diskinin ALTINDA        -> tipik saha diski 456 GB,
+    #                                              48 GiB = ~%11
     # Stream tavanlarini buyutursen bunu da buyutmen gerekir; kucultursen once
     # bu carpar ve sert red geri gelir.
     #
-    # NOT: NATS'ta 'GB' = 10^9 (GiB degil). tests/test_config_consistency.py
-    # karsilastirmayi bu birimle yapiyor.
+    # 2026-08-21 DUZELTME — BU YORUM BAYATTI.
+    # Burada "raw 6 + normalized 3 + dlq 1 = 10 GiB" ve "50GB -> 12GB" yaziyordu.
+    # O tasarim 2026-08-04 saha olcumunde TERK EDILDI: 500 cihazlik yukte
+    # NORMALIZED 3 GiB tavanina dayandi ve akis sessizce en eski mesajlari
+    # atmaya basladi (veri kaybi). Tavanlar RAW 8->24, NORMALIZED 3->12,
+    # hesap 12->48 GiB olarak yukseltildi; config.py ve bu satir birlikte
+    # tasindi ama YORUM tasinmadi. Yorumun soyledigi 12 GB'a donmek,
+    # 38 GiB'lik stream toplaminin ALTINA inmek demektir: hesap tavani once
+    # dolar, publish REDDEDILIR ve telemetri akisi DURUR — tam da bu
+    # mimarinin kacinmak icin kuruldugu ariza.
+    #
+    # BIRIM — OLCULDU, VARSAYILMADI (2026-08-21, nats-server v2.10.25):
+    # `48GB` yazimi 51.539.607.552 bayta cozuluyor, yani NATS 'GB' ekini
+    # 2^30 (GiB) olarak yorumluyor — 10^9 DEGIL. Onceki yorum ve
+    # tests/test_config_consistency.py 10^9 varsayiyordu; varsayim guvenli
+    # yonde yanlisti (tavani oldugundan kucuk sayiyordu) ama yanlisti.
+    # Dogrulama: `nats-server -c <conf>` ile ac, `curl :8222/jsz` ->
+    # `config.max_storage`.
     max_file_store: 48GB
     max_memory_store: 1GB
 }

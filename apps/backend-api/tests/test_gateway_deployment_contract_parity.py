@@ -49,19 +49,28 @@ from pathlib import Path
 import pytest
 import yaml
 
+from app.services import gateway_release_policy as kayit_politikasi
 from app.services import gateway_compose as gc
 from app.services.gateway_compose import ComposeRenderInput
 
 KOK = Path(__file__).resolve().parents[3]
-# GECERLI sozlesme snapshot'i. Eski surumler (`v1.11.0.json` ... `v1.11.3.json`)
+# GECERLI sozlesme snapshot'i. Eski surumler (`v1.11.0.json` ... `v1.11.4.json`)
 # tarihsel kanit olarak dizinde KALIR; testin ve CI'nin baktigi dosya budur ve
 # gateway yayinlandiginda ikisi BIRLIKTE guncellenir.
 #
-# v1.11.4'TEN ITIBAREN KAYNAK DEGISTI: vendor edilen dosya artik gateway
-# repo'sunun main'indeki dosya DEGIL, release workflow'unun URETTIGI
+# v1.11.4'TEN ITIBAREN KAYNAK: vendor edilen dosya gateway repo'sunun
+# main'indeki dosya DEGIL, release workflow'unun URETTIGI
 # `gateway-deployment-contract.generated.json` artifact'idir. Govde ayni;
 # fark provenance alanlarinda (bkz. test_kaynak_sha_gercek_release_commiti).
-SOZLESME_YOLU = KOK / "infra/gateway-contract/v1.11.4.json"
+#
+# 2026-08-21: ISARETCI v1.15.1'E TASINDI. Onceki durumda Grid 1.15.x
+# yeteneklerine (device_health_v1 tasiyicisi, saat gozlemlenebilirligi,
+# Horstmann zaman senkronizasyonu) BAGIMLIYKEN hala v1.11.4 sozlesmesini
+# "gecerli" sayiyordu ve aradaki her yetenek `KNOWN_VERSION_DRIFT` altinda
+# beyanla tasiniyordu. Beyan mekanizmasi dogru calisti — ama beyan, sozlesmenin
+# YERINE gecmez: v1.15.1 icin gercek release ve gercek generated artifact
+# yayinlandigi anda tasinmasi gereken sey isaretcinin kendisiydi.
+SOZLESME_YOLU = KOK / "infra/gateway-contract/v1.15.1.json"
 E1GWD_YOLU = KOK / "infra/appliance/e1-gwd.py"
 
 TOKEN = "t" * 48
@@ -185,7 +194,7 @@ def _yerel_compose() -> dict:
             "backend_url": "http://host.docker.internal/api/v1",
             "nats_url": "nats://gateway:pw@host.docker.internal:4222",
             "host_port": 8020,
-            "image": "ghcr.io/enerjione/enerjione-grid-dnp3-gateway:latest",
+            "image": kayit_politikasi.approved_image_tag(),
             "app_environment": "production",
             "initiating_port_base": 20100,
             "initiating_port_count": 0,
@@ -506,7 +515,8 @@ def test_snapshot_dosya_adi_surumle_tutarli():
 def test_eski_snapshotlar_tarihsel_kanit_olarak_duruyor():
     dizin = SOZLESME_YOLU.parent
     mevcut = {p.name for p in dizin.glob("v*.json")}
-    for eski in ("v1.11.0.json", "v1.11.1.json", "v1.11.2.json", "v1.11.3.json"):
+    for eski in ("v1.11.0.json", "v1.11.1.json", "v1.11.2.json",
+                 "v1.11.3.json", "v1.11.4.json"):
         assert eski in mevcut, (
             f"{eski} silinmis. Eski snapshot'lar bir surumun O GUN neyi "
             f"tasidiginin kanitidir; yenisi eskisinin yerine gecmez."
@@ -698,4 +708,136 @@ def test_TIME_SYNC_sapmasi_UC_YOLDA_DA_AYNI():
     degerler = {yol: _yol_env(yol).get("DNP3_TIME_SYNC") for yol in YOLLAR}
     assert set(degerler.values()) == {"nonlan"}, (
         f"render yollari ayrisiyor: {degerler}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# v1.15.1 — SOZLESMENIN KENDI BEYANLARINA KARSI DOGRULAMA
+# ---------------------------------------------------------------------------
+#
+# v1.11.4 sozlesmesi yalnizca environment + docker_runtime tasiyordu; Grid'in
+# 1.15.x yeteneklerini karsilastiracak bir alan YOKTU ve bu yuzden hepsi
+# `KNOWN_VERSION_DRIFT` altinda PROZA olarak beyan ediliyordu. v1.15.1
+# artifact'i bu yetenekleri MAKINE OKUNABILIR alanlarla ilan ediyor; asagidaki
+# testler Grid'in uygulamasini o alanlara baglar.
+
+
+def test_saglik_tasiyicisi_SOZLESMEDEKI_uc_ile_ayni():
+    """Grid'in dinledigi uc, gateway'in yayin yapacagini soyledigi uc olmali.
+
+    Ikisi ayrisirsa saha sessizce bosa doner: gateway 204 bekledigi yere
+    404 alir, Grid'in gozlem tablosu bos kalir ve hicbir alarm calmaz.
+    """
+    tasima = SOZLESME["device_runtime_health_transport"]
+    assert tasima["supported"] is True
+    assert tasima["schema"] == "device_health_v1"
+
+    from app.api import gateways as api
+
+    # Rota FONKSIYON ADIYLA DEGIL YOLUYLA bulunur: ad degisirse test kor
+    # kalirdi, oysa sozlesmenin bagladigi sey yolun kendisi.
+    #
+    # Sozlesme `/gateways/{gateway_code}/device-health` der; router prefix'i
+    # (`/gateways`) disarida uretildigi icin kuyruk karsilastirilir.
+    kuyruk = "/{gateway_code}/device-health"
+    rotalar = [r for r in api.router.routes if getattr(r, "path", "").endswith(kuyruk)]
+    assert rotalar, (
+        f"sozlesme {tasima['path']} ucunu ilan ediyor ama Grid'de boyle bir "
+        "rota yok"
+    )
+    (rota,) = rotalar
+    assert tasima["path"].endswith(rota.path)
+    assert tasima["http_method"] in rota.methods
+
+
+def test_saglik_tasiyicisi_TOPLU_BASLIGI_buyutmedi():
+    """Sozlesmenin acik yasagi: saglik verisi /pending basligina BINMEZ.
+
+    O baslik FIZIKSEL KOMUT KANALINA biner ve backend tavani ~2KB'dir;
+    buyutmek bir proxy'nin 400 dondurmesi halinde KESICI KOMUTLARINI
+    durdururdu.
+    """
+    tasima = SOZLESME["device_runtime_health_transport"]
+    assert tasima["aggregate_header_unchanged"] is True
+    assert tasima["transport"] == "http_body"
+
+
+def test_saglik_siralamasi_BOOT_ID_ve_SEQUENCE():
+    """Bayat yazma korumasi sozlesmeyle ayni ikiliye dayanmali."""
+    tasima = SOZLESME["device_runtime_health_transport"]
+    assert "boot_id" in tasima["ordering_model"]
+    assert "sequence" in tasima["ordering_model"]
+
+    from app.services import device_runtime_health_service as svc
+
+    kaynak = __import__("inspect").getsource(svc)
+    assert "boot_id" in kaynak and "sequence" in kaynak
+
+
+def test_TIME_SYNC_degeri_SOZLESMENIN_horstmann_degeri():
+    """Grid'in `nonlan` secimi ARTIK proza degil, sozlesmenin KENDI alani.
+
+    Onceki durumda bu bir "bilincli sapma" idi ve gerekcesi yalnizca bizim
+    yazdigimiz metinde yasiyordu — yani karsilastirma kendini dogruluyordu.
+    v1.15.1 sozlesmesi `horstmann_required_value` alanini ILAN EDIYOR;
+    Grid'in urettigi deger artik gateway'in kendi belgesine karsi
+    dogrulaniyor.
+
+    Sozlesmenin VARSAYILANI hala `lan` (Horstmann olmayan kurulumlar icin);
+    Grid Horstmann platformu oldugu icin varsayilandan ayrilir. Sapma
+    gercek, ama artik ONAYLI bir sapma.
+    """
+    zaman = SOZLESME["time_synchronization"]
+    assert zaman["horstmann_required_value"] == "nonlan", (
+        "sozlesme Horstmann icin baska bir deger istiyor; Grid'in uretimi "
+        "gozden gecirilmeli"
+    )
+    assert zaman["default"] == "lan", "varsayilan degismis"
+    for yol in YOLLAR:
+        assert _yol_env(yol).get("DNP3_TIME_SYNC") == zaman["horstmann_required_value"]
+
+
+def test_TIME_SYNC_gecerli_degerlerden_biri():
+    """Gecersiz deger gateway'i ACMAZ (sozlesme: fail_closed)."""
+    zaman = SOZLESME["time_synchronization"]
+    for yol in YOLLAR:
+        assert _yol_env(yol).get("DNP3_TIME_SYNC") in zaman["values"]
+
+
+def test_SAPMA_BEYANI_sozlesme_alaniyla_TUTARLI():
+    """`BILINCLI_SAPMALAR` beyani sozlesmenin ilan ettigi degerle celismesin.
+
+    Beyan metni "Horstmann icin nonlan" diyor; sozlesme de oyle diyorsa
+    beyan artik gateway'in belgesiyle DESTEKLENIYOR demektir. Sozlesme
+    fikir degistirirse bu test kirilir ve beyan gozden gecirilir.
+    """
+    deger, _ = BILINCLI_SAPMALAR["DNP3_TIME_SYNC"]
+    assert deger == SOZLESME["time_synchronization"]["horstmann_required_value"]
+
+
+def test_ONAYLI_SURUM_vendor_edilen_sozlesmeyle_AYNI():
+    """Tek release otoritesi: politika ile sozlesme ayni surumu gostermeli.
+
+    Ayrisirlarsa Grid bir surumu "onayli" diye kurar, baska bir surumun
+    sozlesmesine karsi dogrular ve ikisi de yesil gorunur.
+    """
+    assert kayit_politikasi.APPROVED_GATEWAY_VERSION == SOZLESME["gateway_release"]
+
+
+def test_ONAYLI_SURUMUN_KAYNAK_COMMITI_sozlesmeyle_AYNI():
+    """Digest <-> kaynak commit <-> sozlesme zinciri kapali olmali.
+
+    Politikadaki SHA, imajin `org.opencontainers.image.revision` etiketiyle
+    ayni degerdir (ag ile dogrulandi, 2026-08-21). Sozlesme artifact'i da
+    ayni commit'i tasir. Bu test zincirin OFFLINE dogrulanabilen halkasini
+    kilitler: uc taraftan biri guncellenip otekiler unutulursa kirilir.
+    """
+    assert kayit_politikasi.APPROVED_GATEWAY_SOURCE_SHA == SOZLESME["gateway_source_sha"]
+
+
+def test_ONAYLI_SURUMUN_DIGESTI_KAYITLI():
+    """Onayli surumun degismez referansi uretilebilmeli (fail-closed kurulum)."""
+    surum = kayit_politikasi.APPROVED_GATEWAY_VERSION
+    assert surum in kayit_politikasi.APPROVED_GATEWAY_DIGESTS, (
+        f"{surum} icin digest yok — kurulum kayit defterine bagimli olur"
     )

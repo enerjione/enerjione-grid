@@ -113,7 +113,8 @@ cd apps/frontend-web && npx tsc --noEmit    # type check
 
 ## Deploy / Docker
 
-- `docker-compose.yml` tüm stack. Image: `e1-grid/<service>:${E1_VERSION:-latest}`.
+- `docker-compose.yml` tüm stack. Image: `${E1_REGISTRY}/<service>:${E1_VERSION}` —
+  `E1_VERSION` **zorunlu**, sessiz `latest` yedeği yok (tanımsızsa compose hata verir).
 - Güncelleme: `sudo bash update.sh [backend|frontend|alarm|tag|notification|iec]`.
 - systemd: `sudo systemctl {start,stop,restart,status} enerjione-grid`.
 

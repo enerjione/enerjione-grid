@@ -36,7 +36,13 @@ E1_HELP_HINT="Sorun giderme: docs/SAHA-KURULUM.md"
 
 # ---- Argumanlar -----------------------------------------------------------
 #   [servis]              sadece o servisi guncelle (bkz. basliktaki liste)
-#   --version X.Y.Z       belirli bir surume gec (rollback dahil)
+#   --version X.Y.Z       belirli bir surume gec
+#                         DIKKAT: surum DUSURMEK her zaman guvenli
+#                         degildir. Hedef surum ile mevcut surum
+#                         arasinda migration varsa eski uygulama yeni
+#                         semayla calismayabilir (orn. 2.110.0 -> 2.109.1:
+#                         migration 0078 sonrasi komut kuyruklanamaz).
+#                         Once CHANGELOG'daki surum notunu okuyun.
 #   --edge                yayin tag'i yerine ana dali kullan (gelistirme)
 #   --build               hazir imaji indirmek yerine bu cihazda derle
 #   --yes                 tum onay sorularini atla (CI/otomatik deploy)

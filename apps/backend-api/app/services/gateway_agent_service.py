@@ -361,7 +361,10 @@ def request_update(
     # guncellemede mevcut etiketi geri kazanip aynen yaziyordu; "Guncelle"
     # butonu onu bir daha degistiremiyor, ekran kalici olarak "Guncel" diyor
     # ve yeni surumler HIC gorunmuyordu. `image` gondererek sahada
-    # sabitlenmis kurulumlar ilk guncellemede kendiliginden `:latest`e doner.
+    # sabitlenmis kurulumlar ilk guncellemede ONAYLI SURUME doner.
+    # (Bu satir bir zamanlar "`:latest`e doner" diyordu; urun karari
+    # 2026-08-21'de degisti — hedef artik hareketli etiket degil, onayli
+    # semver.)
     from app.services.gateway_compose import DEFAULT_GATEWAY_IMAGE
 
     # IZLENEN REFERANSIN SAHIBI BACKEND'DIR (urun karari).

@@ -12,12 +12,15 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from threading import Lock
-from typing import Any
+from typing import Any, Final
 
 import requests
 
 from iec104_outbound.registry import PointRegistry, build_point_registry
 from iec104_outbound.server import IEC104ServerManager
+
+from iec104_outbound import runtime_health
+from iec104_outbound.consumer import _parse_iso_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +63,22 @@ class CatalogClient:
         except ValueError:
             logger.warning("catalog_fetch_invalid_json path=%s", path)
             return None
+
+    def fetch_runtime_health(self) -> list[dict[str, Any]] | None:
+        """Cihaz basina calisma-zamani sagligi.
+
+        AYRI CAGRI ve bu bilincli: `fetch_all` herhangi bir parcasi
+        basarisizsa None doner ve TUM deploy'u atlar. Saglik bilgisi nokta
+        HARITASINI degil DEGERLERI besliyor; onun bir kez alinamamasi
+        yuzunden butun registry senkronunu durdurmak, kucuk bir sorunu
+        buyugune cevirirdi.
+
+        BAYATLIK KARARI BACKEND'DE verilir (bkz. `/internal/
+        device-runtime-health`): burada ikinci bir esik tanimlamak, arayuzde
+        `bilinmiyor` gorunen bir cihazin SCADA'da eski `smart_idle`
+        degeriyle "saglikli" gorunmesine yol acardi.
+        """
+        return self._get("/internal/device-runtime-health")
 
     def fetch_all(self) -> tuple[list[dict], list[dict], list[dict]] | None:
         """(targets, devices, signals) doner; herhangi biri basarisizsa None."""
@@ -151,6 +170,14 @@ def _build_registry_for(
     )
 
 
+#: Ust uste kac basarisiz saglik cekiminden sonra tum cihazlar UNKNOWN'a
+#: dusurulur. Bu bir GOZLEM BAYATLIK esigi DEGILDIR (o karar backend'de,
+#: `device_session_readiness.gozlem_bayat`); yalnizca "uc ne kadar sure
+#: erisilemez kalirsa elimizdeki bilgi durum iddiasi olmaktan cikar"
+#: butcesi. Kisa ag hiccup'lari filoyu karartmasin diye 1'den buyuk.
+SAGLIK_HATA_BUTCESI: Final = 3
+
+
 class CatalogSyncer:
     """Periyodik olarak backend'i cekip server manager'i guncel tutar.
 
@@ -172,6 +199,12 @@ class CatalogSyncer:
         self.default_listen_host = default_listen_host
         self.refresh_sec = max(5, int(refresh_sec))
         self._deployed: dict[int, TargetSpec] = {}
+        #: Son BASARILI saglik cekiminde deger yazdigimiz cihaz kodlari.
+        #: Bir cihaz listeden DUSERSE noktasi eski degerinde takili kalmasin
+        #: diye tutulur (bkz. `_push_runtime_health`).
+        self._saglik_bilinen: set[str] = set()
+        #: Ust uste kac saglik cekimi basarisiz oldu.
+        self._saglik_hata_sayaci = 0
         self._lock = Lock()  # _deployed icin (cross-thread okuma yok ama ileride lazim)
         self._stop = asyncio.Event()
 
@@ -241,9 +274,122 @@ class CatalogSyncer:
             except Exception:
                 logger.exception("iec104_target_undeploy_failed id=%d", stale_id)
 
+    def _saglik_yaz(self, kod: str, durum: int, *, iyi: bool,
+                    gecikme: object, damga: object) -> None:
+        """Bir cihazin iki sistem noktasini yazar.
+
+        `gecikme is None` = BILINMIYOR. Bayragi `0` yapmak "gecikme YOK"
+        demek olurdu; bilmedigimiz seyi iyi haber olarak yayinlamayiz —
+        deger `False` gider ama kalite `good=False` ile isaretlenir.
+        """
+        self.manager.update_point_threadsafe(
+            device_code=kod,
+            signal_key=runtime_health.KEY_RUNTIME_STATE,
+            value=float(durum),
+            good=iyi,
+            timestamp=damga,
+        )
+        self.manager.update_point_threadsafe(
+            device_code=kod,
+            signal_key=runtime_health.KEY_REPORT_LATE,
+            value=bool(gecikme),
+            good=gecikme is not None,
+            timestamp=damga,
+        )
+
+    def _bilinmiyora_dusur(self, kodlar: set[str], sebep: str) -> int:
+        """Verilen cihazlari UNKNOWN + kotu kalite olarak yayinlar.
+
+        NEDEN GEREKLI — SESSIZ ESKIME
+        -----------------------------
+        `update_point` "degisim varsa yay" mantigiyla calisir ve son degeri
+        onbellekte tutar. Bir cihaz saglik listesinden DUSERSE (silindi,
+        gateway artik bildirmiyor, uc erisilemez) hicbir yeni yazma olmaz
+        ve SCADA o cihazi SONSUZA KADAR son bilinen degerinde gorur.
+        Cihaz haberlesmeyi tamamen kesmis olsa bile ekranda ONLINE kalirdi:
+        yanlis, ve sessizce yanlis.
+
+        `unknown` yaymak durustur — "bilmiyoruz" bir durum iddiasi degildir.
+        `lost` yaymak ise DOGRULANMAMIS bir ariza iddiasi olurdu.
+        """
+        for kod in sorted(kodlar):
+            self._saglik_yaz(
+                kod, runtime_health.STATE_UNKNOWN,
+                iyi=False, gecikme=None, damga=None,
+            )
+        if kodlar:
+            logger.warning(
+                "iec104_runtime_health_bilinmiyor sebep=%s cihaz_sayisi=%d",
+                sebep, len(kodlar),
+            )
+        return len(kodlar) * 2
+
+    def _push_runtime_health(self) -> int:
+        """Saglik degerlerini sunucuya yaz. Doner: guncellenen nokta sayisi.
+
+        `update_point` DEGISIM VARSA yayar (report by exception), yani her
+        turda cagirmak SCADA'ya gereksiz trafik uretmez; degismeyen durum
+        sessizce onbellekte tazelenir ve bir sonraki GI'da dogru gider.
+
+        UC ERISILEMEZSE tek bir hatada her seyi UNKNOWN yapmayiz — kisa bir
+        ag hiccup'i tum filoyu SCADA'da karartirdi. Ust uste
+        `SAGLIK_HATA_BUTCESI` kez basarisiz olursa artik "bilmiyoruz"
+        demek durustur: elimizdeki en son bilgi o kadar eski ki bir DURUM
+        IDDIASI olarak sunulamaz.
+        """
+        satirlar = self.catalog.fetch_runtime_health()
+        if satirlar is None:
+            self._saglik_hata_sayaci += 1
+            if self._saglik_hata_sayaci < SAGLIK_HATA_BUTCESI:
+                logger.warning(
+                    "iec104_runtime_health_cekilemedi deneme=%d/%d — mevcut "
+                    "degerler korunuyor",
+                    self._saglik_hata_sayaci, SAGLIK_HATA_BUTCESI,
+                )
+                return 0
+            dusen = set(self._saglik_bilinen)
+            self._saglik_bilinen.clear()
+            return self._bilinmiyora_dusur(dusen, "uc_erisilemez")
+
+        self._saglik_hata_sayaci = 0
+        yazilan = 0
+        goruldu: set[str] = set()
+        for satir in satirlar:
+            kod = str(satir.get("device_code") or "")
+            if not kod:
+                continue
+            goruldu.add(kod)
+            damga = _parse_iso_timestamp(satir.get("updated_at"))
+            durum = runtime_health.state_code(satir.get("state"))
+            self._saglik_yaz(
+                kod, durum,
+                # BAYAT GOZLEM `good=False`: SCADA nokta kalitesinden de
+                # gorsun. Deger yine de UNKNOWN olarak gider (backend'in
+                # kendisi oyle yollar) — iki isaret birbirini destekler.
+                iyi=not bool(satir.get("stale")),
+                gecikme=satir.get("report_late"),
+                damga=damga,
+            )
+            yazilan += 2
+
+        # LISTEDEN DUSENLER: onceden bildigimiz ama artik gelmeyen cihazlar.
+        yazilan += self._bilinmiyora_dusur(
+            self._saglik_bilinen - goruldu, "kayit_kayboldu"
+        )
+        self._saglik_bilinen = goruldu
+        return yazilan
+
     async def run_forever(self) -> None:
         # Ilk cekim hemen.
         await self.tick()
+        # BASLANGIC SNAPSHOT'I: servis yeniden basladiginda bir sonraki
+        # durum GECISINI beklemez; mevcut durumlari hemen yayinlar. Aksi
+        # halde SCADA, cihaz haftalarca `smart_idle`da kalirsa restart
+        # sonrasi hicbir sey gormezdi.
+        try:
+            self._push_runtime_health()
+        except Exception:
+            logger.exception("iec104_runtime_health_initial_failed")
         while not self._stop.is_set():
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=self.refresh_sec)
@@ -255,6 +401,13 @@ class CatalogSyncer:
                 await self.tick()
             except Exception:
                 logger.exception("iec104_catalog_tick_failed")
+            try:
+                # NOKTA HARITASINDAN AYRI: saglik degerleri her turda
+                # tazelenir. `tick` basarisiz olsa bile denenir — deploy
+                # sorunu ile deger tazeligi ayri sorunlardir.
+                self._push_runtime_health()
+            except Exception:
+                logger.exception("iec104_runtime_health_push_failed")
 
     def request_stop(self) -> None:
         self._stop.set()
